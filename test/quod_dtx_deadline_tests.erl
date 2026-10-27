@@ -13,10 +13,8 @@ manifest_requires_an_explicit_bounded_deadline_test() ->
     Participants = maps:get(participants, Input),
     ?assertEqual({ok, Manifest}, quod_dtx:new_manifest(
                    Input#{participants := lists:reverse(Participants)})),
-    TooMany = [{{<<"quod:bounded">>, <<N:256>>}, <<N:256>>}
-               || N <- lists:seq(1, 9)],
     [?assertEqual({error, invalid_manifest}, quod_dtx:new_manifest(Input#{participants := Bad}))
-     || Bad <- [TooMany, [hd(Participants) | bad_tail],
+     || Bad <- [[hd(Participants) | bad_tail],
                 [hd(Participants), hd(Participants)]]].
 
 deadline_is_canonical_and_changes_manifest_authority_test() ->

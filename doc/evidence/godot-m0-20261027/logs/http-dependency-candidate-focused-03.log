@@ -1,0 +1,34 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.04s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_ontology_acl_acceptance_tests: run (module 'quod_ontology_acl_acceptance_tests')...[13.477 s] ok
+module 'quod_client_http_tests'
+  quod_client_http_tests: outcome_unknown_is_pending_test...ok
+  quod_client_http_tests: group_commit_and_unknown_are_json_safe_test...ok
+  quod_client_http_tests: invalid_action_is_a_bad_request_test...ok
+  quod_client_http_tests: unsubmitted_instruction_is_explicit_test...ok
+  quod_client_http_tests: foreign_commit_is_json_safe_test...ok
+  quod_client_http_tests: failure_reasons_are_rendered_test...ok
+  quod_client_http_tests: signed_goal_result_keeps_parser_variable_names_test...ok
+  quod_client_http_tests: signed_operation_resolution_has_one_pending_and_terminal_shape_test...ok
+  quod_client_http_tests: refused_group_resolution_does_not_invent_an_operation_claim_test...ok
+  quod_client_http_tests: recovered_group_result_preserves_exact_named_bindings_test...ok
+  quod_client_http_tests: signed_goal_busy_is_not_misreported_as_cursor_contention_test...ok
+  quod_client_http_tests: signed_dispatch_parent_and_cleanup_test...[0.017 s] ok
+  quod_client_http_tests: signed_dispatch_exception_preserves_reply_semantics_test...ok
+  quod_client_http_tests: -client_http_test_/0-fun-7- (health replies and keeps the connection)...[0.059 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-6- (an API reply does not crash its request process)...[0.045 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-5- (every route honours the handler contract)...[0.157 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-4- (an oversized body is refused)...[0.099 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-3- (a non-POST is refused)...[0.051 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-2- (security headers are present)...[0.091 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-1- (group selectors are bounded and retain signed session admission)...[0.055 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-0- (sampled HTTP parent reaches the signed request span)...[0.053 s] ok
+  [done in 0.697 s]
+module 'quod_client_tls'
+module 'quod_http_headers_h'
+=======================================================
+  All 22 tests passed.

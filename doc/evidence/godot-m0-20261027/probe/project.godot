@@ -1,0 +1,7 @@
+[application]
+config/name="M0 qualification"
+run/main_scene="res://probe.tscn"
+[dotnet]
+project/assembly_name="M0"
+[rendering]
+renderer/rendering_method="gl_compatibility"

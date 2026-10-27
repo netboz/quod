@@ -177,7 +177,7 @@ extensions() ->
      %% is actually reached by must appear here. The node is reached through an
      %% orchestrator-mapped host port whose address it cannot know at boot, so
      %% this covers loopback plus any address the node advertises for itself;
-     %% anything else still works behind the usual self-signed warning.
+     %% other names require an operator-provided certificate.
      #'Extension'{extnID = ?'id-ce-subjectAltName',
                   critical = false,
                   extnValue = subject_alt_names()}].
@@ -187,9 +187,19 @@ subject_alt_names() ->
 
 advertised_address() ->
     case application:get_env(quod, node_addr) of
-        {ok, {{A, B, C, D}, _Port}} -> [{iPAddress, [A, B, C, D]}];
+        {ok, {Address, _Port}} -> ip_subject_alt_name(Address);
         _ -> []
     end.
+
+ip_subject_alt_name(Address) when is_list(Address) ->
+    case inet:parse_address(Address) of
+        {ok, Ip} -> ip_subject_alt_name(Ip);
+        {error, _} -> []
+    end;
+ip_subject_alt_name({A, B, C, D}) -> [{iPAddress, [A, B, C, D]}];
+ip_subject_alt_name(Address) when tuple_size(Address) =:= 8 ->
+    [{iPAddress, binary_to_list(<< <<Part:16>> || Part <- tuple_to_list(Address) >>)}];
+ip_subject_alt_name(_) -> [].
 
 %% A serial must be positive and unpredictable; a fixed one would make two
 %% re-mints indistinguishable to a client that cached the first.

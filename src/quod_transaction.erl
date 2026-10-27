@@ -626,8 +626,7 @@ remote_claim_references(#transaction{role = {remote_claim, Manifest, Bundles, Re
 remote_claim_references(_) -> error.
 
 valid_bundle_set(Manifest, Bundles)
-  when is_list(Bundles), length(Bundles) > 0,
-       length(Bundles) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
+  when is_list(Bundles), length(Bundles) > 0 ->
     %% manifest_digest validates its canonical participant set. Checking exact
     %% headers before decoding any selected blob prevents extra/duplicate or
     %% missing bundles from hiding behind list-comprehension filtering.

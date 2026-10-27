@@ -1,0 +1,38 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.09s
+===> Analyzing applications...
+===> Compiling quod
+===> Running Common Test suites...
+%%% quod_ask_SUITE: 
+%%% quod_ask_SUITE ==> init_per_suite: FAILED
+%%% quod_ask_SUITE ==> {timeout,{gen_server,call,
+                     [<0.623.0>,
+                      {call,application,ensure_all_started,[quod]},
+                      5000]}}
+
+%%% quod_ask_SUITE ==> proof_policy_refusal_local_and_remote: SKIPPED
+%%% quod_ask_SUITE ==> {tc_auto_skip,
+    {failed,
+        {quod_ask_SUITE,init_per_suite,
+            {'EXIT',
+                {timeout,
+                    {gen_server,call,
+                        [<0.623.0>,
+                         {call,application,ensure_all_started,[quod]},
+                         5000]}}}}}}
+
+%%% quod_ask_SUITE ==> end_per_suite: SKIPPED
+%%% quod_ask_SUITE ==> {tc_auto_skip,
+    {failed,
+        {quod_ask_SUITE,init_per_suite,
+            {'EXIT',
+                {timeout,
+                    {gen_server,call,
+                        [<0.623.0>,
+                         {call,application,ensure_all_started,[quod]},
+                         5000]}}}}}}
+EXPERIMENTAL: Writing retry specification at /tmp/quod-m0-validation-01/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Skipped 1 (0, 1) tests. Passed 0 tests. 
+Results written to "/tmp/quod-m0-validation-01/_build/test/logs/index.html".
+===> Failures occurred running tests: 1

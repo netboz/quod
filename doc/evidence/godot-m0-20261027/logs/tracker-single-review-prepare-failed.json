@@ -1,0 +1,6 @@
+{
+  "exit": 1,
+  "error": "KeyError: 'description'",
+  "scope": "Local preparation after radar/get; no tracker_update called",
+  "full_error": "Traceback (most recent call last):\n  File \"<stdin>\", line 10, in <module>\nKeyError: 'description'\n"
+}

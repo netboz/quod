@@ -81,7 +81,6 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_scope_command_budget_valid/3,
          test_scope_command_route/2,
          test_read_certificate_scope_reply/2,
-         test_certify_reads_pending_reason/2,
          test_sealed_submit_transition/0,
          test_target_scope_lifetime_ms/2,
          test_remote_timeout_correlation/3,
@@ -2617,86 +2616,54 @@ execute_sealed_scope_command(
   {scope_attest, ManifestBlob}, RequestId, CommandSeq, Binding,
   #remote_scope{
      handle = {quod_scope_session, Pid, _SessionScopeId,
-               SessionProofId, SessionRef, _Ns, _Anchor},
-     pending = Pending}, S) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        false ->
+               SessionProofId, SessionRef, _Ns, _Anchor}}, S) ->
+    case quod_scope_wire:decode_payload(manifest, ManifestBlob) of
+        {ok, Manifest} ->
+            InternalRef = make_ref(),
+            Pid ! {scope_attest, self(), SessionProofId, SessionRef,
+                   InternalRef, Manifest},
+            add_remote_pending(
+              Binding, InternalRef,
+              {scope_attest, RequestId, CommandSeq}, S);
+        {error, Reason} ->
             poison_remote_scope(
-              Binding, RequestId, CommandSeq,
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        true ->
-            case quod_scope_wire:decode_payload(manifest, ManifestBlob) of
-                {ok, Manifest} ->
-                    InternalRef = make_ref(),
-                    Pid ! {scope_attest, self(), SessionProofId, SessionRef,
-                           InternalRef, Manifest},
-                    add_remote_pending(
-                      Binding, InternalRef,
-                      {scope_attest, RequestId, CommandSeq}, S);
-                {error, Reason} ->
-                    poison_remote_scope(
-                      Binding, RequestId, CommandSeq, Reason, S)
-            end
+              Binding, RequestId, CommandSeq, Reason, S)
     end;
 execute_sealed_scope_command(
   certify_reads, RequestId, CommandSeq, Binding,
   #remote_scope{
      handle = {quod_scope_session, Pid, _SessionScopeId,
-               SessionProofId, SessionRef, _Ns, _Anchor},
-     pending = Pending}, S) ->
-    case certify_reads_pending_reason(
-           Pending, target_namespace(Binding)) of
-        {error, Reason} ->
-            poison_remote_scope(
-              Binding, RequestId, CommandSeq, Reason, S);
-        ok ->
-            InternalRef = make_ref(),
-            Pid ! {scope_certify_reads, self(), SessionProofId, SessionRef,
-                   InternalRef},
-            add_remote_pending(
-              Binding, InternalRef,
-              {certify_reads, RequestId, CommandSeq}, S)
-    end;
+               SessionProofId, SessionRef, _Ns, _Anchor}}, S) ->
+    InternalRef = make_ref(),
+    Pid ! {scope_certify_reads, self(), SessionProofId, SessionRef,
+           InternalRef},
+    add_remote_pending(
+      Binding, InternalRef,
+      {certify_reads, RequestId, CommandSeq}, S);
 execute_sealed_scope_command(
   {bind_group_effects, GroupRef, PlanDigest},
   RequestId, CommandSeq, Binding,
   #remote_scope{
      handle = {quod_scope_session, Pid, _SessionScopeId,
-               SessionProofId, SessionRef, _Ns, _Anchor},
-     pending = Pending}, S) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        false ->
-            poison_remote_scope(
-              Binding, RequestId, CommandSeq,
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        true ->
-            InternalRef = make_ref(),
-            Pid ! {scope_bind_group_effects, self(), SessionProofId,
-                   SessionRef, InternalRef, GroupRef, PlanDigest},
-            add_remote_pending(
-              Binding, InternalRef,
-              {bind_group_effects, RequestId, CommandSeq}, S)
-    end;
+               SessionProofId, SessionRef, _Ns, _Anchor}}, S) ->
+    InternalRef = make_ref(),
+    Pid ! {scope_bind_group_effects, self(), SessionProofId,
+           SessionRef, InternalRef, GroupRef, PlanDigest},
+    add_remote_pending(
+      Binding, InternalRef,
+      {bind_group_effects, RequestId, CommandSeq}, S);
 execute_sealed_scope_command(
   {bind_operation_effect, SubmissionBlob},
   RequestId, CommandSeq, Binding,
   #remote_scope{
      handle = {quod_scope_session, Pid, _SessionScopeId,
-               SessionProofId, SessionRef, _Ns, _Anchor},
-     pending = Pending}, S) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        false ->
-            poison_remote_scope(
-              Binding, RequestId, CommandSeq,
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        true ->
-            InternalRef = make_ref(),
-            Pid ! {scope_bind_operation_effect, self(), SessionProofId,
-                   SessionRef, InternalRef, SubmissionBlob},
-            add_remote_pending(
-              Binding, InternalRef,
-              {bind_operation_effect, RequestId, CommandSeq}, S)
-    end;
+               SessionProofId, SessionRef, _Ns, _Anchor}}, S) ->
+    InternalRef = make_ref(),
+    Pid ! {scope_bind_operation_effect, self(), SessionProofId,
+           SessionRef, InternalRef, SubmissionBlob},
+    add_remote_pending(
+      Binding, InternalRef,
+      {bind_operation_effect, RequestId, CommandSeq}, S);
 execute_sealed_scope_command(
   {submit_plan, _, _, _, _, _} = Operation,
   RequestId, CommandSeq, Binding, Scope, S) ->
@@ -2723,61 +2690,39 @@ execute_active_scope_command(
 execute_active_scope_command(
   {invoke_open, InvocationId, Selection, Chain, GoalBlob},
   RequestId, CommandSeq, Binding,
-  #remote_scope{handle = Handle, pending = Pending}, S) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        false ->
-            emit_invocation_error(
+  #remote_scope{handle = Handle}, S) ->
+    case decode_scope_goal(GoalBlob) of
+        {ok, Goal} ->
+            {ok, InternalRef} = quod_scope_session:invoke_open(
+                                  Handle, InvocationId,
+                                  Goal, Chain, Selection),
+            add_remote_pending(
+              Binding, InternalRef,
+              {invoke_open, RequestId, CommandSeq, InvocationId}, S);
+        {error, Reason} ->
+            poison_remote_invocation(
               Binding, RequestId, CommandSeq, InvocationId, 1,
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        true ->
-            case decode_scope_goal(GoalBlob) of
-                {ok, Goal} ->
-                    {ok, InternalRef} = quod_scope_session:invoke_open(
-                                          Handle, InvocationId,
-                                          Goal, Chain, Selection),
-                    add_remote_pending(
-                      Binding, InternalRef,
-                      {invoke_open, RequestId, CommandSeq, InvocationId}, S);
-                {error, Reason} ->
-                    poison_remote_invocation(
-                      Binding, RequestId, CommandSeq, InvocationId, 1,
-                      Reason, S)
-            end
+              Reason, S)
     end;
 execute_active_scope_command(
   {invoke_next, InvocationId, ExpectedAnswerSeq},
   RequestId, CommandSeq, Binding,
-  #remote_scope{handle = Handle, pending = Pending,
-                active_commands = Active}, S) ->
-    case {map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE,
-          length(Active) < ?QUOD_MAX_ACTIVE_PROOF_DEPTH} of
-        {false, _} ->
-            emit_invocation_error(
-              Binding, RequestId, CommandSeq, InvocationId,
-              ExpectedAnswerSeq,
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        {_, false} ->
-            emit_invocation_error(
-              Binding, RequestId, CommandSeq, InvocationId,
-              ExpectedAnswerSeq,
-              {proof_depth_exceeded, ?QUOD_MAX_ACTIVE_PROOF_DEPTH}, S);
-        {true, true} ->
-            {ok, InternalRef} = quod_scope_session:invoke_next(
-                                  Handle, InvocationId,
-                                  ExpectedAnswerSeq),
-            S1 = add_remote_pending(
-                   Binding, InternalRef,
-                   {invoke_next, RequestId, CommandSeq,
-                    InvocationId, ExpectedAnswerSeq}, S),
-            update_remote_scope(
-              Binding,
-              fun(R) ->
-                  R#remote_scope{
-                    active_commands =
-                        active_stack_push(
-                          {RequestId, CommandSeq}, Active)}
-              end, S1)
-    end;
+  #remote_scope{handle = Handle, active_commands = Active}, S) ->
+    {ok, InternalRef} = quod_scope_session:invoke_next(
+                          Handle, InvocationId,
+                          ExpectedAnswerSeq),
+    S1 = add_remote_pending(
+           Binding, InternalRef,
+           {invoke_next, RequestId, CommandSeq,
+            InvocationId, ExpectedAnswerSeq}, S),
+    update_remote_scope(
+      Binding,
+      fun(R) ->
+          R#remote_scope{
+            active_commands =
+                active_stack_push(
+                  {RequestId, CommandSeq}, Active)}
+      end, S1);
 execute_active_scope_command(
   {invoke_cancel, InvocationId}, _RequestId, _CommandSeq, _Binding,
   #remote_scope{handle = Handle}, S) ->
@@ -2812,20 +2757,12 @@ execute_active_scope_command(
              _Principal, _AuthenticationDigest},
   #remote_scope{
      handle = {quod_scope_session, Pid, _SessionScopeId,
-               SessionProofId, SessionRef, _Ns, _Anchor},
-     pending = Pending}, S) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        false ->
-            poison_remote_scope(
-              Binding, RequestId, CommandSeq,
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        true ->
-            InternalRef = make_ref(),
-            Pid ! {scope_seal, self(), SessionProofId, SessionRef,
-                   InternalRef, OriginIdentity},
-            add_remote_pending(
-              Binding, InternalRef, {scope_seal, RequestId, CommandSeq}, S)
-    end;
+               SessionProofId, SessionRef, _Ns, _Anchor}}, S) ->
+    InternalRef = make_ref(),
+    Pid ! {scope_seal, self(), SessionProofId, SessionRef,
+           InternalRef, OriginIdentity},
+    add_remote_pending(
+      Binding, InternalRef, {scope_seal, RequestId, CommandSeq}, S);
 execute_active_scope_command(Operation, _RequestId, _CommandSeq, Binding,
                              _Scope, S)
   when element(1, Operation) =:= nested_opened;
@@ -2905,35 +2842,19 @@ decode_scope_goal(GoalBlob) ->
     quod_scope_wire:decode_payload(goal, GoalBlob).
 
 queue_scope_state_probe(Binding, Purpose,
-                        Scope = #remote_scope{pending = Pending}, S) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        false ->
-            poison_remote_scope(
-              Binding, purpose_request_id(Purpose),
-              purpose_command_seq(Purpose),
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        true ->
-            InternalRef = make_ref(),
-            send_scope_control(Scope, InternalRef, checkpoint, []),
-            add_remote_pending(
-              Binding, InternalRef, {state_probe, Purpose}, S)
-    end.
+                        Scope, S) ->
+    InternalRef = make_ref(),
+    send_scope_control(Scope, InternalRef, checkpoint, []),
+    add_remote_pending(
+      Binding, InternalRef, {state_probe, Purpose}, S).
 
 queue_scope_control(Binding, Operation, BatchIds, Purpose,
-                    Scope = #remote_scope{pending = Pending}, S) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        false ->
-            poison_remote_scope(
-              Binding, purpose_request_id(Purpose),
-              purpose_command_seq(Purpose),
-              {proof_limit_exceeded, target_namespace(Binding)}, S);
-        true ->
-            InternalRef = make_ref(),
-            send_scope_control(Scope, InternalRef, Operation, BatchIds),
-            add_remote_pending(
-              Binding, InternalRef,
-              {scope_control, Purpose, Operation, BatchIds}, S)
-    end.
+                    Scope, S) ->
+    InternalRef = make_ref(),
+    send_scope_control(Scope, InternalRef, Operation, BatchIds),
+    add_remote_pending(
+      Binding, InternalRef,
+      {scope_control, Purpose, Operation, BatchIds}, S).
 
 send_scope_control(
   #remote_scope{
@@ -3409,12 +3330,6 @@ public_scope_reason(Reason, Ns) ->
     Candidate = public_scope_candidate(Reason, Ns),
     quod_scope_wire:normalize_public_error(Candidate, Ns).
 
-certify_reads_pending_reason(Pending, Ns) ->
-    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        true -> ok;
-        false -> {error, {proof_limit_exceeded, Ns}}
-    end.
-
 read_certificate_scope_reply({ok, Certificate}, _Ns) ->
     case quod_scope_wire:encode_payload(read_certificate, Certificate) of
         {ok, Blob} -> {event, {reads_certified, Blob}};
@@ -3435,7 +3350,6 @@ public_scope_candidate(already_open, _Ns) ->
 public_scope_candidate(busy, Ns) -> {ontology_busy, Ns};
 public_scope_candidate(unavailable, Ns) -> {ontology_unreachable, Ns};
 public_scope_candidate(not_allowed, Ns) -> {not_allowed, Ns};
-public_scope_candidate(too_many_answers, Ns) -> {too_many_answers, Ns};
 public_scope_candidate(Reason, _Ns)
   when Reason =:= bad_request; Reason =:= unknown_lineage;
        Reason =:= unknown_savepoint;
@@ -3525,11 +3439,6 @@ test_scope_command_route(State, Operation) ->
 
 test_read_certificate_scope_reply(Result, Ns) ->
     read_certificate_scope_reply(Result, Ns).
-
-test_certify_reads_pending_reason(PendingCount, Ns)
-  when is_integer(PendingCount), PendingCount >= 0 ->
-    Pending = maps:from_keys(lists:seq(1, PendingCount), true),
-    certify_reads_pending_reason(Pending, Ns).
 
 test_route_plans(Plans, OriginIdentity, SignedRequest) ->
     route_plans(Plans, OriginIdentity, SignedRequest, false).
@@ -4467,6 +4376,8 @@ run_pinned_origin(
               quod_trace:context(), <<"quod.prolog.session_stop">>, internal,
               #{}, fun(_SpanCtx) -> quod_proof_session:stop(Session) end)
         end
+    catch
+        throw:{quod_ask_error, BudgetReason} -> {error, BudgetReason}
     after
         quod_proof_context:stop(
           fun close_origin_scope/1,

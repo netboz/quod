@@ -22,16 +22,20 @@ ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test() ->
                              <<"quod.prolog.context_start">>),
             OriginOpen = Take(
                            <<"quod.prolog.origin_scope_open">>),
-            SessionOpen = Take(
+            BudgetOpen = take_child(OriginOpen,
+                           <<"quod.proof_session.open">>),
+            BudgetResult = take_child(OriginOpen,
+                           <<"quod.proof_session.first_result">>),
+            SessionOpen = take_child(Invocation,
                             <<"quod.proof_session.open">>),
-            FirstResult = Take(
+            FirstResult = take_child(Invocation,
                             <<"quod.proof_session.first_result">>),
-            Advance = Take(
+            Advance = take_child(FirstResult,
                         <<"quod.proof_session.advance">>),
-            ErlogStep = Take(<<"quod.erlog.step">>),
-            Interpret = Take(
+            ErlogStep = take_child(Advance, <<"quod.erlog.step">>),
+            Interpret = take_child(Advance,
                           <<"quod.erlog.interpret_result">>),
-            Exposure = Take(
+            Exposure = take_child(Advance,
                          <<"quod.erlog.exposure_guard">>),
             Seal = Take(<<"quod.proof_context.seal">>),
             Finalize = Take(
@@ -45,12 +49,15 @@ ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test() ->
                            Invocation, Seal, Finalize, Cleanup]),
             assert_child(Invocation, SessionOpen),
             assert_child(Invocation, FirstResult),
+            lists:foreach(fun(Child) -> assert_child(OriginOpen, Child) end,
+                          [BudgetOpen, BudgetResult]),
             assert_child(FirstResult, Advance),
             lists:foreach(fun(Child) -> assert_child(Advance, Child) end,
                           [ErlogStep, Interpret, Exposure]),
             %% A seal span must not accidentally wrap downstream submission or
             %% final cleanup. Cached finalize(commit) must not seal a second time.
-            ordered([Authorization, Invocation, Seal, Finalize, Cleanup]),
+            ordered([BudgetOpen, BudgetResult]),
+            ordered([OriginOpen, Authorization, Invocation, Seal, Finalize, Cleanup]),
             receive
                 {quod_test_span, #span{name = <<"quod.proof_context.seal">>,
                                        trace_id = TraceId}} ->
@@ -219,6 +226,15 @@ completed_spans() ->
     end.
 
 spans_named(Name, Spans) -> [Span || Span = #span{name = N} <- Spans, N =:= Name].
+
+%% Policy selection and the requested goal use the same interpreter. Identify
+%% their actual stage parents rather than taking the first interpreter span.
+take_child(#span{trace_id = TraceId, span_id = ParentId}, Name) ->
+    receive
+        {quod_test_span, Span = #span{name = Name, trace_id = TraceId,
+                                      parent_span_id = ParentId}} -> Span
+    after 2000 -> error({missing_child_span, Name, ParentId})
+    end.
 
 assert_child(Parent, Child) ->
     ?assertEqual(Parent#span.trace_id, Child#span.trace_id),

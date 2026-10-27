@@ -54,7 +54,7 @@ empty_selection() -> {tx_selection, none, [], ordinary}.
 valid_selection({tx_selection, Lineage, BatchIds, Mode}) ->
     (Mode =:= ordinary orelse Mode =:= atomic orelse Mode =:= independent) andalso
     valid_lineage(Lineage) andalso
-        valid_sorted_ids(BatchIds, none, 0) andalso
+        valid_sorted_ids(BatchIds, none) andalso
         (Lineage =/= none orelse BatchIds =:= []);
 valid_selection(_) -> false.
 
@@ -127,17 +127,11 @@ enter(St) ->
     case get(?KEY) of
         #state{metadata = Metadata, frames = Frames} = State0 ->
             case metadata(St) of
-                Metadata when length(Frames) <
-                              ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF ->
+                Metadata ->
                     FrameId = new_frame_id(Frames),
                     put_state(State0#state{
                                 frames = [#frame{frame_id = FrameId} | Frames]}),
                     FrameId;
-                Metadata ->
-                    throw(
-                      {quod_ask_error,
-                       {savepoint_limit_exceeded,
-                        ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}});
                 _ ->
                     erlang:error(transaction_scope_context_changed)
             end;
@@ -308,14 +302,12 @@ result_selection(_Result) ->
 
 selection(Lineage, BatchIds0, Mode) ->
     BatchIds = lists:usort(BatchIds0),
-    case length(BatchIds) =< ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF andalso
-         (Lineage =/= none orelse BatchIds =:= []) of
+    case Lineage =/= none orelse BatchIds =:= [] of
         true -> {tx_selection, Lineage, BatchIds, Mode};
         false ->
             throw(
               {quod_ask_error,
-               {savepoint_limit_exceeded,
-                ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}})
+               {protocol_error, bad_selection}})
     end.
 
 request(#state{actor = Actor,
@@ -399,16 +391,14 @@ put_state(#state{} = State) -> _ = put(?KEY, State), ok.
 restore_previous(undefined) -> _ = erase(?KEY), ok;
 restore_previous(#state{} = Previous) -> _ = put(?KEY, Previous), ok.
 
-valid_sorted_ids([], _Previous, _Count) -> true;
-valid_sorted_ids(_Ids, _Previous,
-                 ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF) -> false;
-valid_sorted_ids([Id | Rest], none, Count) ->
+valid_sorted_ids([], _Previous) -> true;
+valid_sorted_ids([Id | Rest], none) ->
     valid_opaque_id(Id) andalso
-        valid_sorted_ids(Rest, Id, Count + 1);
-valid_sorted_ids([Id | Rest], Previous, Count) ->
+        valid_sorted_ids(Rest, Id);
+valid_sorted_ids([Id | Rest], Previous) ->
     valid_opaque_id(Id) andalso Previous < Id andalso
-        valid_sorted_ids(Rest, Id, Count + 1);
-valid_sorted_ids(_Improper, _Previous, _Count) -> false.
+        valid_sorted_ids(Rest, Id);
+valid_sorted_ids(_Improper, _Previous) -> false.
 
 valid_opaque_id(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>) -> true;
 valid_opaque_id(_) -> false.

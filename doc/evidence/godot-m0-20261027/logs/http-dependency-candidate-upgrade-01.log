@@ -1,0 +1,25 @@
+===> Verifying dependencies...
+===> Upgrading cowboy v2.19.0
+===> No upgrade needed for erlog
+===> No upgrade needed for gproc
+===> No upgrade needed for hocon
+===> No upgrade needed for opentelemetry
+===> No upgrade needed for opentelemetry_api
+===> No upgrade needed for opentelemetry_exporter
+===> No upgrade needed for prometheus
+===> No upgrade needed for prometheus_httpd
+===> No upgrade needed for quic
+===> No upgrade needed for accept
+===> Upgrading cowlib v2.21.0
+===> No upgrade needed for getopt
+===> No upgrade needed for grpcbox
+===> No upgrade needed for quantile_estimator
+===> Upgrading ranch v2.3.0
+===> No upgrade needed for tls_certificate_check
+===> No upgrade needed for typerefl
+===> No upgrade needed for acceptor_pool
+===> No upgrade needed for chatterbox
+===> No upgrade needed for ctx
+===> No upgrade needed for erlang_qq
+===> No upgrade needed for ssl_verify_fun
+===> No upgrade needed for hpack

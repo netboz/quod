@@ -1,0 +1,18 @@
+{
+  "command": [
+    "env",
+    "XDG_DATA_HOME=/tmp/quod-m0-godot-data",
+    "XDG_CONFIG_HOME=/tmp/quod-m0-godot-config",
+    "M0_CORPUS=/home/yan/src/quod_worktrees/pearl-stone/client/test/fixtures/native-contract/contracts.json",
+    "M0_BACKUP=/tmp/quod-godot-m0-backup.json",
+    "/tmp/quod-godot-m0-tools/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+    "--headless",
+    "--path",
+    "doc/evidence/godot-m0-20261027/probe"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T14:37:30Z",
+  "elapsed_seconds": 3.6851229667663574,
+  "child_exit": 0,
+  "timed_out": false
+}

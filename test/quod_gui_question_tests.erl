@@ -186,6 +186,8 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
             ?assertMatch({ok,_,_},quod_ct:rp(Ns,{goal,{agent_hosted,actor,Node,1,Key}})),
             AgentPid = receive {agent_installed,_,Pid,#{reference := Actor},_} -> Pid
             after 10000 -> error(gui_actor_not_installed) end,
+            %% Cross-ontology recovery waits on this production progress owner.
+            {ok,Foreign} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir,"foreign")}),
             {ok,Journal} = quod_effect_journal:start_link(#{data_dir => filename:join(Dir,"effects")}),
             ok = quod_effect_journal:configure_limits(8,unlimited),
             Admin = {can_invoke,{'_'},Node,{'_'},{'_'}},
@@ -338,7 +340,7 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 receive {'DOWN',M,process,Hud,normal} -> ok after 5000 -> error(hud_not_stopped) end,
                 quod_agent_hosting_tests:stop_ontology(App),
                 quod_agent_hosting_tests:stop_ontology(HumanOwner),
-                quod_agent_hosting_tests:stop_ontology(Gui),gen_server:stop(Journal)
+                quod_agent_hosting_tests:stop_ontology(Gui),gen_server:stop(Journal),gen_server:stop(Foreign)
             end
         end,source("gui_question.pl") ++ [{gui_pending_allowance,actor,4},{gui_completion_allowance,actor,30000}])
     end}.

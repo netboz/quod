@@ -1,0 +1,11 @@
+{
+  "path": "test/quod_foreign_log_tests.erl",
+  "sha256": "ff5c88f2d19d27c3ff436879a19e050ea7a41a11109d4cbd54ea1518ce17c27c",
+  "stage": "/tmp/quod-m0-bootstrap-fixture-01",
+  "runtime_source_unchanged": true,
+  "original_assertions_and_deadline_preserved": true,
+  "prior_sha256": "866314726a1343bae8629f3c0f9a1ff7a37303bd4906800333e17eed58c209f8",
+  "prior_matches_HEAD": true,
+  "cause": "Existing collector spawns concurrent probes; callback arrival order is not spawn order. Gate05 returned the correct certified identity/committee; only the fixture FIFO assertion failed.",
+  "synchronization": "Existing real-collector start_current_probes call trace must contain Wrong => {error,retry} before the Right proof is released. Public current/3 and original assertions/deadline remain."
+}

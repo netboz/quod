@@ -44,20 +44,16 @@ checkpoint_is_first_writer_wins_test() ->
         quod_proof_session:stop(Session)
     end.
 
-savepoint_limit_is_checked_before_mutation_test() ->
+savepoint_population_preserves_generation_test() ->
     Session = quod_proof_session:start(committed([]), #{}),
     try
         lists:foreach(
           fun(Id) ->
               ok = quod_proof_session:checkpoint_many(Session, [Id])
           end,
-          lists:seq(1, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
+          lists:seq(1, 1025)),
         Generation = quod_proof_session:overlay_generation(Session),
-        ?assertEqual(
-           {error,
-            {savepoint_limit_exceeded,
-             ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}},
-           quod_proof_session:checkpoint_many(Session, [overflow])),
+        ?assertEqual(ok, quod_proof_session:checkpoint_many(Session, [additional])),
         ?assertEqual(
            Generation, quod_proof_session:overlay_generation(Session)),
         ok = quod_proof_session:release_many(Session, [1]),
@@ -156,7 +152,7 @@ unmaterialized_batches_reuse_only_exact_actor_and_lineage_test() ->
         lists:foreach(fun(_) ->
             ?assertEqual({ok, First},
                 quod_proof_context:tx_request(ActorA, {allocate, Lineage}))
-        end, lists:seq(1, 3 * ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
+        end, lists:seq(1, 3 * 1025)),
         ?assertEqual({error, not_allowed},
             quod_proof_context:tx_request(actor(ScopeA), {allocate, Lineage})),
         %% A cut can remove every live holder while the unused batch remains.
@@ -255,7 +251,7 @@ invalid_selection_is_atomic_test() ->
         ok
     end.
 
-controller_transaction_and_lineage_caps_share_public_error_test() ->
+controller_activates_many_owned_transaction_frames_test() ->
     _ = start_context(crypto:strong_rand_bytes(32)),
     Session = quod_proof_session:start(committed([]), #{}),
     try
@@ -263,14 +259,10 @@ controller_transaction_and_lineage_caps_share_public_error_test() ->
         Actor = actor(ScopeId),
         ok = quod_proof_context:register_invocation(
                Actor, empty_selection()),
-        Frames = unique_ids(?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF),
+        Frames = unique_ids(1025),
         {ok, Lineage, _} = quod_proof_context:tx_request(
                              Actor, {activate, none, Frames}),
-        ?assertEqual(
-           {error,
-            {savepoint_limit_exceeded,
-             ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}},
-           quod_proof_context:tx_request(
+        ?assertMatch({ok, _, _}, quod_proof_context:tx_request(
              Actor, {activate, Lineage, [opaque_id()]}))
     after
         quod_proof_context:stop(fun(_Scope) -> ok end,
@@ -278,7 +270,7 @@ controller_transaction_and_lineage_caps_share_public_error_test() ->
         quod_proof_session:stop(Session)
     end.
 
-controller_batch_cap_uses_same_public_error_test() ->
+controller_materializes_many_owned_batches_test() ->
     _ = start_context(crypto:strong_rand_bytes(32)),
     Session = quod_proof_session:start(committed([]), #{}),
     Foreign = quod_proof_session:start(committed([]), #{}),
@@ -298,12 +290,8 @@ controller_batch_cap_uses_same_public_error_test() ->
               {ok, Batch} = quod_proof_context:tx_request(Actor, {allocate, Lineage}),
               ok = quod_proof_context:materialize(selection(Lineage, [Batch]), Target)
           end,
-          lists:seq(2, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
-        ?assertEqual(
-           {error,
-            {savepoint_limit_exceeded,
-             ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}},
-           quod_proof_context:tx_request(Actor, {allocate, Lineage}))
+          lists:seq(2, 1025)),
+        ?assertMatch({ok, _}, quod_proof_context:tx_request(Actor, {allocate, Lineage}))
     after
         quod_proof_context:stop(fun(_Scope) -> ok end,
                                 fun(_Proxy) -> ok end),

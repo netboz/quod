@@ -67,11 +67,9 @@ ambiguous_body_ownership_test_() ->
     end) end}.
 
 subclass_agent_binding_test_() ->
-    {timeout,60,fun() -> with_control(fun(F = #{namespace := Ns}) ->
-        commit(Ns,{',',{retract,{instance_of,agent,compact}},
-            {',',{assertz,{isa,pilot_class,agent}},{assertz,{instance_of,pilot_class,compact}}}}),
+    {timeout,60,fun() -> with_control(fun(F) ->
         ?assertMatch({normalized,{committed,_,_}},action(F,bind(0,none,compact,eye)))
-    end) end}.
+    end, [{isa,pilot_class,agent},{instance_of,pilot_class,compact}]) end}.
 
 bind(Epoch, Previous, Agent, Viewpoint) ->
     {physics_control_agent,room,Epoch,Previous,{controlled,Agent,Viewpoint}}.
@@ -98,25 +96,30 @@ bodies(Ns) ->
     Bodies.
 
 with_control(Fun) ->
+    with_control(Fun, [{instance_of,agent,compact}]).
+
+with_control(Fun, CompactFacts) ->
     Ns = <<"host-test-agent">>,
     Rules = quod_prolog:read_terms("priv/ontologies/quod_physics.pl") ++
         [{can_invoke,{physics_control_agent,{'_'},{'_'},{'_'},{'_'}},{'_'},{'_'},Ns},
          {can_invoke,{physics_client_control,{'_'},{'_'}},{'_'},{'_'},Ns},
          {can_view_physics,room,{'_'}},
          {physics_space,room,disabled,actor},
-         {instance_of,agent,compact},{instance_of,agent,wide},
+         {instance_of,agent,wide},
          {physics_body_definition, room, 2, 1, fixed, {vector,0,1000,0}, {owned, {box,200,200,200}, 1}},
          {physics_body_definition, room, 3, 1, fixed, {vector,2000,1000,0}, {owned, {box,1000,300,500}, 1}},
          {physics_agent,room,compact,1,2,{motion,grounded}},
          {physics_agent,room,wide,1,3,{motion,grounded}},
          {physics_viewpoint,room,compact,eye,2,{pose,{vector,0,100,0},{rotation,0,0,0}},view_only},
-         {physics_viewpoint,room,wide,cockpit,3,{pose,{vector,250,300,-200},{rotation,0,1500,0}},view_only}],
-    quod_agent_hosting_tests:with_host(fun(F = #{node := {agent_instance_ref,HumanNs,Anchor,_},identity := Identity}) ->
-        Human = {agent_instance_ref,HumanNs,Anchor,human},
-        commit(HumanNs,{',',{assertz,{instance_of,human_user,human}},
-            {',',{assertz,{agent_key,human,maps:get(pubkey,Identity),active}},
-                 {assertz,{can_invoke,{'_'},Human,{'_'},HumanNs}}}}),
+         {physics_viewpoint,room,wide,cockpit,3,{pose,{vector,250,300,-200},{rotation,0,1500,0}},view_only}]
+        ++ CompactFacts,
+    quod_agent_hosting_tests:with_host(fun(F = #{reference := {agent_instance_ref,_,Anchor,_}}) ->
+        Human = {agent_instance_ref,Ns,Anchor,human},
         commit(Ns,{',',{assertz,{can_control_physics_agent,room,Human,compact}},
                       {assertz,{can_control_physics_agent,room,Human,wide}}}),
         Fun(F#{human => Human})
-    end,Rules).
+    end,fun(Pub) -> Rules ++
+        [{instance_of,human_user,human},
+         {agent_key,human,Pub,active},
+         {can_invoke,{'_'},{agent_instance_ref,Ns,{'_'},human},{'_'},Ns}]
+    end).

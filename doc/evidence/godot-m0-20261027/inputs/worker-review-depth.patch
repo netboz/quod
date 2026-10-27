@@ -1,0 +1,69 @@
+--- a/src/quod_dtx_endpoint.erl
++++ b/src/quod_dtx_endpoint.erl
+@@ -167,13 +167,23 @@
+                 {ok, WireHints} ->
+                     InnerBinary =
+                         term_to_binary({Inner, WireHints}, [deterministic]),
+-                    Envelope = term_to_binary(
+-                                 {?DOMAIN, ?VERSION, Namespace, InnerBinary, TraceCarrier},
+-                                 [deterministic]),
+-                    case byte_size(Envelope) =<
+-                         ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
+-                        true -> {ok, Envelope};
+-                        false -> too_large(dtx_endpoint)
++                    %% Bindings alone do not include the enclosing protocol
++                    %% depth. Admit the complete inner bytes by the same rule
++                    %% as the receiver before emitting an undecodable frame.
++                    case quod_safe_term:validate_canonical(
++                           InnerBinary, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
++                        ok ->
++                            Envelope = term_to_binary(
++                                         {?DOMAIN, ?VERSION, Namespace,
++                                          InnerBinary, TraceCarrier},
++                                         [deterministic]),
++                            case byte_size(Envelope) =<
++                                 ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
++                                true -> {ok, Envelope};
++                                false -> too_large(dtx_endpoint)
++                            end;
++                        {error, too_large} -> too_large(dtx_endpoint);
++                        {error, _} -> protocol_error(bad_etf)
+                     end;
+                 error ->
+                     protocol_error(bad_hints)
+--- a/test/quod_dtx_endpoint_tests.erl
++++ b/test/quod_dtx_endpoint_tests.erl
+@@ -15,6 +15,33 @@
+ -include("quod_ledger.hrl").
+ -include("quod_proof_limits.hrl").
+ -include("quod_transport_limits.hrl").
++-include("quod_term_limits.hrl").
++
++outcome_binding_depth_includes_its_transport_frame_test() ->
++    Ns = <<"quod:endpoint">>,
++    %% The binding list admits this value, but the response adds a tuple,
++    %% status map and inner frame above it. Refuse before emitting a frame
++    %% that the remote endpoint cannot decode.
++    Depths = [?QUOD_MAX_TERM_DEPTH - 5, ?QUOD_MAX_TERM_DEPTH - 4,
++              ?QUOD_MAX_TERM_DEPTH - 2],
++    lists:foreach(fun(Depth) ->
++        Value = lists:foldl(fun(_, Acc) -> {nested, Acc} end,
++                            leaf, lists:seq(1, Depth)),
++        Bindings = [{<<"X">>, Value}],
++        ?assertMatch({ok, _}, quod_wire_term:encode(Bindings)),
++        Status = #{status => committed, height => 11,
++                   ref => transaction_ref(), bindings => Bindings},
++        Response = {outcome, id(1), outcome_target(), digest(7), 12, Status},
++        case Depth of
++            D when D =:= ?QUOD_MAX_TERM_DEPTH - 5 ->
++                {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
++                ?assertEqual({ok, Response, []},
++                             quod_dtx_endpoint:decode_response(Ns, Frame));
++            _ ->
++                ?assertEqual({error, {protocol_error, bad_etf}},
++                             quod_dtx_endpoint:encode_response(Ns, Response, []))
++        end
++    end, Depths).
+ 
+ channel_and_wire_bounds_are_fixed_test() ->
+     Ns = <<"quod:endpoint">>,

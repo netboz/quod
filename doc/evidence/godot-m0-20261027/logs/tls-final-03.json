@@ -1,0 +1,14 @@
+{
+  "command": [
+    "env",
+    "M0_TLS_DETAIL=tls-detail-03",
+    "python3",
+    "doc/evidence/godot-m0-20261027/tls-check.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:33:26Z",
+  "elapsed_seconds": 5.994361639022827,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

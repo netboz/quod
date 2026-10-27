@@ -18,3 +18,8 @@ material_default_limit(plan, canonical_bytes, unlimited).
 material_default_limit(plan, symbols, 2048).
 material_default_limit(plan, operations, 1024).
 material_default_limit(plan, reads, 1024).
+
+%% Execution memory is an allocation policy, not an encoding constraint.
+%% Each proof selects its pinned committed ontology's allowance. Historical
+%% verification does not re-admit already accepted material under today's policy.
+material_default_limit(proof, heap_bytes, unlimited).

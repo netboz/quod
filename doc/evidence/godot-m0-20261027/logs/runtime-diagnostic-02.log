@@ -1,0 +1,21 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.08s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_material_admission_tests'
+  quod_material_admission_tests: policy_is_authored_and_ambiguous_values_fail_closed_test...[0.426 s] ok
+  quod_material_admission_tests: policy_cannot_write_during_selection_test...[0.076 s] ok
+  quod_material_admission_tests: source_symbol_refusal_precedes_allocation_and_storage_test...[0.284 s] ok
+  quod_material_admission_tests: staged_policy_cannot_authorize_its_own_write_test...[0.245 s] ok
+  quod_material_admission_tests: invalid_policy_updates_are_refused_before_sealing_test...[0.405 s] ok
+  quod_material_admission_tests: proof_budget_is_pinned_and_tracks_helper_changes_test...[0.233 s] ok
+  quod_material_admission_tests: policy_replacement_uses_final_state_and_preserves_zero_allowance_test...[0.090 s] ok
+  quod_material_admission_tests: policy_helper_change_is_checked_through_captured_dependencies_test...[0.072 s] ok
+  quod_material_admission_tests: sealed_plan_carries_policy_reads_and_reuses_exact_result_test...[0.081 s] ok
+  quod_material_admission_tests: canonical_byte_and_count_refusals_name_the_resource_test...[0.238 s] ok
+  quod_material_admission_tests: committed_policy_change_invalidates_the_sealed_plan_test...[0.148 s] ok
+  [done in 4.008 s]
+=======================================================
+  All 11 tests passed.

@@ -1,0 +1,141 @@
+diff --git a/test/quod_ask_SUITE.erl b/test/quod_ask_SUITE.erl
+index a942dc98..6f6f965b 100644
+--- a/test/quod_ask_SUITE.erl
++++ b/test/quod_ask_SUITE.erl
+@@ -15,6 +15,7 @@
+          remote_native_read_uses_selected_observer/1,
+          remote_plain_read_rejects_lying_validator/1,
+          remote_scope_solutions/1, remote_scope_trace_parentage/1,
++         proof_policy_refusal_local_and_remote/1,
+          remote_scope_symbol_safety/1,
+          remote_signed_fresh_nested_symbol/1,
+          remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
+@@ -73,6 +74,7 @@ all() -> [remote_signed_transaction_savepoints,
+           remote_native_read_uses_selected_observer,
+           remote_plain_read_rejects_lying_validator,
+           remote_scope_solutions, remote_scope_trace_parentage,
++          proof_policy_refusal_local_and_remote,
+           remote_scope_symbol_safety,
+           remote_signed_fresh_nested_symbol,
+           remote_scope_chain_policy, remote_scope_failure_reasons,
+@@ -1021,6 +1023,37 @@ remote_scope_solutions(Config) ->
+                                   {'$quod_symbol', <<"meat">>}]}], _},
+                  peer:call(Asker, quod_prolog, prove, [?ASKER_NS, All], 60000)).
+ 
++proof_policy_refusal_local_and_remote(Config) ->
++    Target = ?config(target, Config),
++    Asker = ?config(asker, Config),
++    Ns = <<"proof-policy-refusal">>,
++    Source = filename:join(?config(priv_dir, Config), "proof-policy-refusal.pl"),
++    ok = file:write_file(Source,
++        "can_invoke(_Goal, _Principal, _Chain, _Ns).\nready.\n"),
++    ok = start_namespace(Target, ?config(target_pub, Config), Ns, Source, [], Config),
++    ok = peer:call(Target, quod_ct, await_applied, [Ns, 1, 10000], 15000),
++    Anchor = peer:call(Target, quod_simplex, genesis_hash, [Ns]),
++    AnimalsAnchor = peer:call(Target, quod_simplex, genesis_hash, [?NS]),
++    FourthAnchor = peer:call(Target, quod_simplex, genesis_hash, [?FOURTH_NS]),
++    ok = enrollment_route(Asker, ?config(target_pub, Config), ?config(target_addr, Config),
++        [{Ns, Anchor, validator}, {?NS, AnimalsAnchor, validator},
++         {?FOURTH_NS, FourthAnchor, validator},
++         {?ROOT_NS, ?config(network_id, Config), validator}]),
++    Goal = {'::', Ns, ready},
++    %% Establish both real routes before closing this disposable target's
++    %% proof lane through its committed policy. No repair bypass is needed.
++    lists:foreach(fun({Peer, Origin}) ->
++        ?assertMatch({ok, [_], _},
++            peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
++    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]),
++    ?assertMatch({ok, [_], _}, peer:call(Target, quod_prolog, execute,
++        [Ns, {assertz, {material_limit_override, proof, heap_bytes, 0}}], 15000)),
++    lists:foreach(fun({Peer, Origin}) ->
++        ?assertMatch({error, {material_limit, proof, heap_bytes, Actual, 0}}
++                     when Actual > 0,
++            peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
++    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]).
++
+ remote_scope_trace_parentage(Config) ->
+     Target = ?config(target, Config),
+     Asker = ?config(asker, Config),
+@@ -2529,9 +2562,9 @@ remote_four_scope_chain_recovers_empty_routes(Config) ->
+                 end),
+     try
+         ok = wait_route_demand(Asker, TargetIdentity, 500),
+-        ok = install_chain_target_generation(Config, 2),
++        ok = install_chain_target_generation(Config),
+         ok = wait_route_demand(Asker, ThirdIdentity, 500),
+-        ok = install_chain_third_generation(Config, 2),
++        ok = install_chain_third_generation(Config),
+         ?assertMatch(
+            {ok, [#{'X' := _}], _},
+            receive
+@@ -2547,8 +2580,8 @@ remote_four_scope_chain_recovers_empty_routes(Config) ->
+     after
+         %% Restore complete generations even if the assertion failed so this
+         %% suite never leaves a hidden route dependency for later cleanup.
+-        _ = install_chain_target_generation(Config, 3),
+-        _ = install_chain_third_generation(Config, 3)
++        _ = install_chain_target_generation(Config),
++        _ = install_chain_third_generation(Config)
+     end.
+ 
+ wait_route_demand(_Peer, Identity, 0) ->
+@@ -2567,30 +2600,18 @@ wait_route_demand(Peer, Identity, Retries) ->
+             wait_route_demand(Peer, Identity, Retries - 1)
+     end.
+ 
+-install_chain_target_generation(Config, Epoch) ->
+-    Asker = ?config(asker, Config),
+-    case peer:call(
+-           Asker, quod_ct, install_directory_generation,
+-           [?config(target_pub, Config), ?config(target_addr, Config),
+-            [{?NS, ?config(target_anchor, Config), validator},
+-             {?FOURTH_NS, ?config(fourth_anchor, Config), validator},
+-             {?ROOT_NS, ?config(network_id, Config), validator}],
+-            Epoch, 1]) of
+-        {ok, _} -> ok;
+-        Other -> Other
+-    end.
++install_chain_target_generation(Config) ->
++    enrollment_route(?config(asker, Config),
++        ?config(target_pub, Config), ?config(target_addr, Config),
++        [{?NS, ?config(target_anchor, Config), validator},
++         {?FOURTH_NS, ?config(fourth_anchor, Config), validator},
++         {?ROOT_NS, ?config(network_id, Config), validator}]).
+ 
+-install_chain_third_generation(Config, Epoch) ->
+-    Asker = ?config(asker, Config),
+-    case peer:call(
+-           Asker, quod_ct, install_directory_generation,
+-           [?config(third_pub, Config), ?config(third_addr, Config),
+-            [{?THIRD_NS, ?config(third_anchor, Config), validator},
+-             {?NS, ?config(target_anchor, Config), observer}],
+-            Epoch, 1]) of
+-        {ok, _} -> ok;
+-        Other -> Other
+-    end.
++install_chain_third_generation(Config) ->
++    enrollment_route(?config(asker, Config),
++        ?config(third_pub, Config), ?config(third_addr, Config),
++        [{?THIRD_NS, ?config(third_anchor, Config), validator},
++         {?NS, ?config(target_anchor, Config), observer}]).
+ 
+ wait_vote_barrier(ProofRef, Phase, Config) ->
+     wait_vote_barrier(ProofRef, Phase, Config, 300).
+@@ -3111,10 +3132,15 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
+     %% contains dependency and older build paths, so put this suite's exact
+     %% Quod ebin first instead of relying on their incidental ordering.
+     QuodEbin = filename:dirname(code:which(quod_simplex)),
+-    PeerPaths = [QuodEbin | lists:delete(QuodEbin, code:get_path())],
++    %% Leave the peer's OTP paths ahead of dependency paths. Prepending the
++    %% parent's entire path makes every cold OTP load search all dependencies
++    %% before its own library and can exhaust the startup call's deadline.
++    OtpRoot = code:root_dir() ++ "/",
++    PeerPaths = [Path || Path <- code:get_path(), Path =/= QuodEbin,
++                         not lists:prefix(OtpRoot, Path)],
+     {ok, Peer, _Node} = peer:start(
+                           #{name => Name, connection => standard_io,
+-                            args => ["-pa" | PeerPaths]}),
++                            args => ["-pa", QuodEbin, "-pz" | PeerPaths]}),
+     lists:foreach(
+       fun(Module) ->
+           {module, Module} = peer:call(

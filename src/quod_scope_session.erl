@@ -106,18 +106,14 @@ start(<<_:128>> = ScopeId, <<_:256>> = ProofId, Origin,
                    undefined -> otel_ctx:new();
                    Context -> Context
                end,
-    MaxHeapWords = bytes_to_heap_words(?QUOD_SCOPE_WORKER_MAX_HEAP_BYTES),
     {Pid, WorkerMRef} =
-        spawn_opt(
+        spawn_monitor(
           fun() ->
               quod_trace:with_context(TraceCtx, fun() ->
                   init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
                        Est, Engine, Ref, Opts)
               end)
-          end,
-          [monitor,
-           {max_heap_size,
-            #{size => MaxHeapWords, kill => true, error_logger => true}}]),
+          end),
     {{quod_scope_session, Pid, ScopeId, ProofId, Ref, Ns, Anchor},
      WorkerMRef}.
 
@@ -1285,6 +1281,8 @@ init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
                                session = Session},
             put(?RUNTIME, Runtime),
             run_loop(Ns, Session);
+        {error, {throw, {quod_ask_error, Reason}, _}} ->
+            exit({scope_error, Reason});
         {error, {Class, Reason, Stack}} ->
             logger:warning(
               "quod_scope_session[~s]: start failed: ~p:~p ~p",
@@ -1485,7 +1483,7 @@ authorize_and_open_checked(InvocationId, Goal, Chain, Selection,
         ok ->
             Invocations = (runtime())#runtime.invocations,
             put_runtime(Runtime#runtime{
-              invocations = Invocations#{InvocationId => {1, 0}}}),
+              invocations = Invocations#{InvocationId => 1}}),
             {opened, InvocationId};
         {error, Reason} -> {error, Reason}
     end.
@@ -1494,13 +1492,13 @@ handle_next(RequestRef, InvocationId, ExpectedSeq)
   when is_integer(ExpectedSeq), ExpectedSeq > 0 ->
     Runtime0 = runtime(),
     case maps:find(InvocationId, Runtime0#runtime.invocations) of
-        {ok, {ExpectedSeq, Count}} ->
+        {ok, ExpectedSeq} ->
             begin_step(),
             Result = try quod_proof_session:next(
                            Runtime0#runtime.session, InvocationId)
                      after end_step()
                      end,
-            finish_next(RequestRef, InvocationId, ExpectedSeq, Count, Result);
+            finish_next(RequestRef, InvocationId, ExpectedSeq, Result);
         {ok, _Other} ->
             send_next_error(
               RequestRef, {protocol_error, answer_sequence}),
@@ -1514,18 +1512,16 @@ handle_next(RequestRef, _InvocationId, _ExpectedSeq) ->
     send_next_error(RequestRef, {protocol_error, bad_sequence}),
     handled.
 
-finish_next(RequestRef, InvocationId, Seq, Count, {solution, Solution}) ->
+finish_next(RequestRef, InvocationId, Seq, {solution, Solution}) ->
     Runtime0 = runtime(),
     Session = Runtime0#runtime.session,
     Prepared = with_session_access(
                  Session,
                  fun() ->
                      Dirty = quod_proof_session:dirty(Session),
-                     case {Count < ?QUOD_MAX_ANSWERS_PER_INVOCATION,
-                           answer_disposition(Solution)} of
-                         {true, ok} -> {solution_ready, Dirty};
-                         {false, _} -> {result_error, too_many_answers};
-                         {_, {error, Reason}} -> {result_error, Reason}
+                     case answer_disposition(Solution) of
+                         ok -> {solution_ready, Dirty};
+                         {error, Reason} -> {result_error, Reason}
                      end
                  end),
     case Prepared of
@@ -1536,7 +1532,7 @@ finish_next(RequestRef, InvocationId, Seq, Count, {solution, Solution}) ->
             Invocations = Runtime0#runtime.invocations,
             put_runtime(Runtime0#runtime{
               invocations = Invocations#{
-                InvocationId => {Seq + 1, Count + 1}}}),
+                InvocationId => Seq + 1}}),
             Independent = quod_proof_session:independent_intent(Session, InvocationId),
             send_reply(RequestRef, {solution, Seq, Solution, Dirty, Independent});
         {result_error, Reason} ->
@@ -1544,7 +1540,7 @@ finish_next(RequestRef, InvocationId, Seq, Count, {solution, Solution}) ->
             send_next_error(RequestRef, Reason)
     end,
     handled;
-finish_next(RequestRef, InvocationId, Seq, _Count, {complete, Reasons}) ->
+finish_next(RequestRef, InvocationId, Seq, {complete, Reasons}) ->
     case checked_session_dirty((runtime())#runtime.session) of
         {ok, Dirty} ->
             remove_invocation_metadata(InvocationId),
@@ -1554,7 +1550,7 @@ finish_next(RequestRef, InvocationId, Seq, _Count, {complete, Reasons}) ->
             send_guard_error(RequestRef, Reason)
     end,
     handled;
-finish_next(RequestRef, InvocationId, _Seq, _Count, {error, Reason}) ->
+finish_next(RequestRef, InvocationId, _Seq, {error, Reason}) ->
     remove_invocation_metadata(InvocationId),
     send_next_error(RequestRef, Reason),
     handled.
@@ -1785,19 +1781,16 @@ drain_remote_event(Handle, RequestId) ->
     end.
 
 valid_batch_ids([First | Rest]) ->
-    valid_opaque_id(First) andalso valid_batch_ids(Rest, First, 1);
+    valid_opaque_id(First) andalso valid_batch_ids(Rest, First);
 valid_batch_ids(_) ->
     false.
 
-valid_batch_ids([], _Previous, _Count) ->
+valid_batch_ids([], _Previous) ->
     true;
-valid_batch_ids(_Ids, _Previous,
-                ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF) ->
-    false;
-valid_batch_ids([Id | Rest], Previous, Count) ->
+valid_batch_ids([Id | Rest], Previous) ->
     valid_opaque_id(Id) andalso Previous < Id andalso
-        valid_batch_ids(Rest, Id, Count + 1);
-valid_batch_ids(_Improper, _Previous, _Count) ->
+        valid_batch_ids(Rest, Id);
+valid_batch_ids(_Improper, _Previous) ->
     false.
 
 valid_opaque_id(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>) -> true;
@@ -1940,7 +1933,6 @@ valid_invocation_input(InvocationId, Goal, Chain, Selection) ->
     %% engine can present one, so a remote peer cannot forge `[]` to borrow the
     %% host-entry default admission.
     is_list(Chain) andalso Chain =/= [] andalso
-    length(Chain) < ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
     lists:all(fun valid_identity/1, Chain) andalso
     quod_transaction_scope:valid_selection(Selection) andalso
     erlang:external_size(Goal) =< ?QUOD_MAX_NESTED_GOAL_BYTES.
@@ -1957,10 +1949,6 @@ test_answer_disposition(Answer) -> answer_disposition(Answer).
 
 valid_identity({Ns, <<_:256>>}) when is_binary(Ns), byte_size(Ns) > 0 -> true;
 valid_identity(_) -> false.
-
-bytes_to_heap_words(Bytes) when is_integer(Bytes), Bytes > 0 ->
-    WordBytes = erlang:system_info(wordsize),
-    (Bytes + WordBytes - 1) div WordBytes.
 
 runtime() ->
     case get(?RUNTIME) of

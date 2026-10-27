@@ -60,7 +60,7 @@ that boundary. The source release version is in [`src/quod.app.src`](src/quod.ap
 
 ## Build and verification
 
-A recent Erlang/OTP, `rebar3`, and Rust/Cargo are required. CI and release
+Erlang/OTP 27 or newer, `rebar3`, and Rust/Cargo are required. CI and release
 builders use Rust 1.90.0. The build hook compiles the pinned Rapier/Rustler
 [adapter](native/quod_physics/Cargo.toml) with its committed lockfile; the
 release includes the native library. The QUIC stack is pure Erlang.

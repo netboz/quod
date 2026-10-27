@@ -12,14 +12,14 @@ decoding has no admission dependency and retains only encoding and VM checks.
 
 -type limits() :: #{atom() => non_neg_integer() | unlimited}.
 
--spec policy(founding | plan, tuple()) ->
+-spec policy(founding | plan | proof, tuple()) ->
           {ok, limits(), map()} | {error, term()}.
 policy(Kind, Committed) ->
     select_policy(Kind, Committed, true).
 
 %% Validate a proposed policy with the same read-only selector. Its reads are
 %% not OCC tokens: admission still belongs to the published parent policy.
--spec validate_update(founding | plan, tuple(), list(), map()) -> ok | {error, term()}.
+-spec validate_update(founding | plan | proof, tuple(), list(), map()) -> ok | {error, term()}.
 validate_update(Kind, Committed, Diff, PolicyReads) ->
     case lists:any(fun(F) -> quod_read_set:kind(F) =:= predicate andalso
                              quod_diff:touches_functor(Diff, F) end,
@@ -57,7 +57,8 @@ select_policy(Kind, Committed, CaptureReads) ->
 valid_limits(Kind, Rows) ->
     Keys = case Kind of
                founding -> [canonical_bytes, symbols];
-               plan -> [canonical_bytes, operations, reads, symbols]
+               plan -> [canonical_bytes, operations, reads, symbols];
+               proof -> [heap_bytes]
            end,
     Pairs = [{Resource, Limit} || {limit, Resource, Limit} <- Rows,
                 Limit =:= unlimited orelse (is_integer(Limit) andalso Limit >= 0)],
@@ -76,7 +77,7 @@ usage(Term) ->
         _ -> {error, malformed_material}
     end.
 
--spec check(founding | plan, map(), limits()) -> ok | {error, term()}.
+-spec check(founding | plan | proof, map(), limits()) -> ok | {error, term()}.
 check(Kind, Usage, Limits) ->
     check_resources(Kind, lists:sort(maps:to_list(Usage)), Limits).
 

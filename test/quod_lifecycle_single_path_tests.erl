@@ -1074,9 +1074,8 @@ open_signup_uses_policy_and_ordinary_signed_goals(
     unlink(Auth),
     try
         {ClassNs, ClassAnchor} = found_lobby_classes(),
-        Sources = [{user_source_file, list_to_binary(filename:join(
-            [code:priv_dir(quod), "ontologies", File]))}
-            || File <- ["human_user_instance.pl", "agent_instance.pl", "personal_agent.pl", "gui_hud.pl"]],
+        Sources = [{user_source_directory,
+                    list_to_binary(filename:join(code:priv_dir(quod), "ontologies"))}],
         {SignupNs, SignupAnchor} = found_lobby_source(<<"signup">>, "quod_signup.pl",
             [{lobby_vocabulary, ClassNs, ClassAnchor}, {signup_host, Node} | Sources]),
         {ok, _, _} = quod_prolog:execute(ActorNs,
@@ -1127,6 +1126,14 @@ open_signup_uses_policy_and_ordinary_signed_goals(
                  end || BadGoal <- [{assertz, {unexpected, fact}},
                        {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}]],
                 User = Applicant#{reference => Owner},
+                %% Exercise the packaged signup recipe, not a fixture which
+                %% silently supplies the actor's missing location rules.
+                {LocationBytes, LocationSig} = lobby_user_request(User, read,
+                    {space_location, personal, {0}}),
+                {ok, _, {normalized, {read, _, {answers, _, [Location]}}}} =
+                    quod_client_goal_ingress:submit(LocationBytes, LocationSig),
+                ?assertEqual({ok, [{<<"V0">>, unplaced}]},
+                    quod_client_result:decode_binding(Location)),
                 %% An enrollment receipt is not permission to host arbitrary
                 %% content, and a caller cannot supply someone else's identity.
                 [begin
@@ -1361,7 +1368,7 @@ found_lobby_named_sources(Ns, Files, Facts, Modules) ->
 found_lobby_user({ClassNs, ClassAnchor}, Network, Node) ->
     {Public, _} = Pair = quod_identity:generate(),
     Name = unique_ns(<<"personal-lobby">>),
-    {Ns, Anchor} = found_lobby_sources(<<"human-user">>, ["human_user_instance.pl","agent_instance.pl","personal_agent.pl","gui_hud.pl"],
+    {Ns, Anchor} = found_lobby_sources(<<"human-user">>, ["human_user_instance.pl","agent_instance.pl","personal_agent.pl","space.pl","gui_hud.pl"],
         [{instance_of, human_user, me}, {agent_key, me, Public, active},
          {lobby_vocabulary, ClassNs, ClassAnchor},
          {hosting_node, Node},

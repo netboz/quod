@@ -1,0 +1,4086 @@
+{
+  "nomad_addr": "http://192.168.1.10:4646",
+  "jobs_summary": [
+    {
+      "id": "blocklist-updater",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "blocky",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "blocky-dns-monitoring",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "calibre-web",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "calibre-web-novels",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "ceph-csi-controller",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "ceph-csi-node",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "crowdsec",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "docker-registry",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "esphome",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "flaresolverr",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "flowise",
+      "namespace": "default",
+      "status": "dead"
+    },
+    {
+      "id": "forgejo",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "frigate",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "homeassistant",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "homepage",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "jellyfin",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "loki-stack",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "navidrome",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "onia-visualizer",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "opencanary",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "piper-tts",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "prometheus-monitoring",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "prowlarr",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "quod",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "quod-candidate-browser-ingress",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "quod-finality-candidate-v6-20260926",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "quod27-client-30519",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "servarr-stack",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "stalwart-mail",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "tdarr",
+      "namespace": "default",
+      "status": "dead"
+    },
+    {
+      "id": "tempo",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "traefik",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "traefik-edge",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "uptime-kuma",
+      "namespace": "default",
+      "status": "running"
+    },
+    {
+      "id": "vaultwarden",
+      "namespace": "default",
+      "status": "running"
+    }
+  ],
+  "quod_jobs": [
+    {
+      "id": "quod",
+      "namespace": "default",
+      "version": 246,
+      "modify_index": 826818,
+      "groups": [
+        {
+          "name": "quod-node",
+          "count": 8,
+          "volumes": {
+            "quod-data": {
+              "AccessMode": "",
+              "AttachmentMode": "",
+              "MountOptions": null,
+              "Name": "quod-data",
+              "PerAlloc": true,
+              "ReadOnly": false,
+              "Source": "quod-node-arch206",
+              "Sticky": false,
+              "Type": "host"
+            }
+          },
+          "services": [
+            {
+              "Name": "quod",
+              "PortLabel": "p2p",
+              "Tags": [
+                "quod",
+                "content",
+                "quic",
+                "p2p"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-metrics",
+              "PortLabel": "metrics",
+              "Tags": [
+                "quod",
+                "metrics",
+                "prometheus"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "explorer",
+              "PortLabel": "explorer",
+              "Tags": [
+                "quod",
+                "explorer",
+                "web"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "client",
+              "PortLabel": "client",
+              "Tags": [
+                "quod",
+                "client",
+                "web"
+              ],
+              "AddressMode": "auto"
+            }
+          ],
+          "images": [
+            "192.168.1.11:5000/quod:0.7.252@sha256:2d7ed2e31d9b38eb88501501b8b7b39a2dc189a5438013d05ba97524839b441d",
+            "192.168.1.11:5000/quod:0.7.252@sha256:2d7ed2e31d9b38eb88501501b8b7b39a2dc189a5438013d05ba97524839b441d",
+            "192.168.1.11:5000/quod:0.7.252@sha256:2d7ed2e31d9b38eb88501501b8b7b39a2dc189a5438013d05ba97524839b441d"
+          ],
+          "root_configuration": [
+            "namespace = \"quod:root\"",
+            "data_dir  = \"/quod/data\"",
+            "genesis_hash = \"9F8CD12738E6223B81F68E2DD6D16A278FEA6B583756777D26A06A3FA6135DD4\""
+          ]
+        },
+        {
+          "name": "quod-cloud",
+          "count": 2,
+          "volumes": {
+            "quod-data": {
+              "AccessMode": "",
+              "AttachmentMode": "",
+              "MountOptions": null,
+              "Name": "quod-data",
+              "PerAlloc": false,
+              "ReadOnly": false,
+              "Source": "quod-node-cloud",
+              "Sticky": false,
+              "Type": "host"
+            }
+          },
+          "services": [
+            {
+              "Name": "quod",
+              "PortLabel": "p2p",
+              "Tags": [
+                "quod",
+                "content",
+                "quic",
+                "p2p",
+                "cloud"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-metrics",
+              "PortLabel": "metrics",
+              "Tags": [
+                "quod",
+                "metrics",
+                "prometheus",
+                "cloud"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "explorer",
+              "PortLabel": "explorer",
+              "Tags": [
+                "quod",
+                "explorer",
+                "web",
+                "cloud"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "client",
+              "PortLabel": "client",
+              "Tags": [
+                "quod",
+                "client",
+                "web",
+                "cloud"
+              ],
+              "AddressMode": "auto"
+            }
+          ],
+          "images": [
+            "alpine:3.19",
+            "192.168.1.11:5000/quod:0.7.252@sha256:2d7ed2e31d9b38eb88501501b8b7b39a2dc189a5438013d05ba97524839b441d"
+          ],
+          "root_configuration": [
+            "namespace = \"quod:root\"",
+            "data_dir  = \"/quod/data/arch206/{{ env \"NOMAD_ALLOC_INDEX\" }}\"",
+            "genesis_hash = \"9F8CD12738E6223B81F68E2DD6D16A278FEA6B583756777D26A06A3FA6135DD4\""
+          ]
+        }
+      ],
+      "allocations": [
+        {
+          "ID": "0dd2fc28-a8b0-ba65-3350-471cb43c85ce",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+          "NodeName": "corin",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 826783,
+          "ModifyIndex": 893767,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 25074
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 30840
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 22365
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 21745
+                    }
+                  ],
+                  "IP": "192.168.1.11",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 25074
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 30840
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 22365
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 21745
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "quod": null,
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "2b882898-ac41-a897-1639-1f9e226140d8",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+          "NodeName": "caton",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 836164,
+          "ModifyIndex": 893768,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 27281
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 29300
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 26701
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 20682
+                    }
+                  ],
+                  "IP": "192.168.1.12",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 27281
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 29300
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 26701
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 20682
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null,
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "2e96d21f-18f8-424d-28de-a5b48a3276b9",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+          "NodeName": "caton",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 836164,
+          "ModifyIndex": 893768,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 24940
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 27138
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 27794
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 27145
+                    }
+                  ],
+                  "IP": "192.168.1.12",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 24940
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 27138
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 27794
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 27145
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "quod": null,
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "3aa07136-7732-f9e6-99da-b429450441ec",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+          "NodeName": "corin",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 826810,
+          "ModifyIndex": 893767,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 21879
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 25297
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 27037
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 29004
+                    }
+                  ],
+                  "IP": "192.168.1.11",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 21879
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 25297
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 27037
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 29004
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null
+            },
+            "Tasks": {
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "42948724-22dd-66cf-c426-db5d879d4bde",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 826800,
+          "ModifyIndex": 893806,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 26665
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 29232
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 20387
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 22636
+                    }
+                  ],
+                  "IP": "192.168.1.10",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 26665
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 29232
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 20387
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 22636
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "quod": null,
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "6f516b6d-1463-a133-d460-df8e77259775",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-cloud",
+          "NodeID": "e37f93bb-03a2-4384-e61a-b4648d5a24d2",
+          "NodeName": "quod-cloud-1",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 880804,
+          "ModifyIndex": 880832,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 30207
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 29083
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 30390
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 23378
+                    }
+                  ],
+                  "IP": "100.98.216.20",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 30207
+                },
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 29083
+                },
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 30390
+                },
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 23378
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "quod": null,
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "6f8e20f7-b3d1-a5c7-0637-e02e638823fe",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-cloud",
+          "NodeID": "e37f93bb-03a2-4384-e61a-b4648d5a24d2",
+          "NodeName": "quod-cloud-1",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 880804,
+          "ModifyIndex": 880830,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 26652
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 20895
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 22675
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 27658
+                    }
+                  ],
+                  "IP": "100.98.216.20",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 26652
+                },
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 20895
+                },
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 22675
+                },
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 27658
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "quod": null,
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "e6221978-f080-469f-368d-e298a891342f",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 826728,
+          "ModifyIndex": 893805,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 27075
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 30279
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 23289
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 22092
+                    }
+                  ],
+                  "IP": "192.168.1.10",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 27075
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 30279
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 23289
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 22092
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null
+            },
+            "Tasks": {
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "e6fb3cca-ea87-36e8-0822-724b2d5243ff",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+          "NodeName": "corin",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 826744,
+          "ModifyIndex": 893801,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 28772
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 23229
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 27691
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 31147
+                    }
+                  ],
+                  "IP": "192.168.1.11",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 28772
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 23229
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 27691
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 31147
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null
+            },
+            "Tasks": {
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "f679f4ae-efed-bc2d-a8f3-eb343aac2fb8",
+          "Namespace": "default",
+          "JobID": "quod",
+          "TaskGroup": "quod-node",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 826774,
+          "ModifyIndex": 893803,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 31847
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 24106
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 29163
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 20897
+                    }
+                  ],
+                  "IP": "192.168.1.10",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 31847
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 24106
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 29163
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 20897
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null,
+              "init-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "init-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "quod-candidate-browser-ingress",
+      "namespace": "default",
+      "version": 0,
+      "modify_index": 819533,
+      "groups": [
+        {
+          "name": "ingress",
+          "count": 1,
+          "volumes": null,
+          "services": [
+            {
+              "Name": "quod-candidate-browser-ingress",
+              "PortLabel": "client",
+              "Tags": [
+                "quod",
+                "ingress"
+              ],
+              "AddressMode": "auto"
+            }
+          ],
+          "images": [
+            "traefik@sha256:06ddf61ee653caf4f4211a604e657f084f4727f762c16f826c97aafbefcb279e"
+          ],
+          "root_configuration": []
+        }
+      ],
+      "allocations": [
+        {
+          "ID": "4c8027e9-9fb2-b83b-4234-11258041ed7c",
+          "Namespace": "default",
+          "JobID": "quod-candidate-browser-ingress",
+          "TaskGroup": "ingress",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 819507,
+          "ModifyIndex": 893752,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "IP": "192.168.1.10",
+                  "Mode": "host",
+                  "ReservedPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "Value": 31609
+                    }
+                  ]
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "Value": 31609
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "traefik": null
+            },
+            "Tasks": {
+              "traefik": {
+                "Cpu": {
+                  "CpuShares": 200,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 128,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "quod-finality-candidate-v6-20260926",
+      "namespace": "default",
+      "version": 114,
+      "modify_index": 910806,
+      "groups": [
+        {
+          "name": "quod-node",
+          "count": 8,
+          "volumes": {
+            "quod-data": {
+              "AccessMode": "",
+              "AttachmentMode": "",
+              "MountOptions": null,
+              "Name": "quod-data",
+              "PerAlloc": true,
+              "ReadOnly": false,
+              "Source": "quod-finality-candidate-v6-20260926-refound-20261027-movement01",
+              "Sticky": false,
+              "Type": "host"
+            }
+          },
+          "services": [
+            {
+              "Name": "quod-finality-candidate-v6-20260926-quod",
+              "PortLabel": "p2p",
+              "Tags": [
+                "quod",
+                "content",
+                "quic",
+                "p2p"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-finality-candidate-v6-20260926-quod-metrics",
+              "PortLabel": "metrics",
+              "Tags": [
+                "quod",
+                "metrics",
+                "prometheus"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-finality-candidate-v6-20260926-explorer",
+              "PortLabel": "explorer",
+              "Tags": [
+                "quod",
+                "explorer",
+                "web"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-finality-candidate-v6-20260926-client",
+              "PortLabel": "client",
+              "Tags": [
+                "quod",
+                "client",
+                "web",
+                "candidate-quod-node-${NOMAD_ALLOC_INDEX}"
+              ],
+              "AddressMode": "auto"
+            }
+          ],
+          "images": [
+            "192.168.1.11:5000/quod:0.7.275-movement-f6c29fe9-4dcbd485-20261027-m01@sha256:358acc3197c9d24edafe4f562a909ce78de38eed462ba430372f848457b81dff",
+            "192.168.1.11:5000/quod:0.7.275-movement-f6c29fe9-4dcbd485-20261027-m01@sha256:358acc3197c9d24edafe4f562a909ce78de38eed462ba430372f848457b81dff",
+            "192.168.1.11:5000/quod:0.7.275-movement-f6c29fe9-4dcbd485-20261027-m01@sha256:358acc3197c9d24edafe4f562a909ce78de38eed462ba430372f848457b81dff"
+          ],
+          "root_configuration": [
+            "namespace = \"quod:root\"",
+            "data_dir  = \"/quod/data\"",
+            "genesis_hash = \"664B1CC1D63CFBF9FDAF68DF5E11836B4999AE53480EC33F7EE6C3115D41DF2A\""
+          ]
+        },
+        {
+          "name": "quod-cloud",
+          "count": 0,
+          "volumes": {
+            "quod-data": {
+              "AccessMode": "",
+              "AttachmentMode": "",
+              "MountOptions": null,
+              "Name": "quod-data",
+              "PerAlloc": false,
+              "ReadOnly": false,
+              "Source": "quod-finality-candidate-v6-20260926-refound-20261027-movement01-cloud",
+              "Sticky": false,
+              "Type": "host"
+            }
+          },
+          "services": [
+            {
+              "Name": "quod-finality-candidate-v6-20260926-quod",
+              "PortLabel": "p2p",
+              "Tags": [
+                "quod",
+                "content",
+                "quic",
+                "p2p",
+                "cloud"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-finality-candidate-v6-20260926-quod-metrics",
+              "PortLabel": "metrics",
+              "Tags": [
+                "quod",
+                "metrics",
+                "prometheus",
+                "cloud"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-finality-candidate-v6-20260926-explorer",
+              "PortLabel": "explorer",
+              "Tags": [
+                "quod",
+                "explorer",
+                "web",
+                "cloud"
+              ],
+              "AddressMode": "auto"
+            },
+            {
+              "Name": "quod-finality-candidate-v6-20260926-client",
+              "PortLabel": "client",
+              "Tags": [
+                "quod",
+                "client",
+                "web",
+                "cloud",
+                "candidate-quod-cloud-${NOMAD_ALLOC_INDEX}"
+              ],
+              "AddressMode": "auto"
+            }
+          ],
+          "images": [
+            "alpine:3.19",
+            "192.168.1.11:5000/quod:0.7.275-movement-f6c29fe9-4dcbd485-20261027-m01@sha256:358acc3197c9d24edafe4f562a909ce78de38eed462ba430372f848457b81dff",
+            "192.168.1.11:5000/quod:0.7.275-movement-f6c29fe9-4dcbd485-20261027-m01@sha256:358acc3197c9d24edafe4f562a909ce78de38eed462ba430372f848457b81dff"
+          ],
+          "root_configuration": [
+            "namespace = \"quod:root\"",
+            "data_dir  = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}\"",
+            "genesis_hash = \"664B1CC1D63CFBF9FDAF68DF5E11836B4999AE53480EC33F7EE6C3115D41DF2A\""
+          ]
+        }
+      ],
+      "allocations": [
+        {
+          "ID": "0fb69094-c4b5-5de4-6fb8-f29d483d53c4",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+          "NodeName": "caton",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910766,
+          "ModifyIndex": 910784,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 20761
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 22818
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 29896
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 24884
+                    }
+                  ],
+                  "IP": "192.168.1.12",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 20761
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 22818
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 29896
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 24884
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null
+            },
+            "Tasks": {
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "1414a6e2-5865-f3b3-2880-c1695e302e2e",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910766,
+          "ModifyIndex": 910783,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 25387
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 23279
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 25984
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 27272
+                    }
+                  ],
+                  "IP": "192.168.1.10",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 25387
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 23279
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 25984
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 27272
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "quod": null,
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "781f848d-2ac6-b309-b7b1-460c6691c5ae",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910766,
+          "ModifyIndex": 910787,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 27448
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 26860
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 30409
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 22879
+                    }
+                  ],
+                  "IP": "192.168.1.10",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 27448
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 26860
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 30409
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 22879
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null,
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "91f210a1-97cd-e1c2-6160-278f7880722d",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+          "NodeName": "corin",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910766,
+          "ModifyIndex": 910782,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 25942
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 24880
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 30199
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 30271
+                    }
+                  ],
+                  "IP": "192.168.1.11",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 25942
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 24880
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 30199
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 30271
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "quod": null,
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "b0f94038-4feb-fe47-737a-4184e2ba5e23",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+          "NodeName": "corin",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910766,
+          "ModifyIndex": 910790,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 26943
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 26335
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 30645
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 23227
+                    }
+                  ],
+                  "IP": "192.168.1.11",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 26943
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 26335
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 30645
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 23227
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null,
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "ceafd1da-04f6-d9cd-d93b-a4ccb29b92dd",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+          "NodeName": "caton",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910766,
+          "ModifyIndex": 910796,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 21535
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 20910
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 22719
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 29226
+                    }
+                  ],
+                  "IP": "192.168.1.12",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 21535
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 20910
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 22719
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 29226
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null
+            },
+            "Tasks": {
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "e9a938d4-300c-a5b2-b225-17e08b92c477",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910798,
+          "ModifyIndex": 910804,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 29267
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 31553
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 27509
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 20022
+                    }
+                  ],
+                  "IP": "192.168.1.10",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 29267
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 31553
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 27509
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 20022
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null
+            },
+            "Tasks": {
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "ed749c6f-1aa3-8e83-9836-396155d97a56",
+          "Namespace": "default",
+          "JobID": "quod-finality-candidate-v6-20260926",
+          "TaskGroup": "quod-node",
+          "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+          "NodeName": "corin",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910766,
+          "ModifyIndex": 910791,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "DynamicPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "p2p",
+                      "To": 14567,
+                      "Value": 31566
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "metrics",
+                      "To": 14568,
+                      "Value": 22181
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "explorer",
+                      "To": 14569,
+                      "Value": 27796
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "To": 14570,
+                      "Value": 29178
+                    }
+                  ],
+                  "IP": "192.168.1.11",
+                  "Mode": "bridge"
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "p2p",
+                  "To": 14567,
+                  "Value": 31566
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "metrics",
+                  "To": 14568,
+                  "Value": 22181
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "explorer",
+                  "To": 14569,
+                  "Value": 27796
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "client",
+                  "To": 14570,
+                  "Value": 29178
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "prepare-agent-vault": {
+                "Hook": "prestart",
+                "Sidecar": false
+              },
+              "quod": null,
+              "wait-for-peer": {
+                "Hook": "prestart",
+                "Sidecar": false
+              }
+            },
+            "Tasks": {
+              "prepare-agent-vault": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              },
+              "quod": {
+                "Cpu": {
+                  "CpuShares": 500,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 512,
+                  "MemoryMaxMB": 1024
+                },
+                "Networks": null
+              },
+              "wait-for-peer": {
+                "Cpu": {
+                  "CpuShares": 100,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 32,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "quod27-client-30519",
+      "namespace": "default",
+      "version": 1,
+      "modify_index": 846377,
+      "groups": [
+        {
+          "name": "ingress",
+          "count": 1,
+          "volumes": null,
+          "services": [
+            {
+              "Name": "quod27-client-30519",
+              "PortLabel": "client",
+              "Tags": [
+                "quod",
+                "ingress"
+              ],
+              "AddressMode": "auto"
+            }
+          ],
+          "images": [
+            "traefik@sha256:06ddf61ee653caf4f4211a604e657f084f4727f762c16f826c97aafbefcb279e"
+          ],
+          "root_configuration": []
+        }
+      ],
+      "allocations": [
+        {
+          "ID": "f3de277a-f783-08a3-d918-6075bf2aec6f",
+          "Namespace": "default",
+          "JobID": "quod27-client-30519",
+          "TaskGroup": "ingress",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 846371,
+          "ModifyIndex": 893752,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "IP": "192.168.1.10",
+                  "Mode": "host",
+                  "ReservedPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "client",
+                      "Value": 30519
+                    }
+                  ]
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "client",
+                  "Value": 30519
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "traefik": null
+            },
+            "Tasks": {
+              "traefik": {
+                "Cpu": {
+                  "CpuShares": 200,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 128,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "traefik",
+      "namespace": "default",
+      "version": 4,
+      "modify_index": 441317,
+      "groups": [
+        {
+          "name": "traefik",
+          "count": 1,
+          "volumes": null,
+          "services": [],
+          "images": [
+            "traefik:v3.4"
+          ],
+          "root_configuration": []
+        }
+      ],
+      "allocations": [
+        {
+          "ID": "09c1e8ff-618e-fbea-2c3d-534d3e6c12cd",
+          "Namespace": "default",
+          "JobID": "traefik",
+          "TaskGroup": "traefik",
+          "NodeID": "73642c48-e80a-fe19-52f3-cef2bf36ed2b",
+          "NodeName": "prospero",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 910342,
+          "ModifyIndex": 910350,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "IP": "192.168.1.92",
+                  "Mode": "host",
+                  "ReservedPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "http",
+                      "Value": 80
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "dashboard",
+                      "Value": 8081
+                    }
+                  ]
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.92",
+                  "Label": "http",
+                  "Value": 80
+                },
+                {
+                  "HostIP": "192.168.1.92",
+                  "Label": "dashboard",
+                  "Value": 8081
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "traefik": null
+            },
+            "Tasks": {
+              "traefik": {
+                "Cpu": {
+                  "CpuShares": 200,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 128,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "575e96a7-93f9-242d-b849-041780c7da4e",
+          "Namespace": "default",
+          "JobID": "traefik",
+          "TaskGroup": "traefik",
+          "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+          "NodeName": "caton",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 836119,
+          "ModifyIndex": 893682,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "IP": "192.168.1.12",
+                  "Mode": "host",
+                  "ReservedPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "http",
+                      "Value": 80
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "dashboard",
+                      "Value": 8081
+                    }
+                  ]
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "http",
+                  "Value": 80
+                },
+                {
+                  "HostIP": "192.168.1.12",
+                  "Label": "dashboard",
+                  "Value": 8081
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "traefik": null
+            },
+            "Tasks": {
+              "traefik": {
+                "Cpu": {
+                  "CpuShares": 200,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 128,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "9451499f-6607-b940-ee2b-6f6ce8143424",
+          "Namespace": "default",
+          "JobID": "traefik",
+          "TaskGroup": "traefik",
+          "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+          "NodeName": "conrad",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 772634,
+          "ModifyIndex": 893751,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "IP": "192.168.1.10",
+                  "Mode": "host",
+                  "ReservedPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "http",
+                      "Value": 80
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "dashboard",
+                      "Value": 8081
+                    }
+                  ]
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "http",
+                  "Value": 80
+                },
+                {
+                  "HostIP": "192.168.1.10",
+                  "Label": "dashboard",
+                  "Value": 8081
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "traefik": null
+            },
+            "Tasks": {
+              "traefik": {
+                "Cpu": {
+                  "CpuShares": 200,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 128,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "d3621251-ed99-8b34-33e8-a662bc203fac",
+          "Namespace": "default",
+          "JobID": "traefik",
+          "TaskGroup": "traefik",
+          "NodeID": "e37f93bb-03a2-4384-e61a-b4648d5a24d2",
+          "NodeName": "quod-cloud-1",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 880800,
+          "ModifyIndex": 880829,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "IP": "100.98.216.20",
+                  "Mode": "host",
+                  "ReservedPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "http",
+                      "Value": 80
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "dashboard",
+                      "Value": 8081
+                    }
+                  ]
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "http",
+                  "Value": 80
+                },
+                {
+                  "HostIP": "100.98.216.20",
+                  "Label": "dashboard",
+                  "Value": 8081
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "traefik": null
+            },
+            "Tasks": {
+              "traefik": {
+                "Cpu": {
+                  "CpuShares": 200,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 128,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        },
+        {
+          "ID": "d646c36c-d20d-0361-73f5-1f4c12d988fa",
+          "Namespace": "default",
+          "JobID": "traefik",
+          "TaskGroup": "traefik",
+          "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+          "NodeName": "corin",
+          "ClientStatus": "running",
+          "DesiredStatus": "run",
+          "CreateIndex": 441309,
+          "ModifyIndex": 893756,
+          "AllocatedResources": {
+            "Shared": {
+              "DiskMB": 300,
+              "Networks": [
+                {
+                  "IP": "192.168.1.11",
+                  "Mode": "host",
+                  "ReservedPorts": [
+                    {
+                      "HostNetwork": "default",
+                      "Label": "http",
+                      "Value": 80
+                    },
+                    {
+                      "HostNetwork": "default",
+                      "Label": "dashboard",
+                      "Value": 8081
+                    }
+                  ]
+                }
+              ],
+              "Ports": [
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "http",
+                  "Value": 80
+                },
+                {
+                  "HostIP": "192.168.1.11",
+                  "Label": "dashboard",
+                  "Value": 8081
+                }
+              ]
+            },
+            "TaskLifecycles": {
+              "traefik": null
+            },
+            "Tasks": {
+              "traefik": {
+                "Cpu": {
+                  "CpuShares": 200,
+                  "ReservedCores": null
+                },
+                "Devices": null,
+                "Memory": {
+                  "MemoryMB": 128,
+                  "MemoryMaxMB": 0
+                },
+                "Networks": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "host_volumes": [
+    {
+      "ID": "0016305f-66c5-1840-7062-13d22ff073ea",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[5]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/0016305f-66c5-1840-7062-13d22ff073ea",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "011e6c0b-3b10-bf0a-865d-35f7f140475d",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[1]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/011e6c0b-3b10-bf0a-865d-35f7f140475d",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "059371f5-0cbd-62ca-86ef-4e177445bd55",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[7]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/059371f5-0cbd-62ca-86ef-4e177445bd55",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "06e8ac4e-6976-f1da-830f-b80612bdef51",
+      "Name": "quod-node-arch206[7]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/06e8ac4e-6976-f1da-830f-b80612bdef51",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "130712f9-53a1-b67f-f96e-b45cabdab210",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[6]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/130712f9-53a1-b67f-f96e-b45cabdab210",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "1a71aba6-4068-c0c0-6aee-84fb2521b807",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[5]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/1a71aba6-4068-c0c0-6aee-84fb2521b807",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "21980603-2a5f-271c-fe49-efde09c329fa",
+      "Name": "quod-node-arch206[3]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/21980603-2a5f-271c-fe49-efde09c329fa",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "283727a2-bb29-2296-70c4-599ad3776211",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[3]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/283727a2-bb29-2296-70c4-599ad3776211",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "2ff4967d-d644-ab7a-d755-f26ba6460d17",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[5]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/2ff4967d-d644-ab7a-d755-f26ba6460d17",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "3138d005-159e-c2e0-1022-ee9268388778",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[2]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/3138d005-159e-c2e0-1022-ee9268388778",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "36cfea36-59a3-1649-f96c-ca1c17dcfd63",
+      "Name": "quod-node-arch206[0]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/36cfea36-59a3-1649-f96c-ca1c17dcfd63",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "3c5db3d4-740c-e72a-838d-26521da9826f",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[2]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/3c5db3d4-740c-e72a-838d-26521da9826f",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "3f747ecc-53d0-3606-fdec-a63f91de5fe0",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[3]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/3f747ecc-53d0-3606-fdec-a63f91de5fe0",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "404a1923-586a-be85-ccac-50d6c25c76fb",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[7]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/404a1923-586a-be85-ccac-50d6c25c76fb",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "42429745-820f-fc31-5a74-c57d475481f6",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[7]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/42429745-820f-fc31-5a74-c57d475481f6",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "4e6867d2-4a51-9a08-776e-f3c436ab25d7",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[4]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/4e6867d2-4a51-9a08-776e-f3c436ab25d7",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "50ab6009-4ce4-04d7-b166-1064cc88b894",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[2]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/50ab6009-4ce4-04d7-b166-1064cc88b894",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "50cbd7f4-6468-2815-4432-6e4fb93d8fca",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[7]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/50cbd7f4-6468-2815-4432-6e4fb93d8fca",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "5468fdd5-04ad-5cae-6886-2374b69cb6b1",
+      "Name": "quod-node-arch206[5]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/5468fdd5-04ad-5cae-6886-2374b69cb6b1",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "5ce79279-7b86-4d54-ded2-435f5c95aacf",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[4]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/5ce79279-7b86-4d54-ded2-435f5c95aacf",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "5e959241-4d87-1cbe-1a38-941fb8baa255",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[1]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/5e959241-4d87-1cbe-1a38-941fb8baa255",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "61a86ff8-c5c7-8b2f-2919-26294dd0317e",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[4]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/61a86ff8-c5c7-8b2f-2919-26294dd0317e",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "6a5eca2f-5690-5b16-4c8e-b185f5ff45c7",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[3]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/6a5eca2f-5690-5b16-4c8e-b185f5ff45c7",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "74148ea7-25b5-010c-f0cb-dc84f366cec0",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[0]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/74148ea7-25b5-010c-f0cb-dc84f366cec0",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "7d4f2b5a-c54f-a6ce-91f4-9e27a70cb0b0",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[3]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/7d4f2b5a-c54f-a6ce-91f4-9e27a70cb0b0",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "804f8672-6462-6a50-08c4-f981a64170f5",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[6]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/804f8672-6462-6a50-08c4-f981a64170f5",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "8bdf90cd-1b7d-ffc8-9fa0-4cfd26d7ca79",
+      "Name": "quod-node-arch206[6]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/8bdf90cd-1b7d-ffc8-9fa0-4cfd26d7ca79",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "930f80ef-2703-3461-fd11-edc71c7fb3b5",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[6]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/930f80ef-2703-3461-fd11-edc71c7fb3b5",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "9cbaddc9-d918-f497-a9ab-68d7f64039ad",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261017-v12[1]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/9cbaddc9-d918-f497-a9ab-68d7f64039ad",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "a1c66c8d-c09d-9e46-955d-2f94b417dce8",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[0]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/a1c66c8d-c09d-9e46-955d-2f94b417dce8",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "aca2eee8-5a14-a950-1c39-433602ed0501",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[0]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/aca2eee8-5a14-a950-1c39-433602ed0501",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "ae6bd71f-eaa2-d2e0-5de3-19ff5836ce61",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[5]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/ae6bd71f-eaa2-d2e0-5de3-19ff5836ce61",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "aedc1302-cd53-aabf-a8a0-52e55936cea1",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261027-movement01[2]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/aedc1302-cd53-aabf-a8a0-52e55936cea1",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "b1056453-5f99-93f5-8822-7bfd8260a6ea",
+      "Name": "quod-node-arch206[2]",
+      "Namespace": "default",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "HostPath": "/var/lib/nomad/host_volumes/b1056453-5f99-93f5-8822-7bfd8260a6ea",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "b367034e-01c6-ac49-e7ce-1cfee20eec45",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[6]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/b367034e-01c6-ac49-e7ce-1cfee20eec45",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "c3de2e45-94a3-f53d-bcb6-d675817d4701",
+      "Name": "quod-node-arch206[4]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/c3de2e45-94a3-f53d-bcb6-d675817d4701",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "cbf91da9-126a-3238-e1f6-c5eaac1ae9a5",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[4]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/cbf91da9-126a-3238-e1f6-c5eaac1ae9a5",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "d2646eb5-42a8-bdb5-b32b-aabfc5c51d1c",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[0]",
+      "Namespace": "default",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "HostPath": "/var/lib/nomad/host_volumes/d2646eb5-42a8-bdb5-b32b-aabfc5c51d1c",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "f3e1dbd4-99a8-b2ba-e992-d53bc2d0d36a",
+      "Name": "quod-node-arch206[1]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/f3e1dbd4-99a8-b2ba-e992-d53bc2d0d36a",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    },
+    {
+      "ID": "ff4cd231-8d42-d5bf-da45-f5b232b31019",
+      "Name": "quod-finality-candidate-v6-20260926-refound-20261025-stage1-c05[1]",
+      "Namespace": "default",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "HostPath": "/var/lib/nomad/host_volumes/ff4cd231-8d42-d5bf-da45-f5b232b31019",
+      "State": "ready",
+      "RequestedCapabilities": [
+        {
+          "AccessMode": "single-node-writer",
+          "AttachmentMode": "file-system"
+        }
+      ],
+      "Allocations": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        }
+      ]
+    }
+  ]
+}

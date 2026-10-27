@@ -5,7 +5,9 @@ Pure v13 wire boundary for durable operation and read-attestation traffic.
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
 outcome requests carry a committee id and minimum certified slot; replies carry
-the responder's anchored identity and applied floor. Snapshot absence and
+the responder's anchored identity and applied floor. Selected domain values
+retain unknown symbols as opaque data, independently of the receiver's atom table.
+Snapshot absence and
 gateway retirement never authorize an outcome. Applied requests bind one exact Resolve,
 generation, and verdict; each validator response carries its signed vote for
 the caller to combine into the portable certificate owned by
@@ -165,13 +167,23 @@ encode_traced_direction(Namespace, Inner, Hints, TraceCarrier, Direction) ->
                 {ok, WireHints} ->
                     InnerBinary =
                         term_to_binary({Inner, WireHints}, [deterministic]),
-                    Envelope = term_to_binary(
-                                 {?DOMAIN, ?VERSION, Namespace, InnerBinary, TraceCarrier},
-                                 [deterministic]),
-                    case byte_size(Envelope) =<
-                         ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
-                        true -> {ok, Envelope};
-                        false -> too_large(dtx_endpoint)
+                    %% Bindings alone do not include the enclosing protocol
+                    %% depth. Admit the complete inner bytes by the same rule
+                    %% as the receiver before emitting an undecodable frame.
+                    case quod_safe_term:validate_canonical(
+                           InnerBinary, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
+                        ok ->
+                            Envelope = term_to_binary(
+                                         {?DOMAIN, ?VERSION, Namespace,
+                                          InnerBinary, TraceCarrier},
+                                         [deterministic]),
+                            case byte_size(Envelope) =<
+                                 ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
+                                true -> {ok, Envelope};
+                                false -> too_large(dtx_endpoint)
+                            end;
+                        {error, too_large} -> too_large(dtx_endpoint);
+                        {error, _} -> protocol_error(bad_etf)
                     end;
                 error ->
                     protocol_error(bad_hints)
@@ -250,18 +262,16 @@ decode_inner(Expected, Namespace, InnerBinary, Direction) ->
         {_, false, _} -> protocol_error(bad_namespace);
         {_, _, false} -> protocol_error(bad_shape);
         {true, true, true} ->
-            case quod_safe_term:decode(
+            %% This shared decoder verifies the original canonical bytes while
+            %% retaining unknown domain symbols without allocating atoms.
+            case quod_safe_term:decode_wrapped(
                    InnerBinary, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
-                {ok, {Inner, RawHints} = Wrapped} ->
-                    case term_to_binary(Wrapped, [deterministic]) =:= InnerBinary of
-                        false -> protocol_error(non_canonical);
-                        true ->
-                            case validate_bound_direction(Namespace, Inner, Direction) of
-                                ok ->
-                                    {ok, Namespace, Inner,
-                                     decode_validation_sidecar(RawHints)};
-                                {error, _} = Error -> Error
-                            end
+                {ok, {Inner, RawHints}} ->
+                    case validate_bound_direction(Namespace, Inner, Direction) of
+                        ok ->
+                            {ok, Namespace, Inner,
+                             decode_validation_sidecar(RawHints)};
+                        {error, _} = Error -> Error
                     end;
                 {ok, _Other} -> protocol_error(bad_shape);
                 {error, _} -> protocol_error(bad_etf)
@@ -639,8 +649,7 @@ valid_participant_slots(Slots) ->
 
 valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       (Previous =:= none orelse Previous < Identity),
+  when (Previous =:= none orelse Previous < Identity),
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64 ->

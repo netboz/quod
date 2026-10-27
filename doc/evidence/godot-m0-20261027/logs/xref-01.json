@@ -1,0 +1,15 @@
+{
+  "command": [
+    "env",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "REBAR_CACHE_DIR=/tmp/quod-m0-rebar-cache",
+    "rebar3",
+    "xref"
+  ],
+  "cwd": "/tmp/quod-m0-validation-01",
+  "start_utc": "2026-10-27T15:26:55Z",
+  "elapsed_seconds": 46.34972262382507,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

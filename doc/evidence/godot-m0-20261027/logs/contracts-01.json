@@ -1,0 +1,11 @@
+{
+  "command": [
+    "node",
+    "client/native/tools/contracts.mjs"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T14:36:21Z",
+  "elapsed_seconds": 1.1238484382629395,
+  "child_exit": 0,
+  "timed_out": false
+}

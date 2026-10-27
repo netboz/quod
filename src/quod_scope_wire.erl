@@ -752,8 +752,7 @@ validate_id_id_list(Id, Ids) ->
     end.
 
 validate_id_list(Ids) ->
-    case validate_unique_ids(
-           Ids, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 0, #{}) of
+    case validate_unique_ids(Ids, #{}) of
         ok -> ok;
         error -> protocol_error(bad_id_list)
     end.
@@ -784,8 +783,7 @@ validate_activated(ControllerId, FinalLineage, Activated) ->
     end.
 
 valid_activated_list(Activated) ->
-    Limit = ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF,
-    case bounded_nonempty_list(Activated, Limit) andalso
+    case proper_nonempty_list(Activated) andalso
          lists:all(fun valid_activation_entry/1, Activated) andalso
          unique_activation_fields(Activated) of
         true -> {ok, element(3, lists:last(Activated))};
@@ -805,25 +803,16 @@ unique_ids(Position, Activated) ->
     Ids = [element(Position, Entry) || Entry <- Activated],
     map_size(maps:from_keys(Ids, true)) =:= length(Ids).
 
-validate_unique_ids([], _Limit, Count, _Seen) when Count > 0 -> ok;
-validate_unique_ids([], _Limit, 0, _Seen) -> error;
-validate_unique_ids([Id | Rest], Limit, Count, Seen)
-  when Count < Limit ->
+validate_unique_ids([], Seen) when map_size(Seen) > 0 -> ok;
+validate_unique_ids([Id | Rest], Seen) ->
     case valid_id(Id) andalso not maps:is_key(Id, Seen) of
-        true -> validate_unique_ids(
-                  Rest, Limit, Count + 1, Seen#{Id => true});
+        true -> validate_unique_ids(Rest, Seen#{Id => true});
         false -> error
     end;
-validate_unique_ids(_Ids, _Limit, _Count, _Seen) -> error.
+validate_unique_ids(_, _) -> error.
 
-bounded_nonempty_list([_ | _] = List, Limit) ->
-    bounded_list(List, Limit, 0);
-bounded_nonempty_list(_List, _Limit) -> false.
-
-bounded_list([], _Limit, _Count) -> true;
-bounded_list([_ | Rest], Limit, Count) when Count < Limit ->
-    bounded_list(Rest, Limit, Count + 1);
-bounded_list(_List, _Limit, _Count) -> false.
+proper_nonempty_list(List) when length(List) > 0 -> true;
+proper_nonempty_list(_) -> false.
 
 validate_id_sequence(Id, Sequence) ->
     case {valid_id(Id), valid_sequence(Sequence)} of
@@ -857,7 +846,7 @@ validate_id_error(Id, Reason) ->
     end.
 
 validate_chain(Chain) ->
-    case bounded_nonempty_list(Chain, ?QUOD_MAX_ACTIVE_PROOF_DEPTH) andalso
+    case proper_nonempty_list(Chain) andalso
          lists:all(fun valid_identity/1, Chain) of
         true -> ok;
         false -> protocol_error(bad_chain)
@@ -924,15 +913,15 @@ validate_public_error(independent_scope_required) -> ok;
 validate_public_error(read_certificate_unavailable) -> ok;
 validate_public_error(conflict_retry) -> ok;
 validate_public_error({material_limit, Kind, Resource, Actual, Limit})
-  when Kind =:= founding; Kind =:= plan ->
-    case lists:member(Resource, [canonical_bytes, symbols, operations, reads])
+  when Kind =:= founding; Kind =:= plan; Kind =:= proof ->
+    case lists:member(Resource, [canonical_bytes, symbols, operations, reads, heap_bytes])
          andalso valid_uint64(Actual) andalso valid_uint64(Limit)
          andalso Actual > Limit of
         true -> ok;
         false -> protocol_error(bad_error_code)
     end;
 validate_public_error({invalid_material_policy, Kind})
-  when Kind =:= founding; Kind =:= plan -> ok;
+  when Kind =:= founding; Kind =:= plan; Kind =:= proof -> ok;
 validate_public_error({effect_custody_limit, prepared_bytes, Actual, Limit}) ->
     case valid_uint64(Actual) andalso valid_uint64(Limit) andalso Actual > Limit of
         true -> ok;
@@ -949,17 +938,10 @@ validate_public_error({Tag, Value} = Reason) ->
     end;
 validate_public_error(_) -> protocol_error(bad_error_code).
 
-validate_public_error_pair({Tag, Max})
-  when Tag =:= proof_depth_exceeded; Tag =:= scope_limit_exceeded;
-       Tag =:= savepoint_limit_exceeded ->
-    case valid_sequence(Max) of
-        true -> ok;
-        false -> protocol_error(bad_error_code)
-    end;
 validate_public_error_pair({too_large, Kind}) ->
     case payload_limit(Kind) of
         {ok, _} -> ok;
-        error when Kind =:= scope_envelope; Kind =:= transcript -> ok;
+        error when Kind =:= scope_envelope -> ok;
         error -> protocol_error(bad_error_code)
     end;
 validate_public_error_pair({non_transactional_dependency, {Name, Arity}})
@@ -1016,7 +998,7 @@ namespaced_error_tag(Tag) ->
         Tag =:= ontology_busy orelse Tag =:= ontology_rebuilding orelse
         Tag =:= network_identity_unavailable orelse
         Tag =:= proof_limit_exceeded orelse
-        Tag =:= scope_expired orelse Tag =:= too_many_answers.
+        Tag =:= scope_expired.
 
 valid_protocol_kind(Kind) ->
     lists:member(

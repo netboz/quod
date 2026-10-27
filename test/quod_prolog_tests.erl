@@ -24,6 +24,16 @@ native_execution_uses_ordinary_acl_and_commit_test_() ->
           ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, native_refused))
       end) end}.
 
+origin_heap_policy_refusal_preserves_engine_and_committed_height_test_() ->
+    {timeout,60,fun() -> quod_agent_hosting_tests:with_host(fun(#{namespace := Ns}) ->
+        Engine = quod_reg:where({quod_prolog,Ns}),
+        Height = quod_prolog:applied(Ns),
+        ?assertMatch({error,{material_limit,proof,heap_bytes,Actual,0}} when Actual > 0,
+            quod_prolog:execute(Ns,{assertz,must_not_commit_without_heap})),
+        ?assert(is_process_alive(Engine)),
+        ?assertEqual(Height,quod_prolog:applied(Ns))
+    end,[{material_limit_override,proof,heap_bytes,0}]) end}.
+
 native_engine_loss_before_checkpoint_is_not_an_unknown_operation_test_() ->
     {timeout, 60, fun() -> with_native_barrier(fun(Ns) ->
         Engine = quod_reg:where({quod_prolog, Ns}),

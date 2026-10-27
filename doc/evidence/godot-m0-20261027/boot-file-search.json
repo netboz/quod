@@ -1,0 +1,185 @@
+{
+  "note": "Bounded startup diagnostic, file names and counts only; raw read data was never traced. Tracing adds overhead; not a latency measurement.",
+  "beam_open_attempts": 6216,
+  "missing_open_attempts": 5095,
+  "most_repeated_missing": [
+    [
+      "standard_error.beam",
+      62
+    ],
+    [
+      "inet_udp.beam",
+      62
+    ],
+    [
+      "inet.beam",
+      62
+    ],
+    [
+      "erl_distribution.beam",
+      62
+    ],
+    [
+      "global_group.beam",
+      62
+    ],
+    [
+      "user_sup.beam",
+      62
+    ],
+    [
+      "kernel_config.beam",
+      62
+    ],
+    [
+      "logger_std_h.beam",
+      62
+    ],
+    [
+      "logger_h_common.beam",
+      62
+    ],
+    [
+      "quod_simplex.beam",
+      62
+    ],
+    [
+      "supervisor_bridge.beam",
+      61
+    ],
+    [
+      "prim_tty.beam",
+      61
+    ],
+    [
+      "inet_gethost_native.beam",
+      61
+    ],
+    [
+      "rpc.beam",
+      61
+    ],
+    [
+      "net_kernel.beam",
+      61
+    ]
+  ],
+  "sys_beam_search": [
+    {
+      "path": "/tmp/m0-diagnostic-ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/test/lib/quod/test/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/test/lib/quod/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/gproc/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/ctx/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/opentelemetry_api/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/erlog/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/ssl_verify_fun/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/hpack/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/ranch/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/typerefl/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/prometheus/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/accept/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/tls_certificate_check/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/chatterbox/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/quic/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/grpcbox/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/quantile_estimator/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/prometheus_httpd/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/cowlib/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/getopt/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/erlang_qq/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/hocon/ebin/sys.beam",
+      "missing": false
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/opentelemetry/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/acceptor_pool/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/opentelemetry_exporter/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/tmp/quod-m0-validation-01/_build/default/lib/cowboy/ebin/sys.beam",
+      "missing": true
+    },
+    {
+      "path": "./sys.beam",
+      "missing": true
+    },
+    {
+      "path": "/home/yan/.asdf/installs/erlang/28.0.2/lib/stdlib-7.0.2/ebin/sys.beam",
+      "missing": false
+    }
+  ]
+}

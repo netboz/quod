@@ -1,0 +1,11 @@
+file:///home/yan/src/quod_worktrees/pearl-stone/client/src/prolog-read.js:130
+    if (next !== ',') throw new Error('expected , or ] in a list')
+                            ^
+
+Error: expected , or ] in a list
+    at readItems (file:///home/yan/src/quod_worktrees/pearl-stone/client/src/prolog-read.js:130:29)
+    at readOne (file:///home/yan/src/quod_worktrees/pearl-stone/client/src/prolog-read.js:52:36)
+    at readTerm (file:///home/yan/src/quod_worktrees/pearl-stone/client/src/prolog-read.js:23:16)
+    at file:///home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/wire-fixtures.mjs:39:40
+
+Node.js v26.10.0

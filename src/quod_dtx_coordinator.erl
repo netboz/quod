@@ -1021,7 +1021,7 @@ drive_commands_next(S) ->
         {ok, {Mode, Stage, [_ | _] = Commands} = Batch}
           when (Mode =:= ordered orelse Mode =:= independent),
                is_atom(Stage),
-               length(Commands) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
+               length(Commands) > 0 ->
             queue_drive(),
             {next, S#state{commands = Batch}};
         {ok, _MalformedCommands} ->

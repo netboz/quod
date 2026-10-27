@@ -1722,13 +1722,13 @@ spawn_verification_worker(_RequestRef, Work, Fun) ->
                                erase({?MODULE, confirmation_gate});
                            _ -> undefined
                        end,
-    spawn_opt(
+    spawn(
       fun() ->
           put({?MODULE, worker_result_gate}, ResultGate),
           put({?MODULE, confirmation_gate}, ConfirmationGate),
           put({?MODULE, custody_acquired_gate}, Gate),
           Fun()
-      end, verification_worker_options()).
+      end).
 
 verification_custody_acquired(RequestRef) ->
     case erase({?MODULE, custody_acquired_gate}) of
@@ -1752,13 +1752,9 @@ test_worker_result_gate(RequestRef) ->
     end.
 -else.
 spawn_verification_worker(_RequestRef, _Work, Fun) ->
-    spawn_opt(Fun, verification_worker_options()).
+    spawn(Fun).
 verification_custody_acquired(_RequestRef) -> ok.
 -endif.
-
-verification_worker_options() ->
-    [{max_heap_size,
-      #{size => foreign_worker_heap_words(), kill => true, error_logger => true}}].
 
 request_owners(_RequestRef, {follow, _, _} = From, _TimeoutMs) ->
     {From, #{}};
@@ -4286,9 +4282,6 @@ record_follow_progress(RequestRef, Meta, S0) when is_map(Meta) ->
         _ -> S0
     end;
 record_follow_progress(_RequestRef, _Meta, S) -> S.
-
-foreign_worker_heap_words() ->
-    max(1, ?QUOD_SCOPE_WORKER_MAX_HEAP_BYTES div erlang:system_info(wordsize)).
 
 %%%===================================================================
 %%% Catch-up transport

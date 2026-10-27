@@ -52,7 +52,7 @@ all_command_shapes_roundtrip_deterministically_test() ->
          {materialize, id(4), id(5), id(7), [id(8), id(9)]},
          {batch_restore, [id(8), id(9)]},
          {batch_release, [id(8), id(9)]},
-         {controller_error, id(4), {savepoint_limit_exceeded, 1024}}],
+         {controller_error, id(4), {material_limit, proof, heap_bytes, 1025, 1024}}],
     lists:foreach(
       fun({Index, Operation}) ->
           Command = {scope_command, binding(), Index, id(Index + 20),
@@ -209,8 +209,6 @@ scope_error_target_binding_does_not_constrain_invocation_errors_test() ->
                  {proof_limit_exceeded, Descendant}, Target)),
     ?assert(quod_scope_wire:scope_error_matches_target(read_only, Target)),
     ?assert(quod_scope_wire:scope_error_matches_target(
-              {scope_limit_exceeded, 8}, Target)),
-    ?assert(quod_scope_wire:scope_error_matches_target(
               {transaction_pending, PendingGroup}, Target)),
     ?assertNot(quod_scope_wire:scope_error_matches_target(
                  arbitrary_remote_error, Target)),
@@ -278,10 +276,12 @@ seal_operations_round_trip_and_stay_bounded_test() ->
       end,
       [independent_requires_signed_request, independent_nesting,
        independent_mixed_writes, independent_scope_required,
-       {too_large, transcript}, {too_large, plan}, {too_large, result},
+       {too_large, plan}, {too_large, result},
        {material_limit, plan, symbols, 2049, 2048},
        {material_limit, founding, canonical_bytes, 10, 9},
+       {material_limit, proof, heap_bytes, 10000, 4096},
        {invalid_material_policy, plan},
+       {invalid_material_policy, proof},
        {non_transactional_dependency, {directory_host, 5}},
        {network_identity_unavailable, <<"quod:target">>}]),
     ?assertEqual(
@@ -638,7 +638,7 @@ ids_sequences_chain_generation_and_dirty_are_bounded_test() ->
     Goal = payload(goal, true),
     MaxCommand = {scope_command, binding(), Max, id(1), Max,
                   {invoke_open, id(2), selection(none, []),
-                   chain(?QUOD_MAX_ACTIVE_PROOF_DEPTH), Goal}},
+                   chain(32), Goal}},
     ?assertMatch({ok, _}, quod_scope_wire:encode_command(MaxCommand)),
     ?assertEqual(
        {error, {protocol_error, bad_sequence}},
@@ -649,13 +649,11 @@ ids_sequences_chain_generation_and_dirty_are_bounded_test() ->
     ?assertEqual(
        {error, {protocol_error, bad_id}},
        quod_scope_wire:encode_command(setelement(4, MaxCommand, <<0:120>>))),
-    TooDeep = setelement(
+    LongerChain = setelement(
                 6, MaxCommand,
                 {invoke_open, id(2), selection(none, []),
-                 chain(?QUOD_MAX_ACTIVE_PROOF_DEPTH + 1), Goal}),
-    ?assertEqual(
-       {error, {protocol_error, bad_chain}},
-       quod_scope_wire:encode_command(TooDeep)),
+                 chain(32 + 1), Goal}),
+    ?assertMatch({ok, _}, quod_scope_wire:encode_command(LongerChain)),
     BadChain = setelement(
                  6, MaxCommand,
                  {invoke_open, id(2), selection(none, []),
@@ -718,7 +716,7 @@ lineage_controller_shapes_and_limits_are_exact_test() ->
          command({invoke_open, id(1), selection(<<0:120>>, []),
                   chain(1), Goal}))),
 
-    Limit = ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF,
+    Limit = 1025,
     BatchIds = ids(1000, Limit),
     ?assertMatch(
        {ok, _},
@@ -736,18 +734,14 @@ lineage_controller_shapes_and_limits_are_exact_test() ->
        quod_scope_wire:encode_command(
          command({invoke_open, id(1), selection(none, [id(3)]),
                   chain(1), Goal}))),
-    ?assertEqual(
-       {error, {protocol_error, bad_selection}},
-       quod_scope_wire:encode_command(
+    ?assertMatch({ok, _}, quod_scope_wire:encode_command(
          command({invoke_open, id(1),
                   selection(id(2), ids(1000, Limit + 1)),
                   chain(1), Goal}))),
     ?assertMatch(
        {ok, _},
        quod_scope_wire:encode_command(command({batch_restore, BatchIds}))),
-    ?assertEqual(
-       {error, {protocol_error, bad_id_list}},
-       quod_scope_wire:encode_command(
+    ?assertMatch({ok, _}, quod_scope_wire:encode_command(
          command({batch_restore, ids(1000, Limit + 1)}))),
     ?assertEqual(
        {error, {protocol_error, bad_id_list}},

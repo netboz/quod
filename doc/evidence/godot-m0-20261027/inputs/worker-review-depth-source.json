@@ -1,0 +1,15 @@
+{
+  "stage": "/tmp/quod-m0-review-depth-02",
+  "qualified_build": "/tmp/quod-m0-r1-gates-04/source",
+  "files": [
+    {
+      "path": "src/quod_dtx_endpoint.erl",
+      "sha256": "41c1346edff37994b7f7653bbb451fcd9867f84e3399b487aef9188d0249e86d"
+    },
+    {
+      "path": "test/quod_dtx_endpoint_tests.erl",
+      "sha256": "993da0fa834c180e385d21a484801d105ab53183d73cc5c5868202f9e4cd0f8b"
+    }
+  ],
+  "no_receiver_limit_or_deadline_change": true
+}

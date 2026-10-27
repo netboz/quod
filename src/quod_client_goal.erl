@@ -224,7 +224,7 @@ authorization_transcript(Transcript, Target, GoalBlob)
         [Entry] ->
             case quod_wire_term:encode_canonical([Entry]) of
                 {ok, Blob}
-                  when byte_size(Blob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES ->
+                  when byte_size(Blob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES ->
                     {ok, {agent_goal_v1, Blob}};
                 _ -> error
             end;
@@ -241,10 +241,10 @@ verify_authorization(
     goal_blob := GoalBlob},
   {agent_goal_v1, Blob})
   when is_binary(Ns), is_binary(GoalBlob), is_binary(Blob),
-       byte_size(Blob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES ->
+       byte_size(Blob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES ->
     Target = {Ns, Anchor},
     case quod_wire_term:decode_canonical(
-           Blob, ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES) of
+           Blob, ?QUOD_MAX_PLAN_ENVELOPE_BYTES) of
         {ok, [Entry0]} ->
             case quod_wire_term:materialize_symbols([Entry0]) of
                 {ok, [Entry]} ->
@@ -260,7 +260,7 @@ verify_authorization_entry(
   {<<_:128>>, [Target], GoalBlob, allowed, AnswerCount, <<_:256>>, Tag} = Entry,
   Target, GoalBlob)
   when is_integer(AnswerCount), AnswerCount >= 0,
-       AnswerCount =< ?QUOD_MAX_ANSWERS_PER_INVOCATION,
+       AnswerCount =< ?QUOD_SCOPE_WIRE_MAX_UINT64,
        (Tag =:= active orelse Tag =:= complete orelse
         Tag =:= error orelse Tag =:= cancelled) ->
     {ok, [Entry]};

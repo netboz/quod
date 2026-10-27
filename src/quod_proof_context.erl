@@ -596,9 +596,6 @@ get_or_open_active_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
             case maps:find(Ns, Ctx0#ctx.namespaces) of
                 {ok, OtherAnchor} when OtherAnchor =/= Anchor ->
                     {error, {anchor_conflict, Ns}};
-                _ when map_size(Ctx0#ctx.scopes) >= ?QUOD_MAX_SCOPES_PER_PROOF ->
-                    {error, {scope_limit_exceeded,
-                             ?QUOD_MAX_SCOPES_PER_PROOF}};
                 _ ->
                     open_scope(Identity, Ns, Anchor, OpenFun, Ctx0)
             end
@@ -722,7 +719,7 @@ registered_invocation(Actor, Lineage) ->
 -doc "Create an origin-owned stream proxy bound to one exact invocation actor.".
 -spec new_proxy(actor(), binary(), term()) ->
           {ok, opaque_id()} |
-          {error, not_allowed | {proof_limit_exceeded, binary()}}.
+          {error, not_allowed}.
 new_proxy({ScopeId, <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>} = Owner,
           Target, Stream)
   when is_binary(ScopeId),
@@ -731,8 +728,6 @@ new_proxy({ScopeId, <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>} = Owner,
     Ctx0 = context(),
     case maps:is_key(Owner, Ctx0#ctx.invocations) of
         false -> {error, not_allowed};
-        true when map_size(Ctx0#ctx.proxies) >= ?QUOD_MAX_PROXIES_PER_PROOF ->
-            {error, {proof_limit_exceeded, Target}};
         true ->
             Ref = new_proxy_id(Ctx0#ctx.proxies),
             put_context(Ctx0#ctx{proxies =
@@ -816,11 +811,7 @@ materialize({tx_selection, Lineage, BatchIds, _Mode} = Selection,
   when is_binary(ScopeId),
        byte_size(ScopeId) =:= ?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS div 8 ->
     Ctx0 = context(),
-    case bounded_unique_ids(BatchIds) of
-        {error, limit} ->
-            {error,
-             {savepoint_limit_exceeded,
-              ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}};
+    case unique_batch_ids(BatchIds) of
         {error, _} ->
             {error, bad_request};
         {ok, _Count} ->
@@ -887,22 +878,18 @@ materialize_missing(ScopeId, BatchIds, Actor, Lineage, Ctx0) ->
     end.
 
 activate_transactions(Actor, ParentLineage, FrameIds, Ctx0) ->
-    case bounded_unique_ids(FrameIds) of
+    case unique_batch_ids(FrameIds) of
         {ok, 0} ->
             {error, bad_request};
-        {error, limit} ->
-            {error,
-             {savepoint_limit_exceeded,
-              ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}};
         {error, _} ->
             {error, bad_request};
-        {ok, Count} ->
+        {ok, _Count} ->
             activate_transactions_validated(
-              Actor, ParentLineage, FrameIds, Count, Ctx0)
+              Actor, ParentLineage, FrameIds, Ctx0)
     end.
 
-activate_transactions_validated(Actor, ParentLineage, FrameIds, Count, Ctx0) ->
-    case valid_activation(Actor, ParentLineage, Count, Ctx0) of
+activate_transactions_validated(Actor, ParentLineage, FrameIds, Ctx0) ->
+    case valid_activation(Actor, ParentLineage, Ctx0) of
         ok ->
             BaselineId = new_id(Ctx0),
             {ParentTail, ParentTxsRev} = lineage_tail_and_txs(ParentLineage, Ctx0),
@@ -936,17 +923,10 @@ activate_transactions_validated(Actor, ParentLineage, FrameIds, Count, Ctx0) ->
         {error, _} = Error -> Error
     end.
 
-valid_activation(Actor, ParentLineage, Count, Ctx) ->
-    Limit = ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF,
-    case {invocation_authorized(Actor, ParentLineage, Ctx),
-          map_size(Ctx#ctx.txs) + Count =< Limit,
-          map_size(Ctx#ctx.lineages) + Count =< Limit,
-          map_size(Ctx#ctx.batches) + 1 =< Limit} of
-        {false, _, _, _} -> {error, not_allowed};
-        {_, false, _, _} -> {error, {savepoint_limit_exceeded, Limit}};
-        {_, _, false, _} -> {error, {savepoint_limit_exceeded, Limit}};
-        {_, _, _, false} -> {error, {savepoint_limit_exceeded, Limit}};
-        {true, true, true, true} -> ok
+valid_activation(Actor, ParentLineage, Ctx) ->
+    case invocation_authorized(Actor, ParentLineage, Ctx) of
+        true -> ok;
+        false -> {error, not_allowed}
     end.
 
 allocate_batch(Actor, Lineage, Ctx0) ->
@@ -973,32 +953,23 @@ reusable_batch(Actor, Lineage,
 reusable_batch(_, _, _) -> none.
 
 allocate_new_batch(Actor, Lineage, Ctx0) ->
-    Limit = ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF,
-    case map_size(Ctx0#ctx.batches) + 1 =< Limit of
-        false -> {error, {savepoint_limit_exceeded, Limit}};
-        true ->
-            BatchId = new_id(Ctx0),
-            TxIds = lineage_tx_ids(Lineage, Ctx0),
-            Owners = maps:from_keys(TxIds, true),
-            Batch = #batch{owners = Owners,
-                           local_owner = element(1, Actor)},
-            Txs1 = lists:foldl(
-                     fun(TxId, Acc) ->
-                         Tx = maps:get(TxId, Acc),
-                         Acc#{TxId => Tx#tx{
-                           batches = (Tx#tx.batches)#{BatchId => true}}}
-                     end, Ctx0#ctx.txs, TxIds),
-            put_context(Ctx0#ctx{txs = Txs1, last_batch = {Actor, Lineage, BatchId},
-                                 batches = (Ctx0#ctx.batches)#{BatchId => Batch}}),
-            {ok, BatchId}
-    end.
+    BatchId = new_id(Ctx0),
+    TxIds = lineage_tx_ids(Lineage, Ctx0),
+    Owners = maps:from_keys(TxIds, true),
+    Batch = #batch{owners = Owners,
+                   local_owner = element(1, Actor)},
+    Txs1 = lists:foldl(
+             fun(TxId, Acc) ->
+                 Tx = maps:get(TxId, Acc),
+                 Acc#{TxId => Tx#tx{
+                   batches = (Tx#tx.batches)#{BatchId => true}}}
+             end, Ctx0#ctx.txs, TxIds),
+    put_context(Ctx0#ctx{txs = Txs1, last_batch = {Actor, Lineage, BatchId},
+                         batches = (Ctx0#ctx.batches)#{BatchId => Batch}}),
+    {ok, BatchId}.
 
 restore_batches(Actor, Lineage, BatchIds0, Ctx0) when is_list(BatchIds0) ->
-    case bounded_unique_ids(BatchIds0) of
-        {error, limit} ->
-            {error,
-             {savepoint_limit_exceeded,
-              ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}};
+    case unique_batch_ids(BatchIds0) of
         {error, _} ->
             {error, bad_request};
         {ok, _Count} ->
@@ -1161,7 +1132,7 @@ invocation_authorized(Actor, Lineage, #ctx{invocations = Invocations} = Ctx) ->
 descendant_owned(_Actor, Base, Base, _Ctx, _Depth) -> true;
 descendant_owned(_Actor, none, _Base, _Ctx, _Depth) -> false;
 descendant_owned(Actor, Lineage, Base, Ctx, Depth)
-  when Depth < ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF ->
+  when Depth < map_size(Ctx#ctx.lineages) ->
     case maps:find(Lineage, Ctx#ctx.lineages) of
         {ok, #lineage{parent = Parent, tail = TxId}} ->
             case maps:find(TxId, Ctx#ctx.txs) of
@@ -1190,20 +1161,17 @@ owners_within(Owners, TxSet) ->
     lists:all(fun(TxId) -> maps:is_key(TxId, TxSet) end,
               maps:keys(Owners)).
 
-bounded_unique_ids(Ids) -> bounded_unique_ids(Ids, #{}, 0).
+unique_batch_ids(Ids) -> unique_batch_ids(Ids, #{}, 0).
 
-bounded_unique_ids([], _Seen, Count) -> {ok, Count};
-bounded_unique_ids(_Ids, _Seen,
-                   ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF) ->
-    {error, limit};
-bounded_unique_ids([<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>> = Id | Rest],
+unique_batch_ids([], _Seen, Count) -> {ok, Count};
+unique_batch_ids([<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>> = Id | Rest],
                    Seen, Count) ->
     case maps:is_key(Id, Seen) of
         true -> {error, duplicate};
-        false -> bounded_unique_ids(Rest, Seen#{Id => true}, Count + 1)
+        false -> unique_batch_ids(Rest, Seen#{Id => true}, Count + 1)
     end;
-bounded_unique_ids([_Invalid | _], _Seen, _Count) -> {error, invalid};
-bounded_unique_ids(_Improper, _Seen, _Count) -> {error, improper}.
+unique_batch_ids([_Invalid | _], _Seen, _Count) -> {error, invalid};
+unique_batch_ids(_Improper, _Seen, _Count) -> {error, improper}.
 
 new_id(Ctx) ->
     new_id(Ctx, []).

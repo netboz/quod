@@ -6360,7 +6360,12 @@ identity_current_bootstrap_fails_over_before_certified_routes_test() ->
     RightFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
     Fetch =
         fun(Peer, GivenEndpoint, RequestedNs, Query, Deadline, Consume) ->
-                    {From, _To} = fixture_query_extent(Query),
+            TestPid ! {bootstrap_route_waiting, FetchTag, Peer, self()},
+            receive {release_bootstrap_route, FetchTag} -> ok
+            after max(0, Deadline - quod_time:mono_ms()) ->
+                error(bootstrap_route_not_released)
+            end,
+            {From, _To} = fixture_query_extent(Query),
             TestPid ! {bootstrap_route_fetch, FetchTag, Peer, From},
             case {Peer, GivenEndpoint} of
                 {Wrong, Endpoint} -> {error, retry};
@@ -6371,13 +6376,41 @@ identity_current_bootstrap_fails_over_before_certified_routes_test() ->
         end,
     Dir = temp_dir("identity-current-route-failover"),
     Pid = start_owner(Dir, Fetch),
+    {Caller, Monitor} = spawn_monitor(fun() ->
+        Result = quod_foreign_log:current(
+                   route_candidates([{Wrong, Endpoint}, {Right, Endpoint}]),
+                   Identity, 5000),
+        TestPid ! {bootstrap_current_result, FetchTag, Result}
+    end),
     try
+        Children = maps:from_list([
+            receive
+                {bootstrap_route_waiting, FetchTag, Peer, Child} -> {Peer, Child}
+            after 2000 -> error({bootstrap_route_not_started, Peer})
+            end || Peer <- [Wrong, Right]]),
+        #{active := #{worker := Worker}} =
+            maps:get(Identity, quod_foreign_log:test_lifecycle_state()),
+        %% Probes run concurrently. Observe the failed discovery result in
+        %% the real collector before allowing the valid proof to complete.
+        %% Spawn order alone does not establish this test's required order.
+        {Result, FirstCall} = with_confirmation_edge_trace(Worker, fun() ->
+            maps:get(Wrong, Children) ! {release_bootstrap_route, FetchTag},
+            FailedCall = receive
+                {bootstrap_route_fetch, FetchTag, Wrong, From} -> {Wrong, From}
+            after 2000 -> error(bootstrap_failure_not_delivered)
+            end,
+            _ = receive_confirmation_edge_state(
+                  Worker, FetchTag, Wrong, {error, retry}),
+            maps:get(Right, Children) ! {release_bootstrap_route, FetchTag},
+            receive
+                {bootstrap_current_result, FetchTag, Current} -> {Current, FailedCall}
+            after 5000 -> error(bootstrap_current_not_completed)
+            end
+        end),
         ?assertMatch(
            {ok, #{identity := Identity, committee := [Right]}},
-           quod_foreign_log:current(
-             route_candidates([{Wrong, Endpoint}, {Right, Endpoint}]),
-             Identity, 5000)),
-        Calls = collect_bootstrap_route_fetches(FetchTag, []),
+           Result),
+        Calls = [FirstCall | collect_bootstrap_route_fetches(FetchTag, [])],
         ?assertMatch([{Wrong, {evidence, genesis, tip}},
                       {Right, {evidence, genesis, tip}} | _], Calls),
         %% After the genesis page certifies Right for Endpoint, the conflicting
@@ -6385,6 +6418,8 @@ identity_current_bootstrap_fails_over_before_certified_routes_test() ->
         ?assertEqual(
            1, length([ok || {Peer, _} <- Calls, Peer =:= Wrong]))
     after
+        exit(Caller, kill),
+        erlang:demonitor(Monitor, [flush]),
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
     end.

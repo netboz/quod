@@ -1,4 +1,4 @@
-%% Composed with human_user_instance.pl and agent_instance.pl. The human and
+%% Composed with human_user_instance.pl, agent_instance.pl and space.pl. The human and
 %% personal actor share an ontology, never an identity or a private key.
 instance_of(agent, personal).
 

@@ -1,0 +1,15 @@
+{
+  "command": [
+    "env",
+    "REBAR_CACHE_DIR=/tmp/quod-m0-rebar-cache",
+    "rebar3",
+    "as",
+    "test",
+    "compile"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T14:36:19Z",
+  "elapsed_seconds": 248.81772375106812,
+  "child_exit": 0,
+  "timed_out": false
+}

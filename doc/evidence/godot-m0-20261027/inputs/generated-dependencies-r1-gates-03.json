@@ -1,0 +1,38 @@
+{
+  "campaign": "r1-gates-03",
+  "initial_dependency_entries": 1079,
+  "authored_entries_unchanged": 1076,
+  "regenerated": [
+    {
+      "path": "_build/default/lib/erlog/src/erlog_scan.erl",
+      "copied_host_sha256": "f7b56a3fab505dfc84fcdec913dbeea23522bc0aaad4ed17ab964ea5f98ad883",
+      "compiled_generated_sha256": "c563bbdc79cd6b570669a423cf88f01cb25efae4a950a814eb038d3c4cee1e61",
+      "retained_source": "inputs/generated-dependencies-r1-gates-03/erlog/src/erlog_scan.erl",
+      "only_file_annotations_differ": true,
+      "grammar_inputs": [
+        "_build/default/lib/erlog/src/erlog_scan.xrl"
+      ]
+    },
+    {
+      "path": "_build/default/lib/hocon/src/hocon_parser.erl",
+      "copied_host_sha256": "3db8564268a35ea89747eec7c4af8f2acb974b29e31babe359d7ba32e54f19bf",
+      "compiled_generated_sha256": "c3ac07f376a616862cd904cb0296f2c79223be244613eacd46de7ce105a2fe40",
+      "retained_source": "inputs/generated-dependencies-r1-gates-03/hocon/src/hocon_parser.erl",
+      "only_file_annotations_differ": true,
+      "grammar_inputs": [
+        "_build/default/lib/hocon/src/hocon_parser.yrl"
+      ]
+    },
+    {
+      "path": "_build/default/lib/hocon/src/hocon_scanner.erl",
+      "copied_host_sha256": "77d9c8413ab8ed4553a27d75bec4cf57f07726a44f9fd6b6ae4d3c27cf07a57a",
+      "compiled_generated_sha256": "35392652effdfdfecbbcabda1d3fed41a7c29849b5fa45dff889fc6fb6f356ae",
+      "retained_source": "inputs/generated-dependencies-r1-gates-03/hocon/src/hocon_scanner.erl",
+      "only_file_annotations_differ": true,
+      "grammar_inputs": [
+        "_build/default/lib/hocon/src/hocon_scanner.xrl"
+      ]
+    }
+  ],
+  "derivation": "Rebar regenerates Erlang lexer/parser .erl from identical pinned .xrl/.yrl inputs using the pinned container parsetools2.7.1 rather than the prior host parsetools2.7. Host-generated modules were not used as compiled inputs. All other copied dependency inputs and the relative symlink remain identical. Full current gates qualify the actual generated modules, not the older host compilation."
+}

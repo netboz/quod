@@ -1,0 +1,19 @@
+{
+  "command": [
+    "env",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "REBAR_CACHE_DIR=/tmp/quod-m0-rebar-cache",
+    "rebar3",
+    "as",
+    "test",
+    "ct",
+    "--suite=test/quod_ask_SUITE",
+    "--case=remote_scope_symbol_safety,remote_signed_fresh_nested_symbol,remote_signed_gateway_read_execute_cursor"
+  ],
+  "cwd": "/tmp/quod-m0-validation-01",
+  "start_utc": "2026-10-27T16:03:42Z",
+  "elapsed_seconds": 16.625798225402832,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

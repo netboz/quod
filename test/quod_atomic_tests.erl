@@ -164,6 +164,26 @@ complete_cannot_omit_any_role_test() ->
     ?assertEqual({error, invalid_record}, quod_atomic:new_complete(Group, abort,
                                                                   lists:reverse(Rows), [])).
 
+many_participants_preserve_exact_complete_evidence_test() ->
+    Roles = [{<<"quod:participant-", I:8>>, <<I:256>>} || I <- lists:seq(1, 16)],
+    F = quod_ct:signed_plan_fixture(#{target => hd(Roles), atomic => true}, Roles),
+    Group = group(F),
+    Votes = prepared_votes(F),
+    Origin = maps:get(origin, F), OriginRef = vote_ref(Origin, Votes),
+    {ok, Resolve} = quod_atomic:new_resolve(Group, OriginRef, Origin, commit,
+        {all_prepared, vote_rows(Votes)}, OriginRef, 2),
+    Applied = [{T, ref(T, <<16:256>>), 0} || T <- Roles],
+    {ok, Complete} = quod_atomic:new_complete(Group, abort, Applied, []),
+    lists:foreach(fun(Record) ->
+        {ok, Bytes} = quod_atomic:encode_record(Record),
+        ?assertEqual(quod_atomic:admission_material(Record),
+                     quod_atomic:decode_material(Bytes))
+    end, [Resolve, Complete]),
+    ?assertEqual({error, invalid_record},
+        quod_atomic:new_complete(Group, abort, tl(Applied), [])),
+    ?assertEqual({error, invalid_record},
+        quod_atomic:new_complete(Group, abort, lists:reverse(Applied), [])).
+
 reference_enumeration_is_exhaustive_and_shared_with_decoded_material_test() ->
     F = fixture(), G = group(F), Origin = maps:get(origin, F), Votes = prepared_votes(F),
     VoteRows = vote_rows(Votes), ORef = vote_ref(Origin, Votes),

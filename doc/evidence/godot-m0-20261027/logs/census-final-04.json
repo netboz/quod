@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m0-20261027/census.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:37:22Z",
+  "elapsed_seconds": 38.31161832809448,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

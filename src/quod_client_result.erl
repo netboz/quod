@@ -41,6 +41,8 @@ where the proof ran.
         result_too_large | independent_requires_signed_request |
         independent_nesting | independent_mixed_writes |
         independent_scope_required |
+        {invalid_material_policy, founding | plan | proof} |
+        {material_limit, founding | plan | proof, atom(), non_neg_integer(), non_neg_integer()} |
         {effect_custody_limit, prepared_bytes, non_neg_integer(), non_neg_integer()}.
 -type result() ::
         {read, [{binary(), <<_:256>>, non_neg_integer()}], read_outcome()} |
@@ -56,7 +58,7 @@ where the proof ran.
 -doc "Normalize one target-engine result and enforce the aggregate reply cap.".
 -spec normalize(quod_client_goal:evidence(), term()) -> result().
 normalize(Evidence, {read, Dependencies, Raw}) ->
-    case valid_dependencies(Dependencies, none, 0) of
+    case valid_dependencies(Dependencies, none) of
         true ->
             Outcome = normalize(Evidence, Raw),
             case valid_read_outcome(Outcome) of
@@ -179,20 +181,17 @@ bounded_error({read, Dependencies, _}, Reason) ->
 bounded_error(_, Reason) -> {error, Reason}.
 
 encode_bindings(Evidence, Bindings) ->
-    encode_bindings(Evidence, Bindings, 0, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES, []).
+    encode_bindings(Evidence, Bindings, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES, []).
 
-encode_bindings(_Evidence, [], _Count, _Remaining, Acc) ->
+encode_bindings(_Evidence, [], _Remaining, Acc) ->
     {ok, lists:reverse(Acc)};
-encode_bindings(_Evidence, [_ | _], Count, _Remaining, _Acc)
-  when Count >= ?QUOD_MAX_ANSWERS_PER_INVOCATION ->
-    error;
-encode_bindings(Evidence, [Bindings | Rest], Count, Remaining, Acc) ->
+encode_bindings(Evidence, [Bindings | Rest], Remaining, Acc) ->
     case encode_binding(Evidence, Bindings, Remaining) of
         {ok, Blob} ->
-            encode_bindings(Evidence, Rest, Count + 1, Remaining - byte_size(Blob), [Blob | Acc]);
+            encode_bindings(Evidence, Rest, Remaining - byte_size(Blob), [Blob | Acc]);
         Error -> Error
     end;
-encode_bindings(_Evidence, _Bindings, _Count, _Remaining, _Acc) ->
+encode_bindings(_Evidence, _Bindings, _Remaining, _Acc) ->
     error.
 
 encode_binding(Evidence, Bindings, Remaining) when is_map(Bindings) ->
@@ -250,6 +249,13 @@ public_error(independent_requires_signed_request) -> independent_requires_signed
 public_error(independent_nesting) -> independent_nesting;
 public_error(independent_mixed_writes) -> independent_mixed_writes;
 public_error(independent_scope_required) -> independent_scope_required;
+public_error(Reason)
+  when element(1, Reason) =:= material_limit;
+       element(1, Reason) =:= invalid_material_policy ->
+    case quod_scope_wire:valid_public_error(Reason) of
+        true -> Reason;
+        false -> proof_unavailable
+    end;
 public_error({effect_custody_limit, prepared_bytes, _, _} = Reason) ->
     case quod_scope_wire:valid_public_error(Reason) of
         true -> Reason;
@@ -295,7 +301,7 @@ decode(_Blob) ->
     {error, invalid_result}.
 
 valid_result({read, Dependencies, Outcome}) ->
-    valid_dependencies(Dependencies, none, 0) andalso valid_read_outcome(Outcome);
+    valid_dependencies(Dependencies, none) andalso valid_read_outcome(Outcome);
 valid_result({answers, Height, Blobs}) ->
     valid_uint64(Height) andalso valid_binding_blobs(Blobs);
 valid_result({solution, <<_:256>>, Height, Blob}) ->
@@ -319,23 +325,18 @@ valid_read_outcome({failed, _} = Outcome) -> valid_result(Outcome);
 valid_read_outcome({error, _} = Outcome) -> valid_result(Outcome);
 valid_read_outcome(_) -> false.
 
-valid_dependencies([], _, _) -> true;
-valid_dependencies([{Ns, <<_:256>>, Height} | Rest], Previous, Count)
+valid_dependencies([], _) -> true;
+valid_dependencies([{Ns, <<_:256>>, Height} | Rest], Previous)
   when is_binary(Ns), byte_size(Ns) > 0,
        byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
-       (Previous =:= none orelse Previous < Ns),
-       Count < ?QUOD_MAX_SCOPES_PER_PROOF ->
-    valid_uint64(Height) andalso valid_dependencies(Rest, Ns, Count + 1);
-valid_dependencies(_, _, _) -> false.
+       (Previous =:= none orelse Previous < Ns) ->
+    valid_uint64(Height) andalso valid_dependencies(Rest, Ns);
+valid_dependencies(_, _) -> false.
 
-valid_binding_blobs(Blobs) ->
-    valid_binding_blobs(Blobs, 0).
-
-valid_binding_blobs([], _Count) -> true;
-valid_binding_blobs([Blob | Rest], Count)
-  when Count < ?QUOD_MAX_ANSWERS_PER_INVOCATION ->
-    valid_binding_blob(Blob) andalso valid_binding_blobs(Rest, Count + 1);
-valid_binding_blobs(_, _Count) -> false.
+valid_binding_blobs([]) -> true;
+valid_binding_blobs([Blob | Rest]) ->
+    valid_binding_blob(Blob) andalso valid_binding_blobs(Rest);
+valid_binding_blobs(_) -> false.
 
 valid_binding_blob(Blob) ->
     case decode_binding(Blob) of
@@ -380,7 +381,6 @@ valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots(
   [{{Ns, <<_:256>>} = Identity, Slot, Generation} | Rest], Previous, Count)
   when is_binary(Ns), byte_size(Ns) > 0,
-       Count < ?QUOD_MAX_DTX_PARTICIPANTS,
        (Previous =:= none orelse Previous < Identity),
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64 ->
@@ -392,6 +392,10 @@ valid_uint64(Value) ->
 
 valid_positive_slot(Value) -> valid_uint64(Value) andalso Value > 0.
 
+valid_public_error(Reason)
+  when element(1, Reason) =:= material_limit;
+       element(1, Reason) =:= invalid_material_policy ->
+    quod_scope_wire:valid_public_error(Reason);
 valid_public_error({effect_custody_limit, prepared_bytes, _, _} = Reason) ->
     quod_scope_wire:valid_public_error(Reason);
 valid_public_error(Reason) ->
@@ -471,6 +475,11 @@ http_error({error, conflict_retry}) ->
     {409, #{error => conflict_retry}};
 http_error({error, result_too_large}) ->
     {413, #{error => result_too_large}};
+http_error({error, {invalid_material_policy, Kind}}) ->
+    {500, #{error => invalid_material_policy, kind => Kind}};
+http_error({error, {material_limit, Kind, Resource, Actual, Limit}}) ->
+    {413, #{error => material_limit, kind => Kind, resource => Resource,
+            actual => integer_to_binary(Actual), limit => integer_to_binary(Limit)}};
 http_error({error, {effect_custody_limit, prepared_bytes, Actual, Limit}}) ->
     {413, #{error => effect_custody_limit, resource => prepared_bytes,
             actual => integer_to_binary(Actual), limit => integer_to_binary(Limit)}};

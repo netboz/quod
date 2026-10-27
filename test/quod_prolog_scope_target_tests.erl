@@ -263,7 +263,7 @@ sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
        error,
        quod_prolog:test_scope_command_route(active, certify_reads)).
 
-read_certificate_reply_and_capacity_use_the_existing_scope_seams_test() ->
+read_certificate_reply_uses_the_existing_scope_seam_test() ->
     Ns = <<"quod:certificate-target">>,
     Certificate = read_certificate(Ns),
     {event, {reads_certified, Blob}} =
@@ -282,15 +282,7 @@ read_certificate_reply_and_capacity_use_the_existing_scope_seams_test() ->
          {error, unlisted_internal_reason}, Ns)),
     ?assertEqual(
        {error, {protocol_error, proof_engine}},
-       quod_prolog:test_read_certificate_scope_reply(malformed, Ns)),
-    ?assertEqual(
-       ok,
-       quod_prolog:test_certify_reads_pending_reason(
-         ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE - 1, Ns)),
-    ?assertEqual(
-       {error, {proof_limit_exceeded, Ns}},
-       quod_prolog:test_certify_reads_pending_reason(
-         ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE, Ns)).
+       quod_prolog:test_read_certificate_scope_reply(malformed, Ns)).
 
 idle_expiry_reuses_exact_last_command_correlation_test() ->
     OpenRequest = <<1:128>>,

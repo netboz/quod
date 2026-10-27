@@ -1,0 +1,359 @@
+{
+  "production_added": 377,
+  "production_removed": 598,
+  "production_net": -221,
+  "changed_production_files": 25,
+  "production_files": [
+    {
+      "path": "include/quod_proof_limits.hrl",
+      "added": 6,
+      "removed": 27
+    },
+    {
+      "path": "priv/ontologies/material_policy.pl",
+      "added": 5,
+      "removed": 0
+    },
+    {
+      "path": "priv/ontologies/personal_agent.pl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "src/predicates/quod_ask.erl",
+      "added": 12,
+      "removed": 21
+    },
+    {
+      "path": "src/predicates/quod_common_primitives.erl",
+      "added": 6,
+      "removed": 5
+    },
+    {
+      "path": "src/quod_ask_router.erl",
+      "added": 4,
+      "removed": 35
+    },
+    {
+      "path": "src/quod_atomic.erl",
+      "added": 2,
+      "removed": 5
+    },
+    {
+      "path": "src/quod_client_goal.erl",
+      "added": 4,
+      "removed": 4
+    },
+    {
+      "path": "src/quod_client_result.erl",
+      "added": 34,
+      "removed": 25
+    },
+    {
+      "path": "src/quod_client_tls.erl",
+      "added": 12,
+      "removed": 2
+    },
+    {
+      "path": "src/quod_dtx.erl",
+      "added": 33,
+      "removed": 45
+    },
+    {
+      "path": "src/quod_dtx_coordinator.erl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "src/quod_dtx_current_view.erl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "src/quod_dtx_endpoint.erl",
+      "added": 30,
+      "removed": 21
+    },
+    {
+      "path": "src/quod_foreign_log.erl",
+      "added": 3,
+      "removed": 10
+    },
+    {
+      "path": "src/quod_material_admission.erl",
+      "added": 5,
+      "removed": 4
+    },
+    {
+      "path": "src/quod_operation_vector.erl",
+      "added": 3,
+      "removed": 5
+    },
+    {
+      "path": "src/quod_outcome.erl",
+      "added": 1,
+      "removed": 2
+    },
+    {
+      "path": "src/quod_prolog.erl",
+      "added": 79,
+      "removed": 168
+    },
+    {
+      "path": "src/quod_proof_context.erl",
+      "added": 33,
+      "removed": 65
+    },
+    {
+      "path": "src/quod_proof_session.erl",
+      "added": 58,
+      "removed": 66
+    },
+    {
+      "path": "src/quod_scope_session.erl",
+      "added": 19,
+      "removed": 31
+    },
+    {
+      "path": "src/quod_scope_wire.erl",
+      "added": 14,
+      "removed": 32
+    },
+    {
+      "path": "src/quod_transaction.erl",
+      "added": 1,
+      "removed": 2
+    },
+    {
+      "path": "src/quod_transaction_scope.erl",
+      "added": 10,
+      "removed": 20
+    }
+  ],
+  "test_added": 502,
+  "test_removed": 225,
+  "test_net": 277,
+  "changed_test_files": 23,
+  "test_files": [
+    {
+      "path": "test/quod_ask_SUITE.erl",
+      "added": 52,
+      "removed": 27
+    },
+    {
+      "path": "test/quod_ask_router_tests.erl",
+      "added": 19,
+      "removed": 32
+    },
+    {
+      "path": "test/quod_ask_tests.erl",
+      "added": 13,
+      "removed": 4
+    },
+    {
+      "path": "test/quod_atomic_tests.erl",
+      "added": 20,
+      "removed": 0
+    },
+    {
+      "path": "test/quod_client_result_tests.erl",
+      "added": 45,
+      "removed": 3
+    },
+    {
+      "path": "test/quod_dtx_deadline_tests.erl",
+      "added": 1,
+      "removed": 3
+    },
+    {
+      "path": "test/quod_dtx_endpoint_tests.erl",
+      "added": 64,
+      "removed": 0
+    },
+    {
+      "path": "test/quod_dtx_tests.erl",
+      "added": 33,
+      "removed": 42
+    },
+    {
+      "path": "test/quod_foreign_log_tests.erl",
+      "added": 40,
+      "removed": 5
+    },
+    {
+      "path": "test/quod_gui_question_tests.erl",
+      "added": 3,
+      "removed": 1
+    },
+    {
+      "path": "test/quod_lifecycle_single_path_tests.erl",
+      "added": 11,
+      "removed": 4
+    },
+    {
+      "path": "test/quod_material_admission_tests.erl",
+      "added": 34,
+      "removed": 4
+    },
+    {
+      "path": "test/quod_operation_vector_tests.erl",
+      "added": 3,
+      "removed": 3
+    },
+    {
+      "path": "test/quod_physics_control_tests.erl",
+      "added": 15,
+      "removed": 12
+    },
+    {
+      "path": "test/quod_prolog_scope_target_tests.erl",
+      "added": 2,
+      "removed": 10
+    },
+    {
+      "path": "test/quod_prolog_tests.erl",
+      "added": 10,
+      "removed": 0
+    },
+    {
+      "path": "test/quod_proof_context_tests.erl",
+      "added": 6,
+      "removed": 15
+    },
+    {
+      "path": "test/quod_proof_session_savepoint_tests.erl",
+      "added": 10,
+      "removed": 22
+    },
+    {
+      "path": "test/quod_proof_session_tests.erl",
+      "added": 4,
+      "removed": 4
+    },
+    {
+      "path": "test/quod_proof_trace_tests.erl",
+      "added": 23,
+      "removed": 7
+    },
+    {
+      "path": "test/quod_schema_tests.erl",
+      "added": 35,
+      "removed": 0
+    },
+    {
+      "path": "test/quod_scope_session_tests.erl",
+      "added": 48,
+      "removed": 10
+    },
+    {
+      "path": "test/quod_scope_wire_tests.erl",
+      "added": 11,
+      "removed": 17
+    }
+  ],
+  "dependency_metadata_added": 10,
+  "dependency_metadata_removed": 10,
+  "dependency_metadata_net": 0,
+  "changed_dependency_metadata_files": 2,
+  "dependency_metadata_files": [
+    {
+      "path": "rebar.config",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "rebar.lock",
+      "added": 9,
+      "removed": 9
+    }
+  ],
+  "qualification_source_files": 21,
+  "qualification_source_physical_lines": 1350,
+  "qualification_sources": [
+    {
+      "path": "doc/evidence/godot-m0-20261027/catalogue-inventory.py",
+      "physical_lines": 21
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/census.py",
+      "physical_lines": 54
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/dispositions.py",
+      "physical_lines": 96
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/fetch-godot.py",
+      "physical_lines": 40
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/freeze-validation.py",
+      "physical_lines": 31
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/gate-campaign.py",
+      "physical_lines": 68
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/m0_acl_diagnostic.erl",
+      "physical_lines": 48
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/m0_boot_diagnostic.erl",
+      "physical_lines": 37
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/m0_fetch_close_diagnostic.cjs",
+      "physical_lines": 59
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/m0_fetch_diagnostic.cjs",
+      "physical_lines": 58
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/m0_outcome_diagnostic.erl",
+      "physical_lines": 117
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/m0_protocol_capture.erl",
+      "physical_lines": 63
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/network-inventory.py",
+      "physical_lines": 47
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/probe/Qualification.cs",
+      "physical_lines": 177
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/production-wire-check.mjs",
+      "physical_lines": 29
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/redact-logs.py",
+      "physical_lines": 45
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/run.py",
+      "physical_lines": 44
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/storage-check.py",
+      "physical_lines": 83
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/tls-check.py",
+      "physical_lines": 43
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/verify-evidence.py",
+      "physical_lines": 125
+    },
+    {
+      "path": "doc/evidence/godot-m0-20261027/wire-fixtures.mjs",
+      "physical_lines": 65
+    }
+  ],
+  "note": "Physical repository production-source delta, tests, dependency metadata and bounded qualification sources counted separately. Documentation/generated evidence/build outputs/retained archives are not reduction credit. No ontology archives were moved. Third-party HTTP dependency versions change through their explicit lock; no local domain code was moved into a dependency."
+}

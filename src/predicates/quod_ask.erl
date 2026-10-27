@@ -116,9 +116,6 @@ do_ask(NsTerm, Inner, Next, St) ->
 guarded_ask(Self, Target, Inner, Next, St) ->
     quod_predicates:local_only(St) andalso ask_error(ask_in_membership_verdict),
     Chain = quod_predicates:ctx_chain(quod_predicates:context(St)),
-    length(Chain) >= ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
-        ask_error(
-          {proof_depth_exceeded, ?QUOD_MAX_ACTIVE_PROOF_DEPTH}),
     InnerTerm = erlog_int:dderef(Inner, St#est.bs),
     case open(Self, Target, InnerTerm, Chain, St) of
         {ok, Stream, St1} ->
@@ -701,18 +698,14 @@ router_admission_error(_Target, Reason)
     unavailable;
 router_admission_error(_Target, {request_link_down, _Reason}) -> unavailable;
 router_admission_error(_Target, {return_link_down, _Reason}) -> unavailable;
-router_admission_error(_Target, {scope_limit_exceeded, _Max} = Reason) ->
-    %% This is a per-peer target admission bound. Another eligible host can
-    %% still admit the same immutable scope request before any execution.
-    {retry, Reason};
-router_admission_error(_Target, owner_scope_limit) ->
-    {fatal,
-     {scope_limit_exceeded, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER}};
 router_admission_error(_Target, signed_scope_unavailable) ->
     {retry, signed_scope_unavailable};
 router_admission_error(Target, {proof_poisoned, Reason}) ->
     {fatal, normalize_router_failure(Target, Reason)};
-router_admission_error(_Target, {protocol_error, _} = Reason) ->
+router_admission_error(_Target, Reason)
+  when element(1, Reason) =:= protocol_error;
+       element(1, Reason) =:= material_limit;
+       element(1, Reason) =:= invalid_material_policy ->
     case quod_scope_wire:valid_public_error(Reason) of
         true -> {fatal, Reason};
         false -> {fatal, {protocol_error, proof_engine}}
@@ -1742,7 +1735,7 @@ validate_authorization_entry(
   {Ns, _Anchor} = Target, Origin, Principal, ParentHeight, ParentEst)
   when (Verdict =:= allowed orelse Verdict =:= denied),
        is_integer(AnswerCount), AnswerCount >= 0,
-       AnswerCount =< ?QUOD_MAX_ANSWERS_PER_INVOCATION,
+       AnswerCount =< ?QUOD_SCOPE_WIRE_MAX_UINT64,
        (Tag =:= active orelse Tag =:= complete orelse
         Tag =:= error orelse Tag =:= cancelled) ->
     case {authorization_chain(FullChain, Target, Origin),
@@ -1787,7 +1780,7 @@ reprove_authorization(
     end.
 
 authorization_chain([Target | Rest] = FullChain, Target, Origin) ->
-    case chain_identities(FullChain, 0, [], undefined) of
+    case chain_identities(FullChain, [], undefined) of
         {ok, [_TargetNs | _CallerNamespaces], Origin} ->
             {ok, Rest};
         _ ->
@@ -1796,18 +1789,16 @@ authorization_chain([Target | Rest] = FullChain, Target, Origin) ->
 authorization_chain(_FullChain, _Target, _Origin) ->
     error.
 
-chain_identities([], _Depth, NamespacesRev, Last) ->
+chain_identities([], NamespacesRev, Last) ->
     {ok, lists:reverse(NamespacesRev), Last};
-chain_identities([{Ns, <<_:256>>} = Identity | Rest], Depth,
-                 NamespacesRev, _Last)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       Depth < ?QUOD_MAX_ACTIVE_PROOF_DEPTH ->
-    chain_identities(Rest, Depth + 1, [Ns | NamespacesRev], Identity);
-chain_identities(_ImproperOrTooDeep, _Depth, _NamespacesRev, _Last) ->
+chain_identities([{Ns, <<_:256>>} = Identity | Rest], NamespacesRev, _Last)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    chain_identities(Rest, [Ns | NamespacesRev], Identity);
+chain_identities(_Improper, _NamespacesRev, _Last) ->
     error.
 
 authorization_goal({Ns, _Anchor}, Goal, Principal, Chain) ->
-    case chain_identities(Chain, 0, [], undefined) of
+    case chain_identities(Chain, [], undefined) of
         {ok, CallChain, _Last} ->
             case policy_principal(Principal) of
                 {ok, PolicyPrincipal} ->

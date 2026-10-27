@@ -1168,7 +1168,7 @@ outcome_references(abort, {refused, Ref}) -> quod_dtx:validate_certified_ref(Ref
 outcome_references(_, _) -> false.
 
 reference_rows(Rows, Mode) ->
-    bounded(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) andalso Rows =/= []
+    Rows =/= []
         andalso reference_rows(Rows, Mode, none).
 reference_rows([], _Mode, _Previous) -> true;
 reference_rows([{Target, Ref} | Rest], plain, Previous)
@@ -1181,7 +1181,7 @@ reference_rows([{Target, Ref, Generation} | Rest], generation, Previous)
 reference_rows(_, _, _) -> false.
 
 applied_rows(Rows, Previous) ->
-    bounded(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) andalso applied_rows_valid(Rows, Previous).
+    applied_rows_valid(Rows, Previous).
 applied_rows_valid([], _) -> true;
 applied_rows_valid([{Target, Certificate} | Rest], Previous)
   when Previous =:= none; Previous < Target ->
@@ -1205,9 +1205,6 @@ valid_outcome(commit) -> true;
 valid_outcome(abort) -> true;
 valid_outcome(_) -> false.
 uint(N) -> is_integer(N) andalso N >= 0 andalso N =< ?MAX_UINT64.
-bounded([], _) -> true;
-bounded([_ | Rest], N) when N > 0 -> bounded(Rest, N - 1);
-bounded(_, _) -> false.
 within_limit(Term) -> erlang:external_size(Term) =< ?QUOD_MAX_DTX_BODY_BYTES.
 bytes(Term) -> term_to_binary(Term, [deterministic]).
 digest(Term) -> crypto:hash(sha256, bytes(Term)).

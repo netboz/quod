@@ -1,0 +1,109 @@
+{
+  "status": "M0 contract fixture; live recursive server expansion and physical-domain integration are M3 acceptance, not installed here.",
+  "scene": "[mark(<<\"s1\">>,<<\"group\">>,[],transform(1000,200,0,0,90,0),no_surface,unlabelled,depicts(<<\"storage:s1\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,s1)),mark(<<\"s1/s2\">>,<<\"group\">>,[],relative(<<\"s1\">>,transform(0,300,2000,0,0,90)),no_surface,unlabelled,depicts(<<\"storage:s2\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,s2)),mark(<<\"s1/s2/object\">>,<<\"group\">>,[],relative(<<\"s1/s2\">>,transform(100,0,0,0,0,0)),no_surface,unlabelled,depicts(<<\"storage:object\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,object))]",
+  "local_transforms_mm_degrees": [
+    [
+      1000,
+      200,
+      0,
+      0,
+      90,
+      0
+    ],
+    [
+      0,
+      300,
+      2000,
+      0,
+      0,
+      90
+    ],
+    [
+      100,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "expected_object_origin_mm": [
+    3000,
+    600,
+    0
+  ],
+  "exact_subjects": [
+    {
+      "namespace": "storage:s1",
+      "anchor": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+      "entity": "s1"
+    },
+    {
+      "namespace": "storage:s2",
+      "anchor": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+      "entity": "s2"
+    },
+    {
+      "namespace": "storage:object",
+      "anchor": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+      "entity": "object"
+    }
+  ],
+  "obligations": [
+    {
+      "case": "S0→S1→S2 contents",
+      "expected": "all contents exposed recursively with no entry"
+    },
+    {
+      "case": "second independent S2 display",
+      "expected": "distinct occurrence path; same exact subject; no duplicated physical body"
+    },
+    {
+      "case": "S2→S1 cycle",
+      "expected": "explicit cycle occurrence; no recursive expansion of repeated ancestor"
+    },
+    {
+      "case": "source denied/revoked or wrong anchor",
+      "expected": "refuse/withdraw affected exposure; no private marks, empty success or cube fallback"
+    },
+    {
+      "case": "unchanged renewal",
+      "expected": "retained readers/native resources; zero replay/rebuild/write/sync"
+    },
+    {
+      "case": "real source update",
+      "expected": "only dependent exposure updates; physical body revision and geometry agree"
+    },
+    {
+      "case": "cross-boundary physics",
+      "expected": "shared authoritative domain/frame; contact and control agree with rendered coordinates"
+    },
+    {
+      "case": "independent active simulation conflict",
+      "expected": "explicit refusal until governed custody/transfer transition; no visual-only success"
+    }
+  ],
+  "wireframe": {
+    "default_extent_mm": [
+      100000,
+      100000,
+      100000
+    ],
+    "default_bounds_mm": [
+      -50000,
+      -50000,
+      -50000,
+      50000,
+      50000,
+      50000
+    ],
+    "asymmetric_extent_mm": [
+      2000,
+      3000,
+      5000
+    ],
+    "rational_example": "box(q(1/3,<<\"mm\">>),q(3,<<\"m\">>),q(5,<<\"m\">>))",
+    "infinite": "unavailable for finite wire box; no fake bounds or cube fallback",
+    "collision": false
+  }
+}

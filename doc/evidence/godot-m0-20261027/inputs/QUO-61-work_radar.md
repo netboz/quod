@@ -1,0 +1,1 @@
+1 recent work thread across 1 actor lane; 0 shared-item signals.

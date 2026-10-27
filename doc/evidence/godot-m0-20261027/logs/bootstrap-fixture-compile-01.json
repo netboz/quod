@@ -1,0 +1,32 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--volume",
+    "/tmp/quod-m0-r1-gates-05/source:/work:ro",
+    "--volume",
+    "/tmp/quod-m0-bootstrap-fixture-01:/review",
+    "--workdir",
+    "/work",
+    "--env",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/usr/bin/env",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "erlc",
+    "-DTEST",
+    "-I",
+    "/work/include",
+    "-o",
+    "/review",
+    "/review/quod_foreign_log_tests.erl"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T19:46:03Z",
+  "elapsed_seconds": 1.770284652709961,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

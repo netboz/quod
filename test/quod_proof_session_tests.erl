@@ -322,7 +322,7 @@ run_first_keeps_existing_result_contract_test() ->
        quod_proof_session:run_first(
          {child, bob}, Est, #{read_set => true})).
 
-invocation_continuations_are_bounded_test() ->
+invocations_retain_distinct_lifetime_ids_test() ->
     Session = quod_proof_session:start(committed([]), #{}),
     try
         lists:foreach(
@@ -331,12 +331,12 @@ invocation_continuations_are_bounded_test() ->
                      Session, invocation_id(Id), true, allowed, context(),
                      empty_selection())
           end,
-          lists:seq(1, ?QUOD_MAX_INVOCATIONS_PER_SCOPE)),
+          lists:seq(1, 129)),
         ?assertEqual(
            {error,
-            {proof_limit_exceeded, <<"quod:session-test">>}},
+            {protocol_error, bad_binding}},
            quod_proof_session:open(
-             Session, invocation_id(65535), true, allowed, context(),
+             Session, invocation_id(1), true, allowed, context(),
              empty_selection()))
     after
         quod_proof_session:stop(Session)

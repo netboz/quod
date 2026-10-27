@@ -6,8 +6,8 @@ context_test_() ->
     [?_test(with_context(fun reuses_exact_identity/1)),
      ?_test(with_context(fun rejects_anchor_conflict/1)),
      ?_test(with_context(fun retains_exact_read_heights/1)),
-     ?_test(with_context(fun bounds_distinct_scopes/1)),
-     ?_test(with_context(fun bounds_invocation_proxies/1)),
+     ?_test(with_context(fun distinct_scopes_keep_exact_owners/1)),
+     ?_test(with_context(fun invocation_proxies_keep_actor_binding/1)),
      ?_test(with_context(fun binds_proxies_to_registered_owner/1)),
      ?_test(with_context(fun local_typed_death_wins_finalization/1)),
      ?_test(with_context(fun live_local_scope_is_closed_at_finalization/1)),
@@ -78,7 +78,7 @@ rejects_anchor_conflict(_Ctx) ->
         ScopePid ! stop
     end.
 
-bounds_distinct_scopes(_Ctx) ->
+distinct_scopes_keep_exact_owners(_Ctx) ->
     Pids = [spawn(fun wait/0) || _ <- lists:seq(1, 9)],
     try
         lists:foreach(
@@ -89,18 +89,12 @@ bounds_distinct_scopes(_Ctx) ->
                               {Ns, Anchor},
                               fun(_Id) -> {ok, Pid, Index, 7} end)
           end,
-          lists:zip(lists:seq(1, 8), lists:sublist(Pids, 8))),
-        Ninth = lists:nth(9, Pids),
-        ?assertEqual(
-           {error, {scope_limit_exceeded, ?QUOD_MAX_SCOPES_PER_PROOF}},
-           quod_proof_context:get_or_open_scope(
-             {<<"9">>, <<9:256>>},
-             fun(_Id) -> {ok, Ninth, 9, 7} end))
+          lists:zip(lists:seq(1, 9), Pids))
     after
         lists:foreach(fun(Pid) -> Pid ! stop end, Pids)
     end.
 
-bounds_invocation_proxies(_Ctx) ->
+invocation_proxies_keep_actor_binding(_Ctx) ->
     Actor = register_actor(self(), <<"proxy-owner">>, <<99:256>>),
     lists:foreach(
       fun(_) ->
@@ -108,10 +102,7 @@ bounds_invocation_proxies(_Ctx) ->
                        quod_proof_context:new_proxy(
                          Actor, <<"proxy-target">>, stream))
       end,
-      lists:seq(1, ?QUOD_MAX_PROXIES_PER_PROOF)),
-    ?assertEqual(
-       {error, {proof_limit_exceeded, <<"proxy-target">>}},
-       quod_proof_context:new_proxy(Actor, <<"proxy-target">>, overflow)),
+      lists:seq(1, 513)),
     quod_proof_context:unregister_invocation(Actor).
 
 binds_proxies_to_registered_owner(_Ctx) ->

@@ -1,0 +1,20 @@
+{
+  "owner_session": "31de17b5-0309-4c06-bd10-826ecd280745",
+  "prior_snapshot": "/tmp/quod-godot-m0-handoff-31de17b5-20261027-02",
+  "files": [
+    {
+      "path": "src/quod_dtx_endpoint.erl",
+      "prior_sha256": "eae62de79a63b02ad77540bb25822b6a55389e9947282e8b8ff3d344a516d81b",
+      "worker_sha256": "8d07fd3477f698d526ec9970c78a45c300b5c7ec22ef0a5a2718d688dbc92234"
+    },
+    {
+      "path": "test/quod_dtx_endpoint_tests.erl",
+      "prior_sha256": "545e31392e4a8cf0d93e2490c995865fdc64fc9c79c0df3d037ece651ed90b48",
+      "worker_sha256": "91b0a3d4029ddee7fc1fd7e77b81cb1e268500fee12b90f1537754d5f2c818c5"
+    }
+  ],
+  "wire_version": 13,
+  "caller_deadlines_changed": false,
+  "canonicality_owner": "quod_safe_term:decode_wrapped/2",
+  "new_process_or_state_owner": false
+}

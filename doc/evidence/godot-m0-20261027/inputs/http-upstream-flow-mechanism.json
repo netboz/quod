@@ -1,0 +1,27 @@
+{
+  "review_finding": 2,
+  "checked_by": "31de17b5-0309-4c06-bd10-826ecd280745",
+  "comparison": [
+    {
+      "version": "2.12.0",
+      "source": "/tmp/quod-m0-r1-gates-03/source/_build/default/lib/cowboy/src/cowboy_http.erl",
+      "full_source_sha256": "2e61f64abfb434c79af2c27298e151c75c1734a3bdca8cfdccdb83f187b2a23e",
+      "lines": [
+        1368,
+        1387
+      ],
+      "excerpt": "stream_next(State0=#state{opts=Opts, active=Active, out_streamid=OutStreamID, streams=Streams}) ->\n\tNextOutStreamID = OutStreamID + 1,\n\tcase lists:keyfind(NextOutStreamID, #stream.id, Streams) of\n\t\tfalse ->\n\t\t\tState = State0#state{out_streamid=NextOutStreamID, out_state=wait},\n\t\t\t%% There are no streams remaining. We therefore can\n\t\t\t%% and want to switch back to the request_timeout.\n\t\t\tset_timeout(State, request_timeout);\n\t\t#stream{queue=Commands} ->\n\t\t\tState = case Active of\n\t\t\t\ttrue -> State0;\n\t\t\t\tfalse -> active(State0)\n\t\t\tend,\n\t\t\t%% @todo Remove queue from the stream.\n\t\t\t%% We set the flow to the initial flow size even though\n\t\t\t%% we might have sent some data through already due to pipelining.\n\t\t\tFlow = maps:get(initial_stream_flow_size, Opts, 65535),\n\t\t\tcommands(State#state{flow=Flow, out_streamid=NextOutStreamID, out_state=wait},\n\t\t\t\tNextOutStreamID, Commands)\n\tend."
+    },
+    {
+      "version": "2.19.0",
+      "source": "/tmp/quod-m0-r1-gates-04/source/_build/default/lib/cowboy/src/cowboy_http.erl",
+      "full_source_sha256": "9df9afb5077c66f9bce847b7bb695b772dc6b6eda67f7ad58cc8d90b54aab249",
+      "lines": [
+        1533,
+        1580
+      ],
+      "excerpt": "stream_terminate(State0=#state{opts=Opts, active=Active,\n\t\tin_state=InState, out_state=OutState, stream=Stream0,\n\t\tchildren=Children0}, Reason) ->\n\t#stream{\n\t\tid=StreamID,\n\t\tversion=Version,\n\t\tlocal_expected_size=ExpectedSize,\n\t\tlocal_sent_size=SentSize\n\t} = Stream0,\n\t%% Send a response or terminate chunks depending on the current output state.\n\tState1 = #state{stream=Stream} = case OutState of\n\t\twait when element(1, Reason) =:= internal_error ->\n\t\t\tinfo(State0, StreamID, {response, 500, #{<<\"content-length\">> => <<\"0\">>}, <<>>});\n\t\twait when element(1, Reason) =:= connection_error ->\n\t\t\tinfo(State0, StreamID, {response, 400, #{<<\"content-length\">> => <<\"0\">>}, <<>>});\n\t\twait ->\n\t\t\tinfo(State0, StreamID, {response, 204, #{}, <<>>});\n\t\tchunked when Version =:= 'HTTP/1.1' ->\n\t\t\tinfo(State0, StreamID, {data, fin, <<>>});\n\t\tstreaming when SentSize < ExpectedSize ->\n\t\t\tterminate(State0, response_body_too_small);\n\t\t_ -> %% done or Version =:= 'HTTP/1.0'\n\t\t\tState0\n\tend,\n\t%% Stop the stream, shutdown children and reset overriden options.\n\t#stream{state=StreamState} = Stream,\n\tstream_call_terminate(StreamID, Reason, StreamState, State1),\n\tChildren = cowboy_children:shutdown(Children0, StreamID),\n\tState = State1#state{overriden_opts=#{}, stream=undefined, children=Children},\n\t%% We want to drop the connection if the body was not read fully\n\t%% and we don't know its length or more remains to be read than\n\t%% configuration allows.\n\tMaxSkipBodyLength = maps:get(max_skip_body_length, Opts, 1000000),\n\tcase InState of\n\t\t#ps_body{length=undefined} ->\n\t\t\tterminate(State, skip_body_unknown_length);\n\t\t#ps_body{length=Len, received=Received}\n\t\t\t\twhen Received + MaxSkipBodyLength < Len ->\n\t\t\tterminate(State, skip_body_too_large);\n\t\t_ ->\n\t\t\t%% Enable active mode again if it was disabled.\n\t\t\tStateN = case Active of\n\t\t\t\ttrue -> State;\n\t\t\t\tfalse -> active(State)\n\t\t\tend,\n\t\t\tStateN#state{out_state=wait, flow=infinity}\n\tend.\n"
+    }
+  ],
+  "conclusion": "The old no-successor stream_next branch leaves active=false unchanged. The selected stream_terminate rearms the connection independently of a successor before resetting flow. This directly repairs the observed passive/unlimited-flow state; the active_n default alone is not the causal correction."
+}

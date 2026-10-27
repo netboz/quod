@@ -130,6 +130,41 @@ removed_ask_scope_config_names_rejected_test_() ->
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
+boot_client_certificate_matches_advertised_ip_test_() ->
+    [{Address, fun() ->
+        _ = application:load(quod),
+        Saved = application:get_all_env(quod),
+        Names = ["QUOD_CONF", "HOCON_ENV_OVERRIDE_PREFIX", "QUOD_NODE__IP"],
+        Os = [{Name, os:getenv(Name)} || Name <- Names],
+        Dir = tmp_dir(),
+        try
+            os:unsetenv("QUOD_NODE__IP"),
+            Path = write_boot_conf(Dir, ""),
+            ok = file:write_file(Path, ["node.ip = \"", Address, "\"\n"], [append]),
+            os:putenv("QUOD_CONF", Path),
+            _ = quod_app:load_config(),
+            ?assertEqual({ok, {Address, 14999}}, application:get_env(quod, node_addr)),
+            {ok, IdentityDir} = application:get_env(quod, identity_dir),
+            {ok, #{cert := Cert, key := Key}} = quod_client_tls:ensure(IdentityDir),
+            {ok, Ip} = inet:parse_address(Address),
+            ?assert(public_key:pkix_verify_hostname(Cert, [{ip, Ip}])),
+            ?assertNot(public_key:pkix_verify_hostname(Cert, [{ip, {192,0,2,99}}])),
+            ?assert(public_key:pkix_verify_hostname(Cert, [{dns_id, "localhost"}])),
+            {ok, #{cert := ReloadedCert, key := ReloadedKey}} =
+                quod_client_tls:ensure(IdentityDir),
+            ?assertEqual(Cert, ReloadedCert),
+            ?assertEqual(crypto:hash(sha256, public_key:der_encode('ECPrivateKey', Key)),
+                         crypto:hash(sha256, public_key:der_encode('ECPrivateKey', ReloadedKey)))
+        after
+            CurrentKeys = [Key || {Key, _} <- application:get_all_env(quod)],
+            SavedKeys = [Key || {Key, _} <- Saved],
+            _ = [application:unset_env(quod, Key) || Key <- CurrentKeys -- SavedKeys],
+            _ = [application:set_env(quod, Key, Value) || {Key, Value} <- Saved],
+            _ = [restore_os_env(Name, Value) || {Name, Value} <- Os],
+            _ = file:del_dir_r(Dir)
+        end
+    end} || Address <- ["192.0.2.27", "2001:db8::27"]].
+
 local_vault_boot_does_not_require_https_provider_test() ->
     _ = application:load(quod),
     {ok, _} = application:ensure_all_started(gproc),

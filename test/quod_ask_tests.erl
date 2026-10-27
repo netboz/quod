@@ -23,10 +23,6 @@ remote_route_errors_retry_only_before_execution_test() ->
        quod_ask:test_remote_open_error(
          Target, {not_allowed, Target})),
     ?assertEqual(
-       {retry, {scope_limit_exceeded, 16}},
-       quod_ask:test_remote_open_error(
-         Target, {scope_limit_exceeded, 16})),
-    ?assertEqual(
        {fatal, {protocol_error, event_sequence}},
        quod_ask:test_remote_open_error(
          Target, {protocol_error, event_sequence})),
@@ -53,6 +49,19 @@ remote_route_errors_retry_only_before_execution_test() ->
        First,
        quod_ask:test_remember_route_error(
          First, {ontology_rebuilding, Target})).
+
+remote_policy_refusals_are_fatal_and_keep_their_reason_test() ->
+    Target = <<"quod:policy-refusal">>,
+    lists:foreach(fun(Reason) ->
+        ?assertEqual({fatal, Reason}, quod_ask:test_remote_open_error(Target, Reason))
+    end, [{material_limit, proof, heap_bytes, 4096, 0},
+          {invalid_material_policy, proof}]),
+    lists:foreach(fun(Reason) ->
+        ?assertEqual({fatal, {protocol_error, proof_engine}},
+                     quod_ask:test_remote_open_error(Target, Reason))
+    end, [{material_limit, proof, private_resource, 4096, 0},
+          {material_limit, proof, heap_bytes, 0, 4096},
+          {invalid_material_policy, private_kind}, {material_limit}]).
 
 pending_router_death_is_reported_at_each_opening_wait_test() ->
     Target = <<"quod:router-death">>,

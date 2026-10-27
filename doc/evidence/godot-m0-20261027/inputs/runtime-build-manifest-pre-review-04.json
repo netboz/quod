@@ -1,0 +1,2148 @@
+{
+  "source_copy": "/tmp/quod-m0-r1-gates-04/source",
+  "source_manifest": "inputs/r1-gates-04-source-manifest.json",
+  "toolchain": "server-toolchain.json",
+  "note": "Actual test/default/prod production modules and native output from the clean qualified source. Test-helper beams are excluded. Resolved dependency app hashes/versions are included. No release was started or deployed.",
+  "files": [
+    {
+      "path": "_build/test/lib/quod/ebin/quod.app",
+      "bytes": 4259,
+      "sha256": "5f99eff9b19d5eaac92f70f954f117c50d517109c4d3c2171e830d8dcb51459a"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_action_predicates.beam",
+      "bytes": 10640,
+      "sha256": "4e2f4e9db709ec623ed46adaba04fa187bf819cc3721c5e727180f1793a021ef"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_agent.beam",
+      "bytes": 33172,
+      "sha256": "d5a513d8d7219780b2c9560a98d83a60196e95ba0dcfe4f76986157c71aaae11"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_agent_identity.beam",
+      "bytes": 12004,
+      "sha256": "6edf3736f45e93552bc458c6f406291eae1a0455d6bfda910e203f55fba07e75"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_agent_observer.beam",
+      "bytes": 29008,
+      "sha256": "e512993dee919221a2505c50d4b48c38ead44b1b138bfcd0875b2c86abcbe454"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_agent_predicates.beam",
+      "bytes": 14768,
+      "sha256": "6e399b43e7198ebc1d20f1ba1dcfaf6ca38b353891b74b3860c593af3df63fdf"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_agent_ref.beam",
+      "bytes": 6828,
+      "sha256": "fb056d403e45a1e68df8db828a557f73ceaa59327f4aa1d5dac1f3ef591e8b3e"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_agent_vault.beam",
+      "bytes": 30384,
+      "sha256": "b5d9cf6d592d200e92ea98e18d948d0c4f079cccb28df6508c2f65a4d3588441"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_agent_work_predicates.beam",
+      "bytes": 3364,
+      "sha256": "f49f2ad0e533fdb60921595d19120c88dd1860891b1119b217359ecf5cbf1df6"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_app.beam",
+      "bytes": 25280,
+      "sha256": "54453d240e7fb09bc0f55df4341c1ba1dc8c4c7938d319cf2e8afb8db719785f"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_applied_certificate.beam",
+      "bytes": 17404,
+      "sha256": "5a3263e3e25c90811403585d2069bb902901f4d47e660eec8067201001c6ce8b"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ask.beam",
+      "bytes": 89232,
+      "sha256": "34525e7f08fbfa3144a17ec8d992e61160701cca0d5e2a01eaacc14424e30253"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ask_router.beam",
+      "bytes": 93068,
+      "sha256": "f39e091a17c5a2b8c6a9099f3b624533db309a4bf5b646763af1c1406dbbb95d"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_atomic.beam",
+      "bytes": 75396,
+      "sha256": "3b94784c49fa347242f6cb6fe560ffed3591c040f11e5c287ed6925d8decb6b0"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_atomic_admission.beam",
+      "bytes": 18924,
+      "sha256": "397398480bbfd2d7b5d3a3856c7a7b80d191771870370103e7b7aa6db08675ff"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_attempt_span.beam",
+      "bytes": 4372,
+      "sha256": "446bffdeb5b9a61fb0d9711a836335569c8f47cb257c111d0e9803d92d834d0a"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_brahms.beam",
+      "bytes": 42084,
+      "sha256": "a55fd688e55c01e70950dc89b94f5c9f70adb1b98013f2c41ebf10ba575f6cf9"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_brahms_population.beam",
+      "bytes": 11184,
+      "sha256": "a5505d762a43aa7047591a7fc312b2260b61867dd5052d3ab1f544f1aef2bef5"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_brahms_sampler.beam",
+      "bytes": 5608,
+      "sha256": "ebe06c8e0982b3581c09972f6d2d503dfc85b9480e7a47a00e0db613d284e20c"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_brahms_sup.beam",
+      "bytes": 3644,
+      "sha256": "0c72ecbf2ba02e93f7a78d611e174f493f9fc8227f4c41b5cb2e52b3e6554b95"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_c4_attempt.beam",
+      "bytes": 6392,
+      "sha256": "6be875cfabad2b0a54e2f814d4f998cc85b5e0de9a3180e3e57853d795fa1c34"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_c4_sampler_observation.beam",
+      "bytes": 7400,
+      "sha256": "ff938764b36f830ae3beb5a91035c758f836a8fe0bd0aea9d3e22e2e934e93c7"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_c4_sdk_config.beam",
+      "bytes": 3944,
+      "sha256": "647cc02c9b2fa43ff9c9c76f79f0f3b0df49c344032c2b5409987c68fb8dccb2"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_catchup.beam",
+      "bytes": 104968,
+      "sha256": "9dc79a5549e7bbff62014a283fa2116617f02ac900a0bae67844f5e776432fdc"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client.beam",
+      "bytes": 11584,
+      "sha256": "702e0ed463df30730c836688405f5f316d1b52c9b599c55495f5355615159b70"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_auth.beam",
+      "bytes": 27344,
+      "sha256": "7a82167e6dba9c42ffe8cdc086c98483eaa62e3dd96ba4f49fb91f6d51494842"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_cursor.beam",
+      "bytes": 19564,
+      "sha256": "c7e4f8fe872fba456a7039db9a1ccdf7e4b2cc79df658ab52aa32283ed936d60"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_goal.beam",
+      "bytes": 25656,
+      "sha256": "d5dfb8c0f9e5f97209ec941c6ee8eb54f05f300b10cd0380c0ce57ff8c99b529"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_goal_endpoint.beam",
+      "bytes": 14340,
+      "sha256": "f7bc3c164ea1bf0aee27f87febdbb89f093110435984af62c6782f0eac8be811"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_goal_ingress.beam",
+      "bytes": 30508,
+      "sha256": "2f84bb3f20f819f47408c6088c04bd25495e8837e9da5cb38dff993f0f557428"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_goal_parser.beam",
+      "bytes": 40732,
+      "sha256": "6e70906f67a2f5fb581386d829562f24ba75c3b7b64b94cef2321ccdddf30dcf"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_goal_router.beam",
+      "bytes": 43392,
+      "sha256": "32f0b0128eb249cd86435dcb9b99ef63727027ccf161711d0f4540b07b7fa612"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_goal_target.beam",
+      "bytes": 12568,
+      "sha256": "ebc800a65afb829f7475bca85a824ab68d0f90360276c8f80f6cd308f4bd1e75"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_http.beam",
+      "bytes": 31716,
+      "sha256": "40e30b919e8281ca658ac92600db5423ff2016e8fca05d0f6182f432d55ac922"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_result.beam",
+      "bytes": 29976,
+      "sha256": "0c9535d38003511b63937742cd4b645604d3a1efd79b2090d5eb1c0b01544991"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_tls.beam",
+      "bytes": 20596,
+      "sha256": "18fc5bd50dcffe63e3bed70ddad77d5d36d5594f64b60ba577e2bee15bc3637d"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_client_view.beam",
+      "bytes": 74696,
+      "sha256": "a9ac11535d0bc098c9bb2d97d5f06f33989701e7ade31fc37bd4b2f0a65b0e1e"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_commit_validation.beam",
+      "bytes": 48664,
+      "sha256": "fec5fe35682c051cd8118402c9c3040cd330736b9ce1ae8dbb38be2a7f28b2c2"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_committed_projection.beam",
+      "bytes": 36400,
+      "sha256": "9a41afe7483ef2d1861bdcdfb79fc98676e74d0a9e166d2c0a659058087c5b1c"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_committee_predicates.beam",
+      "bytes": 9256,
+      "sha256": "d6149f23c0f72300a9e0dce08df6c6512441fa8dd0fd40a258bfe39c35eafd22"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_common_primitives.beam",
+      "bytes": 37612,
+      "sha256": "f9050147d56e081150bd42f6b52779ddf167a130e2f1d223d0e74c43d1e1fde4"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_conn.beam",
+      "bytes": 38516,
+      "sha256": "8a3434de453dd079456cc9facd42ffce531b7b96462673c142d50965f46e0a0b"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_consensus_trace.beam",
+      "bytes": 3452,
+      "sha256": "39daa0ce07dc2271b74081855f6a8e886c2b009402be02ecedf113c14064857e"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_diff.beam",
+      "bytes": 21784,
+      "sha256": "080660c00a2bd5fd3fef1e17f4dfda4ef282d7a16f648e5794680e1301ff7dba"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_directory.beam",
+      "bytes": 35720,
+      "sha256": "43b57d1661f69a6d87cca1632cebf667513b709abedc9d943d984380641ea819"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_directory_control.beam",
+      "bytes": 87644,
+      "sha256": "0053f83f6c572f94e5041c060b7e2f40d5994320665feb537718eb3605bdc0a9"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_directory_generation.beam",
+      "bytes": 19776,
+      "sha256": "f4df995f24051f2b2cb8885e734521f06c0630ef0b00f9d23097300cdadf95ea"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_directory_predicates.beam",
+      "bytes": 5728,
+      "sha256": "2ac49aee15175658488da4521fc89f921db5a1ca43c0a658c8d1f3ee64cc66e3"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_directory_shape.beam",
+      "bytes": 2872,
+      "sha256": "c9200b73be6226b01a389b34495495646ff512aea61b811411502179ff6425dd"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_dtx.beam",
+      "bytes": 62576,
+      "sha256": "158171fd4c4010aca1b750a753317254b8ec9ffd8bcf98263c7e5a4d212822d6"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_dtx_coordinator.beam",
+      "bytes": 148808,
+      "sha256": "05b60672ab2cea8462662793a0fd683839deb488ef48f05d60436e2db9f470b7"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_dtx_current_view.beam",
+      "bytes": 76168,
+      "sha256": "b461ca94734c102a5bdd518be3da56179aa3f7fc849da85aaf1e800053b6f929"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_dtx_endpoint.beam",
+      "bytes": 40988,
+      "sha256": "40c3e909deaa4b49a4383067c4863b6ff4260d059c7b22312fab0fae2bb3764a"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_dtx_owner.beam",
+      "bytes": 21256,
+      "sha256": "2e91a32fd59b4e79e54f8e2d4cda147715fe8df1dfd8a572a928ce82841da8f8"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_dtx_phase_index.beam",
+      "bytes": 36228,
+      "sha256": "570695fd3aa0b499ba887279fbbb4d5c7f261c2d729536513c68d885fc1761a4"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_dtx_recovery.beam",
+      "bytes": 22740,
+      "sha256": "65153137460fce89b0404fb123ba0fa9511bbca4504bdaeebd444a0c9d6da1a3"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_durable_term.beam",
+      "bytes": 4244,
+      "sha256": "8060ba770b62e9520dc3a5dd56211e7f8f8995d092798891814a4847b80ee569"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_effect.beam",
+      "bytes": 10308,
+      "sha256": "5ac5f17e22665ea28dd14bf89df14272045015e5edd8daad10fd54a61a2bfc11"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_effect_journal.beam",
+      "bytes": 87160,
+      "sha256": "686221b0c045ebb48a4ba822f3c398923dd52c30cedffb116ce84f6f377a5213"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_erlog_db_local_prove.beam",
+      "bytes": 51696,
+      "sha256": "ed88caa4c3549cb42bfeb407ed1a817c861289925f9e25068895cd1247ea32ca"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_erlog_db_mvcc.beam",
+      "bytes": 19232,
+      "sha256": "31fd525dc904290b9328f2f31c30b8396f5b4b11040cd04fda78f059ddfe0e0d"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_explorer.beam",
+      "bytes": 4676,
+      "sha256": "9ef7b6bdcd35d4edaf07450b829bf3216d57506debb9df2cb262d6eb521f1771"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_explorer_http.beam",
+      "bytes": 63408,
+      "sha256": "02aeb44ae5a9ee4956a4a376bd7bf819e96d52640b03e90343bca18369e74d7e"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_explorer_ws.beam",
+      "bytes": 9620,
+      "sha256": "ab8329595fc6bca817d6e3443e5b542d9725884a14d4cdd327ff002596328873"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_feed.beam",
+      "bytes": 44168,
+      "sha256": "1fa99fea5c6202bef8691a4973998615d85df10dc9a57101965a24c570d797db"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_file.beam",
+      "bytes": 4668,
+      "sha256": "7bd0eabe32fbd9612bce98fcca78c5774a9231e6d9f95831a0100e062a6a3420"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_foreign_log.beam",
+      "bytes": 351060,
+      "sha256": "44ca1757212044e692ec56a52979f3d22287920ce95301e943697e64c85db9c1"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_foreign_projection.beam",
+      "bytes": 27224,
+      "sha256": "d456fc78aac8d8c035faa97c451ddc16e5985446145ddd15624c5c708e8cea27"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_gui_predicates.beam",
+      "bytes": 13224,
+      "sha256": "f7c386fd5a9c316aa64deacab481c9026e4235fb4fd4f5860550494d3ac8f127"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_gui_presentation.beam",
+      "bytes": 8712,
+      "sha256": "a570666e9af3c67a92f5c5ad8a44e4448b69c780cf8c7ca0a04b81b9de1801e7"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_http_headers_h.beam",
+      "bytes": 4280,
+      "sha256": "55c37cbd342c9ce1d0130970fe8726e9932cc5fd01a3b731cd6e169494e91326"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_http_listener.beam",
+      "bytes": 5124,
+      "sha256": "db23122d70c6137b6dde51a6dd2decb33ed4f66b886fb1460b31e8460473b2bd"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_identity.beam",
+      "bytes": 26784,
+      "sha256": "fc82be7b58ee7bd3419e17f6a52c4be0c7f48c0971fceea11d2a2a27659b558b"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ingress_state.beam",
+      "bytes": 27316,
+      "sha256": "9544498072ed8a773e7528630784679984aa8471370bdfbacc3f357164cbb45f"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ledger.beam",
+      "bytes": 34380,
+      "sha256": "5aee95f58dabdd3e751579964173a63010ec942780216af660643c0b33ff812f"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ledger_store.beam",
+      "bytes": 61780,
+      "sha256": "0363a624e1229812242c5f60621bcb7082c5bc238ae5d128f6552d11fdd40683"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_link.beam",
+      "bytes": 37472,
+      "sha256": "449ed449eb8a82c14ff065db04d08878357bcef7529dcc2dd53355749b72bbdf"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_log_formatter.beam",
+      "bytes": 10136,
+      "sha256": "29c0c5b40cd34944d481d5896f9dc3cddf5072f65aac876d60e5c54ea9b2bd69"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_material_admission.beam",
+      "bytes": 6924,
+      "sha256": "8d2dbe1c9d51992d52b57534aa816ebc41e679cede6d0191592e6dfd0429b1a7"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_metrics.beam",
+      "bytes": 127604,
+      "sha256": "7775b8c8ccc8c3513b70479f989ce35f17612fef039be161c106839af9a2b84b"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_namespace_manager.beam",
+      "bytes": 80856,
+      "sha256": "1809c68415ee85de73a4be0e16e262cd974b6a628be5b919447bda788a2ed063"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_node_actor.beam",
+      "bytes": 27744,
+      "sha256": "0abafb4f3bdd4ad813e855777eae24ce0b73e30c0c55e383ab8b1c3b6bf29f3c"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ns.beam",
+      "bytes": 3088,
+      "sha256": "0832ee36ca01d606929c033cfed3dc0c84bffe53e2218bfb2e150e8914b5bd08"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ns_sup.beam",
+      "bytes": 4328,
+      "sha256": "3bc21777fba39e8872a70c69e4d2f2b68855921bb3c83f1e56f4bb9223540164"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_observation.beam",
+      "bytes": 3968,
+      "sha256": "8e84269310551959b0aa130ff0818c7f62da5cb3802fb1591d0b82e35fc104a9"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ontology.beam",
+      "bytes": 39644,
+      "sha256": "10080e438dfe23a0fbbf93b6f6cc8fffa11a289b8f99004f6492fa7a5dbf1600"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ontology_name.beam",
+      "bytes": 2452,
+      "sha256": "c19da4d5fa252a6afacb2d8de7ecc5804c7cb4ff1a42931b9130ea9d5bd59eda"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_ontology_predicates.beam",
+      "bytes": 19344,
+      "sha256": "62226d2f588c71dd718fa45e331b3781785cdab00b53e52574b01f13280a4887"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_operation.beam",
+      "bytes": 18572,
+      "sha256": "7f28f2387d41c1a43afc41c950802f4f9f350e67abd2cf8ffe96380aceefc392"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_operation_vector.beam",
+      "bytes": 9464,
+      "sha256": "78d6c3b45f61b083ed494a775b71c6d530c4edb0ecc2282d3995ef3099077b43"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_outcome.beam",
+      "bytes": 78596,
+      "sha256": "25ad1d1f0ba80c662129423b33405253ac088b32c5a33a5291997437bf08ee3c"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_peer_route.beam",
+      "bytes": 2612,
+      "sha256": "a2e8f92c988556d7f59a98f0791bfa30d75915c27913cf83905327b6f4dcab0b"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_physics.beam",
+      "bytes": 134732,
+      "sha256": "257dbf9e947bc835cd14857e45c18bdd3dc113cc52cc729e234a0448df68d51b"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_physics_coordinates.beam",
+      "bytes": 13516,
+      "sha256": "658acddccc1381e414ddae1af5810037c923ac2ff1021a7b748f72331d3bbee0"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_physics_native.beam",
+      "bytes": 4632,
+      "sha256": "ef6350645992943918f96b822632a414bf59f298b33099b56983c269a9d79b52"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_physics_predicates.beam",
+      "bytes": 18584,
+      "sha256": "e5e27a541700a0917c39499c58f74badeb0d0b58e26ba3fa994284192a776392"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_predicates.beam",
+      "bytes": 21104,
+      "sha256": "594fead2882184fb2e4bbf3af1842489552c4d60d834947c07e1cdef9c57b63a"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_process.beam",
+      "bytes": 2320,
+      "sha256": "9174933d48608cebcc2e6b37f4e3243dbf11f6dfd6be69b1e498044b3622d391"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_prolog.beam",
+      "bytes": 322736,
+      "sha256": "cacce8978f42602ca8b2e7e6e7633f53c63cf034a60c96a272222be4d6c67814"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_proof_context.beam",
+      "bytes": 58324,
+      "sha256": "d904080da2ccfb868ae2538164b702f89ff23c454bca05ba93c554eb255f47ba"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_proof_continuation.beam",
+      "bytes": 3844,
+      "sha256": "1309a8b6a95455fac8859199a91f633e6b564359cf725db5a12b15f4def58cad"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_proof_savepoint.beam",
+      "bytes": 9056,
+      "sha256": "1251283a6a54d742447c41f8fd8fbf0d857aaae44dec2fc12be4e0f99d7675b4"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_proof_scope.beam",
+      "bytes": 10200,
+      "sha256": "be5d1c874d61a4cb31c74db87d14d1003d5861078edab099afc294a03b0d49dc"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_proof_session.beam",
+      "bytes": 43272,
+      "sha256": "dbbc28709bea8cc03fe8ea45888bf2a58589f5e5653edab7a9ce86501fa17ce6"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_quic.beam",
+      "bytes": 47888,
+      "sha256": "a19da8c3b79d0ed94ec27900b64b9f656d65717d2791dbfdf6a6f7a279b2a1d2"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_quorum.beam",
+      "bytes": 6504,
+      "sha256": "5d96822b7e31f2d3d2e63da817267791fe7ede656867465986dd49a1fb8dabd5"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_rate.beam",
+      "bytes": 4168,
+      "sha256": "189fcf50f27da29f70a6e4c18a85ee10084c64a8953381889e31ae55640a6ea3"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_read_certificate.beam",
+      "bytes": 8128,
+      "sha256": "70aeab2b4789c1e1a418f29f878e7564e967de82ee9ba359d7fada98191d5b4d"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_read_set.beam",
+      "bytes": 9380,
+      "sha256": "0195016d1533ff44b60314fc5bd8e1771d063aa827bf83d8928210343729fcc3"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_reg.beam",
+      "bytes": 6104,
+      "sha256": "4ed308ef1cb9240bda3afe87f94de8f793337b41d02a70d18fecfe87f6112f49"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_relay.beam",
+      "bytes": 9848,
+      "sha256": "edf4323ef59ef32cf5473439eb2b69f5289229b3580d37bac400cacb4c7749fd"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_resource_basis.beam",
+      "bytes": 6656,
+      "sha256": "286e5b1bec9bc1769539f18a782f2e076af5c6b6c3053b3e799045a30d40f1f9"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_runtime.beam",
+      "bytes": 219592,
+      "sha256": "144cc28899d8a74cdc96cdb78a85b1908a204b209a92ca62c72771e88cccc3d9"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_runtime_predicates.beam",
+      "bytes": 31240,
+      "sha256": "185c2c79c9e916ab671e90e7c035fd3c9e9bb276377285494e372013b6e35c81"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_safe_term.beam",
+      "bytes": 23344,
+      "sha256": "d2ee2d218953ad131c56b04076374746849a8d54b3e661954e8091e307629b7a"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_schema.beam",
+      "bytes": 10724,
+      "sha256": "b046e9de3451953b87e91b91feb9eb7bfe47217abb3872d9ff7f0d00a23d7456"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_scope_session.beam",
+      "bytes": 82852,
+      "sha256": "292c01d819408e4a07ee14feb92280a14bfe950f5af589d5b5b57b75c900c5dc"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_scope_wire.beam",
+      "bytes": 44948,
+      "sha256": "310603261ffd047b935a58dde423419b1d9caee8ae87cd145ccca36445db9228"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_selection_basis.beam",
+      "bytes": 6376,
+      "sha256": "fb7f10faa96497dde798f3002be34ba87539e46d342115ef65ce90663ef8877f"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_signing_journal.beam",
+      "bytes": 59916,
+      "sha256": "0b7732b42b6c3a6eabbab1648f40188fc2dec8c325c6a988b687871ea5a8e698"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_simplex.beam",
+      "bytes": 732732,
+      "sha256": "1c1f0e97d2d32532aa59fc064e794db0dcc89645284c5ba515c84e67b66805fd"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_sup.beam",
+      "bytes": 4328,
+      "sha256": "608d79a8650ea983fa994378d8c5bba7a368c63d38055070e8d92ed5ae118658"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_system_ontology.beam",
+      "bytes": 11028,
+      "sha256": "c98dd693c301971f4c0a689d4595da431f96851d50991f1804e6e5610a9ceb79"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_terrain_wire.beam",
+      "bytes": 6780,
+      "sha256": "3d5ec4077f43aae9e9b5a21bc7f35ec80822f71f01a4590c0981ff0a16381ff0"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_time.beam",
+      "bytes": 2244,
+      "sha256": "f3be889e562b8010744f641dddcc97bdb019be0424a7b96f0bd81fedfb6c90df"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_trace.beam",
+      "bytes": 15424,
+      "sha256": "fee17d7b324eef6617ff2f99363e26eb97defcb33617b26491cf16b6fe1446de"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_transaction.beam",
+      "bytes": 85292,
+      "sha256": "23e9e5f2ce5b769cc6c3bebcfbc141e9cf874c2d22f1f9b4387380d63832f19b"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_transaction_predicates.beam",
+      "bytes": 8752,
+      "sha256": "374d7c1d9c0ccabd0ddeb69d1ea268fdb0d6023949a8a8f5e72e83d12ca62896"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_transaction_scope.beam",
+      "bytes": 20060,
+      "sha256": "4e454a99387d72e9b3995001fc6ff33de0adfdbbe67a4ad0ce4c2b7ab12d85de"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_voxel.beam",
+      "bytes": 46400,
+      "sha256": "a18d80bb7c1799e4397e6c0f2739531163e8bae9d72f11e6bff2674074e3f8d0"
+    },
+    {
+      "path": "_build/test/lib/quod/ebin/quod_wire_term.beam",
+      "bytes": 30916,
+      "sha256": "1a2bb962ed54be2154aee057ba0f12589e5a9f2b10d45401f671dae6c2f41c1d"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod.app",
+      "bytes": 4259,
+      "sha256": "5f99eff9b19d5eaac92f70f954f117c50d517109c4d3c2171e830d8dcb51459a"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_action_predicates.beam",
+      "bytes": 10504,
+      "sha256": "7e96abf46c2fed21cdfdb053110c3e8a8afa26c73ab0859a21ebafc3311bad54"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_agent.beam",
+      "bytes": 33076,
+      "sha256": "c1412b595204477c920638e2438416019f7bb950748e3a8eeab47f7cc1f278cd"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_agent_identity.beam",
+      "bytes": 11888,
+      "sha256": "af903bad6bfe7e1206a65a38288a6c9dfd1d59afc468ae0eb79e152806c6fcf5"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_agent_observer.beam",
+      "bytes": 28892,
+      "sha256": "9142707b29b222e6ca50547871d32348ff1b8a4d2c0fd303289e1f7fec9c052e"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_agent_predicates.beam",
+      "bytes": 14652,
+      "sha256": "e918f1e278b0462ed76fa2b7ed93919299fb74cabbce004d0f4d2c5e94866870"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_agent_ref.beam",
+      "bytes": 6696,
+      "sha256": "573cfe6cc59f6baf229d48d641934833aba743775d1624985212802444e79471"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_agent_vault.beam",
+      "bytes": 30260,
+      "sha256": "d0a3020ee061a4dc518028494beaeac83ab43bad9333b26adf1f07a5957ffc72"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_agent_work_predicates.beam",
+      "bytes": 3232,
+      "sha256": "f18df73a57fc344aef1b6df682e63e179f33100418dbd0139fefed8be3540f4e"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_app.beam",
+      "bytes": 25140,
+      "sha256": "9c18dbb360efe88f722a39ceb1a840db3774523091518965db12f60d9d3abec6"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_applied_certificate.beam",
+      "bytes": 17280,
+      "sha256": "60556ec32e69ee898db2f7f6c0572d1c55b96be5f08d2b4f2469125d0fdee2f3"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ask.beam",
+      "bytes": 87312,
+      "sha256": "7cd454e802cea14f425bd2f97794b62960867f78c11b4207b8d4c4b4ff75af5b"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ask_router.beam",
+      "bytes": 90400,
+      "sha256": "aa84b6e65b5a3a8b564c7a8ac4916f6261762cd41d266b30725139c169850738"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_atomic.beam",
+      "bytes": 75284,
+      "sha256": "f397a003553b5c3ccf20d9c95d42998ec8d45b5533cda96fdcc3ca5b263d2a1e"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_atomic_admission.beam",
+      "bytes": 18696,
+      "sha256": "90f0069fc84c168f1f54b11f9790465dc74eb7746e450c51baad12c64e9de156"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_attempt_span.beam",
+      "bytes": 4240,
+      "sha256": "9061dcd728888ef745719c24b7a09abb65e2638175ee7bfcd852c78d938e61c2"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_brahms.beam",
+      "bytes": 41596,
+      "sha256": "9275d2b6ea87f280f3f8956972f1acf20545900b5f53109baa30c786bce4e871"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_brahms_population.beam",
+      "bytes": 11060,
+      "sha256": "d33bb982c8657df7d47f24d0d86fb2da71d0fe97af77e45ecf60178b421a700f"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_brahms_sampler.beam",
+      "bytes": 5480,
+      "sha256": "b201e185e3f18b50e94b10d35ca7fc2298d4bb3736dbb04a0e1c62da81028c56"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_brahms_sup.beam",
+      "bytes": 3520,
+      "sha256": "9f348ccd819ccb3db0f08777981e78586764c5bfd3563d81fc68a863d3e70e84"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_c4_attempt.beam",
+      "bytes": 6264,
+      "sha256": "b7ac6448768d131466a8e44b7bd4f09882fbf57d0d738f3dda69359ff25873f7"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_c4_sampler_observation.beam",
+      "bytes": 7272,
+      "sha256": "b6c5df0d011d4f11ff9c9fbbf999e2d4ce3ad8b11649b7c9e37dbd1ad342c095"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_c4_sdk_config.beam",
+      "bytes": 3812,
+      "sha256": "4beeafd53a5c1feee72b7a95c2fb003ad9c6d51396f2bb94cd6ae1f7826b6f0a"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_catchup.beam",
+      "bytes": 102516,
+      "sha256": "8dda4b06d031810a79bb5f229dff12bb666ff46c4624a420fbd7436bb4c71a32"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client.beam",
+      "bytes": 11456,
+      "sha256": "f00638f6c552e778da0dc0fb525f776297642cc120840587525045f6a25df1b3"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_auth.beam",
+      "bytes": 26640,
+      "sha256": "398e41f7b5c7dc8ffcd0759187466b5c17db504d2dfff27454d05f18aee27c0b"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_cursor.beam",
+      "bytes": 19444,
+      "sha256": "094963717485812c50c98eb77d98274e61c24350929ee101d716a3237a057d33"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_goal.beam",
+      "bytes": 25548,
+      "sha256": "840ba4a715cd0b6303ad4d0b2227dde15e08cb43df796452d17202dd398ab905"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_goal_endpoint.beam",
+      "bytes": 14228,
+      "sha256": "26e41decc5634f03d1524a61fee8cbaedd5720679dea63b834a6c1f6ae1b8535"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_goal_ingress.beam",
+      "bytes": 29764,
+      "sha256": "48711fb7563561ad421ee64cc70599017a3be1badd235ab1972bff95f7d1aabe"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_goal_parser.beam",
+      "bytes": 40688,
+      "sha256": "bc6b554a98973467e90087aab4bf5f2801bf3f5095abe8e438ffd6a433fd6217"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_goal_router.beam",
+      "bytes": 41900,
+      "sha256": "84e7e1823000d84a7da7900f05670a89f405c583eb2b4f0c50ee777a51ba22a1"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_goal_target.beam",
+      "bytes": 12328,
+      "sha256": "92f50ce5af89bb0dddaa9c0cad370c77ff16da30081960413ead6d19c3cfce73"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_http.beam",
+      "bytes": 31408,
+      "sha256": "32ab4b2645d4a04f6f612b831b604c1eda6cb485238e10489dd019cffc39844d"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_result.beam",
+      "bytes": 29856,
+      "sha256": "f6c1ee62834974c7f22084a3d1ba4badba85819f0b1563efe8c513c972d57602"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_tls.beam",
+      "bytes": 20532,
+      "sha256": "9f9f77ceec29f0995c1877e64334e7a87d09bf79eb31d3ce2e4acbf444efa6af"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_client_view.beam",
+      "bytes": 74648,
+      "sha256": "13c498f5614c4693c14481a4122760257f634e518d8b12c789a9b6ede566fc09"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_commit_validation.beam",
+      "bytes": 48584,
+      "sha256": "f0c106b4ebc59dd5d4d178b531cdc561a14bdab666430c73cd73b29912b3733b"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_committed_projection.beam",
+      "bytes": 36060,
+      "sha256": "df1505baf3bdd62e419e23f34d967063bb3e934e85e7d9c95c2b278d7b25e438"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_committee_predicates.beam",
+      "bytes": 9132,
+      "sha256": "3de388825cbf122fce2205a19e88dd12cf2e2c4895a0ee319ee70e56b4c9acf1"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_common_primitives.beam",
+      "bytes": 37492,
+      "sha256": "3d8886612b6f9836dbd947548419258b6d207623d4661a12d22a17ff92ad84ce"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_conn.beam",
+      "bytes": 37224,
+      "sha256": "a6edd6a7a19bc070202f58a8040ec899f3ee1d9b0722bc24ff355fc3ee0c653d"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_consensus_trace.beam",
+      "bytes": 3324,
+      "sha256": "c2ffc57bf3e07334054f2124045836aca2bcf08607f41b77c40feb2f3dbf3c51"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_diff.beam",
+      "bytes": 21656,
+      "sha256": "147f04c8e947a9ffe337f544a11f8ac54902888e1aeaf32f4c21a4e003d21978"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_directory.beam",
+      "bytes": 35652,
+      "sha256": "9eae25978bf8c21a109fa6a26e4cbb61c423724f4e7fdfade88326e2eb96de5b"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_directory_control.beam",
+      "bytes": 81500,
+      "sha256": "02e3bfb91d78d1c997062812e833d693f5e3f7deb26106cfea50a0d4e356633f"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_directory_generation.beam",
+      "bytes": 19652,
+      "sha256": "db6be4e2dc29cc7e79b9fe5790e567d4336867f86039e96cd5c0bd8788147f5c"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_directory_predicates.beam",
+      "bytes": 5600,
+      "sha256": "aeb98bcb635b35b1188cbb053dab89b30e7585801c2ba8b8de5227991149e3e0"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_directory_shape.beam",
+      "bytes": 2744,
+      "sha256": "129c3bcc89060703907cd233dfccd57164af919d3eb3595efc7b67240a86a8ed"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_dtx.beam",
+      "bytes": 62452,
+      "sha256": "c3562fe7d75ae65d7dbb639aa190a31fd99667f181d71ca5dec99571700837c3"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_dtx_coordinator.beam",
+      "bytes": 123268,
+      "sha256": "79bff4479593d0eb8242b6f011eef0b7656c7c0139311b56818cd1b200de7bc3"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_dtx_current_view.beam",
+      "bytes": 72900,
+      "sha256": "842fb8a1a53b49b5964c207052066082ee469b5b6a92772dd8e492411b7e8345"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_dtx_endpoint.beam",
+      "bytes": 40868,
+      "sha256": "223d21c27ec5afdbb54a7b3dd1f80a2e335712437bf6e6bc98565be90eba3ed2"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_dtx_owner.beam",
+      "bytes": 20444,
+      "sha256": "af23fce1d2c5bfc43cdfb102c23dd2d93802818db7fd37d7653f1ab4caff33d0"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_dtx_phase_index.beam",
+      "bytes": 35688,
+      "sha256": "92eefa9be4a67a10c5746427d7c3a2b87638189ac3f8bf2c3e362b36e2947744"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_dtx_recovery.beam",
+      "bytes": 22636,
+      "sha256": "ec5a15a43696091de50b8f155199e8e44c6d455f82e6298e9320c06471cad1ee"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_durable_term.beam",
+      "bytes": 4116,
+      "sha256": "5acf489f58df2457f1a1174f384b54c8b8d90e9051093731cfface4958551083"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_effect.beam",
+      "bytes": 10184,
+      "sha256": "b93964c87d4e5d547c10feeccc1dff23f28cac851ed07e19e28e7d0d21e84601"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_effect_journal.beam",
+      "bytes": 85972,
+      "sha256": "ebec6a1c1c62807decc21ad7d3db0c76d96145e7a49836aa7d64c2efbb012796"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_erlog_db_local_prove.beam",
+      "bytes": 51568,
+      "sha256": "2f577b4ef7e4d86ec0a627ea5e60dc04049a67dddb80646d4f1fd483cc76fbfe"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_erlog_db_mvcc.beam",
+      "bytes": 18992,
+      "sha256": "1022d60c374e368900ae90fb03f5c8b747c9aa9c75951d8fba850a13115d64be"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_explorer.beam",
+      "bytes": 4556,
+      "sha256": "596e4dd5cb7887d5004f2d39aa5288461396976e59fa084b63e613c84b5bd256"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_explorer_http.beam",
+      "bytes": 62912,
+      "sha256": "1600ef63d813326f722430f3cbeb339b2fdb1dff46d47e008a7b327bdfdd2970"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_explorer_ws.beam",
+      "bytes": 9496,
+      "sha256": "292a42997cfbc9ece657841a4a60a9e3e89eb6afd21e1182618d5134d07b43d9"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_feed.beam",
+      "bytes": 41668,
+      "sha256": "0b17b7d311c5098ac95cbb354160895a924ab244c71fb6ec374e7f494c449404"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_file.beam",
+      "bytes": 4544,
+      "sha256": "9d87ff7652b0d98a690fd81e30dd239ae3d2043487b8a35d6ca311547fee1784"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_foreign_log.beam",
+      "bytes": 333832,
+      "sha256": "a8dcde3fb566a811235ee377d55415f1be52536438bfde4d4b9c043c70076af2"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_foreign_projection.beam",
+      "bytes": 26816,
+      "sha256": "3aa3a27e436575480867570929eed0eb6cb8c8b1a33849f8993cad65516023a4"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_gui_predicates.beam",
+      "bytes": 13112,
+      "sha256": "4817d563582196ad386a6fc87012e35f39c7e961bc9c75ce461ce05382999f47"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_gui_presentation.beam",
+      "bytes": 8584,
+      "sha256": "9cb92ff2616496a6a5b4c8cf77f4f342cb93cf62725aa741ae9ae301f97fc2c5"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_http_headers_h.beam",
+      "bytes": 4148,
+      "sha256": "239304dcef0b656f28ce6a6a79f7d66d4821cb21cdee8833af473a1b581cfa81"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_http_listener.beam",
+      "bytes": 5008,
+      "sha256": "90104b6f613878c39f11b0d25183739511909116ef09c512e395a4ea59b8171e"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_identity.beam",
+      "bytes": 26672,
+      "sha256": "cb803a62c5ae1209fa6603f681ff8a7d9ead5c9e105967c769ad94b998215cdb"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ingress_state.beam",
+      "bytes": 26736,
+      "sha256": "7cb08a462c519936e786d999fb32a773d2fab6bf906bb3519f13e4022577aa78"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ledger.beam",
+      "bytes": 34256,
+      "sha256": "7874f1973b61e6999370675187626a1909c0a317150ac55ba7182e99e6049893"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ledger_store.beam",
+      "bytes": 61668,
+      "sha256": "5058c0664a6c26ce64e2e0bae239cf48e4adbe9339962606731c00a8b018690c"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_link.beam",
+      "bytes": 35588,
+      "sha256": "ae32a4ef9410d3bb48091a98020062ff5ff2b28973c4a88f36567048dfc9ba9f"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_log_formatter.beam",
+      "bytes": 10024,
+      "sha256": "0a68ccf7d0786623efcd236efac1f21d75d34064c2d34bcb265bb9a37f9db98a"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_material_admission.beam",
+      "bytes": 6808,
+      "sha256": "aa4f9a6bd612596de8bd9a35a2cf364c75530a8c74553407bc0e2fb34af406dc"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_metrics.beam",
+      "bytes": 126088,
+      "sha256": "5b6c805c43dd942459ea00fdc27faf5c3626d53d6bcb421da1ce09e00608b3e2"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_namespace_manager.beam",
+      "bytes": 77784,
+      "sha256": "067a21100dfb69dba1e71bc904d1293a3390d23f2e858a64a5e0e5915a57f4ae"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_node_actor.beam",
+      "bytes": 27256,
+      "sha256": "ed50c1bee3dc797bd64aef321f949183c8e7fd38fc378a9c84d3e12aa15a2644"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ns.beam",
+      "bytes": 2976,
+      "sha256": "07c571724f6e368b2771eb5b0a932b71aff16251fe3235ae9f5eafc07d73b4da"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ns_sup.beam",
+      "bytes": 4208,
+      "sha256": "474d2579e520e0d8ec7bf4289cc2db2dd2ecceacb32988f692e8eedb962d7cd4"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_observation.beam",
+      "bytes": 3836,
+      "sha256": "431a320e3b408c1e0adf211d21184b7ddc3bbf0ce3f726392a91717407c8e873"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ontology.beam",
+      "bytes": 37708,
+      "sha256": "34ca25d54cec09909a6c9a4b08ee633b7d1b9d1b277245e00bc46e8e47536c5b"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ontology_name.beam",
+      "bytes": 2316,
+      "sha256": "5ec7fa598686c5c3a5ee599d43937c49ec242fc413004e6bdca36d76eb28794f"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_ontology_predicates.beam",
+      "bytes": 19220,
+      "sha256": "5ea959d76cb1240dc71ca50aed2414325e932f680033562b2d48b0f2ef5d0dee"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_operation.beam",
+      "bytes": 18444,
+      "sha256": "c0603329ca812646ef3715b0908c89925c27411d65d08f284906c99572f6560b"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_operation_vector.beam",
+      "bytes": 9336,
+      "sha256": "a314f3edfd6eee6f5d6d0157955f660a9e92ca5f71853ec0cc7314cfc6bc1fcf"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_outcome.beam",
+      "bytes": 78496,
+      "sha256": "9492dc90023d0d1b64c3c6c76eeaaf83bff6a83c226d43b49fc1b41e6e557f86"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_peer_route.beam",
+      "bytes": 2480,
+      "sha256": "e804b42f7881689396e13999914bf3f1d7a37b7c47b4cff7942e921c96620a35"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_physics.beam",
+      "bytes": 134736,
+      "sha256": "d554d9b806967a7e85674c0eb483e5e3849538b6f45b638bfcaaf6414636edd3"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_physics_coordinates.beam",
+      "bytes": 13400,
+      "sha256": "45c9a96b44e417680ec9cb3dec408f8e855acbc933be4c1654d11b8b2c9446ed"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_physics_native.beam",
+      "bytes": 4504,
+      "sha256": "18953d0f153a3a999772c9025db208139e74ad70b419d2b52e7bb5d1e03de21c"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_physics_predicates.beam",
+      "bytes": 18460,
+      "sha256": "9aca0a90655be10d2358b445cc5915f237e862a8dcda3faac210edde3c68eafd"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_predicates.beam",
+      "bytes": 20832,
+      "sha256": "fb1b9d35a7f1d3d153c2f3689eb3501b6e02135985511083d14591d07de5f209"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_process.beam",
+      "bytes": 2196,
+      "sha256": "5d6b6f0970d110d6cc6b94a4bf0806b4c7778de24564951af57bafb759b614d4"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_prolog.beam",
+      "bytes": 303284,
+      "sha256": "e8c9b014ba3b695aa4fe11ed45278a30c92eea0f4e8f41d80f35fcaa1c5c5c93"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_proof_context.beam",
+      "bytes": 57260,
+      "sha256": "0b0de713542165fc4d3e900302b4de462fcc2253cd47ee262bf7ed6408cc791e"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_proof_continuation.beam",
+      "bytes": 3712,
+      "sha256": "755f78d21b29209e4d1f734e2426f78a36f187822a83c62e1fc9d61d67428d1a"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_proof_savepoint.beam",
+      "bytes": 8924,
+      "sha256": "72b2879e7ace9a2952d8325b139e3796b84f5c10dace39a988f142ef1eee22cf"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_proof_scope.beam",
+      "bytes": 10068,
+      "sha256": "fd4829aae5031e4b09482872e19fa8a7a329a627d8285f5fcdf76acc383976af"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_proof_session.beam",
+      "bytes": 42720,
+      "sha256": "fb2a334f1d9754b8250c2e8e237be6f6e6b9dd924d1c80d9ec6a3ad45abe1275"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_quic.beam",
+      "bytes": 47720,
+      "sha256": "5aaef7969cd505f131147b2f74c2cefc2e5a298072fcf40455423572c8c50b94"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_quorum.beam",
+      "bytes": 6380,
+      "sha256": "5c3133bf338dcaefe2bfcbadc0f2bb001cf22adf1ebccafb985f05a3fc4fdd1e"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_rate.beam",
+      "bytes": 4040,
+      "sha256": "d130cc8f59652d0ed52f7566d3c946561870a8aaf8076d045004959af7fab086"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_read_certificate.beam",
+      "bytes": 8004,
+      "sha256": "917288bab1acfd5d705d344b5d95a0d45257110022df4815baae43bc0617ee92"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_read_set.beam",
+      "bytes": 9248,
+      "sha256": "7bd8395b586ffc1609c46144ce832b5e8048a75a0d602df2128dec4610adbfa0"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_reg.beam",
+      "bytes": 5976,
+      "sha256": "c3323863b50d4c3dd99fb5adb8957faeba14ea2d5c93d5b642c15d320af14d4c"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_relay.beam",
+      "bytes": 9736,
+      "sha256": "e182d049c7606a78f91c1505293875ad12ea81a3fedce94cc3460f990ffae02c"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_resource_basis.beam",
+      "bytes": 6576,
+      "sha256": "0100f4ee5d4b1b94b540cd995d2fc3a32213edd55c4adf818cb72416b95f7e07"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_runtime.beam",
+      "bytes": 218004,
+      "sha256": "506ad8e73975a5a069db903a19f1701670321f8d996a708347b0256280a84ab4"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_runtime_predicates.beam",
+      "bytes": 31132,
+      "sha256": "7bb4bd86b901d2a89eb0edda089e583cac17d1cd8e2c9f7844c3fb9fb80eb894"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_safe_term.beam",
+      "bytes": 23228,
+      "sha256": "d828351680fdca0e064f2c68dc22c6c3c7a4ba7c89bf519635e508ab916dbe07"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_schema.beam",
+      "bytes": 10624,
+      "sha256": "e6fe0c53ebfefc1c5ef28307cb48930583a3cd4351df5c624243984667c85e5f"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_scope_session.beam",
+      "bytes": 81844,
+      "sha256": "85529d448a955f9bd9fa59a762ea60de97a4e5f4ad3fd73b391d7a1a2211cfcd"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_scope_wire.beam",
+      "bytes": 44844,
+      "sha256": "6f3bed81103ac02a8b3b0e49ca8ce35b63517ba8f04ed9b58c763479419f7b38"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_selection_basis.beam",
+      "bytes": 6188,
+      "sha256": "065149771136ce8f55b877c90673fb157172dc97e074be19bc8e6b4c8e065d84"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_signing_journal.beam",
+      "bytes": 58864,
+      "sha256": "9461662239f7720b280a80bfc6b022b9df3334fbc772c29f3283119cecfdb827"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_simplex.beam",
+      "bytes": 657268,
+      "sha256": "60841d86455b4e5456e66392c9c1ab65a109c8afb8310212e9166e73034539e5"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_sup.beam",
+      "bytes": 4204,
+      "sha256": "29000d8b4e26817e4d846d1adaac471d353f9e8c5b3b580dd9609d668629bf71"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_system_ontology.beam",
+      "bytes": 10612,
+      "sha256": "2fc394ef8a1e9d98a9c81d19bca714033383039199e103185770ff6a63f16316"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_terrain_wire.beam",
+      "bytes": 6652,
+      "sha256": "7fe4171757e6c042ba5fcd0f7d0f0478f73cd628da7d8d8998445c2c7deb34a9"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_time.beam",
+      "bytes": 2112,
+      "sha256": "8f31f173c1ba9afa6dce7ffc6d670bad3b4a1096b67c6b7705b0fd722a2535c0"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_trace.beam",
+      "bytes": 15300,
+      "sha256": "b873998e8eed4898d9f789994d0a09691a3784e07d38a50ad431d25f3d12d629"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_transaction.beam",
+      "bytes": 85188,
+      "sha256": "68ff9ab4995fb83d1fc809e5b3c947e5631992484c581305442f2a9793fbfea7"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_transaction_predicates.beam",
+      "bytes": 8612,
+      "sha256": "339c5b2d8171d5cea96b7a27ed5b85f0b7643c37fa10e8b4a0194682e2379ed9"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_transaction_scope.beam",
+      "bytes": 19932,
+      "sha256": "7317ef1920a65364e2dd2e6fe000f7e96806358089fd5c765911e27f6bab4271"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_voxel.beam",
+      "bytes": 46344,
+      "sha256": "a25e9e3ce063d16ec46caa903185a769565405640d331bc9cb1bf1793ae70615"
+    },
+    {
+      "path": "_build/default/lib/quod/ebin/quod_wire_term.beam",
+      "bytes": 30896,
+      "sha256": "bb5c675aeccb401efbd42fc2087aa072d5016876af0e8675f4ddb851b069b087"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod.app",
+      "bytes": 4259,
+      "sha256": "5f99eff9b19d5eaac92f70f954f117c50d517109c4d3c2171e830d8dcb51459a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_action_predicates.beam",
+      "bytes": 10500,
+      "sha256": "f88e879f1aef92e081852771d940bac3815f2c575509d7ff53b387817ab89972"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_agent.beam",
+      "bytes": 33068,
+      "sha256": "cdd5862f83ea04edbe8627ba2993fccd9f5be3be413f27f7115dadeb47bae342"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_agent_identity.beam",
+      "bytes": 11872,
+      "sha256": "60c911b4b194f90cf4e37f38afdb1fd754ca3d2be941c6c7169ff8d55abcfd6f"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_agent_observer.beam",
+      "bytes": 28876,
+      "sha256": "32ca34b615aaf845765eb83ae4ebb712a04417b468026900b2027934a2e077bb"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_agent_predicates.beam",
+      "bytes": 14648,
+      "sha256": "6af810ede7c2085948178da0ba0dba511960e5d8fb3e4050b95bb87b7d4deccd"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_agent_ref.beam",
+      "bytes": 6684,
+      "sha256": "15587c0deeb610535bac7be6ab4829e0f2d21b18e1a4f2f2899a6f94072a7888"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_agent_vault.beam",
+      "bytes": 30252,
+      "sha256": "910f6ce627792c2b87af40a8a944d93b9e00583743293a01256650059d2be9e5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_agent_work_predicates.beam",
+      "bytes": 3228,
+      "sha256": "4963ac821b31a19c0d825647797ca93eba25d930167d427ce4864a3eb2491110"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_app.beam",
+      "bytes": 25132,
+      "sha256": "6e5dac59d726537a0f5b77b32131d852630ebae984c9154fcbf4dc5ff18c0083"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_applied_certificate.beam",
+      "bytes": 17276,
+      "sha256": "60cc85c426cfd0188770679563d88e770891105821709b5ed40526870be3de50"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ask.beam",
+      "bytes": 87296,
+      "sha256": "07ddd01f7046ce301d42cf92d9a9715a678f2b4fe46a24a11d3e41d29602e299"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ask_router.beam",
+      "bytes": 90380,
+      "sha256": "89e08627d53668b6c9441da4629ea2be8ce8395a9862574dc231c5ea54d40ecf"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_atomic.beam",
+      "bytes": 75272,
+      "sha256": "cd91910f8fbbd39e546ee5050f55906aaa457cab06c44ba76739bd4e00681edf"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_atomic_admission.beam",
+      "bytes": 18684,
+      "sha256": "5447b1bb9ca7871590e4c6a9610ac2252c08fdb5e37e753040f702927c995ad3"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_attempt_span.beam",
+      "bytes": 4232,
+      "sha256": "35e2b78ae1393e8df8ace5297c0ee4b756154839b06216701fb828124a2beaa1"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_brahms.beam",
+      "bytes": 41580,
+      "sha256": "24dcae4c0d8a620069bea2fc2ff2bddf3b3b27dd2eba46d731320e11b67ca20c"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_brahms_population.beam",
+      "bytes": 11052,
+      "sha256": "384d5483b65b9e0c1747829a94782b5a401fcc0a3c311c563efeebc03338b7e7"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_brahms_sampler.beam",
+      "bytes": 5468,
+      "sha256": "da252fdfedbcf3715669fcc9f308436d314f6569397427d9517c9f3a933d72b4"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_brahms_sup.beam",
+      "bytes": 3504,
+      "sha256": "bbd9fc1bb170cb013c6d58dccd6e781c519edc01b5c8aa873c000985b4017744"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_c4_attempt.beam",
+      "bytes": 6252,
+      "sha256": "33e61c5b97121eee9a4c01c6991c6589c5a94597450ca8c3fb32fcf67cd72d93"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_c4_sampler_observation.beam",
+      "bytes": 7268,
+      "sha256": "a30a3b118567bf96b6b7fd2a973cbad106ee068ac29fbd9fff9be6b6afa81764"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_c4_sdk_config.beam",
+      "bytes": 3804,
+      "sha256": "0ea803f87ce2a9b74bcae64e0fe9ca3b2cc6b22d07b9cade7fdf342db4f09b59"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_catchup.beam",
+      "bytes": 102496,
+      "sha256": "63bd734dd95a5b10883ae5c41e9670469d0c7f5012354df33cf289a7521f7ba8"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client.beam",
+      "bytes": 11444,
+      "sha256": "349dddeec24dd7c6b8951b161c8e8f47dd65a567c164d85ad4ce85daaf6ae91e"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_auth.beam",
+      "bytes": 26632,
+      "sha256": "79fa58d9c070aa83c5f7ee794e56fc2af3beaa2343b9ad14f4746bb54f5aa71a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_cursor.beam",
+      "bytes": 19436,
+      "sha256": "3a3c6a5b0c598f624a31b71d8963f0733cca9b7f7262bf070ec9e884b114e81f"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_goal.beam",
+      "bytes": 25536,
+      "sha256": "aacd6886d11c43df99675577290d9e9c6b335789708ad9005580aac986be1f7e"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_goal_endpoint.beam",
+      "bytes": 14216,
+      "sha256": "a3621d6adaebb474830da335712e6853a598eb3886eafc0cce2c824327e92932"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_goal_ingress.beam",
+      "bytes": 29752,
+      "sha256": "6593995d3138fd8327887e7617987272daaf2582f9c3a749fc9bf3701b773d68"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_goal_parser.beam",
+      "bytes": 40672,
+      "sha256": "7e0ff2bb429903e3177270d981658df5cf08124ad9049a26c49135f888fef13f"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_goal_router.beam",
+      "bytes": 41880,
+      "sha256": "521da9fab1cc337a69cc5651de97b4e11363ef3ea47e9b751371607ba15214e6"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_goal_target.beam",
+      "bytes": 12316,
+      "sha256": "e87212f2cd4e1238203bdfae97850028884fc0931d0c3ddf205d9308a78167d4"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_http.beam",
+      "bytes": 31396,
+      "sha256": "9d484ba886ebc7b337d5a2612c397f9f6c61b05ad8884700cd5cc25c1f717be5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_result.beam",
+      "bytes": 29844,
+      "sha256": "da77c4c75f722070d30075a7da2411ed7029a08c33389f84289fdb18dde5baf5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_tls.beam",
+      "bytes": 20520,
+      "sha256": "d9424c36b5e855591fc7f0fd26c050b48d1ac00d16b797f92d59a0a4fea3da94"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_client_view.beam",
+      "bytes": 74636,
+      "sha256": "0335e0b9d6e1a883887ea9c4743e25653f69015b00d99e7957abf92e8aa194ab"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_commit_validation.beam",
+      "bytes": 48580,
+      "sha256": "017ffa2bfce1bb6d81adb5fed265629d0e25b338d701bcea3ff0bc0633ade81b"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_committed_projection.beam",
+      "bytes": 36052,
+      "sha256": "d2474a4a2a7383524644c45e85193c53533bc7321e1c9449ea336d358c5d1627"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_committee_predicates.beam",
+      "bytes": 9128,
+      "sha256": "f72587521f2a4378f95f841cbe81556fe47aa68653b46d0bcf5794ff0e47c367"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_common_primitives.beam",
+      "bytes": 37484,
+      "sha256": "44dc9d1dea434669c4ad6698bfe72927cb44d7843ed5eefc63e96af824853772"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_conn.beam",
+      "bytes": 37212,
+      "sha256": "e066e07954cc895b46507bcb138bd98e7581fa4bc373c527e193d328bf0e19bd"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_consensus_trace.beam",
+      "bytes": 3316,
+      "sha256": "d4c93b0567bdaf40961d3ea184bfdcf75193e88acc23eedc9bbef8205a196fc9"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_diff.beam",
+      "bytes": 21644,
+      "sha256": "6df7e5a8e44c98039ef1ab67ebbe5d419c93a68399473bb8018f110e50883b58"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_directory.beam",
+      "bytes": 35644,
+      "sha256": "f8858c2a7a1aa39f0399ccdccadbdf8ee31935bdc1688ffe88654a31e94bd0a9"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_directory_control.beam",
+      "bytes": 81488,
+      "sha256": "78a925a55607c674faf7645ea1f54f642387396bc738821957bd74388bc4ba39"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_directory_generation.beam",
+      "bytes": 19644,
+      "sha256": "887a8cb3ae6aaea6e02521b7d05d9c0f325dd35d396d851c9250e48b136025e1"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_directory_predicates.beam",
+      "bytes": 5596,
+      "sha256": "5beee60e793d88afcdf1b0b2288e10875f12ad5888b117fbbe50e141ca870efc"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_directory_shape.beam",
+      "bytes": 2736,
+      "sha256": "095071cb5f716326f3122863b840a8afe2f30960c5c7c44972bbff5679be9abf"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_dtx.beam",
+      "bytes": 62444,
+      "sha256": "7a614b546ee5302c2d4d887f2524f6729733745134388537754d51e22e59f2ee"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_dtx_coordinator.beam",
+      "bytes": 123260,
+      "sha256": "6d23d4fee0233c27e06c4246e7c0b9918a3500baff2c8a2c109bdcd342a59341"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_dtx_current_view.beam",
+      "bytes": 72888,
+      "sha256": "64c9533b3e6a1eae839dfe0f52f04859c775414c2c3031bedfd179e57cdc89d9"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_dtx_endpoint.beam",
+      "bytes": 40856,
+      "sha256": "b0c597315d1aff8139d4d2e3f9645b79637d865b4762e20666cb36500c76c76a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_dtx_owner.beam",
+      "bytes": 20432,
+      "sha256": "760ee3eba68bce1e579d63134cd10d901a2a095d3c646c38d0644000c88c630b"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_dtx_phase_index.beam",
+      "bytes": 35676,
+      "sha256": "505dcc4f094902456cb8ba0077f5426f08f1c6f6ba55812a31d794376cdd37ca"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_dtx_recovery.beam",
+      "bytes": 22624,
+      "sha256": "f228dfb946634cb79c070bc2eabb8c0221b8b568e68458ac195b2ec80847b093"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_durable_term.beam",
+      "bytes": 4100,
+      "sha256": "02b00f894f89e7f6f25bdb44899a51f1cb2c3af0f064e9c3bc2ffdd7cf9848e5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_effect.beam",
+      "bytes": 10172,
+      "sha256": "561d41531da67d38dec8c859ef03483263db904082955e4cbba22a84135ec067"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_effect_journal.beam",
+      "bytes": 85956,
+      "sha256": "59d2689df2b1496b680141ba6653645fb79dcca5a87d079f2bcc89a2310d2381"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_erlog_db_local_prove.beam",
+      "bytes": 51560,
+      "sha256": "2f86e53dc286654ba087f55d90526cc41c91d502da0f53472ad2709bccbe1045"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_erlog_db_mvcc.beam",
+      "bytes": 18976,
+      "sha256": "a7c0435c406fe699410a20ae1653bc2ce4b46e054696af7c24de9406f8020e33"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_explorer.beam",
+      "bytes": 4548,
+      "sha256": "59865c9c657381bd623959813db46a4c908aeb444c97ea1f858f7dbc1e52b347"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_explorer_http.beam",
+      "bytes": 62904,
+      "sha256": "5240051e2ea65ff623c1897d2bf058186e9536fb1f69959ce0dd3e80794283bb"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_explorer_ws.beam",
+      "bytes": 9484,
+      "sha256": "e08b283594fde345e1ffc1d451ab131df8ff7cb2432e93d6bdc5df9c1bac2e23"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_feed.beam",
+      "bytes": 41660,
+      "sha256": "b485cc31361faa46c010ffedf90764adba72d8b67cddcf27cc8d1423579edcfb"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_file.beam",
+      "bytes": 4536,
+      "sha256": "1038e6d1ed0fa21aad6a5b5434e700b759f1153105cd31ef48237852ad072217"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_foreign_log.beam",
+      "bytes": 333820,
+      "sha256": "046a6e422820812f4d66646aa48c7d13f93c8fc8b6ce9b8f39172c248db155e5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_foreign_projection.beam",
+      "bytes": 26812,
+      "sha256": "eea1fb18a8569014a441862c6bf3ce12e3f987f81d9c10a7c30de3f304f18f79"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_gui_predicates.beam",
+      "bytes": 13112,
+      "sha256": "eb2e24401f0170074e01c1bc176edfc0cc8c366f165dde8425b5d1ee5120d5ef"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_gui_presentation.beam",
+      "bytes": 8576,
+      "sha256": "89714e00e7c2539382201722153d35545910e17ac64990d2af803e4f680f7aef"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_http_headers_h.beam",
+      "bytes": 4140,
+      "sha256": "201919426ec6fcffd9649cef109f730f051d9549f7a2a77f763d4f2e0460d5ea"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_http_listener.beam",
+      "bytes": 4996,
+      "sha256": "9d11fe9793a7041516d43c31666a6c6d367d581d904b260164277a94b9a430fd"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_identity.beam",
+      "bytes": 26664,
+      "sha256": "f479d6f8eb9539b6601b0b1fdf32f12ab0f4d0f675ea39d1c9649a5faad1971d"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ingress_state.beam",
+      "bytes": 26720,
+      "sha256": "ce6238471718e5ba9f47780d52733de762760db29d9d89ab3b150ab2ca25b489"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ledger.beam",
+      "bytes": 34244,
+      "sha256": "4985c17a79c40c369423e182d7599e21b0b41cc79aa45838a3c7481f81219268"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ledger_store.beam",
+      "bytes": 61660,
+      "sha256": "9b68fcee0d9eb363230a111e573a1e4554db285c76fcc54dcfdd545f0e24fad7"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_link.beam",
+      "bytes": 35580,
+      "sha256": "424d40fb6391217f364a7e58eea751b4b1aab551d2d22275a9c2636f68a98c06"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_log_formatter.beam",
+      "bytes": 10016,
+      "sha256": "f0af8e4ace6357e7517abd303aacdb10ba176f0bb8707a4eee1e7c30ce8e090c"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_material_admission.beam",
+      "bytes": 6792,
+      "sha256": "29ddeee786c437e0e0b2155ba4fd04ff08b4f461643785230e6ca336b2d39fb8"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_metrics.beam",
+      "bytes": 126080,
+      "sha256": "a5769fafbfb688b74bfefa0e1cbd4549f5bf51f616bfb875679f08a7196ace69"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_namespace_manager.beam",
+      "bytes": 77776,
+      "sha256": "a824eda3215d3a00132c7b18d0709a07dabe7cc6c5d0b92f1ceebcd1c94da007"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_node_actor.beam",
+      "bytes": 27244,
+      "sha256": "93d21f7ac1ed31de32ca08b003a9055715ff283cb0906d8fbf85290de267d806"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ns.beam",
+      "bytes": 2964,
+      "sha256": "fa304f1869862cca3130b75594f5b877ff204c7c9d29eb7f6fc727762761edb2"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ns_sup.beam",
+      "bytes": 4192,
+      "sha256": "589429b119f4ad04aa5f72c9055319b1216c6b0838e8c64904ad7dccb431728a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_observation.beam",
+      "bytes": 3832,
+      "sha256": "378c8cf37523d99897eb1a6453927c886383411d5c7e077ae3bfa12377875d6a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ontology.beam",
+      "bytes": 37700,
+      "sha256": "5c78b2786648b7174c61ce6bd905723504bc25f1bb4e027cea4ee491b7472288"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ontology_name.beam",
+      "bytes": 2308,
+      "sha256": "3ee604ed2e24e0f1bcc64183727de3531fbc815dc2157f1cb63076f481f1e95a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_ontology_predicates.beam",
+      "bytes": 19208,
+      "sha256": "9f3c1dd25caaa27744f40899214657571abefb23f6cd6331db375922acd936d4"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_operation.beam",
+      "bytes": 18436,
+      "sha256": "b6344a06caf6c079c4b42bccca456f85906bab39f4b04efac12ef186333adbff"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_operation_vector.beam",
+      "bytes": 9324,
+      "sha256": "5af22bef1ebf12183459078ee2969081535bd3147dde3d2dc577b55f45881224"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_outcome.beam",
+      "bytes": 78488,
+      "sha256": "7fd2260730af63a748eaf4f2182534add41a98b5f02ccd74f90247bbbb412d2e"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_peer_route.beam",
+      "bytes": 2468,
+      "sha256": "eb0251ef7545a8a89fa0b45a68dc84fb40ab3bfcc85b7f48fbedfd18761d8949"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_physics.beam",
+      "bytes": 134724,
+      "sha256": "1dcd1a9c2df8c35772b82dd9aabdf392716cbbf83d80b6f07bafa6dd600e5c3f"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_physics_coordinates.beam",
+      "bytes": 13388,
+      "sha256": "303879457349ffd428479575d3931453013a79d64816e4fbdf74e50b8fcf48b7"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_physics_native.beam",
+      "bytes": 4492,
+      "sha256": "1558fb8f43419e60d8ad61618354045a9a1ac2ff4c408522b5fc3a0353dc4f99"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_physics_predicates.beam",
+      "bytes": 18448,
+      "sha256": "1f431d3a0410e4908890b8f0c3249b0634d406d49d806a99301ac6bd704562df"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_predicates.beam",
+      "bytes": 20816,
+      "sha256": "ba17d3d92750b9eb5ea265396ab2554f56a8cff44ac1f6b9cddbccba6a951260"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_process.beam",
+      "bytes": 2184,
+      "sha256": "741d27b7a35365cc3589d8f9d2d1e8852cb1001b750b810725c1bb49ef1aeb37"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_prolog.beam",
+      "bytes": 303276,
+      "sha256": "e7b8e2c3755dced81f177bf37bffec3943ec51b28ae090b5051718f42862eb8e"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_proof_context.beam",
+      "bytes": 57252,
+      "sha256": "cdb1383fc7d90558f0e42532113460293a622e4e617cc73a3051c253dfb98f0b"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_proof_continuation.beam",
+      "bytes": 3704,
+      "sha256": "6805a04fdab160ca43a25b33b7d41f75096e505735095eae68d8dc37a47aee6d"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_proof_savepoint.beam",
+      "bytes": 8920,
+      "sha256": "8f969991a4f63873206012536e5984eef49d98a42a08420dc1f6b14f6c1c49cb"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_proof_scope.beam",
+      "bytes": 10064,
+      "sha256": "48ccb95c5023ab05d002b8d819c1784f89aae93808ff88498124b06a23c218b3"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_proof_session.beam",
+      "bytes": 42716,
+      "sha256": "2de86f293d9476b8f8bbfc49f37a8d0bd456d7b520c5026e317832dcc035439b"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_quic.beam",
+      "bytes": 47712,
+      "sha256": "f0704e5a1af2187484fb42c136852fb485336d7ac34296562e63339d72f71ea4"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_quorum.beam",
+      "bytes": 6364,
+      "sha256": "06f8aaf1adae2eeebe04ee694550232e55a839f201185fa46d2e9d77e6481ceb"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_rate.beam",
+      "bytes": 4028,
+      "sha256": "e0ab39429c7e735fdd36b8acd6bfb8ddf1254bfa8bf1a1feb3c4e68747952145"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_read_certificate.beam",
+      "bytes": 7992,
+      "sha256": "da63440a31d789821d9f5d1651ec99789ea069e0bded6eac3f3ffe8015b284a5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_read_set.beam",
+      "bytes": 9240,
+      "sha256": "ad6095c29c7e8c3bcd22cdd0631a3116086b47c5a81e2e806a6c6e863677cd11"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_reg.beam",
+      "bytes": 5964,
+      "sha256": "8be4d0026bebd298be25ba8a861de67bae3fd1e4693d07684170c3c0880b19d5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_relay.beam",
+      "bytes": 9728,
+      "sha256": "4d7310df85fc68381ae3b67eac8d181e6b4f848d90cb83b66d515467a244ea87"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_resource_basis.beam",
+      "bytes": 6564,
+      "sha256": "aa65d93e54ad022b27403c5590921807ae9b4d3d173f062ca7155d80755ab89b"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_runtime.beam",
+      "bytes": 217996,
+      "sha256": "e80b5060969e298cc7fc21ad048c7ccc30d7ccc11a083c90ecdc42bea028289b"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_runtime_predicates.beam",
+      "bytes": 31128,
+      "sha256": "da74a2894f47a5dc271b55645ecf1f82198be3237bc2421216b2d761df794926"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_safe_term.beam",
+      "bytes": 23224,
+      "sha256": "8c20f84a5a19bd9aa2ffd54045da4a6f7ee062035254dbbf8e8cab8afadf4e23"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_schema.beam",
+      "bytes": 10620,
+      "sha256": "09fbb1416f0ac05e76e6e9ba6003cfe9f03e5f591d9decb64d0f6100ee4ee43a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_scope_session.beam",
+      "bytes": 81832,
+      "sha256": "0003d7e6bf486fec56e38f84168e23439963cb8d3ad486913b4d9a778fd79cef"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_scope_wire.beam",
+      "bytes": 44840,
+      "sha256": "4f8ca753f86307866f1cf8287fd333fd0abb4012e7b0190347aa636cf9ef675a"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_selection_basis.beam",
+      "bytes": 6180,
+      "sha256": "ced34163a3fc13098a0f4558d5d7844a9fd8ffba40dc13d5e8f4aab933a42314"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_signing_journal.beam",
+      "bytes": 58844,
+      "sha256": "30c0c8478a832257b3205ae6cc2643bb0372136b7365add6be61262bbb955ea4"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_simplex.beam",
+      "bytes": 657252,
+      "sha256": "e2422473c4f5072edb4986ae118a3e03eddc076e239458f7e499d4efe03d52a7"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_sup.beam",
+      "bytes": 4192,
+      "sha256": "aa438d60a779c82effd63c1c0803e60ceb36f09f90c633ad44f8fd406472e3a8"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_system_ontology.beam",
+      "bytes": 10600,
+      "sha256": "85cf8c10e4d2a0c60ba610c4166b66c0cbb3a2316ca5933e7e1f37c3875a2de4"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_terrain_wire.beam",
+      "bytes": 6644,
+      "sha256": "742fe4af1cfe6870eeab6459c15eabc2c24c6f54ed3aa22089edb01eaff818f5"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_time.beam",
+      "bytes": 2100,
+      "sha256": "64691e3fad14cbf6ace15fbb119ba1d134b85c497f60b323fa853982400d9442"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_trace.beam",
+      "bytes": 15288,
+      "sha256": "454c0184a5d42a191ce927c1f788fcf329f8c9be183f970e51f1ef491546e2fc"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_transaction.beam",
+      "bytes": 85176,
+      "sha256": "178897a44dbdec43e1fa65890c172901031f3679cc9d90768454ed398d1dc214"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_transaction_predicates.beam",
+      "bytes": 8612,
+      "sha256": "7d227319869668976788faa2f5126ddbee901b4169391b94ef8327a13bee0b2d"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_transaction_scope.beam",
+      "bytes": 19920,
+      "sha256": "b0eabc1758daa94c8221e5dc17f9397a6091ffe7a3316cbfb0f10b06b33e6453"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_voxel.beam",
+      "bytes": 46336,
+      "sha256": "68258eed4ecfa30b25aebe7dd937c23a66b50df0931b9d5e1b3b2ad67d50e47f"
+    },
+    {
+      "path": "_build/prod/lib/quod/ebin/quod_wire_term.beam",
+      "bytes": 30892,
+      "sha256": "b9014307f0a5d0a04a0f8bc8b0ef700828d17379359775a9a93bb9bcf242401e"
+    },
+    {
+      "path": "priv/native/quod_physics.so",
+      "bytes": 4484280,
+      "sha256": "1957242745b093c28990eab77c1402a7dfd1d996c81cc1b3b2ba7fe9a61e3b16"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "_build/default/lib/accept/ebin/accept.app",
+      "bytes": 470,
+      "sha256": "b4e58380f9a042670c19ffe4f32cd7877a5677eac79754cc9455dcd34de391b6",
+      "application": "accept",
+      "version": "0.3.7"
+    },
+    {
+      "path": "_build/default/lib/acceptor_pool/ebin/acceptor_pool.app",
+      "bytes": 474,
+      "sha256": "4b4fed820516a5dd1ce2cda074b7363139d9c1063d181c0a251ae29f13381af1",
+      "application": "acceptor_pool",
+      "version": "1.0.1"
+    },
+    {
+      "path": "_build/default/lib/chatterbox/ebin/chatterbox.app",
+      "bytes": 2102,
+      "sha256": "ff973006013f4364c8db825081bd4128cd265dc20b743ef2ac099f41c94a73ea",
+      "application": "chatterbox",
+      "version": "0.16.0"
+    },
+    {
+      "path": "_build/default/lib/cowboy/ebin/cowboy.app",
+      "bytes": 756,
+      "sha256": "34f072736f37da31b80c82b2b357a441fa45f69c08211abba6dc8303f201553f",
+      "application": "cowboy",
+      "version": "2.19.0"
+    },
+    {
+      "path": "_build/default/lib/cowlib/ebin/cowlib.app",
+      "bytes": 572,
+      "sha256": "ded64159f90dfae00ad9662cf65f63670bc2685ea7adf80ace0c584fae94341b",
+      "application": "cowlib",
+      "version": "2.21.0"
+    },
+    {
+      "path": "_build/default/lib/ctx/ebin/ctx.app",
+      "bytes": 428,
+      "sha256": "2e291b92ee8349217211f17a5788054943af78c7d852f476fca149e179ad572d",
+      "application": "ctx",
+      "version": "0.6.0"
+    },
+    {
+      "path": "_build/default/lib/erlang_qq/ebin/erlang_qq.app",
+      "bytes": 306,
+      "sha256": "a9a1e8adca3e7b5e2c4ad1a74c2c5e1aa3e480cc3a96b05acf06116762f37c8c",
+      "application": "erlang_qq",
+      "version": "1.0.0"
+    },
+    {
+      "path": "_build/default/lib/erlog/ebin/erlog.app",
+      "bytes": 626,
+      "sha256": "f9af2784db9ee5492c146c8347a3575f6389604b0f64cb2d6f0a29e340508707",
+      "application": "erlog",
+      "version": "0.7"
+    },
+    {
+      "path": "_build/default/lib/getopt/ebin/getopt.app",
+      "bytes": 393,
+      "sha256": "c6f8f3f2cf66f946986c9d19e702ba8f4ecb799191047ec842ce48e96562cbc5",
+      "application": "getopt",
+      "version": "1.0.3"
+    },
+    {
+      "path": "_build/default/lib/gproc/ebin/gproc.app",
+      "bytes": 612,
+      "sha256": "3b73df9375e7f9dafdf9da6a494f6c5472a7d7e0f12ab5bbd4f04e002f9fce45",
+      "application": "gproc",
+      "version": "0.9.1"
+    },
+    {
+      "path": "_build/default/lib/grpcbox/ebin/grpcbox.app",
+      "bytes": 1962,
+      "sha256": "efcebc73f8fcf6ee8e32c7a555352dae2a04d78f2cfff0d080f85858fd117118",
+      "application": "grpcbox",
+      "version": "0.18.0"
+    },
+    {
+      "path": "_build/default/lib/hocon/ebin/hocon.app",
+      "bytes": 869,
+      "sha256": "75e8d8a2fab23f27a7426dccc5d1775ec98a622395c9dd00e243e8202e4983dc",
+      "application": "hocon",
+      "version": "0.45.9"
+    },
+    {
+      "path": "_build/default/lib/hpack/ebin/hpack.app",
+      "bytes": 496,
+      "sha256": "d655043a10736bc893187971c809c78c8759547b811b00dbeda6667011269572",
+      "application": "hpack",
+      "version": "0.3.0"
+    },
+    {
+      "path": "_build/default/lib/opentelemetry/ebin/opentelemetry.app",
+      "bytes": 1574,
+      "sha256": "94028be7012f4f12f06dc8fbde3f591f6ff7339268efe1642e563761c3b33ce0",
+      "application": "opentelemetry",
+      "version": "1.7.0"
+    },
+    {
+      "path": "_build/default/lib/opentelemetry_api/ebin/opentelemetry_api.app",
+      "bytes": 1011,
+      "sha256": "ca5dfd1aab54872239977496a221c4f82cfee8d8d1136a38803ae07f91cb718d",
+      "application": "opentelemetry_api",
+      "version": "1.5.0"
+    },
+    {
+      "path": "_build/default/lib/opentelemetry_exporter/ebin/opentelemetry_exporter.app",
+      "bytes": 1087,
+      "sha256": "c7d50127436a7b0be4c4752378f2bd5b645d99b28619a8c9f050dc95a63c6fbd",
+      "application": "opentelemetry_exporter",
+      "version": "1.10.0"
+    },
+    {
+      "path": "_build/default/lib/prometheus/ebin/prometheus.app",
+      "bytes": 2468,
+      "sha256": "39ecc98abf211ef3f6c6a47a7b07d257d9efd529196655310d49109fe97cc77a",
+      "application": "prometheus",
+      "version": "4.11.0"
+    },
+    {
+      "path": "_build/default/lib/prometheus_httpd/ebin/prometheus_httpd.app",
+      "bytes": 1600,
+      "sha256": "2ddbfebbb0d71724a3b77980932db348debda3c4283d03bc08c7507785d46ceb",
+      "application": "prometheus_httpd",
+      "version": "2.1.15"
+    },
+    {
+      "path": "_build/default/lib/quantile_estimator/ebin/quantile_estimator.app",
+      "bytes": 388,
+      "sha256": "f52371338d01f1639a0bf82681e2b759da69ee54d5f8cbcbe83ba9d3a3d749bd",
+      "application": "quantile_estimator",
+      "version": "0.2.1"
+    },
+    {
+      "path": "_build/default/lib/quic/ebin/quic.app",
+      "bytes": 1774,
+      "sha256": "754a1ef14c1a9028cb7a5e47809d57ea43af8f8846ee1e42548e5a490c05e731",
+      "application": "quic",
+      "version": "1.6.5"
+    },
+    {
+      "path": "_build/default/lib/ranch/ebin/ranch.app",
+      "bytes": 550,
+      "sha256": "924595f963fe157a3b3ab3ee207c934b091afa597e57d40985116d70c613b585",
+      "application": "ranch",
+      "version": "2.3.0"
+    },
+    {
+      "path": "_build/default/lib/ssl_verify_fun/ebin/ssl_verify_fun.app",
+      "bytes": 442,
+      "sha256": "deb32c6f649aadbb28b471e8b082336aed936c8067bc479bb3789357f0a5e910",
+      "application": "ssl_verify_fun",
+      "version": "1.1.7"
+    },
+    {
+      "path": "_build/default/lib/tls_certificate_check/ebin/tls_certificate_check.app",
+      "bytes": 980,
+      "sha256": "66d2ed10a5a55b228a01f3cc255da52a6791c38a3933d7ac23f88ed2231a6ec6",
+      "application": "tls_certificate_check",
+      "version": "1.33.0"
+    },
+    {
+      "path": "_build/default/lib/typerefl/ebin/typerefl.app",
+      "bytes": 383,
+      "sha256": "21e0732ad28c3723444c2e3b8150c5979ef4eef1c3a7d8b2c966c4847a5646a3",
+      "application": "typerefl",
+      "version": "0.9.8"
+    }
+  ]
+}

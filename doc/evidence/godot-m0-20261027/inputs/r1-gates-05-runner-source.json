@@ -1,0 +1,16 @@
+{
+  "campaign": "r1-gates-05",
+  "inputs": [
+    {
+      "source": "gate-campaign.py",
+      "retained_source": "inputs/r1-gates-05-gate-campaign.py",
+      "sha256": "51f985bdb227f1509e837dacfd271f533d4f54181cbc3e6d121cec0ccb93603e"
+    },
+    {
+      "source": "run.py",
+      "retained_source": "inputs/r1-gates-05-run.py",
+      "sha256": "c75a3a6613bee47c1bd75b76b2d192f3195d606e75952ca182aad0defe89ce05"
+    }
+  ],
+  "diagnostic_instrumentation": false
+}

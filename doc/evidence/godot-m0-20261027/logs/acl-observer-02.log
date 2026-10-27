@@ -1,0 +1,8 @@
+case_failure=error:undef stack=[{quod_ontology_acl_acceptance_tests,run,[],[]},
+                                {m0_acl_diagnostic,run,0,
+                                    [{file,"m0/m0_acl_diagnostic.erl"},
+                                     {line,10}]},
+                                {init,start_it,1,[]},
+                                {init,start_em,1,[]},
+                                {init,do_boot,3,[]}]
+http_terminations=[]

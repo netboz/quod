@@ -1,0 +1,21 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--name",
+    "quod-m0-31de17b5-ci-otp-exact-03",
+    "--entrypoint",
+    "/usr/bin/env",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "cat",
+    "/usr/local/lib/erlang/releases/28/OTP_VERSION"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T18:47:47Z",
+  "elapsed_seconds": 0.7192602157592773,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

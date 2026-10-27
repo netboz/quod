@@ -1,0 +1,9 @@
+file:///home/yan/src/quod_worktrees/pearl-stone/client/src/prolog-read.js:25
+  if (state.at !== text.length) throw new Error('trailing text after the term')
+                                      ^
+
+Error: trailing text after the term
+    at readTerm (file:///home/yan/src/quod_worktrees/pearl-stone/client/src/prolog-read.js:25:39)
+    at file:///home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/production-wire-check.mjs:17:13
+
+Node.js v26.10.0

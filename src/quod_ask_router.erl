@@ -537,15 +537,7 @@ start_probe(_Owner, _Endpoint, _Namespace, _RemainingMs, _S0) ->
     {error, invalid_probe}.
 
 admit_probe(Owner, S) ->
-    case probe_owner_admission(maps:get(Owner, S#s.owners, undefined)) of
-        {error, _} = Error -> Error;
-        ok ->
-            case owner_entry_count(Owner, S) >=
-                 ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER of
-                true -> {error, owner_scope_limit};
-                false -> ok
-            end
-    end.
+    probe_owner_admission(maps:get(Owner, S#s.owners, undefined)).
 
 probe_owner_admission(undefined) -> ok;
 probe_owner_admission(#owner{finalization = {sealed, _}}) ->
@@ -1195,15 +1187,7 @@ reusable_binding(_, _) -> false.
 
 admit_scope(Owner, ProofId, _TargetKey, S) ->
     OwnerState = maps:get(Owner, S#s.owners, undefined),
-    case owner_admission(OwnerState, ProofId) of
-        {error, _} = Error -> Error;
-        ok ->
-            case owner_entry_count(Owner, S) >=
-                 ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER of
-                true -> {error, owner_scope_limit};
-                false -> ok
-            end
-    end.
+    owner_admission(OwnerState, ProofId).
 
 owner_admission(undefined, _ProofId) -> ok;
 owner_admission(#owner{finalization = {sealed, _}}, _ProofId) ->
@@ -1243,13 +1227,6 @@ insert_opening_scope(Owner, Endpoint, Fields, OpenFrame, S0) ->
 router_entry_count(#s{scopes = Scopes, probes = Probes,
                       retained_owners = RetainedOwners}) ->
     map_size(Scopes) + map_size(Probes) + RetainedOwners.
-
-owner_entry_count(Owner, #s{owners = Owners}) ->
-    case maps:get(Owner, Owners, undefined) of
-        #owner{scopes = Scopes, probes = Probes} ->
-            map_size(Scopes) + map_size(Probes);
-        undefined -> 0
-    end.
 
 add_owner_scope(OwnerPid, ScopeKey,
                 S = #s{owners = Owners, owner_refs = OwnerRefs}) ->
@@ -1308,19 +1285,11 @@ build_active_command(
   {scope_open, _Authentication, _TraceCarrier}) ->
     {error, {protocol_error, unexpected_scope_command}};
 build_active_command(
-  Scope = #scope{status = active, next_command_seq = CommandSeq,
-                 pending = Pending},
+  Scope = #scope{status = active, next_command_seq = CommandSeq},
   RemainingMs, Operation)
   when CommandSeq =< ?QUOD_SCOPE_WIRE_MAX_UINT64 ->
     ExpectsEvent = command_expects_event(Operation),
-    case ExpectsEvent andalso
-         map_size(Pending) >= ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        true ->
-            {error, pending_request_limit};
-        false ->
-            build_bounded_command(
-              Scope, RemainingMs, Operation, ExpectsEvent)
-    end;
+    build_bounded_command(Scope, RemainingMs, Operation, ExpectsEvent);
 build_active_command(#scope{status = active}, _RemainingMs, _Operation) ->
     {error, command_sequence_exhausted}.
 

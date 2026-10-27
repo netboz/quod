@@ -1,0 +1,46 @@
+{
+  "owner_session": "31de17b5-0309-4c06-bd10-826ecd280745",
+  "reason": "Proven Cowboy2.12 passive connection with flow=infinity after buffering a large request; next request dispatched but server never resumes reading and closes at its unchanged5000ms no-request-line timeout.",
+  "scope": [
+    {
+      "path": "rebar.config",
+      "before_sha256": "d76c36ca1063355141f6eb556362cefa085b28cad55645ebf4038a4b353f59c9",
+      "qualified_sha256": "91e7bdd0c9fd62c423cb04cea5c089db3df615666b899c093864c43ef0d4ce5a"
+    },
+    {
+      "path": "rebar.lock",
+      "before_sha256": "984ca552a60fd996e413c0dcce5edc4ad70c8cbe32fcf5dc52dda651f0a9c29a",
+      "qualified_sha256": "09f364a859950d3cf2aeece1e56c14f8fd6cbbd4b7cda2a4de4e83888b9df01b"
+    }
+  ],
+  "packages": {
+    "cowboy": [
+      "2.12.0",
+      "2.19.0"
+    ],
+    "cowlib": [
+      "2.13.0",
+      "2.21.0"
+    ],
+    "ranch": [
+      "1.8.0",
+      "2.3.0"
+    ]
+  },
+  "qualification": [
+    "http-dependency-candidate-focused-03:22 tests exit0",
+    "acl-upstream-repeat-10:eight independent full original fixtures exit0"
+  ],
+  "production_erlang_or_prolog_changed_for_http_fix": false,
+  "timeouts_or_assertions_or_retries_changed": false,
+  "new_runtime_state_owner": false,
+  "candidate_build_copy": "/tmp/quod-m0-r1-gates-02/source",
+  "historical_failed_build_03_preserved": true,
+  "primary_sources": [
+    "https://ninenines.eu/docs/en/cowboy/2.13/manual/cowboy_http/",
+    "https://ninenines.eu/articles/cowboy-2.19.0/"
+  ],
+  "inference": "The old no-successor stream_next branch leaves active=false unchanged. The selected stream_terminate rearms the connection independently of a successor before resetting flow. This directly repairs the observed passive/unlimited-flow state; the active_n default alone is not the causal correction.",
+  "superseded_inference_in_review_snapshot_03": "Source flow analysis and live old active=false/flow=infinity state explain the defect. The upstream standard active_n=1 default (introduced2.13) prevents queued final body data leaving the receiver passive. Candidate behavior is verified; no maintainer-specific bug-ID attribution is claimed.",
+  "checked_review_source": "http-upstream-flow-mechanism.json"
+}

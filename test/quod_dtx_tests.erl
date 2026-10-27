@@ -656,7 +656,7 @@ overlay_separates_tokens_from_bridge_markers_test() ->
     quod_erlog_db_local_prove:cleanup_read_set(Wrapped1).
 
 %% ------------------------------------------------------------------
-%% transcript ordering, terminal tags, and the pre-run byte bound
+%% transcript ordering, terminal tags, and canonical goal/plan bounds
 %% ------------------------------------------------------------------
 
 transcript_orders_invocations_and_tags_terminals_test() ->
@@ -726,53 +726,44 @@ peer_ready_taint_is_exempt_only_for_membership_diff_test() ->
         quod_proof_session:stop(Membership)
     end.
 
-transcript_charge_is_taken_before_the_goal_runs_test() ->
+transcript_population_uses_the_complete_plan_envelope_test() ->
     Session = session([]),
+    Goal = {pad, binary:copy(<<$p>>, 6000)},
     try
-        %% Fill the transcript to exactly the limit, then show the next open
-        %% is refused at admission — the goal never runs, so nothing escapes
-        %% the transcript's accounting.
-        ok = fill_transcript_to_limit(Session, 0),
-        ?assertEqual({error, {too_large, transcript}},
-                     open(Session, <<3:128>>, pad_goal(0))),
-        %% The refused invocation does not exist afterwards.
-        ?assertEqual({error, unknown_invocation},
-                     quod_proof_session:next(Session, <<3:128>>))
+        %% A real session retains every invocation beyond the old component
+        %% quota; the complete sealed plan owns the encoded byte ceiling.
+        [ok = open(Session, <<I:128>>, Goal) || I <- lists:seq(1, 65)],
+        {Entries, _} = quod_proof_session:transcript(Session),
+        ?assertEqual(65, length(Entries)),
+        ?assert(byte_size(wire_blob(Entries)) > 128 * 1024),
+        {_Read, {complete, _}} = first(Session, {missing, fact}),
+        {ok, Plan} = quod_dtx:seal_session(Session, bind()),
+        {ok, Encoded} = quod_dtx:encode(Plan),
+        {ok, Decoded} = quod_dtx:decode(Encoded),
+        {SealedEntries, _} = quod_proof_session:transcript(Session),
+        ?assertEqual(SealedEntries, quod_ct:plan_material(transcript, Decoded)),
+        %% Include a material read so admission examines the complete plan.
+        Extra = ?QUOD_MAX_PLAN_ENVELOPE_BYTES div 6000 + 1,
+        [ok = open(Session, <<I:128>>, Goal) || I <- lists:seq(66, 65 + Extra)],
+        ?assertEqual({error, {too_large, plan}},
+                     quod_dtx:seal_session(Session, bind()))
     after
         quod_proof_session:stop(Session)
     end.
 
-transcript_boundary_is_exact_test() ->
-    Boundary = fun(Slack) ->
-        Session = session([]),
-        try
-            fill_transcript_to_limit(Session, Slack)
-        after
-            quod_proof_session:stop(Session)
-        end
-    end,
-    ?assertEqual(ok, Boundary(0)),
-    ?assertEqual({error, {too_large, transcript}}, Boundary(1)).
-
-pad_goal(PadBytes) -> {pad, binary:copy(<<$p>>, PadBytes)}.
-
-fill_transcript_to_limit(Session, Slack) ->
-    Id1 = <<1:128>>,
-    Id2 = <<2:128>>,
-    FirstPad = 6000,
-    SecondPad = ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES
-        - charged_cost(Id1, pad_goal(FirstPad))
-        - charged_cost(Id2, pad_goal(0)) + Slack,
-    true = SecondPad >= 0,
-    ok = open(Session, Id1, pad_goal(FirstPad)),
-    open(Session, Id2, pad_goal(SecondPad)).
-
-%% Mirrors the session's charge: the entry's external size plus the fixed
-%% per-invocation slack for count, chained digest, and completion tag.
-charged_cost(Id, Goal) ->
-    Chain = quod_predicates:ctx_chain(ctx()),
-    GoalBin = wire_blob(Goal),
-    erlang:external_size({Id, Chain, GoalBin, allowed}) + 96.
+oversized_goal_is_refused_before_invocation_exists_test() ->
+    Session = session([]),
+    Id = <<3:128>>,
+    try
+        ?assertEqual({error, {too_large, goal}},
+                     open(Session, Id, {pad, binary:copy(<<$p>>,
+                         ?QUOD_MAX_NESTED_GOAL_BYTES + 1)})),
+        ?assertEqual({error, unknown_invocation},
+                     quod_proof_session:next(Session, Id)),
+        ?assertEqual({[], 0}, quod_proof_session:transcript(Session))
+    after
+        quod_proof_session:stop(Session)
+    end.
 
 denied_transcript_keeps_request_and_never_executes_it_test() ->
     Session = session([]),

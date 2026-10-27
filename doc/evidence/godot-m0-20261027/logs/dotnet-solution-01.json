@@ -1,0 +1,12 @@
+{
+  "command": [
+    "bash",
+    "-c",
+    "cd doc/evidence/godot-m0-20261027/probe && dotnet new sln --name M0 --format sln && dotnet sln M0.sln add M0.csproj"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T14:38:08Z",
+  "elapsed_seconds": 2.778589963912964,
+  "child_exit": 0,
+  "timed_out": false
+}

@@ -217,11 +217,12 @@ build_plan_failed(#cp{next = #build_scope{ref = Ref}, bs = Bs, vn = Vn}, Cps, St
     quod_proof_continuation:prove(Ref, [fail], St#est{bs = Bs, vn = Vn, cps = Cps}).
 
 build_plan_step(Fun, #build_scope{ref = Ref, previous = Previous}) ->
-    quod_proof_continuation:run(Ref, Fun, fun
-        (throw, {erlog_error, Error, ErrorSt}, _, _) ->
-            erlog_int:erlog_error(Error, set_build_context(Previous, ErrorSt));
-        (Class, Reason, Stack, _) -> erlang:raise(Class, Reason, Stack)
-    end, none).
+    quod_proof_continuation:run(Ref, Fun, fun build_plan_error/4, Previous).
+
+-spec build_plan_error(atom(), term(), list(), term()) -> no_return().
+build_plan_error(throw, {erlog_error, Error, ErrorSt}, _, Previous) ->
+    erlog_int:erlog_error(Error, set_build_context(Previous, ErrorSt));
+build_plan_error(Class, Reason, Stack, _) -> erlang:raise(Class, Reason, Stack).
 
 build_context(Bs) ->
     case erlog_int:get_binding(?BUILD_CONTEXT, Bs) of

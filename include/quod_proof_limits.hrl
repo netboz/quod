@@ -8,22 +8,12 @@
 %% Simplex's preference for an owned parent verdict use the same setting.
 -define(QUOD_VALIDATION_TTL_MS, 2000).
 
-%% One source of truth for the bounded distributed-proof worker state.
--define(QUOD_MAX_ACTIVE_PROOF_DEPTH, 8).
--define(QUOD_MAX_SCOPES_PER_PROOF, 8).
--define(QUOD_MAX_INVOCATIONS_PER_SCOPE, 64).
-%% Every retained invocation may have one origin-side continuation proxy.
--define(QUOD_MAX_PROXIES_PER_PROOF,
-        (?QUOD_MAX_SCOPES_PER_PROOF * ?QUOD_MAX_INVOCATIONS_PER_SCOPE)).
--define(QUOD_MAX_ANSWERS_PER_INVOCATION, 10000).
+%% Proof populations allocate memory under the pinned Prolog material policy.
+%% The remaining bounds describe encoded payloads, identifiers and transport.
 -define(QUOD_MAX_NESTED_GOAL_BYTES, ?QUOD_MAX_TOPLEVEL_GOAL_BYTES).
 -define(QUOD_MAX_PROOF_ANSWER_BYTES, 65536).
--define(QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 1024).
 
-%% Sealing bounds (doc/outdated/distributed-proof-plan.md §4.2). The transcript charge is taken
-%% BEFORE a goal runs; the plan bounds are enforced at seal time and again on
-%% every decode of a plan blob.
--define(QUOD_MAX_SCOPE_TRANSCRIPT_BYTES, (128 * 1024)).
+%% A complete plan must fit its enclosing durable network control payload.
 -define(QUOD_MAX_PLAN_ENVELOPE_BYTES, ?QUOD_MAX_DTX_BODY_BYTES).
 %% Coalesced change notices use an all-heads marker beyond this optimization
 %% bound. It neither refuses a write nor limits an ontology's population.
@@ -37,9 +27,7 @@
 -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).
 %% Durable multi-ontology control records.  The semantic body limit leaves a
 %% fixed encoding margin below the block ceiling for the target-bound
-%% author envelope and one-item maximum-size block framing. A group has the same
-%% participant ceiling as the proof that produced it.
--define(QUOD_MAX_DTX_PARTICIPANTS, ?QUOD_MAX_SCOPES_PER_PROOF).
+%% author envelope and one-item maximum-size block framing.
 -define(QUOD_MAX_DTX_BODY_BYTES, (?MAX_BLOCK_BYTES - (32 * 1024))).
 %% Deterministic ETF adds exactly 28 bytes around a binary in a canonical
 %% one-control payload `{batch, [{dtx, Blob}]}`. Ordinary blocks may carry more
@@ -63,10 +51,6 @@
 -define(QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, 30000).
 -define(QUOD_DTX_ENDPOINT_REQUEST_ID_BITS, 128).
 
-%% Defined in bytes for operator-facing clarity; the sole worker spawn seam
-%% converts it to this VM's heap words before installing the hard kill limit.
--define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).
-
 %% Hard-break scope-session wire.  The largest command carries one exact
 %% operation-custody submission, the certified-read carrier accepted by the
 %% transaction codec, a maximum-size agent principal, two bounded namespaces,
@@ -89,12 +73,7 @@
 -define(QUOD_SCOPE_WIRE_OPAQUE_ID_BITS, 128).
 -define(QUOD_SCOPE_WIRE_MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
-%% Router ownership follows the proof-shape bounds.  There is deliberately no
-%% node-wide or peer-wide population quota: those rejected otherwise valid
-%% concurrent proofs based on arrival timing.  Pending command entries are
-%% nested under a scope and inherit the invocation bound.
--define(QUOD_MAX_ROUTER_SCOPES_PER_OWNER, ?QUOD_MAX_SCOPES_PER_PROOF).
--define(QUOD_MAX_ROUTER_PENDING_PER_SCOPE,
-        ?QUOD_MAX_INVOCATIONS_PER_SCOPE).
+%% Routers retain only correlations owned by live proofs and exact deadlines;
+%% they do not impose a second population quota on admitted work.
 
 -endif.

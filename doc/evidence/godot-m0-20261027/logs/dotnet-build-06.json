@@ -1,0 +1,14 @@
+{
+  "command": [
+    "dotnet",
+    "build",
+    "doc/evidence/godot-m0-20261027/probe/M0.csproj",
+    "--no-restore"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:04:30Z",
+  "elapsed_seconds": 6.70252799987793,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

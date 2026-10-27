@@ -21,8 +21,7 @@ signed_read_dependencies_survive_answers_failure_and_errors_test() ->
                [{<<"a">>,<<1:256>>,1 bsl 64}],[{<<"a">>,<<1>>,1}],
                [{<<>>,<<1:256>>,0}],
                [{binary:copy(<<"n">>,?DIRECTORY_MAX_NAMESPACE_BYTES+1),<<1:256>>,0}],
-               [{<<"a">>,<<1:256>>,0},{<<"a">>,<<2:256>>,0}],
-               [{<<I:32>>,<<I:256>>,I} || I <- lists:seq(1,?QUOD_MAX_SCOPES_PER_PROOF+1)]],
+               [{<<"a">>,<<1:256>>,0},{<<"a">>,<<2:256>>,0}]],
     [?assertEqual({error,invalid_result},quod_client_result:encode({read,D,fail})) || D <- BadDeps],
     [?assertEqual({error,invalid_result},quod_client_result:encode({read,Deps,R})) || R <-
         [{read,Deps,fail},stopped,{pending,{transaction,<<"a">>,<<1:256>>,<<2:256>>}}]].
@@ -39,6 +38,49 @@ read_dependency_heights_are_lossless_json_test() ->
         ?assertEqual(Height,binary_to_integer(Decimal))
     end,[0,9007199254740991,9007199254740993,
           18446744073709551614,18446744073709551615]).
+
+many_dependencies_and_answers_keep_their_exact_values_test() ->
+    Evidence = maps:get(evidence, fixture()),
+    Deps = [{<<I:32>>, <<I:256>>, I} || I <- lists:seq(1, 32)],
+    Raw = {read, Deps, {ok, lists:duplicate(10001, #{}), 7}},
+    Read = quod_client_result:normalize(Evidence, Raw),
+    ?assertMatch({read, Deps, {answers, 7, _}}, Read),
+    {read, _, {answers, _, Answers}} = Read,
+    ?assertEqual(10001, length(Answers)),
+    {ok, Bytes} = quod_client_result:encode(Read),
+    ?assertEqual({ok, Read}, quod_client_result:decode(Bytes)).
+
+material_budget_errors_report_the_actual_resource_test() ->
+    lists:foreach(fun({Kind, Resource}) ->
+        Error = {error, {material_limit, Kind, Resource, 9007199254740993, 1024}},
+        ?assertEqual(Error, quod_client_result:normalize(#{}, Error)),
+        {ok, Bytes} = quod_client_result:encode(Error),
+        ?assertEqual({ok, Error}, quod_client_result:decode(Bytes)),
+        ?assertEqual({413, #{error => material_limit, kind => Kind,
+            resource => Resource, actual => <<"9007199254740993">>, limit => <<"1024">>}},
+            quod_client_result:http_normalized(#{}, Error))
+    end, [{proof, heap_bytes}, {plan, operations}, {plan, reads},
+          {founding, symbols}, {founding, canonical_bytes}]),
+    lists:foreach(fun(Reason) ->
+        ?assertEqual({error, proof_unavailable},
+                     quod_client_result:normalize(#{}, {error, Reason})),
+        ?assertEqual({error, invalid_result}, quod_client_result:encode({error, Reason}))
+    end, [{material_limit, private_kind, heap_bytes, 2, 1},
+          {material_limit, proof, private_resource, 2, 1},
+          {material_limit, proof, heap_bytes, 1, 2}]).
+
+invalid_material_policy_survives_the_client_boundary_test() ->
+    lists:foreach(fun(Kind) ->
+        Error = {error, {invalid_material_policy, Kind}},
+        ?assertEqual(Error, quod_client_result:normalize(#{}, Error)),
+        {ok, Bytes} = quod_client_result:encode(Error),
+        ?assertEqual({ok, Error}, quod_client_result:decode(Bytes)),
+        ?assertEqual({500, #{error => invalid_material_policy, kind => Kind}},
+                     quod_client_result:http_normalized(#{}, Error))
+    end, [founding, plan, proof]),
+    Private = {error, {invalid_material_policy, private_kind}},
+    ?assertEqual({error, proof_unavailable}, quod_client_result:normalize(#{}, Private)),
+    ?assertEqual({error, invalid_result}, quod_client_result:encode(Private)).
 
 independent_refusals_remain_typed_through_the_client_boundary_test() ->
     lists:foreach(fun({Reason, Status}) ->
@@ -178,7 +220,7 @@ read_envelope_survives_payload_and_envelope_overflow_test() ->
     %% are added; the complete envelope owns the byte limit.
     Payload = binary:part(Huge,0,?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES - 256),
     LargeDeps = [{<<I,(binary:copy(<<"n">>,254))/binary>>,<<I:256>>,7}
-                 || I <- lists:seq(1,?QUOD_MAX_SCOPES_PER_PROOF)],
+                 || I <- lists:seq(1,32)],
     ?assertMatch({answers,7,[_]},quod_client_result:normalize(Evidence,{ok,[#{0 => Payload}],7})),
     ?assertEqual({read,LargeDeps,{error,result_too_large}},
         quod_client_result:normalize(Evidence,{read,LargeDeps,{ok,[#{0 => Payload}],7}})),

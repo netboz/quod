@@ -1,0 +1,23 @@
+======================== EUnit ========================
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.445 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.078 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.139 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.138 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.072 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.068 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.068 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.069 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.086 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.132 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.130 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.146 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.132 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.131 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.070 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.073 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.073 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.073 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.070 s] ok
+quod_foreign_log_tests: identity_current_bootstrap_fails_over_before_certified_routes_test...[0.092 s] ok
+=======================================================
+  All 20 tests passed.

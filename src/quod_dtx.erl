@@ -195,16 +195,22 @@ seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal,
                 case quod_material_admission:policy(
                        plan, quod_proof_session:committed_state(Session)) of
                     {ok, Limits, PolicyReads} ->
-                        case quod_material_admission:validate_update(
+                        ProofPolicyReads = quod_proof_session:proof_policy_reads(Session),
+                        case {quod_material_admission:validate_update(
                                plan, quod_proof_session:committed_state(Session),
-                               Diff, PolicyReads) of
-                            ok ->
-                                ok = quod_proof_session:absorb_read_set(Session, PolicyReads),
+                               Diff, PolicyReads),
+                              quod_material_admission:validate_update(
+                                proof, quod_proof_session:committed_state(Session),
+                                Diff, ProofPolicyReads)} of
+                            {ok, ok} ->
+                                ok = quod_proof_session:absorb_read_set(
+                                       Session, maps:merge(PolicyReads, ProofPolicyReads)),
                                 seal_material(
                                   Session, Target, BaseHeight, ProofId, Origin, Principal,
                                   RequestBinding, Diff, quod_proof_session:read_set(Session),
                                   Effects, Limits);
-                            {error, _} = UpdateError -> UpdateError
+                            {{error, _} = UpdateError, _} -> UpdateError;
+                            {ok, {error, _} = UpdateError} -> UpdateError
                         end;
                     {error, _} = PolicyError -> PolicyError
                 end
@@ -277,15 +283,12 @@ encode_material(Diff, ReadCheck, Effects, Bridges, Transcript) ->
           quod_wire_term:encode_canonical(Transcript)} of
         {{ok, DiffBlob}, {ok, ReadCheckBlob}, {ok, EffectsBlob},
          {ok, BridgesBlob}, {ok, TranscriptBlob}}
-          when byte_size(EffectsBlob) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES,
-               byte_size(TranscriptBlob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES ->
+          when byte_size(EffectsBlob) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
             {ok, DiffBlob, ReadCheckBlob, EffectsBlob, BridgesBlob,
              TranscriptBlob};
         {{ok, _}, {ok, _}, {ok, EffectsBlob}, {ok, _}, {ok, _}}
           when byte_size(EffectsBlob) > ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
             {error, {too_large, effects}};
-        {{ok, _}, {ok, _}, {ok, _}, {ok, _}, {ok, _TooLargeTranscript}} ->
-            {error, {too_large, transcript}};
         _ ->
             {error, {too_large, plan}}
     end.
@@ -427,7 +430,7 @@ valid_core(#{target := Target, base_height := BaseHeight,
         is_binary(Bridges) andalso
         byte_size(Bridges) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
         is_binary(Transcript) andalso
-        byte_size(Transcript) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES;
+        byte_size(Transcript) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES;
 valid_core(_) ->
     false.
 
@@ -554,7 +557,7 @@ decode_material(Core) ->
             %% materialize. The eventual map is only a lookup index.
             case {quod_read_set:valid_pairs(ReadPairs),
                   exact_length(ReadPairs, maps:get(read_functors, Core), 0),
-                  attach_transcript_goals(Transcript, 0, [])} of
+                  attach_transcript_goals(Transcript, [])} of
                 {true, true, {ok, AnnotatedTranscript}} ->
                     {ok, {Diff, ReadPairs, Effects, Bridges,
                           AnnotatedTranscript}};
@@ -568,13 +571,12 @@ decode_material(Core) ->
 decode_material_blob(Blob) ->
     quod_wire_term:decode_canonical(Blob, ?QUOD_MAX_PLAN_ENVELOPE_BYTES).
 
-attach_transcript_goals([], _Count, Acc) ->
+attach_transcript_goals([], Acc) ->
     {ok, lists:reverse(Acc)};
 attach_transcript_goals(
   [{InvocationId, Chain, GoalBlob, Verdict, AnswerCount, Digest, Tag} | Rest],
-  Count, Acc)
-  when Count < ?QUOD_MAX_INVOCATIONS_PER_SCOPE,
-       is_binary(GoalBlob),
+  Acc)
+  when is_binary(GoalBlob),
        byte_size(GoalBlob) =< ?QUOD_MAX_NESTED_GOAL_BYTES ->
     case quod_wire_term:decode_canonical(
            GoalBlob, ?QUOD_MAX_NESTED_GOAL_BYTES) of
@@ -582,11 +584,11 @@ attach_transcript_goals(
             Annotated =
                 {InvocationId, Chain, GoalBlob, Goal, Verdict,
                  AnswerCount, Digest, Tag},
-            attach_transcript_goals(Rest, Count + 1, [Annotated | Acc]);
+            attach_transcript_goals(Rest, [Annotated | Acc]);
         {error, _} ->
             error
     end;
-attach_transcript_goals(_MalformedOrTooLong, _Count, _Acc) ->
+attach_transcript_goals(_Malformed, _Acc) ->
     error.
 
 materialize_decoded(Core, Decoded) ->
@@ -605,7 +607,7 @@ materialize_decoded(Core, Decoded) ->
                          andalso seal_bound_reads(
                                    Diff, ReadCheck, maps:get(base_height, Core),
                                    Effects, Bridges) =:= ok
-                         andalso valid_transcript(Transcript, 0)
+                         andalso lists:all(fun valid_transcript_entry/1, Transcript)
                          andalso conflict_descriptor(
                                    Diff, ReadCheck, Effects) =:=
                                      maps:get(conflict_descriptor, Core) of
@@ -697,34 +699,24 @@ valid_live_bridges(Bridges) ->
           end,
           Bridges).
 
-valid_transcript([], Count) ->
-    Count =< ?QUOD_MAX_INVOCATIONS_PER_SCOPE;
-valid_transcript([Entry | Rest], Count)
-  when Count < ?QUOD_MAX_INVOCATIONS_PER_SCOPE ->
-    valid_transcript_entry(Entry) andalso
-        valid_transcript(Rest, Count + 1);
-valid_transcript(_ImproperOrTooLong, _Count) ->
-    false.
-
 valid_transcript_entry(
   {<<_:128>>, Chain, GoalBin, Verdict, AnswerCount, <<_:256>>, Tag}) ->
-    valid_chain(Chain, 0) andalso
+    valid_chain(Chain) andalso
         is_binary(GoalBin) andalso
         byte_size(GoalBin) =< ?QUOD_MAX_NESTED_GOAL_BYTES andalso
         (Verdict =:= allowed orelse Verdict =:= denied) andalso
         is_integer(AnswerCount) andalso AnswerCount >= 0 andalso
-        AnswerCount =< ?QUOD_MAX_ANSWERS_PER_INVOCATION andalso
+        AnswerCount =< ?QUOD_SCOPE_WIRE_MAX_UINT64 andalso
         (Tag =:= active orelse Tag =:= complete orelse
          Tag =:= error orelse Tag =:= cancelled);
 valid_transcript_entry(_) ->
     false.
 
-valid_chain([], _Depth) ->
+valid_chain([]) ->
     true;
-valid_chain([Identity | Rest], Depth)
-  when Depth < ?QUOD_MAX_ACTIVE_PROOF_DEPTH ->
-    valid_identity(Identity) andalso valid_chain(Rest, Depth + 1);
-valid_chain(_ImproperOrTooDeep, _Depth) ->
+valid_chain([Identity | Rest]) ->
+    valid_identity(Identity) andalso valid_chain(Rest);
+valid_chain(_Improper) ->
     false.
 
 %% ===================================================================
@@ -745,7 +737,7 @@ new_manifest(#{proof_id := <<_:256>> = ProofId,
   when map_size(Input) =:= 9, is_binary(Goal), is_binary(Result) ->
     case {byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES,
           byte_size(Result) =< ?QUOD_MAX_DURABLE_RESULT_BYTES,
-          bounded_length(Participants, ?QUOD_MAX_DTX_PARTICIPANTS)} of
+          proper_length(Participants)} of
         {true, true, {ok, _}} ->
             case canonical_identity_digest_rows(Participants) of
                 {ok, CanonicalParticipants} ->
@@ -1185,7 +1177,7 @@ durable_blobs_valid(Goal, Result) ->
     end.
 
 valid_participants(Participants) ->
-    case bounded_length(Participants, ?QUOD_MAX_DTX_PARTICIPANTS) of
+    case proper_length(Participants) of
         {ok, Length} when Length >= 1 ->
             valid_identity_digest_rows(Participants, none);
         _ ->
@@ -1200,7 +1192,7 @@ valid_identity_digest_rows([{Identity, <<_:256>>} | Rest], Previous)
 valid_identity_digest_rows(_, _) -> false.
 
 canonical_identity_digest_rows(Rows) ->
-    case bounded_length(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) of
+    case proper_length(Rows) of
         {ok, Length} when Length >= 1 ->
             case lists:all(
                    fun({Identity, <<_:256>>}) -> valid_identity(Identity);
@@ -1349,11 +1341,7 @@ manifest_group_ref(_Manifest, _GroupId) ->
 within_body_limit(Term) ->
     erlang:external_size(Term) =< ?QUOD_MAX_DTX_BODY_BYTES.
 
-bounded_length(List, Max) ->
-    bounded_length(List, Max, 0).
-
-bounded_length([], _Max, Length) -> {ok, Length};
-bounded_length([_ | Rest], Max, Length) when Length < Max ->
-    bounded_length(Rest, Max, Length + 1);
-bounded_length([_ | _], _Max, _Length) -> too_many;
-bounded_length(_, _Max, _Length) -> improper.
+proper_length(List) -> proper_length(List, 0).
+proper_length([], Length) -> {ok, Length};
+proper_length([_ | Rest], Length) -> proper_length(Rest, Length + 1);
+proper_length(_, _Length) -> improper.

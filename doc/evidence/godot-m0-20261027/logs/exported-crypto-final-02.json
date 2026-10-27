@@ -1,0 +1,18 @@
+{
+  "command": [
+    "env",
+    "XDG_DATA_HOME=/tmp/quod-m0-godot-data",
+    "XDG_CONFIG_HOME=/tmp/quod-m0-godot-config",
+    "DOTNET_ROOT=/tmp/quod-m0-no-installed-runtime",
+    "M0_CORPUS=/home/yan/src/quod_worktrees/pearl-stone/client/test/fixtures/native-contract/contracts.json",
+    "M0_BACKUP=/tmp/quod-godot-m0-backup-final.json",
+    "/tmp/quod-godot-m0-export/m0.x86_64",
+    "--headless"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:03:24Z",
+  "elapsed_seconds": 3.736633539199829,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

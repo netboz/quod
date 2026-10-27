@@ -12,7 +12,7 @@ tags:
   - eidolons
 created: '2026-10-17'
 startDate: '2026-10-24T14:22:52Z'
-updated: '2026-10-25'
+updated: '2026-10-27'
 progress: 73
 trackerStatus:
   type: plan
@@ -29,6 +29,41 @@ Implementation and agreed local acceptance for **stage 1 — one empty space thr
 
 [Use **space** for the domain container previously called a world. Existing `world_*` names below identify current code. Replacing a path does not authorize deleting pending work, user changes or founded ontology data.]{open by="yan" email=yan.guiborat@gmail.com}
 
+
+## Onboarding and containment for the Godot delivery
+
+The current [space specification](../../doc/spaces.md#new-user-onboarding-and-parentless-spaces)
+records Yan's onboarding clarification: normal signup provisions distinct U/A
+identities and an ordinary empty space S0 owned by U. S0 has no containing
+space; A starts inside it. The initial view is black with available controllers
+and accessible GUI. A future lobby subclass is deferred. Domain composition,
+permissions and placement belong in Prolog through the existing lifecycle.
+
+A containing space is optional, not mandatory. After signup, U can create S1
+inside S0 through the ordinary GUI, see S1's default exterior Eidolon, enter S1
+with the same A, and create S2 there through the same rules. Explicit storage,
+default owner U, generated identities, finite/infinite extent and atomic
+assignment/admission remain unchanged. Ordinary nesting and successive direct
+entry do not imply a universal parent tree, access inheritance or ontology
+founding per space. An exterior Eidolon can display the space's contents instead
+of a mesh. If S0 contains S1 containing S2 and both select contents exteriors,
+all their contents compose recursively into S0 as one continuous space, subject
+to physics and disclosure, without entering S1 or S2. This is required behavior,
+not an optional later effect or a one-level preview. The default cube is one
+recipe. D1's parentless-space behavior is settled; D5's frame/exposure/cycle and
+physics integration must deliver this exterior composition. M0 records the
+current physics adapter's separate-space limitation and the required owner/frame
+contract; M3 verifies the composed scene and applicable physical behavior.
+Broader ontology editing remains in D6's later scope.
+
+[QUO-60](nimbalyst://QUO-60) and its existing milestones own the Godot delivery:
+M0 freezes the onboarding contract; M1a provisions S0/A using existing Stage 1
+construction and initial placement; M1b presents the blank interior and GUI;
+M2 integrates user-created child spaces; M3 covers entry and creation at further
+levels through the same owners. This does not reopen completed Stage 1 or mark
+Stage 2 delivered. Dated source-investigation sections below retain their
+original baseline; use the linked current specification for implemented Stage 1
+semantics and distinguish the onboarding target from current physical-lobby code.
 
 ## Implementation checklist
 
@@ -139,7 +174,7 @@ Ticket refinement changes no architectural decision, implementation checkbox or 
 - **Names:** `name` is a standard instance attribute, mutable and not required to be unique. A supplied name wins. Classes choose suitable defaults; the existing naming ontology applies to humans, places and other supported kinds, not every class. Store the resolved name during creation instead of generating it again for each view.
 - **Lost operation replies:** retrieve the original submitted change's status and returned values from existing transaction evidence. For space creation this is “committed” and the generated reference. Recovery remains available while the original history is retained, including after the instance is deleted; introduce no separate result-expiry policy or deleted-instance list. It must work from any authorized device, so the initiating browser cannot be the only source of the request association. Never repeat creation merely to discover its ID.
 - **Storage selection:** create in the explicitly selected target ontology. Do not introduce an automatic personal-ontology/lobby default. Storage remains independent of default near-agent placement.
-- **Placement:** nonphysical instances may remain unplaced. By default, represent a new immaterial instance near A using its defined 3D-model Eidolon when A occupies a space. If A has no containing space and no destination was specified, create unplaced. An explicit placement refusal must not silently fall back to unplaced creation. Once placed, an instance has one containing space.
+- **Placement:** nonphysical instances, including spaces, may remain unplaced. The initial personal space S0 has no containing space, while A starts inside S0. By default, represent a new immaterial instance near A using its defined 3D-model Eidolon when A occupies a space. If A has no containing space and no destination was specified, create unplaced. An explicit placement refusal must not silently fall back to unplaced creation. Once placed, an instance has one containing space. The same creation/entry rules apply at successive nesting levels.
 - **Spaces:** space is foundational; an ontology is to become a specialized space of predicates. Physics belongs to `physical_space < space`. Empty ordinary spaces require no terrain or sky. Spaces offer exterior and contents representations. There is **no adopted restriction on displaying infinite spaces inside finite spaces**.
 - **Shared appearances:** several spaces can display one instance through exact references. Removing an appearance does not delete the instance. Shared display grants neither shared ownership nor permission.
 - **Operations and policy:** classes declare offered operations and permissions, including for ontology instances. Owners may widen or restrict default grants within the compulsory requirements of every applicable class. Ontology admission still applies. Menus and directly submitted goals use the same authoritative checks; discovery grants no authority.
@@ -168,6 +203,23 @@ Ticket refinement changes no architectural decision, implementation checkbox or 
 This inventories declarations and template-created instances in the source, not a census of deployed data.
 
 ## Shared model
+
+The Godot/seven-foundation [M0 contract](../../doc/godot-foundation-contract.md)
+now fixes source ownership, exact replacement pin slots, explicit S0 storage,
+signup privacy and the constructor-time initial-occupants composition required
+to place existing A atomically. It also specifies recursive contents frames,
+source/revocation dependencies, cycle behavior and the demonstrated physics
+domain adapter gap; M3 must verify S0/S1/S2 as a continuous physical exposure.
+These are replacement obligations, not completed Stage 2 implementation.
+
+Yan's exterior choices include a real-size wireframe box for a finite space,
+with exact interior extents and the local origin as centre. The default
+100-metre box therefore has ±50-metre bounds. It is an Eidolon, not collision
+geometry. Infinite extents cannot be represented by an invented finite box;
+rational dimensions must not be rounded. Shared scene support belongs to M2.
+The cube remains one recipe, and selecting contents still expands recursively
+at every contents-exterior level. The source/retirement and qualification
+artifacts are linked from the M0 contract; the shared tracker retains status.
 
 ```mermaid
 %%{init: {"flowchart": {"useMaxWidth": true}}}%%
@@ -226,7 +278,7 @@ An instance's identity already appears in `instance_of(Class,Instance)` and rela
 
 **Confirmed storage choice:** the instruction explicitly selects the target ontology holding the new instance's facts; its policy must authorize creation. There is no automatic personal-lobby storage default. The selected ontology describes the instance; the containing space holds admission/reference information. This does not make the ontology administrator, domain owner, containing space or runtime host interchangeable. Creating an ordinary space does not require founding another ontology. Moving it need not move its stored facts.
 
-**Proposed location model:** generalize the existing instance-owned exclusive assignment and destination-owned admission to ordinary spaces. Keep useful many-to-many display references. `enter` checks expected location, applicable parent/travel rules and destination permission, then commits assignment and admission together; navigation follows the result. Viewing another space is not entry. Roots, removal/eviction and A's physical body/pilot relationship remain open. [Assignment/admission](/home/yan/src/quod/priv/ontologies/space.pl:56).
+**Location model:** use the existing instance-owned exclusive assignment and destination-owned admission for ordinary spaces. Keep useful many-to-many display references. `enter` checks expected location, applicable authored travel rules and destination permission, then commits assignment and admission together; navigation follows the result. Viewing another space is not entry. Parentless spaces are permitted, including S0; removal/eviction and A's physical body/pilot relationship retain their separately scoped obligations. [Assignment/admission](/home/yan/src/quod/priv/ontologies/space.pl:56).
 
 Exterior, contents and information GUIs depict the same subject. The proposed acyclic frame hierarchy composes authorized child appearances and relative transforms. Child disclosure and viewer rights apply; parents may restrict exposure further. Reuse retained views and installed-change notifications, not an agent per space. Current [space views](/home/yan/src/quod/priv/ontologies/space_view.pl:3) enumerate direct contents; [model transforms](/home/yan/src/quod/priv/ontologies/quod_modelling.pl:151) compose visuals. Recursive exposure, scale, revocation and dependencies remain to define. Nested display does not imply another simulation; general cross-simulation transfer remains outside the current [contract](/home/yan/src/quod/doc/spaces.md:155).
 
@@ -470,10 +522,10 @@ Removing a local appearance does not delete the thread. Shared display grants no
 | D10 — Names | Standard `name` attribute, separate from identity, mutable and nonunique. Supplied name wins; class policy selects an ordinary default or an appropriate naming-ontology pool. Store the chosen name once. | Class-specific default choices belong to their authors. Refactor affected `display_name` declarations/readers/writers together; no universal naming-ontology fallback. |
 | Decision | Settled direction | Implementation or later scope |
 | --- | --- | --- |
-| D1 — Placement | Nonphysical instances may be unplaced; near-A default when placed; one containing space; multiple display references allowed. | Implementation: use the shared placement/transform vocabulary for optional explicit destination and near-A defaults. Later: roots, removal and eviction beyond existing governed behavior. |
+| D1 — Placement | Nonphysical instances, including spaces, may be unplaced; signup's S0 has no containing space and A starts inside it. Near-A creation and direct entry repeat at successive levels; one containing space when placed, multiple display references allowed. | Implementation: reuse shared placement/transform vocabulary and ordinary exterior Eidolons. Parentless spaces are settled. Later: removal/eviction beyond existing governed behavior and D5 recursive rendering. |
 | D2 — Ownership and storage | U normally owns spaces/terrain A creates for U. Explicitly selected target ontology; no automatic personal storage default. Storage, hosting and location remain distinct. | Implementation: an explicit target selector using existing ontology identity. Later: shared-instance administration UI. |
 | D3 — U instructs A | Distinct authenticated actor; attempt-now behavior; no restart of unsubmitted instructions; exact submitted-operation recovery. | Implementation: bind the instruction to A's exact signed request and provide U's authorized outcome access through existing owners; acceptance is an attempt now, not a queued promise. |
-| D5 — Frames and exposure | Exterior and contents depict one subject; no adopted infinite/finite display prohibition. | Later recursive-view scope: authorized recursion, normalization/scale, cycles, revocation and physical coordinates. Not a stage-1 prerequisite. |
+| D5 — Frames and exposure | Contents exteriors compose recursively: S0 containing S1 containing S2 displays all selected contents in S0 as one continuous space, subject to physics, without entry. Exact subjects and disclosure remain governed; no adopted infinite/finite prohibition. | Required delivery: composed transforms, physical agreement, authorized recursion, cycles, revocation and dependencies. M0 specifies the owner/frame contract and adapter gaps; M3 verifies S0/S1/S2 composition. This does not reopen completed Stage 1 or include broader D6 ontology editing. |
 | D6 — Ontology contents | Ontology becomes a space; owning facts differs from spatial containment. | Later ontology-view/founding scope: predicate/clause subjects, editing/layout and history creation. Not required to create an ordinary space in an existing ontology. |
 | D7 — Terrain and embodiment | Physics belongs to physical spaces; A retains its identity. Live subclass specialization is later. | Later terrain/physical-entry scope: terrain extent and A's body/pilot relationship. Keep current physical protections until their replacement covers them. |
 

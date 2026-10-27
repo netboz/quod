@@ -794,7 +794,7 @@ certify_applied_many_with(_OwnerNs, _Requests, _Deadline, _Dependencies) ->
 certify_applied_many_before_deadline(
   OwnerNs, Requests, TimeoutMs, Deadline, Dependencies)
   when is_list(Requests), Requests =/= [],
-       length(Requests) =< ?QUOD_MAX_DTX_PARTICIPANTS,
+       length(Requests) > 0,
        is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
     case prepare_applied_many(OwnerNs, Requests, TimeoutMs, []) of

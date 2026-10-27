@@ -1,0 +1,2160 @@
+[
+  {
+    "source": "priv/ontologies/agent_instance.pl",
+    "sha256": "ffec2e02cfd6bf89e1bc1d26b61cfc6b6ffc9c0feea4807c64849e8b45373613",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/agent_recovery_policy.pl",
+        "line": 1,
+        "text": "%% Optional remote-host recovery policy, composed with agent_instance.pl."
+      },
+      {
+        "path": "priv/ontologies/fipa_request.pl",
+        "line": 1,
+        "text": "%% Internal Request conversation transitions, composed with agent_instance.pl."
+      },
+      {
+        "path": "priv/ontologies/gui_instance.pl",
+        "line": 33,
+        "text": "%% edit, just like agent_instance.pl. The application supplies gui_vocabulary/2,"
+      },
+      {
+        "path": "priv/ontologies/personal_agent.pl",
+        "line": 1,
+        "text": "%% Composed with human_user_instance.pl, agent_instance.pl and space.pl. The human and"
+      },
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 134,
+        "text": "user_source_component(<<\"agent_instance.pl\">>)."
+      },
+      {
+        "path": "test/quod_agent_actions_tests.erl",
+        "line": 422,
+        "text": "\"ontologies/agent_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_actions_tests.erl",
+        "line": 558,
+        "text": "\"ontologies/agent_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_failover_SUITE.erl",
+        "line": 507,
+        "text": "\"ontologies/agent_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 410,
+        "text": "|| File <- [\"agent_instance.pl\", \"fipa_request.pl\"]]),"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 1428,
+        "text": "Source = filename:join(code:priv_dir(quod), \"ontologies/agent_instance.pl\"),"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 1628,
+        "text": "Source = filename:join(code:priv_dir(quod), \"ontologies/agent_instance.pl\"),"
+      },
+      {
+        "path": "test/quod_agent_vault_tests.erl",
+        "line": 297,
+        "text": "{ok, Source} = file:read_file(filename:join(code:priv_dir(quod), \"ontologies/agent_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_vault_tests.erl",
+        "line": 484,
+        "text": "Source = filename:join(code:priv_dir(quod), \"ontologies/agent_instance.pl\"),"
+      },
+      {
+        "path": "test/quod_agent_vault_tests.erl",
+        "line": 563,
+        "text": "{ok, DefaultSource} = file:read_file(filename:join(code:priv_dir(quod), \"ontologies/agent_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 805,
+        "text": "AppAnchor = Start(AppNs,Source(\"agent_instance.pl\") ++ Source(\"gui_question.pl\") ++"
+      },
+      {
+        "path": "test/quod_effect_journal_tests.erl",
+        "line": 1098,
+        "text": "|| File <- [\"agent_instance.pl\", \"space.pl\", \"quod_physics.pl\"]],"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 30,
+        "text": "Files = [\"space.pl\",\"agent_instance.pl\",\"quod_physics.pl\",\"space_view.pl\",\"lobby_instance.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 463,
+        "text": "genesis_diff => quod_prolog:terms_to_diff(source(\"agent_instance.pl\") ++ source(\"gui_question.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 421,
+        "text": "genesis_diff => quod_prolog:terms_to_diff(source(\"agent_instance.pl\") ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 692,
+        "text": "|| File <- [\"agent_instance.pl\", \"space.pl\", \"quod_physics.pl\"]] ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 709,
+        "text": "|| File <- [\"agent_instance.pl\", \"agent_recovery_policy.pl\"]] ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1341,
+        "text": "|| File <- [\"lobby_instance.pl\", \"space.pl\", \"agent_instance.pl\","
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1371,
+        "text": "{Ns, Anchor} = found_lobby_sources(<<\"human-user\">>, [\"human_user_instance.pl\",\"agent_instance.pl\",\"personal_agent.pl\",\"space.pl\",\"gui_hud.pl\"],"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 131,
+        "text": "end || File <- [\"agent_instance.pl\", \"quod_physics.pl\", \"quod_hinged.pl\"]],"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 254,
+        "text": "\"ontologies/agent_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 4940,
+        "text": "quod_prolog:genesis_diff(\"priv/ontologies/agent_instance.pl\"),"
+      }
+    ],
+    "retained_obligations": "Hosting, custody, observation and monotonic recovery; agent_actions/agent_hosting/agent_recovery/failover suites",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/agent_recovery_policy.pl",
+    "sha256": "9839cd3f6f49115391e00963f97401f34374f977d2b1b5054fb9e0e63400b865",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_agent_actions_tests.erl",
+        "line": 424,
+        "text": "\"ontologies/agent_recovery_policy.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_actions_tests.erl",
+        "line": 506,
+        "text": "\"ontologies/agent_recovery_policy.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_failover_SUITE.erl",
+        "line": 509,
+        "text": "\"ontologies/agent_recovery_policy.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 807,
+        "text": "\"ontologies/agent_recovery_policy.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 815,
+        "text": "\"ontologies/agent_recovery_policy.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_observation_capacity_tests.erl",
+        "line": 14,
+        "text": "\"ontologies/agent_recovery_policy.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_recovery_tests.erl",
+        "line": 61,
+        "text": "\"ontologies/agent_recovery_policy.pl\")),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 709,
+        "text": "|| File <- [\"agent_instance.pl\", \"agent_recovery_policy.pl\"]] ++"
+      }
+    ],
+    "retained_obligations": "Optional remote recovery thresholds and exact observations; recovery/observation_capacity/failover suites",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/animals.pl",
+    "sha256": "75f1a2c0cac115091b1b54c7c410cebafae9a434c414e8df9159c9445640d018",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 459,
+        "text": "Animals = filename:join(code:priv_dir(quod), \"ontologies/animals.pl\"),"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 466,
+        "text": "TargetGenesis = filename:join(?config(priv_dir, Config), \"remote_animals.pl\"),"
+      },
+      {
+        "path": "test/quod_ask_tests.erl",
+        "line": 525,
+        "text": "start_ns(<<\"animals\">>, <<\"ontologies/animals.pl\">>, Dir),"
+      },
+      {
+        "path": "test/quod_ask_tests.erl",
+        "line": 531,
+        "text": "start_ns(<<\"taxonomy:animals\">>, <<\"ontologies/animals.pl\">>, Dir)"
+      },
+      {
+        "path": "test/quod_create_root_tests.erl",
+        "line": 193,
+        "text": "{A, ACfg} = quod_app:build_ns_config(Block(<<\"animals\">>, <<\"ontologies/animals.pl\">>)),"
+      },
+      {
+        "path": "test/quod_genesis_tests.erl",
+        "line": 74,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/animals.pl\"),"
+      }
+    ],
+    "retained_obligations": "Cross-ontology class/ask and genesis fixtures; ask_SUITE, ask, create_root, genesis",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/common_predicates.pl",
+    "sha256": "36fb03df1de9f28262d565f5b9ca0ce561b5e5c7022e969981d015717bb7dbad",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "committed-projection:ordered-common-bootstrap"
+    ],
+    "explicit_callers": [
+      {
+        "path": "src/predicates/quod_common_primitives.erl",
+        "line": 22,
+        "text": "`proof_draw/3` in `common_predicates.pl`. It is deterministic selection:"
+      },
+      {
+        "path": "src/predicates/quod_ontology_predicates.erl",
+        "line": 9,
+        "text": "through the shared `action/3` relation in `common_predicates.pl`. Only the"
+      },
+      {
+        "path": "src/quod_committed_projection.erl",
+        "line": 617,
+        "text": "|| File <- [\"common_predicates.pl\", \"construction.pl\", \"material_policy.pl\"]])"
+      }
+    ],
+    "retained_obligations": "Actions, committed permission, source access and world-view wrappers; action_savepoint/class_semantics/operation_permissions/prolog_ontology/client_view",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/construction.pl",
+    "sha256": "b86de51186ca0a308485d37f11237d26c96439a62681d449d18954c19597a266",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "committed-projection:ordered-common-bootstrap"
+    ],
+    "explicit_callers": [
+      {
+        "path": "src/quod_committed_projection.erl",
+        "line": 617,
+        "text": "|| File <- [\"common_predicates.pl\", \"construction.pl\", \"material_policy.pl\"]])"
+      }
+    ],
+    "retained_obligations": "Defaults, inherited constructors and part/savepoint lifetime; constructor/assertion_construction/space_creation",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/controller_preferences.pl",
+    "sha256": "171fdb28e629a8fccf7306cf231bafbd569e56565925c4f43cf59f3510aa0b1b",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 141,
+        "text": "user_source_component(<<\"controller_preferences.pl\">>)."
+      },
+      {
+        "path": "test/quod_controller_tests.erl",
+        "line": 111,
+        "text": "Sources = lists:append([source(F) || F <- [\"gui_instance.pl\",\"gui_operation.pl\",\"controller_preferences.pl\"]]),"
+      }
+    ],
+    "retained_obligations": "Private preference facts/forms and U\u2192A Save/Reset; controller/personal_agent tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/cross_benchmark_source.pl",
+    "sha256": "3da47909be1b5265c560405e1909e592aec5ee6fbf3d5f0339ab24ed04b99608",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "nomad:optional-configured-benchmark-genesis"
+    ],
+    "explicit_callers": [
+      {
+        "path": "deploy/quod.nomad",
+        "line": 393,
+        "text": "genesis_file = \"ontologies/cross_benchmark_source.pl\""
+      }
+    ],
+    "retained_obligations": "Configured benchmark source, not dead; deploy/quod.nomad and cross-ontology load scripts",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/cross_benchmark_target.pl",
+    "sha256": "b0b41c0b28598b4cd0143a8d11c59374f4f3898049e8c5c6ab9d05cc504e2d2e",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "nomad:optional-configured-benchmark-genesis"
+    ],
+    "explicit_callers": [
+      {
+        "path": "deploy/quod.nomad",
+        "line": 407,
+        "text": "genesis_file = \"ontologies/cross_benchmark_target.pl\""
+      }
+    ],
+    "retained_obligations": "Configured benchmark target/echo, not dead; deploy/quod.nomad and cross-ontology load scripts",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/fipa_request.pl",
+    "sha256": "d7a7de47079235a134eec507efeb789afdc78fc8af6d6294f93e725ca22032da",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 390,
+        "text": "quod_prolog:read_terms(filename:join(code:priv_dir(quod), \"ontologies/fipa_request.pl\")) ++"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 410,
+        "text": "|| File <- [\"agent_instance.pl\", \"fipa_request.pl\"]]),"
+      }
+    ],
+    "retained_obligations": "Atomic request/receiver/completion transitions and replay rules; agent_hosting tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/gui_hud.pl",
+    "sha256": "bb987312e1300028d67033d522553ddea460ddf9f0f6770c85fc3df4b01d969e",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/human_user_instance.pl",
+        "line": 1,
+        "text": "%% Human-user instance behaviour, composed with gui_hud.pl. Founding supplies the local instance/key,"
+      },
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 137,
+        "text": "user_source_component(<<\"gui_hud.pl\">>)."
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 778,
+        "text": "HumanAnchor = Start(HumanNs,Source(\"gui_hud.pl\") ++ ["
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 40,
+        "text": "commit(Ctx,scope(HumanNs,assertions(source(\"gui_hud.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 257,
+        "text": "commit(Ctx,scope(HumanNs,assertions(source(\"gui_hud.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 373,
+        "text": "commit(Ctx, scope(HumanNs, assertions(source(\"gui_hud.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 104,
+        "text": "commit(Ctx,assertions(source(\"gui_hud.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 200,
+        "text": "HumanOwner = Start(HumanNs,source(\"gui_hud.pl\") ++ ["
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 452,
+        "text": "commit(Ctx, scope(HumanNs, assertions(source(\"gui_hud.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 759,
+        "text": "HumanOwner = Start(HumanNs, source(\"gui_hud.pl\") ++ [{instance_of, human_user, person}]),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1371,
+        "text": "{Ns, Anchor} = found_lobby_sources(<<\"human-user\">>, [\"human_user_instance.pl\",\"agent_instance.pl\",\"personal_agent.pl\",\"space.pl\",\"gui_hud.pl\"],"
+      }
+    ],
+    "retained_obligations": "Private receiver/HUD relationships and cleanup; gui_question/gui_examples/ask_SUITE",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/gui_instance.pl",
+    "sha256": "f1fdf2e19c101e7b8a4aec96aea1250072dfffa4ccb924add3166155fb7b810f",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/instrument_configuration.pl",
+        "line": 1,
+        "text": "%% Nonphysical application example. Compose gui_instance.pl and supply an"
+      },
+      {
+        "path": "priv/ontologies/lobby_atmosphere.pl",
+        "line": 1,
+        "text": "%% Compose with lobby_instance.pl and gui_instance.pl. The application supplies"
+      },
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 139,
+        "text": "user_source_component(<<\"gui_instance.pl\">>)."
+      },
+      {
+        "path": "priv/ontologies/voxel_world_gui.pl",
+        "line": 1,
+        "text": "%% Compose with voxel_world.pl and gui_instance.pl. The application supplies"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 806,
+        "text": "Source(\"gui_instance.pl\") ++ quod_prolog:read_terms(filename:join(["
+      },
+      {
+        "path": "test/quod_controller_tests.erl",
+        "line": 111,
+        "text": "Sources = lists:append([source(F) || F <- [\"gui_instance.pl\",\"gui_operation.pl\",\"controller_preferences.pl\"]]),"
+      },
+      {
+        "path": "test/quod_gui_components_tests.erl",
+        "line": 8,
+        "text": "Terms = source(\"gui_instance.pl\") ++ quod_prolog:read_terms(\"test/fixtures/gui-remaining.pl\"),"
+      },
+      {
+        "path": "test/quod_gui_components_tests.erl",
+        "line": 39,
+        "text": "Terms = source(\"gui_instance.pl\") ++ quod_prolog:read_terms(\"test/fixtures/gui-composition.pl\"),"
+      },
+      {
+        "path": "test/quod_gui_components_tests.erl",
+        "line": 103,
+        "text": "Ctx = quod_lobby_tests:start(Dir, [], base_system_catalogue, source(\"gui_instance.pl\") ++ Terms),"
+      },
+      {
+        "path": "test/quod_gui_components_tests.erl",
+        "line": 157,
+        "text": "source(\"gui_instance.pl\") ++ Terms),"
+      },
+      {
+        "path": "test/quod_gui_components_tests.erl",
+        "line": 184,
+        "text": "Terms = source(\"gui_instance.pl\") ++ fixture(),"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 31,
+        "text": "\"voxel_world.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\",\"gui_question.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 253,
+        "text": "\"space_view.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"voxel_world_gui.pl\"]]) ++ Facts,"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 327,
+        "text": "LobbyTerms = source(\"gui_instance.pl\") ++ source(\"lobby_atmosphere.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 345,
+        "text": "genesis_diff => quod_prolog:terms_to_diff(source(\"gui_instance.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 464,
+        "text": "source(\"gui_instance.pl\") ++ source(\"instrument_configuration.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_operations_tests.erl",
+        "line": 237,
+        "text": "Sources = source(\"gui_instance.pl\") ++ source(\"gui_operation.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 206,
+        "text": "App = Start(AppNs,source(\"gui_instance.pl\") ++ quod_prolog:read_terms(\"test/fixtures/gui-components.pl\") ++ ["
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 442,
+        "text": "genesis_diff => quod_prolog:terms_to_diff(source(\"gui_instance.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 764,
+        "text": "App = Start(AppNs, source(\"gui_instance.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_stage1_tests.erl",
+        "line": 97,
+        "text": "Sources = lists:append([source(F) || F <- [\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\"]]) ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1343,
+        "text": "\"gui_instance.pl\", \"gui_operation.pl\", \"space_gui.pl\", \"gui_question.pl\", \"voxel_world_gui.pl\", \"lobby_worlds.pl\"]],"
+      }
+    ],
+    "retained_obligations": "Portable compilation, fields, exact revisions and binding; gui_components/gui_operations/gui_stage1/gui_question",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/gui_operation.pl",
+    "sha256": "c91b8d1545461aafe3b9a8f36df03dd488cba1f7944ed1b98cbbd6930f606530",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 140,
+        "text": "user_source_component(<<\"gui_operation.pl\">>)."
+      },
+      {
+        "path": "test/quod_controller_tests.erl",
+        "line": 111,
+        "text": "Sources = lists:append([source(F) || F <- [\"gui_instance.pl\",\"gui_operation.pl\",\"controller_preferences.pl\"]]),"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 31,
+        "text": "\"voxel_world.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\",\"gui_question.pl\","
+      },
+      {
+        "path": "test/quod_gui_operations_tests.erl",
+        "line": 237,
+        "text": "Sources = source(\"gui_instance.pl\") ++ source(\"gui_operation.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_stage1_tests.erl",
+        "line": 97,
+        "text": "Sources = lists:append([source(F) || F <- [\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\"]]) ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1343,
+        "text": "\"gui_instance.pl\", \"gui_operation.pl\", \"space_gui.pl\", \"gui_question.pl\", \"voxel_world_gui.pl\", \"lobby_worlds.pl\"]],"
+      }
+    ],
+    "retained_obligations": "Offered operations, prebound-output refusal and original results; gui_operations/space_creation/controller",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/gui_question.pl",
+    "sha256": "d1abd3a7cf4ccdb51436bd74c78b00e1f7ba5a8042fda99c3fa46fa324d8b76b",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 805,
+        "text": "AppAnchor = Start(AppNs,Source(\"agent_instance.pl\") ++ Source(\"gui_question.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 31,
+        "text": "\"voxel_world.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\",\"gui_question.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 463,
+        "text": "genesis_diff => quod_prolog:terms_to_diff(source(\"agent_instance.pl\") ++ source(\"gui_question.pl\") ++"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 332,
+        "text": "{gui_complete,_}},_} <- source(\"gui_question.pl\")],"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 345,
+        "text": "end,source(\"gui_question.pl\") ++ [{gui_pending_allowance,actor,4},{gui_completion_allowance,actor,30000}])"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 422,
+        "text": "source(\"gui_question.pl\") ++ [Admin, HudHelperGrant, {gui_completion_allowance, responder, 30000},"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 876,
+        "text": "end, source(\"gui_question.pl\"))"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1343,
+        "text": "\"gui_instance.pl\", \"gui_operation.pl\", \"space_gui.pl\", \"gui_question.pl\", \"voxel_world_gui.pl\", \"lobby_worlds.pl\"]],"
+      }
+    ],
+    "retained_obligations": "Genuine deferred questions and atomic continuation/cancel; gui_question/gui_examples/ask_SUITE",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/hinged_example_view.pl",
+    "sha256": "1b504de1d5f76068684b5968724944f287ef41e2cfd136d6af7c37da1e0bc935",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 4788,
+        "text": "Rules = quod_prolog:read_terms(\"priv/ontologies/hinged_example_view.pl\") ++"
+      }
+    ],
+    "retained_obligations": "Diagnostic view, not required startup; physics hinge/contact/checkpoint fixtures",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/human_user_instance.pl",
+    "sha256": "332d09e43c75cdf977f40f9401f4f244796f27bc737f7f0d9241e256f693d899",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/personal_agent.pl",
+        "line": 1,
+        "text": "%% Composed with human_user_instance.pl, agent_instance.pl and space.pl. The human and"
+      },
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 133,
+        "text": "user_source_component(<<\"human_user_instance.pl\">>)."
+      },
+      {
+        "path": "test/quod_class_semantics_tests.erl",
+        "line": 8,
+        "text": "code:priv_dir(quod), \"ontologies/human_user_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_controller_tests.erl",
+        "line": 99,
+        "text": "source(\"human_user_instance.pl\")++[{instance_of,human_user,me},{agent_key,me,Key,active}]),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1371,
+        "text": "{Ns, Anchor} = found_lobby_sources(<<\"human-user\">>, [\"human_user_instance.pl\",\"agent_instance.pl\",\"personal_agent.pl\",\"space.pl\",\"gui_hud.pl\"],"
+      },
+      {
+        "path": "test/quod_personal_agent_tests.erl",
+        "line": 197,
+        "text": "Sources = quod_prolog:read_terms(filename:join([code:priv_dir(quod), \"ontologies\", \"human_user_instance.pl\"])),"
+      },
+      {
+        "path": "test/quod_personal_agent_tests.erl",
+        "line": 352,
+        "text": "|| File <- [\"human_user_instance.pl\", \"personal_agent.pl\"]]),"
+      }
+    ],
+    "retained_obligations": "U authority, source privacy and lobby-to-S0 setup replacement; lifecycle_single_path/personal_agent/controller",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/instrument_configuration.pl",
+    "sha256": "68bf3df1a39e184f44a42f22149fade89a1a0e51738e237df7c72018f699f561",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 346,
+        "text": "source(\"instrument_configuration.pl\") ++ [Admin, Original,"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 464,
+        "text": "source(\"gui_instance.pl\") ++ source(\"instrument_configuration.pl\") ++"
+      }
+    ],
+    "retained_obligations": "Independent nonphysical form and continuation example; gui_examples",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/lobby_atmosphere.pl",
+    "sha256": "52e725869fb37f0c535fde08ed7576ab21b63b218559160e83d50a872414ebfd",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 327,
+        "text": "LobbyTerms = source(\"gui_instance.pl\") ++ source(\"lobby_atmosphere.pl\") ++"
+      }
+    ],
+    "retained_obligations": "Atmosphere question example; preserve genuine question/default/typed-form obligations in gui_examples",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/lobby_instance.pl",
+    "sha256": "5d417706be96ebdfbc79937b5106f5f12eabd1a69e5a46a438914189883ec08c",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/lobby_atmosphere.pl",
+        "line": 1,
+        "text": "%% Compose with lobby_instance.pl and gui_instance.pl. The application supplies"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 30,
+        "text": "Files = [\"space.pl\",\"agent_instance.pl\",\"quod_physics.pl\",\"space_view.pl\",\"lobby_instance.pl\","
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1341,
+        "text": "|| File <- [\"lobby_instance.pl\", \"space.pl\", \"agent_instance.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1540,
+        "text": "filename:join(code:priv_dir(quod),\"ontologies/lobby_instance.pl\")),"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 1515,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/lobby_instance.pl\")],"
+      }
+    ],
+    "retained_obligations": "Remove mandatory physical-lobby floor/pilot composition after ordinary S0 replaces it; retain physical grants/admission regressions in physics and space fixtures",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/lobby_worlds.pl",
+    "sha256": "d7ca4495cadeb1c16def299981721c8bf280a5d5b2a21868750fd788d43f6873",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 32,
+        "text": "\"voxel_world_gui.pl\",\"lobby_worlds.pl\"],"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1343,
+        "text": "\"gui_instance.pl\", \"gui_operation.pl\", \"space_gui.pl\", \"gui_question.pl\", \"voxel_world_gui.pl\", \"lobby_worlds.pl\"]],"
+      },
+      {
+        "path": "test/quod_voxel_world_tests.erl",
+        "line": 6,
+        "text": "with_world([\"voxel_world_gui.pl\",\"lobby_worlds.pl\"],fun(Store0,Owner) ->"
+      },
+      {
+        "path": "test/quod_voxel_world_tests.erl",
+        "line": 42,
+        "text": "{timeout,60,fun() -> with_world([\"voxel_world_gui.pl\",\"lobby_worlds.pl\"],fun(Store,_) ->"
+      }
+    ],
+    "retained_obligations": "Terrain create/library/arrival, budgets and occupied-world protections; gui_examples/voxel_world/physics. Not ordinary-space creation",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/material_policy.pl",
+    "sha256": "8cd184e65422e19829ed9f2faade33606c1021f0ce082e3787e5ff636db3123d",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "committed-projection:ordered-common-bootstrap"
+    ],
+    "explicit_callers": [
+      {
+        "path": "src/quod_committed_projection.erl",
+        "line": 617,
+        "text": "|| File <- [\"common_predicates.pl\", \"construction.pl\", \"material_policy.pl\"]])"
+      }
+    ],
+    "retained_obligations": "Founding/plan/proof admission policy; material_admission/scope_session/sealing/OCC tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/node_execution.pl",
+    "sha256": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "node-class:committed-node-identity-template"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_agent_failover_SUITE.erl",
+        "line": 486,
+        "text": "\"ontologies/node_execution.pl\")),"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 926,
+        "text": "Source = filename:join(code:priv_dir(quod), \"ontologies/node_execution.pl\"),"
+      },
+      {
+        "path": "test/quod_agent_hosting_tests.erl",
+        "line": 1612,
+        "text": "NodeExecution = filename:join(code:priv_dir(quod), \"ontologies/node_execution.pl\"),"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 127,
+        "text": "\"ontologies/node_execution.pl\")),"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 787,
+        "text": "NodeAnchor = Start(NodeNs,Source(\"node_execution.pl\") ++ [Admin,"
+      },
+      {
+        "path": "test/quod_ct.erl",
+        "line": 48,
+        "text": "{ok, Source} = file:read_file(filename:join(code:priv_dir(quod), \"ontologies/node_execution.pl\")),"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 453,
+        "text": "genesis_diff => quod_prolog:terms_to_diff(source(\"node_execution.pl\") ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 420,
+        "text": "\"ontologies/node_execution.pl\")),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 497,
+        "text": "\"ontologies/node_execution.pl\")),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1227,
+        "text": "\"ontologies/node_execution.pl\")),"
+      },
+      {
+        "path": "test/quod_node_actor_tests.erl",
+        "line": 40,
+        "text": "{ok, Policy} = file:read_file(filename:join(code:priv_dir(quod), \"ontologies/node_execution.pl\")),"
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 12,
+        "text": "NodePolicy = policy_terms(\"node_execution.pl\"),"
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 61,
+        "text": "with_policy(\"node_execution.pl\","
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 84,
+        "text": "with_policy(\"node_execution.pl\","
+      }
+    ],
+    "retained_obligations": "Private node methods and hosting intention owner; node_actor/node_context/lifecycle/failover",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/personal_agent.pl",
+    "sha256": "55f3457dcc2594f50eacf0c1ce189be8bc495de26a5c7652652fb2b7aee8933f",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 135,
+        "text": "user_source_component(<<\"personal_agent.pl\">>)."
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1371,
+        "text": "{Ns, Anchor} = found_lobby_sources(<<\"human-user\">>, [\"human_user_instance.pl\",\"agent_instance.pl\",\"personal_agent.pl\",\"space.pl\",\"gui_hud.pl\"],"
+      },
+      {
+        "path": "test/quod_personal_agent_tests.erl",
+        "line": 352,
+        "text": "|| File <- [\"human_user_instance.pl\", \"personal_agent.pl\"]]),"
+      }
+    ],
+    "retained_obligations": "Distinct A key, attempt-now custody and original outcome association; personal_agent tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/pets.pl",
+    "sha256": "7940ee0b18cced9019a56b98aeda795d97986acd29869a6e9ea84afff4c24197",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 460,
+        "text": "Pets = filename:join(code:priv_dir(quod), \"ontologies/pets.pl\"),"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 529,
+        "text": "AskerGenesis = filename:join(?config(priv_dir, Config), \"remote_pets.pl\"),"
+      },
+      {
+        "path": "test/quod_ask_tests.erl",
+        "line": 526,
+        "text": "start_ns(<<\"pets\">>, <<\"ontologies/pets.pl\">>, Dir),"
+      },
+      {
+        "path": "test/quod_create_root_tests.erl",
+        "line": 194,
+        "text": "{P, PCfg} = quod_app:build_ns_config(Block(<<\"pets\">>,    <<\"ontologies/pets.pl\">>)),"
+      }
+    ],
+    "retained_obligations": "Foreign class/follow/instance fixtures; ask/ask_SUITE/create_root",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_agent.pl",
+    "sha256": "58664252af00ff0137d88268a529475941641ed34a7c199e68a1c5dabc49bb5f",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1431,
+        "text": "ExtraSpec = [{<<\"quod:agent\">>, \"quod_agent.pl\", []},"
+      }
+    ],
+    "retained_obligations": "Public agent class; agent_hosting/class_semantics/lobby vocabulary tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_environment.pl",
+    "sha256": "2ecbd5e3208cb0a21890f6e5600a1813021a18df6618d02e12a00bb8a8c87f43",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1334,
+        "text": "<<\"environment\">>, \"quod_environment.pl\", []),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1424,
+        "text": "{<<\"lobby-test-environment\">>, \"quod_environment.pl\", []},"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1432,
+        "text": "{<<\"quod:environment\">>, \"quod_environment.pl\", []},"
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 203,
+        "text": "\"quod_material_eidolons.pl\", \"quod_environment.pl\","
+      }
+    ],
+    "retained_obligations": "Optional sky/environment properties; rendering/lobby fixtures. No mandatory onboarding atmosphere",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_environment_eidolons.pl",
+    "sha256": "370cf34e94284de34669da8455e81634d24e723a4447b2171f9cb55f2a87a241",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1336,
+        "text": "<<\"environment-eidolons\">>, \"quod_environment_eidolons.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1425,
+        "text": "{<<\"lobby-test-environment-eidolons\">>, \"quod_environment_eidolons.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1433,
+        "text": "{<<\"quod:environment:eidolons\">>, \"quod_environment_eidolons.pl\","
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 204,
+        "text": "\"quod_environment_eidolons.pl\"])."
+      }
+    ],
+    "retained_obligations": "Optional panorama assets/Eidolons/digests; rendering/lobby fixtures",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_gui.pl",
+    "sha256": "f936c4e430ff3f73c8e7e3a59ad65246f13e18e7494237248d673d557cef093e",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 770,
+        "text": "GuiAnchor = Start(GuiNs,Source(\"quod_gui.pl\") ++ [{can_invoke,true,{'_'},{'_'},GuiNs}],"
+      },
+      {
+        "path": "test/quod_constructor_tests.erl",
+        "line": 261,
+        "text": "with_fixture(source(\"quod_gui.pl\"), fun(St) ->"
+      },
+      {
+        "path": "test/quod_controller_tests.erl",
+        "line": 115,
+        "text": "Sup=quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],source(\"quod_gui.pl\")),"
+      },
+      {
+        "path": "test/quod_gui_operations_tests.erl",
+        "line": 241,
+        "text": "Sup = quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],source(\"quod_gui.pl\")),"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 197,
+        "text": "data_dir => filename:join(Dir,\"gui\"),genesis_diff => quod_prolog:terms_to_diff(source(\"quod_gui.pl\")),"
+      },
+      {
+        "path": "test/quod_gui_question_tests.erl",
+        "line": 757,
+        "text": "Vocabulary = Start(<<\"quod:gui\">>, source(\"quod_gui.pl\")),"
+      },
+      {
+        "path": "test/quod_gui_stage1_tests.erl",
+        "line": 101,
+        "text": "Sup = quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],source(\"quod_gui.pl\")),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 379,
+        "text": "[\"quod_gui.pl\"], [], [quod_agent_predicates,quod_gui_predicates]),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1428,
+        "text": "{<<\"quod:gui\">>, \"quod_gui.pl\", []},"
+      }
+    ],
+    "retained_obligations": "Portable components/type validation and governed GUI native effects; gui_components/gui_operations/gui_question/gui_stage1",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_hinged.pl",
+    "sha256": "5a1b432da48b0439655994be2f6a8aa613db2cb18c4c1dc965d8b31a0c2078b2",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 131,
+        "text": "end || File <- [\"agent_instance.pl\", \"quod_physics.pl\", \"quod_hinged.pl\"]],"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 268,
+        "text": "\"ontologies/\" ++ File)) || File <- [\"quod_physics.pl\", \"quod_hinged.pl\"]]),"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 2788,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/quod_hinged.pl\") ++"
+      }
+    ],
+    "retained_obligations": "Mechanical close/cancel/custody consequences; physics tests. Retain independently of entry",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_human_user.pl",
+    "sha256": "eb323b03fe8a0168aea2077c7e07eca8ff0e0d7e4b5e41f6b0fa83fa9c330e77",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1435,
+        "text": "{<<\"quod:human_user\">>, \"quod_human_user.pl\", []},"
+      }
+    ],
+    "retained_obligations": "Human class vocabulary, merged with signup ACL explicitly; class_semantics/lobby tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_lens.pl",
+    "sha256": "db667b0a7fb5f528bec09996929904eb305162745ba1854aec664e6f0de9ed68",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lens_tests.erl",
+        "line": 3,
+        "text": "%% The `quod:lens` ontology (priv/ontologies/quod_lens.pl): a lens and its"
+      },
+      {
+        "path": "test/quod_lens_tests.erl",
+        "line": 332,
+        "text": "lens_source() -> filename:join(code:priv_dir(quod), \"ontologies/quod_lens.pl\")."
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1427,
+        "text": "{<<\"quod:lens\">>, \"quod_lens.pl\", []},"
+      }
+    ],
+    "retained_obligations": "Complete source and explicit predicate/policy/interfaces/routes lenses; lens/prolog_ontology/lobby tests. Broader editing remains separate",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_licence.pl",
+    "sha256": "a93e1664cf1cf9db7de01ce5d0b6bddef357ffcb7e7b5ab5f641db272df21112",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lens_tests.erl",
+        "line": 333,
+        "text": "licence_source() -> filename:join(code:priv_dir(quod), \"ontologies/quod_licence.pl\")."
+      },
+      {
+        "path": "test/quod_licence_tests.erl",
+        "line": 3,
+        "text": "%% The `quod:licence` ontology (priv/ontologies/quod_licence.pl) on the base"
+      },
+      {
+        "path": "test/quod_licence_tests.erl",
+        "line": 174,
+        "text": "source() -> filename:join(code:priv_dir(quod), \"ontologies/quod_licence.pl\")."
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1436,
+        "text": "{<<\"quod:licence\">>, \"quod_licence.pl\", []},"
+      }
+    ],
+    "retained_obligations": "Licence compatibility, notices, obligations; licence/lens tests. No new shared identity",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_lobby.pl",
+    "sha256": "d9d60da7f5f60204ecb6c144d8050f3f3085b70d0c02a7bdcf0de99f05e5e6bd",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_controller_tests.erl",
+        "line": 117,
+        "text": "CSup=quod_agent_hosting_tests:start_ontology(Shared,Dir,Node,[],source(\"quod_lobby.pl\")),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1344,
+        "text": "found_lobby_source(<<\"lobby-classes\">>, \"quod_lobby.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1437,
+        "text": "{<<\"quod:lobby\">>, \"quod_lobby.pl\", []},"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1487,
+        "text": "Classes = start_namespace(ClassNs, config(Dir, ClassNs, Base, \"quod_lobby.pl\","
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 1540,
+        "text": "E,quod_prolog:read_terms(\"priv/ontologies/quod_lobby.pl\")),"
+      }
+    ],
+    "retained_obligations": "Device/controller classes/bindings/appearance to controllers; optional building recipes to space_environment; remove lobby founding policy only after S0 replacement; controller/lobby/rendering",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_material.pl",
+    "sha256": "8fa34ec28eb02510164f4d05f9e31ed10dd0a39784589e843761cf73adc8f96d",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1329,
+        "text": "{MaterialNs, MaterialAnchor} = found_lobby_source(<<\"material\">>, \"quod_material.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1420,
+        "text": "{<<\"lobby-test-material\">>, \"quod_material.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1438,
+        "text": "{<<\"quod:material\">>, \"quod_material.pl\","
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 202,
+        "text": "end, [\"quod_rendering.pl\", \"quod_modelling.pl\", \"quod_material.pl\","
+      }
+    ],
+    "retained_obligations": "Material-property quantities use GUI exact measure pin; rendering/material tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_material_eidolons.pl",
+    "sha256": "f31583679b387e679378c3908dd2503ccc803dee17e31cf5de38382e3be224cf",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1331,
+        "text": "{EidolonNs, EidolonAnchor} = found_lobby_source(<<\"material-eidolons\">>, \"quod_material_eidolons.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1422,
+        "text": "{<<\"lobby-test-material-eidolons\">>, \"quod_material_eidolons.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1440,
+        "text": "{<<\"quod:material:eidolons\">>, \"quod_material_eidolons.pl\","
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 203,
+        "text": "\"quod_material_eidolons.pl\", \"quod_environment.pl\","
+      }
+    ],
+    "retained_obligations": "Verified texture/surface recipes; rendering/lobby asset tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_measure.pl",
+    "sha256": "43135c44d20bbf1e2ea9762f1e85898476fb1845bc8cb3e17497c56ffc96c02b",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1328,
+        "text": "{MeasureNs, MeasureAnchor} = found_lobby_source(<<\"measure\">>, \"quod_measure.pl\", []),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1417,
+        "text": "{<<\"lobby-test-measure\">>, \"quod_measure.pl\", []},"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1442,
+        "text": "{<<\"quod:measure\">>, \"quod_measure.pl\", []},"
+      },
+      {
+        "path": "test/quod_measure_tests.erl",
+        "line": 3,
+        "text": "%% The `quod:measure` ontology (priv/ontologies/quod_measure.pl): what a unit"
+      },
+      {
+        "path": "test/quod_measure_tests.erl",
+        "line": 130,
+        "text": "source() -> filename:join(code:priv_dir(quod), \"ontologies/quod_measure.pl\")."
+      },
+      {
+        "path": "test/quod_space_creation_tests.erl",
+        "line": 158,
+        "text": "MSup = quod_agent_hosting_tests:start_ontology(Measure,Dir,Node,[],source(\"quod_measure.pl\")),"
+      }
+    ],
+    "retained_obligations": "Complete exact unit/signature/rational conversion including material units; measure/space_creation/rendering",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_modelling.pl",
+    "sha256": "f57f04d1565327aeb0d8fdbbab5cd96347c9e26e76e1d4089b616ecbc5469093",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1326,
+        "text": "{ModelNs, ModelAnchor} = found_lobby_source(<<\"modelling\">>, \"quod_modelling.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1418,
+        "text": "{<<\"lobby-test-modelling\">>, \"quod_modelling.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1443,
+        "text": "{<<\"quod:modelling\">>, \"quod_modelling.pl\","
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 5380,
+        "text": "quod_prolog:genesis_diff(\"priv/ontologies/quod_modelling.pl\"),"
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 202,
+        "text": "end, [\"quod_rendering.pl\", \"quod_modelling.pl\", \"quod_material.pl\","
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 249,
+        "text": "{ok, Modelling} = file:read_file(\"priv/ontologies/quod_modelling.pl\"),"
+      },
+      {
+        "path": "test/quod_space_creation_tests.erl",
+        "line": 253,
+        "text": "MSup = quod_agent_hosting_tests:start_ontology(Model,Dir,Node,[],source(\"quod_modelling.pl\") ++"
+      },
+      {
+        "path": "test/quod_space_tests.erl",
+        "line": 480,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/quod_modelling.pl\") ++"
+      }
+    ],
+    "retained_obligations": "Pure model, shape bounds, placement/pivot/front/scoped occurrence paths; rendering/space/physics",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_names.pl",
+    "sha256": "b8a5f99dbf72d9f1d8498123c7ec010e37970a86879eae6008a15900873bdeee",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/OGL-1.0a.txt",
+        "line": 4,
+        "text": "quod_names.pl (this directory) carries Open Game Content used under the Open"
+      },
+      {
+        "path": "test/quod_constructor_tests.erl",
+        "line": 272,
+        "text": "Terms = source(\"quod_names.pl\") ++ ["
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1324,
+        "text": "{NamesNs, NamesAnchor} = found_lobby_source(<<\"names\">>, \"quod_names.pl\", []),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 2811,
+        "text": "filename:join(code:priv_dir(quod), \"ontologies/quod_names.pl\")),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1445,
+        "text": "{<<\"quod:names\">>, \"quod_names.pl\", []},"
+      },
+      {
+        "path": "test/quod_names_SUITE.erl",
+        "line": 46,
+        "text": "Names = filename:join(code:priv_dir(quod), \"ontologies/quod_names.pl\"),"
+      },
+      {
+        "path": "test/quod_names_tests.erl",
+        "line": 3,
+        "text": "%% The `quod:names` ontology (priv/ontologies/quod_names.pl) on the base"
+      },
+      {
+        "path": "test/quod_names_tests.erl",
+        "line": 366,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/quod_names.pl\"),"
+      },
+      {
+        "path": "test/quod_names_tests.erl",
+        "line": 423,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/quod_names.pl\"),"
+      },
+      {
+        "path": "test/quod_outcome_result_tests.erl",
+        "line": 107,
+        "text": "quod_prolog:read_terms(filename:join(code:priv_dir(quod), \"ontologies/quod_names.pl\")) ++ Terms."
+      }
+    ],
+    "retained_obligations": "Optional naming pools and licence notice OGL-1.0a; names/names_SUITE/constructor/outcome_result. Ordinary space default remains stored literal",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_node.pl",
+    "sha256": "f7531de9c3081ec26f77d43f34a937d2c7cfc2941ef4d27f6858764ae0d900a2",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/join_SUITE.erl",
+        "line": 331,
+        "text": "code:priv_dir(quod), \"ontologies/quod_node.pl\")),"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 117,
+        "text": "NodeSource = filename:join(code:priv_dir(quod), \"ontologies/quod_node.pl\"),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 369,
+        "text": "\"ontologies/quod_node.pl\")),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1446,
+        "text": "{<<\"quod:node\">>, \"quod_node.pl\", []},"
+      }
+    ],
+    "retained_obligations": "Protected open enrollment, allocations and executor-bound hosting; node_actor/lifecycle/join/failover",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_physics.pl",
+    "sha256": "b00716f34682df9a232a0468eb159ef6bfbc760267b692985dd7dc64fa45ebbc",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_effect_journal_tests.erl",
+        "line": 1098,
+        "text": "|| File <- [\"agent_instance.pl\", \"space.pl\", \"quod_physics.pl\"]],"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 30,
+        "text": "Files = [\"space.pl\",\"agent_instance.pl\",\"quod_physics.pl\",\"space_view.pl\",\"lobby_instance.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 252,
+        "text": "Terms = lists:append([source(F) || F <- [\"space.pl\",\"quod_physics.pl\",\"voxel_world.pl\","
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 692,
+        "text": "|| File <- [\"agent_instance.pl\", \"space.pl\", \"quod_physics.pl\"]] ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1342,
+        "text": "\"quod_physics.pl\", \"space_view.pl\", \"voxel_world.pl\", \"voxel_world_view.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 131,
+        "text": "end || File <- [\"agent_instance.pl\", \"quod_physics.pl\", \"quod_hinged.pl\"]],"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 268,
+        "text": "\"ontologies/\" ++ File)) || File <- [\"quod_physics.pl\", \"quod_hinged.pl\"]]),"
+      },
+      {
+        "path": "test/quod_physics_control_tests.erl",
+        "line": 103,
+        "text": "Rules = quod_prolog:read_terms(\"priv/ontologies/quod_physics.pl\") ++"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 778,
+        "text": "Terms = quod_prolog:read_terms(\"priv/ontologies/quod_physics.pl\") ++"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 1312,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/quod_physics.pl\"),element(1,Head) =:= Functor],ok."
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 2787,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/quod_physics.pl\") ++"
+      },
+      {
+        "path": "test/quod_space_tests.erl",
+        "line": 143,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/quod_physics.pl\"),"
+      },
+      {
+        "path": "test/quod_voxel_world_tests.erl",
+        "line": 184,
+        "text": "[\"space.pl\",\"quod_physics.pl\",\"voxel_world.pl\"] ++ ExtraSources]),"
+      }
+    ],
+    "retained_obligations": "Authority/run/custody/control/body admission and source delegates; physics/physics_control/coordinates suites, including new recursive domain mapping obligations",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_prolog.pl",
+    "sha256": "f15c6f0f39a6bc897c0c9dbaac342da24178999c2992f3a299bd95448b5bc7f6",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1429,
+        "text": "{<<\"quod:prolog\">>, \"quod_prolog.pl\", []},"
+      },
+      {
+        "path": "test/quod_prolog_ontology_tests.erl",
+        "line": 333,
+        "text": "[code:priv_dir(quod), \"ontologies\", \"quod_prolog.pl\"])),"
+      }
+    ],
+    "retained_obligations": "Guarded source compiler, complete baseline/conflict/atomic edit; prolog_ontology/lobby. Do not retire because broad editing is deferred",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_prolog_eidolons.pl",
+    "sha256": "1d7d90147dd1cc5403b310fa30523638df66e0dc7fb04de4bcccc38e32d28bf9",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1430,
+        "text": "{<<\"quod:prolog:eidolons\">>, \"quod_prolog_eidolons.pl\", []}],"
+      }
+    ],
+    "retained_obligations": "Source/inspection recipes re-pin common selectors to GUI; lobby/lens/prolog_ontology",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_rendering.pl",
+    "sha256": "f157aab960fc2112abb4b6d4e4023843ef8686c138e5fc93c7d41fa8a0e64f27",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lens_tests.erl",
+        "line": 334,
+        "text": "rendering_source() -> filename:join(code:priv_dir(quod), \"ontologies/quod_rendering.pl\")."
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1325,
+        "text": "{RenderNs, RenderAnchor} = found_lobby_source(<<\"rendering\">>, \"quod_rendering.pl\", []),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1416,
+        "text": "BaseSpec = [{<<\"lobby-test-rendering\">>, \"quod_rendering.pl\", []},"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1447,
+        "text": "{<<\"quod:rendering\">>, \"quod_rendering.pl\", []},"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 2775,
+        "text": "quod_prolog:genesis_diff(\"priv/ontologies/quod_rendering.pl\"),"
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 3,
+        "text": "%% The `quod:rendering` ontology (priv/ontologies/quod_rendering.pl): the bounded"
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 202,
+        "text": "end, [\"quod_rendering.pl\", \"quod_modelling.pl\", \"quod_material.pl\","
+      },
+      {
+        "path": "test/quod_rendering_tests.erl",
+        "line": 327,
+        "text": "source() -> filename:join(code:priv_dir(quod), \"ontologies/quod_rendering.pl\")."
+      },
+      {
+        "path": "test/quod_space_creation_tests.erl",
+        "line": 252,
+        "text": "RSup = quod_agent_hosting_tests:start_ontology(Render,Dir,Node,[],source(\"quod_rendering.pl\")),"
+      },
+      {
+        "path": "test/quod_space_tests.erl",
+        "line": 478,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/quod_rendering.pl\"), #{}),"
+      }
+    ],
+    "retained_obligations": "Complete mark/material/asset validation and resource policy; rendering/client marks/GLB tests. Extend portable wireframe vocabulary in M2",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_root.pl",
+    "sha256": "5b9cc76c0d4671762f2f19dbb2f81d982841273efb1ee046b03a11ab6e4d56d8",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "config/nomad:root-bootstrap-genesis"
+    ],
+    "explicit_callers": [
+      {
+        "path": "config/quod.conf",
+        "line": 61,
+        "text": "genesis_file = \"ontologies/quod_root.pl\"   # read once by the founder at create"
+      },
+      {
+        "path": "deploy/quod.nomad",
+        "line": 376,
+        "text": "genesis_file = \"ontologies/quod_root.pl\""
+      },
+      {
+        "path": "src/quod_app.erl",
+        "line": 354,
+        "text": "%% would otherwise FOUND `animals` seeded with quod_root.pl's content, which is always"
+      },
+      {
+        "path": "src/quod_app.erl",
+        "line": 367,
+        "text": "{create, <<\"ontologies/quod_root.pl\">>} ->"
+      },
+      {
+        "path": "src/quod_schema.erl",
+        "line": 125,
+        "text": ", {genesis_file, hoconsc:mk(binary(), #{default => <<\"ontologies/quod_root.pl\">>})}"
+      },
+      {
+        "path": "test/growth_SUITE.erl",
+        "line": 366,
+        "text": "%% Build the default-open genesis ontology in the suite's priv_dir (the shipped quod_root.pl carries the"
+      },
+      {
+        "path": "test/join_SUITE.erl",
+        "line": 308,
+        "text": "genesis_file => <<\"ontologies/quod_root.pl\">>,"
+      },
+      {
+        "path": "test/join_SUITE.erl",
+        "line": 409,
+        "text": "genesis_file => filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\")}."
+      },
+      {
+        "path": "test/quod_agent_failover_SUITE.erl",
+        "line": 473,
+        "text": "Source = filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\"),"
+      },
+      {
+        "path": "test/quod_ask_SUITE.erl",
+        "line": 3219,
+        "text": "genesis_file => <<\"ontologies/quod_root.pl\">>,"
+      },
+      {
+        "path": "test/quod_committee_predicates_tests.erl",
+        "line": 15,
+        "text": "%% ontology-declared bridge modules, the real quod_root.pl (for can_join), and"
+      },
+      {
+        "path": "test/quod_committee_predicates_tests.erl",
+        "line": 26,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\"),"
+      },
+      {
+        "path": "test/quod_committee_predicates_tests.erl",
+        "line": 52,
+        "text": "%% Run Fun with the readiness environment quod_root.pl's `can_join :- peer_ready(Pk)` reads: Ns's digest"
+      },
+      {
+        "path": "test/quod_create_root_tests.erl",
+        "line": 6,
+        "text": "%%% create-a-network: the founder reads quod_root.pl once and commits it"
+      },
+      {
+        "path": "test/quod_create_root_tests.erl",
+        "line": 19,
+        "text": "genesis_file => <<\"ontologies/quod_root.pl\">>,"
+      },
+      {
+        "path": "test/quod_create_root_tests.erl",
+        "line": 53,
+        "text": "%% genesis_diff compiles the real quod_root.pl into write-set ops (compiled clause"
+      },
+      {
+        "path": "test/quod_create_root_tests.erl",
+        "line": 56,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\"),"
+      },
+      {
+        "path": "test/quod_create_root_tests.erl",
+        "line": 80,
+        "text": "%% the genesis content from quod_root.pl is committed + applied into the kb"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 357,
+        "text": "genesis_file => <<\"ontologies/quod_root.pl\">>,"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 526,
+        "text": "\"ontologies/quod_root.pl\"))],"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 2453,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\"),"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 2473,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\"),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1470,
+        "text": "Root = start_namespace(RootNs, config(Dir, RootNs, RootBase, \"quod_root.pl\", Catalogue)),"
+      },
+      {
+        "path": "test/quod_names_SUITE.erl",
+        "line": 500,
+        "text": "genesis_file => <<\"ontologies/quod_root.pl\">>,"
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 23,
+        "text": "policy_terms(\"quod_root.pl\") ++ [{root_administrator_agent, Node}]),"
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 107,
+        "text": "with_policy(\"quod_root.pl\", [{root_administrator_agent, Ref},"
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 134,
+        "text": "with_policy(\"quod_root.pl\", [{ontology_creator_agent, Ref}],"
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 151,
+        "text": "with_policy(\"quod_root.pl\", [], fun(Est) ->"
+      },
+      {
+        "path": "test/quod_node_context_tests.erl",
+        "line": 165,
+        "text": "with_policy(\"quod_root.pl\", [{peer_admitted, Key, peer, address, Key}],"
+      },
+      {
+        "path": "test/quod_ns_SUITE.erl",
+        "line": 29,
+        "text": "genesis_file => filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\"),"
+      },
+      {
+        "path": "test/quod_root_resource_lifecycle_tests.erl",
+        "line": 179,
+        "text": "#{namespace => ?ROOT, mode => create, genesis_file => <<\"ontologies/quod_root.pl\">>,"
+      },
+      {
+        "path": "test/quod_schema_tests.erl",
+        "line": 9,
+        "text": "\"genesis_file = \\\"ontologies/quod_root.pl\\\", seeds = [\\\"1.2.3.4:14567\\\"] }]\\n\">>."
+      },
+      {
+        "path": "test/quod_schema_tests.erl",
+        "line": 54,
+        "text": "?assertEqual(<<\"ontologies/quod_root.pl\">>, maps:get(genesis_file, B)),"
+      },
+      {
+        "path": "test/quod_simplex_SUITE.erl",
+        "line": 67,
+        "text": "File = filename:join(code:priv_dir(quod), \"ontologies/quod_root.pl\"),"
+      }
+    ],
+    "retained_obligations": "Creation/catalogue/source restrictions, resource policy; create_root/root_resource/lifecycle/system-source tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/quod_signup.pl",
+    "sha256": "6c415a1c1b3ae57009fcc99ec96f8bff804fa22f473ed3e4961b78f475c1a642",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1079,
+        "text": "{SignupNs, SignupAnchor} = found_lobby_source(<<\"signup\">>, \"quod_signup.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1448,
+        "text": "{<<\"quod:signup\">>, \"quod_signup.pl\", []}],"
+      }
+    ],
+    "retained_obligations": "Private key-bound receipts and founding policy; lifecycle_single_path/lobby negative source access; rebind old lobby recipe to U/A/S0",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/space.pl",
+    "sha256": "95bc3ab6a978ff3c165e3fc8dc1305022aa2fd7cf2eca20354fbbe978e656b86",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "signup:declared-reviewed-user-composition",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/personal_agent.pl",
+        "line": 1,
+        "text": "%% Composed with human_user_instance.pl, agent_instance.pl and space.pl. The human and"
+      },
+      {
+        "path": "priv/ontologies/quod_signup.pl",
+        "line": 136,
+        "text": "user_source_component(<<\"space.pl\">>)."
+      },
+      {
+        "path": "test/quod_effect_journal_tests.erl",
+        "line": 1098,
+        "text": "|| File <- [\"agent_instance.pl\", \"space.pl\", \"quod_physics.pl\"]],"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 30,
+        "text": "Files = [\"space.pl\",\"agent_instance.pl\",\"quod_physics.pl\",\"space_view.pl\",\"lobby_instance.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 252,
+        "text": "Terms = lists:append([source(F) || F <- [\"space.pl\",\"quod_physics.pl\",\"voxel_world.pl\","
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 692,
+        "text": "|| File <- [\"agent_instance.pl\", \"space.pl\", \"quod_physics.pl\"]] ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1341,
+        "text": "|| File <- [\"lobby_instance.pl\", \"space.pl\", \"agent_instance.pl\","
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1371,
+        "text": "{Ns, Anchor} = found_lobby_sources(<<\"human-user\">>, [\"human_user_instance.pl\",\"agent_instance.pl\",\"personal_agent.pl\",\"space.pl\",\"gui_hud.pl\"],"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 82,
+        "text": "Terms = quod_prolog:read_terms(filename:join(code:priv_dir(quod), \"ontologies/space.pl\")),"
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1538,
+        "text": "\"ontologies/\" ++ File)) || File <- [\"space.pl\",\"space_view.pl\"]]),"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 779,
+        "text": "(quod_prolog:read_terms(\"priv/ontologies/space.pl\") ++"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 2789,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/space.pl\") ++"
+      },
+      {
+        "path": "test/quod_space_creation_tests.erl",
+        "line": 153,
+        "text": "Sources = source(\"space.pl\") ++ source(\"space_view.pl\") ++ fixture() ++ Extra,"
+      },
+      {
+        "path": "test/quod_space_tests.erl",
+        "line": 140,
+        "text": "Source = quod_prolog:read_terms(\"priv/ontologies/space.pl\") ++"
+      },
+      {
+        "path": "test/quod_voxel_world_tests.erl",
+        "line": 184,
+        "text": "[\"space.pl\",\"quod_physics.pl\",\"voxel_world.pl\"] ++ ExtraSources]),"
+      }
+    ],
+    "retained_obligations": "Ordinary/physical placement, exact extent/owner construction and atomic permissions; space/space_creation/constructor tests",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/space_gui.pl",
+    "sha256": "5cd335338b11d1f560009676560a276ebb1c540b10185137e01cfe4d2179df5a",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_gui_browser_tests.erl",
+        "line": 103,
+        "text": "[Rule || Rule={':-',{gui_form,_,_,_},_} <- quod_prolog:read_terms(\"priv/ontologies/space_gui.pl\")],"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 31,
+        "text": "\"voxel_world.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\",\"gui_question.pl\","
+      },
+      {
+        "path": "test/quod_gui_stage1_tests.erl",
+        "line": 97,
+        "text": "Sources = lists:append([source(F) || F <- [\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\"]]) ++"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1343,
+        "text": "\"gui_instance.pl\", \"gui_operation.pl\", \"space_gui.pl\", \"gui_question.pl\", \"voxel_world_gui.pl\", \"lobby_worlds.pl\"]],"
+      }
+    ],
+    "retained_obligations": "Finite/infinite forms, exact storage/placement/results; gui_stage1/gui_operations/space_creation/browser fixture obligations",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/space_view.pl",
+    "sha256": "0027a04dfa67e89f64ae9fad43d8ac2e41b647c9314b3e997cf469bcfe8bf226",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/lobby_instance.pl",
+        "line": 129,
+        "text": "%% from its admitted binding in space_view.pl. The played capsule is hidden."
+      },
+      {
+        "path": "priv/ontologies/voxel_world_view.pl",
+        "line": 1,
+        "text": "%% Compose with voxel_world.pl and space_view.pl. The application supplies"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 30,
+        "text": "Files = [\"space.pl\",\"agent_instance.pl\",\"quod_physics.pl\",\"space_view.pl\",\"lobby_instance.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 253,
+        "text": "\"space_view.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"voxel_world_gui.pl\"]]) ++ Facts,"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1342,
+        "text": "\"quod_physics.pl\", \"space_view.pl\", \"voxel_world.pl\", \"voxel_world_view.pl\","
+      },
+      {
+        "path": "test/quod_lobby_tests.erl",
+        "line": 1538,
+        "text": "\"ontologies/\" ++ File)) || File <- [\"space.pl\",\"space_view.pl\"]]),"
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 5407,
+        "text": "Name <- [\"space_view.pl\",\"voxel_world_view.pl\"]]))."
+      },
+      {
+        "path": "test/quod_space_creation_tests.erl",
+        "line": 153,
+        "text": "Sources = source(\"space.pl\") ++ source(\"space_view.pl\") ++ fixture() ++ Extra,"
+      },
+      {
+        "path": "test/quod_space_tests.erl",
+        "line": 141,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/space_view.pl\") ++"
+      }
+    ],
+    "retained_obligations": "Direct subjects/default cube/body_pose refusal; space/rendering/physics. Extend contents recursion and wireframe without alternate scene path",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/voxel_world.pl",
+    "sha256": "669e383e2e794184c66872e1529500ad301cfef2d35fbf92f96a1a3e72ecaf13",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/voxel_world_gui.pl",
+        "line": 1,
+        "text": "%% Compose with voxel_world.pl and gui_instance.pl. The application supplies"
+      },
+      {
+        "path": "priv/ontologies/voxel_world_view.pl",
+        "line": 1,
+        "text": "%% Compose with voxel_world.pl and space_view.pl. The application supplies"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 31,
+        "text": "\"voxel_world.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\",\"gui_question.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 252,
+        "text": "Terms = lists:append([source(F) || F <- [\"space.pl\",\"quod_physics.pl\",\"voxel_world.pl\","
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1342,
+        "text": "\"quod_physics.pl\", \"space_view.pl\", \"voxel_world.pl\", \"voxel_world_view.pl\","
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 2760,
+        "text": "quod_prolog:read_terms(\"priv/ontologies/voxel_world.pl\") ++ Extra ++"
+      },
+      {
+        "path": "test/quod_voxel_world_tests.erl",
+        "line": 184,
+        "text": "[\"space.pl\",\"quod_physics.pl\",\"voxel_world.pl\"] ++ ExtraSources]),"
+      }
+    ],
+    "retained_obligations": "Terrain generation/overrides/lifecycle, explicit resource budgets and atomic edits; voxel_world/physics",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/voxel_world_gui.pl",
+    "sha256": "9e66b7089abe70078ea198da07e377bff77ed875c71e5121fe63ae8fd0f4035c",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 32,
+        "text": "\"voxel_world_gui.pl\",\"lobby_worlds.pl\"],"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 253,
+        "text": "\"space_view.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"voxel_world_gui.pl\"]]) ++ Facts,"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1343,
+        "text": "\"gui_instance.pl\", \"gui_operation.pl\", \"space_gui.pl\", \"gui_question.pl\", \"voxel_world_gui.pl\", \"lobby_worlds.pl\"]],"
+      },
+      {
+        "path": "test/quod_voxel_world_tests.erl",
+        "line": 6,
+        "text": "with_world([\"voxel_world_gui.pl\",\"lobby_worlds.pl\"],fun(Store0,Owner) ->"
+      },
+      {
+        "path": "test/quod_voxel_world_tests.erl",
+        "line": 42,
+        "text": "{timeout,60,fun() -> with_world([\"voxel_world_gui.pl\",\"lobby_worlds.pl\"],fun(Store,_) ->"
+      }
+    ],
+    "retained_obligations": "Existing voxel_generation form is reachable; gui_examples/voxel_world",
+    "absence_is_not_dead_code": true
+  },
+  {
+    "source": "priv/ontologies/voxel_world_view.pl",
+    "sha256": "02ba81af173e31059424d965825c1267c27f9b40990bae19c7b0168b4ab61f8f",
+    "loading_paths": [
+      "packaged:governed-authorized-source-file-selection",
+      "lobby:reviewed-composition-in-production-lifecycle-fixture"
+    ],
+    "explicit_callers": [
+      {
+        "path": "priv/ontologies/voxel_world_gui.pl",
+        "line": 138,
+        "text": "%% Compose voxel_world_view.pl to expose viewing distance through the same"
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 31,
+        "text": "\"voxel_world.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"gui_operation.pl\",\"space_gui.pl\",\"gui_question.pl\","
+      },
+      {
+        "path": "test/quod_gui_examples_tests.erl",
+        "line": 253,
+        "text": "\"space_view.pl\",\"voxel_world_view.pl\",\"gui_instance.pl\",\"voxel_world_gui.pl\"]]) ++ Facts,"
+      },
+      {
+        "path": "test/quod_lifecycle_single_path_tests.erl",
+        "line": 1342,
+        "text": "\"quod_physics.pl\", \"space_view.pl\", \"voxel_world.pl\", \"voxel_world_view.pl\","
+      },
+      {
+        "path": "test/quod_physics_tests.erl",
+        "line": 5407,
+        "text": "Name <- [\"space_view.pl\",\"voxel_world_view.pl\"]]))."
+      }
+    ],
+    "retained_obligations": "Terrain source refs/render allowances and updates; voxel_world/physics/rendering",
+    "absence_is_not_dead_code": true
+  }
+]

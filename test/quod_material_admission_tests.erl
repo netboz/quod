@@ -51,19 +51,46 @@ staged_policy_cannot_authorize_its_own_write_test() ->
     end).
 
 invalid_policy_updates_are_refused_before_sealing_test() ->
-    lists:foreach(fun(Fact) ->
+    lists:foreach(fun(Fact = {material_limit_override, Kind, _, _}) ->
         with_session([], fun(Session) ->
             first(Session, {assertz, Fact}),
-            ?assertEqual({error, {invalid_material_policy, plan}},
+            ?assertEqual({error, {invalid_material_policy, Kind}},
                          quod_proof_session:seal(Session, binding()))
         end)
     end, [{material_limit_override, plan, symbols, -1},
           {material_limit_override, plan, symbols, {'Any'}},
-          {material_limit_override, plan, unknown_resource, 12}]),
+          {material_limit_override, plan, unknown_resource, 12},
+          {material_limit_override, proof, heap_bytes, -1},
+          {material_limit_override, proof, heap_bytes, {'Any'}},
+          {material_limit_override, proof, unknown_resource, 12}]),
     with_session([{material_limit_override, plan, symbols, 100}], fun(Session) ->
         first(Session, {assertz, {material_limit_override, plan, symbols, 200}}),
         ?assertEqual({error, {invalid_material_policy, plan}},
                      quod_proof_session:seal(Session, binding()))
+    end).
+
+proof_budget_is_pinned_and_tracks_helper_changes_test() ->
+    Budget = 64 * 1024 * 1024,
+    Rule = {':-', {material_limit_override, proof, heap_bytes, {'Limit'}},
+                  {proof_allowance, {'Limit'}}},
+    with_session([Rule,{proof_allowance,Budget}], fun(Session) ->
+        ExpectedWords = Budget div erlang:system_info(wordsize),
+        ?assertMatch({max_heap_size,#{size := ExpectedWords}},
+                     process_info(self(),max_heap_size)),
+        first(Session,{',',{retract,{proof_allowance,Budget}},
+                          {assertz,{proof_allowance,unlimited}}}),
+        %% A staged increase cannot change the current worker's installed budget.
+        ?assertMatch({max_heap_size,#{size := ExpectedWords}},
+                     process_info(self(),max_heap_size)),
+        {ok,Plan} = quod_proof_session:seal(Session,binding()),
+        {ok,#{read_check := Reads}} = quod_dtx:material(Plan),
+        ?assert(maps:is_key({proof_allowance,1},Reads)),
+        Est = quod_proof_session:committed_state(Session),
+        {ok,Changed} = quod_diff:apply_ops(Est,
+            quod_ct:diff_for({proof_allowance,10000})),
+        Published = quod_ct:commit_kb(Changed,2,1),
+        ?assertEqual({conflict,{proof_allowance,1}},
+            quod_diff:validate(Reads,(Published#est.db)#db.ref))
     end).
 
 policy_replacement_uses_final_state_and_preserves_zero_allowance_test() ->
@@ -127,10 +154,13 @@ committed_policy_change_invalidates_the_sealed_plan_test() ->
 
 with_session(Facts, Fun) ->
     #est{db = #db{ref = Ref}} = Est = quod_ct:committed_kb(Facts),
+    {max_heap_size, PreviousHeap} = process_info(self(),max_heap_size),
     Session = quod_proof_session:start(Est,
         #{read_set => true, proof_context => {origin, test}, signer => none}),
     try Fun(Session)
-    after quod_proof_session:stop(Session), quod_erlog_db_mvcc:delete(Ref)
+    after
+        process_flag(max_heap_size,PreviousHeap),
+        quod_proof_session:stop(Session), quod_erlog_db_mvcc:delete(Ref)
     end.
 
 first(Session, Goal) ->

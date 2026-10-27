@@ -1346,8 +1346,7 @@ valid_participant_slots(Slots) ->
 
 valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       (Previous =:= none orelse Previous < Identity),
+  when (Previous =:= none orelse Previous < Identity),
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64 ->

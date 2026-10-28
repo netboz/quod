@@ -7,11 +7,13 @@ membership: an ontology owns code, committed facts, authorization and history.
 An ontology can be depicted or edited in 3D without acquiring space semantics.
 An instance can carry both roles only through explicit authored membership and policy.
 
-[space.pl](../priv/ontologies/space.pl) is composable domain source, like
-[fipa_request.pl](../priv/ontologies/fipa_request.pl). Compose it into the
-ontologies owning the affected facts through ordinary founding or authorized
-source editing. It is not an automatically founded system ontology. Existing
-histories, native capability manifests and deployment authority are unchanged.
+[quod_space.pl](../priv/ontologies/quod_space.pl) defines the shared space
+foundation and is composed into the ontologies owning individual spaces through
+ordinary founding or authorized source editing. Each selected storage owns its
+local class and instances; the shared foundation's exact pin and source hash
+certify the composition without becoming a remote constructor or class alias.
+The [ordered founding recipe](godot-foundation-contract.md#reproducible-founding-recipe)
+does not rewrite existing histories or grant deployment authority.
 
 ## Classes and dispatch
 
@@ -36,9 +38,8 @@ membership changes neither the entity reference, code, ACL nor history.
 space S0 for human U; S0 is the initial personal lobby, has no containing space,
 and initially contains A.]{decided by="yan.guiborat" email=yan.guiborat@gmail.com on=2026-10-27 over="a dedicated lobby subclass for this delivery"} [Y](https://console.nimbalyst.com/app/cite/ed9cd520-b2a4-4607-a8f5-ff99d08f3e46/prompt/80fe5d70d8db7a67f1cc071ad91cced3 "by=yan.guiborat email=yan.guiborat@gmail.com at=2026-10-27T14:04:14.517Z quote='some points before starting :%0A- I would like to clarify new users onbording. These should only prolog if possible:%0A%2A When a normal user is created atm we will create for it a simple empty space. It will be later the user lobby %28 we will create a dedicated subclass for it %29 but for now we will use a simple space class. So I guess when registering a new user, we should create a space and an agent…'")
 
-This is the target onboarding composition for the clean Godot/seven-foundation
-delivery, not a claim that the existing physical-lobby signup implements it.
-Use the existing `space` class and defaults, including its 100-metre box extent.
+The user-owned setup composition uses the existing `space` class and defaults,
+including its 100-metre box extent, after signup has allocated the exact account.
 A dedicated user-lobby subclass is later work. S0 is a space instance, not the
 root ontology, a shared lobby foundation or a new ontology per room.
 
@@ -105,8 +106,8 @@ mesh-only exterior or require entry before a contents-displaying exterior works.
 ## Empty creation
 
 U instructs the distinct personal agent A through the existing immediate signed
-route, selecting an **existing** ontology explicitly. Compose `space.pl` into
-that storage owner and A's ontology, and `space_view.pl` where space exteriors
+route, selecting an **existing** ontology explicitly. Compose `quod_space.pl` into
+that storage owner and A's ontology, and `quod_space.pl` where space exteriors
 or contents are projected. Finite dimensions use the storage owner's exact
 `measure_vocabulary(Namespace, Anchor)` reference to the measurement ontology.
 No automatic lobby storage selection or ontology founding occurs.
@@ -157,6 +158,8 @@ not following A. A denied, unavailable, ambiguous or incomplete location read
 fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
 Transform)`; missing pose does not prove absence. Physical-pilot entry and live
 body poses remain the separate physical/entry integration.
+Explicit `attribute(placement, unplaced)` skips that location lookup and requests
+no admission. It is distinct from treating a failed near-agent read as absence.
 
 Creation and placement use the existing assertion savepoint and `space_place/3`
 transaction. Refused explicit placement rolls back the instance and all admission
@@ -167,7 +170,7 @@ half-metre cube independently of finite or infinite interior extent, through the
 existing scene/model/rendering path. Contents remain empty. The landscape/terrain
 creation route is unchanged.
 
-Compose `space_gui.pl`, `gui_instance.pl` and `gui_operation.pl` in the storage
+Compose `quod_space.pl` and `gui_instance.pl` in the storage
 owner to offer **Create space** and **Create infinite space**. The existing
 `gui_vocabulary/2` must pin the component vocabulary. The forms initialize name
 and finite dimensions from class defaults; leaving those fields unchanged uses
@@ -181,6 +184,24 @@ The [shared operation panel](gui-implementation-plan.md#offered-class-and-instan
 displays these bindings and can open the returned subject's offered operations.
 Source composition in an already founded ontology requires its existing owner
 authority; installing client files does not rewrite ontology data.
+
+The shared form also offers **Create space with rational lengths**, with a
+positive integer numerator/divisor per axis and an explicit length unit. The
+ordinary finite form retains its integer defaults; both use the same Stage 1
+assertion and binder. Names may be empty binary values; leaving the supplied
+default unchanged keeps `Space`. Every form selects placement and an exterior
+recipe. Creation and form definition check the unique anchored
+`space_vocabulary/2` plus `space_source_digest/1` against the shared source's
+`space_template_hash/1`; missing, ambiguous or mismatched composition refuses.
+This certifies the original composition without aliasing the target's class.
+
+The account composition separately authorizes its personal A's new-space
+constructor to place a newly constructed space, and that A's admission into
+completed U-owned destinations for other source subjects. These are committed
+class and destination policies. They grant no later A entry/leave permission
+and no blanket invocation. Foreign storage independently authorizes the exact
+operation and source assignment callback. Its owner, U and destination remain
+distinct.
 
 ## Relations and owners
 
@@ -306,17 +327,21 @@ consequences retain their checks independently of default permission overrides.
 Exterior and interior describe viewing purposes, not fixed representation types: showing
 contents does not require entering the space, moving A or changing containment.
 
-The target exterior choices also include a **full-size wireframe** of a finite
+Exterior choices include a **full-size wireframe** of a finite
 space's box, centred on its local origin and transformed into the viewing
 frame. Its extents equal the exact interior dimensions: the default box spans
 −50 to +50 metres on X/Y/Z. It does not create collision walls or physics.
 Infinite dimensions have no finite wire box; report that choice unavailable,
 without inventing bounds or selecting a cube implicitly. Exact rational lengths
-must not be rounded. The shared scene vocabulary/adapters need the edge-only
-and exact-rational extent support recorded in the
+must not be rounded. The shared scene vocabulary supplies `wire_box` with exact
+positive reduced integer/rational millimetre dimensions, as specified in the
 [M0 exterior contract](godot-foundation-contract.md#space-exterior-and-recursive-exposure).
-This is M2 replacement acceptance, not a claim that the current solid recipe
-already implements wireframe rendering.
+Prolog converts the stored quantities; the engine converts only when rendering.
+Twelve edges create no collision surfaces or physical bodies. The stored
+`exterior` selects the actual recipe. Infinite forms offer the solid cube and
+explain wireframe unavailability; a direct infinite/wireframe request refuses.
+A selected contents recipe emits an explicit unavailable status, never a
+substitute mesh; recursive exposure and continuous physics remain M3 work.
 
 [When S0 contains S1 containing S2, and both S1 and S2 select contents exteriors,
 their contents are displayed recursively in S0, subject to physics, as if all
@@ -342,7 +367,7 @@ scene and applicable physical behavior, not only meshes or successive entry.
 Empty ordinary spaces still allocate no physics solely because they are spaces;
 the target does not waive existing admission, custody or transfer guarantees.
 
-The existing `space_view.pl` projects the union of placement and display
+The existing `quod_space.pl` projects the union of placement and display
 references, deduplicating each exact subject within that view. It asks the source
 owner for `entity_scene/3` and uses the existing Eidolon, `place_model/5`, local
 `transform/6` and anchored `depicts/3` contracts. Ordinary placement uses the
@@ -409,3 +434,18 @@ competing prepared proofs, rollback, replay and exact operation resolution.
 Physics resource selection is present during the no-allocation checks. The
 simulated integration is exercised through production owners in
 [quod_physics_tests.erl](../test/quod_physics_tests.erl).
+
+
+The `quod_space.pl` constructor declares optional `initial_occupants`. Its input
+is `part(initial_occupants,[attribute(entities,[entity_ref(Ns,Anchor,Id),...])])`.
+Every reference must be ground, exact and unique, and identify an existing
+unplaced entity in the same storage history as the new space. A cross-history
+occupant refuses with `initial_occupants_require_local_storage`: constructor
+authority belongs to the active assertion continuation in its actual owner.
+M1a places the existing A in its own account storage. Ordinary foreign storage
+creation remains supported; this part cannot import an occupant from another
+history. Construction places those entities through `space_place/3`
+before its assertion authorization ends. Source entry and destination admission
+still require committed policy; a part cannot grant itself permission. Failure
+rolls back the assertion and all placement participants. With no part, ordinary
+empty creation is unchanged. Loading or recovery never runs this constructor.

@@ -1,0 +1,96 @@
+{
+  "scope": "Read-only cost observations from retained campaign02; EUnit passed and CT had one failure. These observations are not new test qualification or a diagnosis of computation versus protocol wait.",
+  "eunit": {
+    "command_seconds": 1718.42516207695,
+    "reported_execution_seconds": 1630.781,
+    "compilation_and_other_seconds": 87.64416207695012,
+    "individual_timings_available": false
+  },
+  "ct": {
+    "command_seconds": 662.0329804420471,
+    "suite_log": "/tmp/quod-m1a-gates-02/source/_build/test/logs/ct_run.nonode@nohost.2026-10-28_00.17.47/lib.quod.logs/run.2026-10-28_00.17.47/suite.log",
+    "suite_log_sha256": "295667e98553d0ea13b4d4e8a8ab611b8bfa64acfb25bcf3fd4e55557ef5150a",
+    "elapsed_records": 175,
+    "sum_recorded_seconds": 525.921486,
+    "suite_init_end_seconds": 32.303745,
+    "by_suite_seconds": {
+      "quod_agent_failover_SUITE": 142.026305,
+      "quod_ask_SUITE": 94.006782,
+      "quod_quic_SUITE": 71.82012999999999,
+      "growth_SUITE": 59.43268299999999,
+      "simplex_SUITE": 59.165983000000004,
+      "quod_names_SUITE": 28.75632,
+      "join_SUITE": 19.442413000000002,
+      "quod_read_set_SUITE": 16.627385,
+      "feed_SUITE": 14.846323,
+      "quod_peer_observation_SUITE": 12.767949,
+      "quod_peer_capacity_SUITE": 3.1521020000000006,
+      "quod_ns_SUITE": 2.1423970000000003,
+      "quod_simplex_SUITE": 1.734708,
+      "ct_framework": 5.999999999999999e-06
+    },
+    "slowest_records": [
+      {
+        "case": "quod_agent_failover_SUITE:uncertain_claim_recovers_after_target_restart",
+        "seconds": 35.600951
+      },
+      {
+        "case": "quod_agent_failover_SUITE:uncertain_claim_recovers_after_quorum_loss",
+        "seconds": 35.298045
+      },
+      {
+        "case": "quod_quic_SUITE:inconclusive_loss_confirmation_is_reobserved",
+        "seconds": 32.02636
+      },
+      {
+        "case": "quod_ask_SUITE:node_enrollment_remote_custodian",
+        "seconds": 30.970587
+      },
+      {
+        "case": "quod_ask_SUITE:remote_signed_transaction_savepoints",
+        "seconds": 27.29063
+      },
+      {
+        "case": "quod_agent_failover_SUITE:validator_host_loss_recovers_state",
+        "seconds": 26.919003
+      },
+      {
+        "case": "quod_agent_failover_SUITE:abrupt_host_loss_recovers_state",
+        "seconds": 26.623249
+      },
+      {
+        "case": "simplex_SUITE:over_fault_restart_recovers",
+        "seconds": 20.333016
+      },
+      {
+        "case": "quod_agent_failover_SUITE:suspended_host_retires_stale_process",
+        "seconds": 17.585057
+      },
+      {
+        "case": "simplex_SUITE:membership_survives_leader_loss",
+        "seconds": 16.596426
+      },
+      {
+        "case": "quod_names_SUITE:remote_completion_of_deep_proof",
+        "seconds": 16.391713
+      },
+      {
+        "case": "growth_SUITE:grow_to_four",
+        "seconds": 13.112314
+      },
+      {
+        "case": "growth_SUITE:admit_refused_mid_catchup",
+        "seconds": 13.004429
+      },
+      {
+        "case": "quod_quic_SUITE:ontology_observer_shares_physical_failure",
+        "seconds": 10.835117
+      },
+      {
+        "case": "quod_read_set_SUITE:reconnect_missing_route",
+        "seconds": 10.390997
+      }
+    ]
+  },
+  "follow_up": "Capture per-case EUnit timing during a required future run, diagnose slow cases before changing them, and run affected CT fixtures before the final freeze. Do not change current gates, assertions, deadlines or clean-build requirements. Isolate process-global fixtures before considering safe parallel partitions."
+}

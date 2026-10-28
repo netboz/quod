@@ -1,0 +1,23 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=menu",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final12/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m2-artifacts/private/menu-export-probe04"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T09:38:31Z",
+  "elapsed_seconds": 2.8232674598693848,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/menu-export-probe04.log",
+  "raw_sha256": "03b31d8e0b87037d43305966ea350d40673c3f5e440cfa127425baef6a167777",
+  "sanitized_sha256": "03b31d8e0b87037d43305966ea350d40673c3f5e440cfa127425baef6a167777",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

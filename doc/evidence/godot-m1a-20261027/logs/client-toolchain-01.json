@@ -1,0 +1,13 @@
+{
+  "command": [
+    "node",
+    "-p",
+    "JSON.stringify({node:process.version,versions:process.versions,executable:process.execPath})"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T01:18:33Z",
+  "elapsed_seconds": 0.06483650207519531,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

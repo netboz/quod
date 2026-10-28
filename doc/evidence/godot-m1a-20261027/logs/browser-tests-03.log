@@ -1,0 +1,42 @@
+npm notice run quod-client@0.1.0 pretest
+npm notice run node tools/check-dependencies.mjs
+npm notice run quod-client@0.1.0 test
+npm notice run node --test test/*.test.js
+✔ test/accounts.test.js (174.45146ms)
+✔ test/agent-references.test.js (94.487538ms)
+✔ test/controlled-navigation.test.js (293.442883ms)
+✔ test/controller-input.test.js (106.646682ms)
+✔ test/controller-panel.test.js (113.140998ms)
+✔ test/controller-scene.test.js (396.981445ms)
+✔ test/controller-view.test.js (154.00383ms)
+✔ test/glb-profile.test.js (123.726567ms)
+✔ test/gui-pointer.test.js (369.279935ms)
+✔ test/gui-view.test.js (185.027895ms)
+✔ test/key-provider.test.js (1126.563413ms)
+✔ test/locomotion.test.js (68.772625ms)
+✔ test/marks.test.js (166.583065ms)
+✔ test/navigation.test.js (100.370632ms)
+✔ test/operation-controller.test.js (169.722584ms)
+✔ test/personal-agent.test.js (131.825835ms)
+✔ test/prolog-edit.test.js (117.22018ms)
+✔ test/prolog-highlight.test.js (85.792119ms)
+✔ test/prolog-term.test.js (117.426467ms)
+✔ test/question-controller.test.js (155.823296ms)
+✔ test/render-model.test.js (547.225232ms)
+✔ test/render-resources.test.js (436.051511ms)
+✔ test/scene.test.js (531.481136ms)
+✔ test/signed-client.test.js (157.54847ms)
+✔ test/simulation.test.js (535.935346ms)
+✔ test/space-library.test.js (133.769459ms)
+✔ test/terrain-delivery.test.js (480.891782ms)
+✔ test/voxel-profile.test.js (97.183633ms)
+✔ test/world-xr.test.js (590.010362ms)
+✔ test/world.test.js (172.474185ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1430.023404

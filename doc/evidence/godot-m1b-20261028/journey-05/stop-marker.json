@@ -1,0 +1,8 @@
+{
+  "reason": "demonstrated repeated stale navigation-vector refresh; qualification stopped as failed",
+  "signalled_test_children": [
+    362608
+  ],
+  "signal": "SIGTERM",
+  "time_utc": "2026-10-28T03:10:05Z"
+}

@@ -1,0 +1,46 @@
+[
+  {
+    "phase": "m2-fresh",
+    "command": [
+      "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-development-06/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m2-artifacts/private/journey-development-05/identity",
+      "--node",
+      "https://127.0.0.1:42189",
+      "--ca",
+      "/home/yan/.cache/quod-m2-artifacts/private/journey-development-05/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 26.136361739998392,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m2-final",
+    "command": [
+      "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-development-06/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m2-artifacts/private/journey-development-05/identity",
+      "--node",
+      "https://127.0.0.1:42189",
+      "--ca",
+      "/home/yan/.cache/quod-m2-artifacts/private/journey-development-05/proxy-ca.pem"
+    ],
+    "child_exit": 1,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 19.881679457001155,
+    "godot_error_diagnostics": false,
+    "passed": false
+  }
+]

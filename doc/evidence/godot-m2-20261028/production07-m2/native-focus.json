@@ -1,0 +1,16 @@
+[
+  {
+    "phase": "m2-fresh",
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.focus({window=\"pid:744937\"})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 744937,
+    "before_pid": 744937,
+    "after_pid": 744937
+  }
+]

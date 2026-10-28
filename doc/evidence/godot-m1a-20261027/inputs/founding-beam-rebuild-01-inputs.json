@@ -1,0 +1,7 @@
+{
+  "campaign": "gates-04",
+  "stage": "/tmp/quod-m1a-founding-beam-rebuild-01",
+  "source_manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1a-20261027/inputs/gates-04-source-manifest.json",
+  "compiled_inputs_copied": false,
+  "purpose": "EUnit-provider artifact reconstruction, not replacement qualification"
+}

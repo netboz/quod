@@ -2,15 +2,76 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([with_forms/1]).
 
+selected_exterior_uses_exact_shared_scene_test_() ->
+    {timeout,90,fun() -> with_forms(fun(C=#{namespace:=Ns}) ->
+        Subject=subject(Ns,class_ref,space), Room=subject(Ns,entity_ref,room),
+        Pose={transform,1000,2000,3000,15,35,75}, Placement={at,Room,Pose},
+        replace_placement_options(Ns,[{option,near_agent,<<"Near agent">>},
+            {option,unplaced,<<"Unplaced">>},{option,Placement,<<"Rotated room">>}]),
+        [Finite,Exact,Infinite]=views(Ns,Subject),
+        Defaults=fields(element(7,Finite),[{space_placement,Placement},{{space_exterior,finite},wireframe}]),
+        {Reply,Bytes}=submit(C,Ns,Finite,Defaults),{Ref,_}=created(C,Reply,Bytes,space),
+        holds(Ns,{attribute,element(4,Ref),dimensions,default_dimensions()}),
+        quod_space_creation_tests:with_models(C,fun() ->
+            Marks=scene(Ns,room), assert_wire(Marks,Ref,Pose,[100000,100000,100000]),
+            Values=fields(element(7,Exact),[{space_name,<<>>},{space_unit,<<"mm">>},
+                {{space_length,width},1},{{space_divisor,width},3},
+                {{space_length,height},1001},{{space_divisor,height},1},
+                {{space_length,depth},1001},{{space_divisor,depth},2},
+                {space_placement,Placement},{{space_exterior,exact},wireframe}]),
+            {Rational,RationalBytes}=submit(C,Ns,Exact,Values),
+            {RationalRef,_}=created(C,Rational,RationalBytes,space),
+            holds(Ns,{attribute,element(4,RationalRef),name,<<>>}),
+            assert_wire(scene(Ns,room),RationalRef,Pose,[{'/',1,3},1001,{'/',1001,2}]),
+            %% Explicit unplaced creation succeeds even though an ordinary
+            %% near-agent location read is unavailable, without admission.
+            {ok,_,_}=quod_prolog:execute(Ns,{retract,{personal_agent_query,{space_location,personal,{'_'}}}}),
+            [Current|_]=views(Ns,Subject),
+            {Unplaced,UnplacedBytes}=submit(C,Ns,Current,fields(element(7,Current),[{space_placement,unplaced}])),
+            {UnplacedRef,_}=created(C,Unplaced,UnplacedBytes,space),
+            holds(Ns,{space_location,element(4,UnplacedRef),unplaced})
+        end),
+        {operation_view,create_infinite,_,_,Tree,_,_,_,_,_}=Infinite,
+        ?assertEqual([{option,solid,<<"Small solid cube">>}],
+            tree_property(Tree,{space_exterior,infinite},options)),
+        Before=instances(Ns),
+        Goal={with_build_plan,[{attribute,dimensions,infinite},{attribute,exterior,wireframe},
+            {attribute,placement,unplaced}],{assert,{instance_of,space,{'Space'}}}},
+        {Instruction,_}=quod_personal_agent_tests:instruction(C,Goal),
+        quod_personal_agent_tests:await_runtime_ready(Ns),
+        ?assertMatch({ok,_,{normalized,{failed,_}}},quod_personal_agent_tests:instruct(C,submit,Instruction)),
+        ?assertEqual(Before,instances(Ns))
+    end) end}.
+
+fields(Values,Changes) ->
+    lists:foldl(fun({Id,Value},Acc)->lists:keyreplace(Id,2,Acc,{field,Id,Value}) end,Values,Changes).
+default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
+instances(Ns) ->
+    {ok,[#{'Rows':=Rows}],_}=quod_prolog:prove_ro(Ns,{findall,{'I'},{instance_of,space,{'I'}},{'Rows'}}),Rows.
+scene(Ns,Space) ->
+    {ok,[#{'Marks':=Marks}],_}=quod_prolog:prove_ro(Ns,{world_view,Space,playing,{'Marks'}}),Marks.
+assert_wire(Marks,{entity_ref,Ns,Anchor,Id},Pose,[W,H,D]) ->
+    [Root]=[M||M={mark,_,<<"group">>,[],Pose0,_,_,{depicts,N,A,I}}<-Marks,
+        {N,A,I,Pose0}=:={Ns,Anchor,Id,Pose}],
+    RootId=element(2,Root),
+    ?assertMatch([{mark,_,<<"wire_box">>,[{f,<<"width">>,W},{f,<<"height">>,H},{f,<<"depth">>,D}],
+        {relative,RootId,{transform,0,0,0,0,0,0}},_,_,_}],
+        [M||M={mark,_,_,_,{relative,Parent,_},_,_,_}<-Marks,Parent=:=RootId]).
+tree_property({component,Id,_,Properties,_},Id,Key) -> proplists:get_value(Key,[{K,V}||{property,K,V}<-Properties]);
+tree_property({component,_,_,_,Children},Id,Key) ->
+    case [V||Child<-Children,(V=tree_property(Child,Id,Key))=/=undefined] of
+        [Value]->Value; []->undefined end.
+
 authored_creation_recovery_test_() ->
     [{atom_to_list(Lane), {timeout,90,fun() -> with_forms(fun(C) ->
         Ns = case Lane of ordinary -> maps:get(namespace,C); atomic -> maps:get(storage,C) end,
         Subject = subject(Ns,class_ref,space),
         {ok,[#{'Classes':=Classes}],_} = quod_prolog:prove_ro(Ns,{gui_operation_classes,{'Classes'}}),
         ?assert(lists:member(space,Classes)), ?assert(lists:member(note,Classes)),
-        [Finite,Infinite] = views(Ns,Subject),
-        ?assertMatch({operation_view,create,_,_,_,_,_,_,[space,location],requires_input},Finite),
-        ?assertMatch({operation_view,create_infinite,_,_,_,_,_,_,[space,location],requires_input},Infinite),
+        [Finite,Exact,Infinite] = views(Ns,Subject),
+        ?assertMatch({operation_view,create_exact,_,_,_,_,_,_,[space,location,owner],requires_input},Exact),
+        ?assertMatch({operation_view,create,_,_,_,_,_,_,[space,location,owner],requires_input},Finite),
+        ?assertMatch({operation_view,create_infinite,_,_,_,_,_,_,[space,location,owner],requires_input},Infinite),
         Values = element(7,Finite),
         Destination = subject(maps:get(destination,C),entity_ref,room),
         Fields = case Lane of ordinary -> Values;
@@ -94,11 +155,11 @@ retained_operation_views_update_and_revoke_test_() ->
     end) end}.
 
 with_forms(Fun) ->
-    Sources = lists:append([source(F) || F <- ["gui_instance.pl","gui_operation.pl","space_gui.pl"]]) ++
+    Sources = lists:append([source(F) || F <- ["gui_instance.pl", "quod_space.pl"]]) ++
         quod_prolog:read_terms("test/fixtures/note-operations.pl"),
     quod_space_creation_tests:with_spaces(fun(C=#{identity:=Node,directory:=Dir}) ->
         Gui = <<"quod:gui">>,
-        Sup = quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],source("quod_gui.pl")),
+        Sup = quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],quod_ct:gui_terms()),
         try
             [edit(Ns,{assertz,{gui_vocabulary,Gui,quod_simplex:genesis_hash(Gui)}})
                 || Ns <- [maps:get(namespace,C),maps:get(storage,C),maps:get(destination,C)]],
@@ -109,7 +170,14 @@ with_forms(Fun) ->
 replace_placement_options(Ns,Options) ->
     edit(Ns,{retract,{':-',{attribute,space_placement,options,{'_'}},{'_'}}}),
     edit(Ns,{assertz,{attribute,space_placement,options,Options}}).
-source(File) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File)).
+source(File) ->
+    case File of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File))
+    end.
 subject(Ns,Kind,Id) -> {Kind,Ns,quod_simplex:genesis_hash(Ns),Id}.
 views(Ns,Subject) ->
     case quod_prolog:prove_ro(Ns,{gui_operations,Subject,{'Views'}}) of

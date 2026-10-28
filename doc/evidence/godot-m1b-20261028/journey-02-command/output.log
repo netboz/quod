@@ -1,0 +1,12 @@
+fresh: Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+fresh: 
+fresh: System.Exception: real challenge and authenticated network
+fresh:    at ExportChecks.Check(Boolean yes, String name) in /home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs:line 20
+fresh:    at ExportChecks.Begin(Main application) in /home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs:line 47
+fresh: PASS enabled action create-key
+fresh: PASS offline durable identity created
+fresh: PASS enabled action connect
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 166, in <module>
+    raise RuntimeError('Export qualification phase failed: ' + phase)
+RuntimeError: Export qualification phase failed: fresh

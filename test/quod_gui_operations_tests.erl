@@ -7,9 +7,9 @@ prebound_creation_output_is_refused_test_() ->
         {operation_view,create,Subject,Revision,_,_,Values,create,_,_} = create_view(C,Ns),
         denied(C,Ns,conj([
             {gui_operation_bind,Subject,create,Revision,create,Values,{'Goal'},{'Results'}},
-            {'=',{'Results'},[{result,space,ref(Ns,space_name)}]},
+            {'=',{'Results'},[{result,space,ref(Ns,example_name)}]},
             {call,{'Goal'}}])),
-        fails(Ns,{instance_of,space,space_name})
+        fails(Ns,{instance_of,space,example_name})
     end) end}.
 
 execution_preserves_authored_output_aliases_test_() ->
@@ -18,7 +18,7 @@ execution_preserves_authored_output_aliases_test_() ->
         Original = hd([Clause || Clause = {':-',{gui_form,space_create,_,_},_} <-
             quod_prolog:read_terms("test/fixtures/gui-operations.pl")]),
         edit(Ns,{retract,Original}),
-        Fields = [{field,space_name,{'Name'}},{field,space_extent,{'Extent'}}],
+        Fields = [{field,example_name,{'Name'}},{field,space_extent,{'Extent'}}],
         Inputs = [{attribute,name,{'Name'}},{attribute,dimensions,{'Extent'}}],
         Create = fun(Id) -> {with_build_plan,Inputs,{assert,{instance_of,space,Id}}} end,
         Distinct = {gui_form,space_create,Fields,{submit,create,
@@ -70,7 +70,7 @@ offered_creation_and_instance_operation_test_() ->
         View = create_view(C, Ns),
         {operation_view, create, Subject, Revision, Tree, _, Values, create, [space], requires_input} = View,
         ?assertMatch({component, space_create, form, _, _}, Tree),
-        ?assertEqual([{field,space_name,<<"Space">>},
+        ?assertEqual([{field,example_name,<<"Space">>},
                       {field,space_extent,default_dimensions()}], Values),
         %% An unplaced class has a create offer without an existing instance.
         edit(Ns, {retract,{instance_of,space,room}}),
@@ -82,7 +82,7 @@ offered_creation_and_instance_operation_test_() ->
                 {ok,[_],_} = quod_prolog:prove_ro(Ns,{gui_operations,Subject,{'Views'}})
              end || _ <- [first,repeat]]
         end),
-        Values2 = lists:keyreplace(space_name,2,Values,{field,space_name,<<"Offered">>}),
+        Values2 = lists:keyreplace(example_name,2,Values,{field,example_name,<<"Offered">>}),
         %% One submitted ordinary goal binds a named output through the real
         %% assertion hook, constructor, U->A instruction and outcome owners.
         Bound = {gui_operation_bind,Subject,create,Revision,create,Values2,{'Goal'},{'Results'}},
@@ -131,8 +131,8 @@ binding_refuses_invalid_or_changed_contract_test_() ->
             setelement(3,Subject,<<0:256>>),ref(Ns,room),class_ref(<<"wrong">>,space)]],
         [denied(C,Ns,Bind(Subject,R,V)) || V <- [tl(Values),Values++[hd(Values)],
             Values++[{field,space,chosen_id}], Values++[{field,continuation,{assertz,injected}}],
-            lists:keyreplace(space_name,2,Values,{field,space_name,<<"Forbidden">>}),
-            lists:keyreplace(space_name,2,Values,{field,space_name,42}),
+            lists:keyreplace(example_name,2,Values,{field,example_name,<<"Forbidden">>}),
+            lists:keyreplace(example_name,2,Values,{field,example_name,42}),
             lists:keyreplace(space_extent,2,Values,{field,space_extent,bad_extent})]],
         denied(C,Ns,{gui_operation_bind,Subject,create,R,create,Values,{assertz,injected},{'R'}}),
         denied(C,Ns,{gui_operation_bind,Subject,create,R,create,Values,{'G'},[{result,space,chosen_id}]}),
@@ -194,7 +194,7 @@ malformed_outputs_and_ambiguous_offers_are_refused_test_() ->
             quod_prolog:read_terms("test/fixtures/gui-operations.pl")]),
         edit(Ns,{retract,Original}),
         Name = {'Name'}, Extent = {'Extent'}, Output = {'Output'},
-        Fields = [{field,space_name,Name},{field,space_extent,Extent}],
+        Fields = [{field,example_name,Name},{field,space_extent,Extent}],
         Inputs = [{attribute,name,Name},{attribute,dimensions,Extent}],
         Goal = {with_build_plan,Inputs,{assert,{instance_of,space,Output}}},
         Valid = [{result,space,Output}],
@@ -234,17 +234,25 @@ discovery_is_read_only_even_in_execute_test_() ->
     end) end}.
 
 with_operations(Fun) ->
-    Sources = source("gui_instance.pl") ++ source("gui_operation.pl") ++
+    Sources = source("gui_instance.pl") ++
               quod_prolog:read_terms("test/fixtures/gui-operations.pl"),
+    %% This fixture authors its own offers/forms over the shared constructor.
+    %% Production space-form coverage uses the unfiltered source in stage1.
+    SpaceSource = [T || T <- source("quod_space.pl"), not production_space_offer(T)],
     quod_space_creation_tests:with_spaces(fun(C = #{identity := Node,directory := Dir}) ->
         Gui = <<"quod:gui">>,
-        Sup = quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],source("quod_gui.pl")),
+        Sup = quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],quod_ct:gui_terms()),
         try
             [edit(Ns,{assertz,{gui_vocabulary,Gui,quod_simplex:genesis_hash(Gui)}})
              || Ns <- [maps:get(namespace,C),maps:get(storage,C),maps:get(destination,C)]],
             Fun(C)
         after quod_agent_hosting_tests:stop_ontology(Sup) end
-    end,Sources).
+    end,Sources,SpaceSource).
+
+production_space_offer({':-',{class_eidolon,space,{operation,class},_,_},_}) -> true;
+production_space_offer({':-',{eidolon,Name,_,_},_}) ->
+    lists:member(Name,[space_create,space_create_exact,space_create_infinite]);
+production_space_offer(_) -> false.
 
 create_view(C,Ns) -> [View] = views(C,Ns,class_ref(Ns,space)), View.
 views(C,Ns,Subject) ->
@@ -269,7 +277,14 @@ wait_complete({ok,Evidence,{normalized,{committed,_,_}}}) ->
 edit(Ns,Goal) -> ?assertMatch({ok,_,_},quod_prolog:execute(Ns,Goal)).
 holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
 fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
-source(File) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File)).
+source(File) ->
+    case File of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File))
+    end.
 ref(Ns,Id) -> {entity_ref,Ns,quod_simplex:genesis_hash(Ns),Id}.
 class_ref(Ns,Class) -> {class_ref,Ns,quod_simplex:genesis_hash(Ns),Class}.
 scoped(Ns,Goal) -> {'::',Ns,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},Goal}}.

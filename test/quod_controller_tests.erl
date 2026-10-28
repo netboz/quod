@@ -96,7 +96,7 @@ private_preferences_refuse_another_human_and_direct_human_save_test_() ->
         ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(Direct,DirectSig)),
         {Key,_}=Pair=quod_identity:generate(),OtherNs = <<"controller-other-human">>,
         Sup=quod_agent_hosting_tests:start_ontology(OtherNs,Dir,Node,[],
-            source("human_user_instance.pl")++[{instance_of,human_user,me},{agent_key,me,Key,active}]),
+            source("user_instance.pl")++[{instance_of,human_user,me},{agent_key,me,Key,active}]),
         Other=C#{human=>{agent_instance_ref,OtherNs,quod_simplex:genesis_hash(OtherNs),me},human_pair=>Pair},
         try
             ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},
@@ -108,20 +108,27 @@ private_preferences_refuse_another_human_and_direct_human_save_test_() ->
     end) end}.
 
 with_controller(Fun) ->
-    Sources = lists:append([source(F) || F <- ["gui_instance.pl","gui_operation.pl","controller_preferences.pl"]]),
+    Sources = lists:append([source(F) || F <- ["gui_instance.pl"]]),
     quod_personal_agent_tests:with_personal(fun(C=#{namespace:=Ns,directory:=Dir,identity:=Node}) ->
         {ok,Foreign}=quod_foreign_log:start_link(#{cache_dir=>filename:join(Dir,"foreign")}),
         Gui = <<"quod:gui">>,
-        Sup=quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],source("quod_gui.pl")),
-        Shared = <<"quod:lobby">>,
-        CSup=quod_agent_hosting_tests:start_ontology(Shared,Dir,Node,[],source("quod_lobby.pl")),
+        Sup=quod_agent_hosting_tests:start_ontology(Gui,Dir,Node,[],quod_ct:gui_terms()),
+        Shared = <<"quod:controllers">>,
+        CSup=quod_agent_hosting_tests:start_ontology(Shared,Dir,Node,[],source("quod_controllers.pl")),
         try
             ?assertMatch({ok,_,_},quod_prolog:execute(Ns,{assertz,{gui_vocabulary,Gui,quod_simplex:genesis_hash(Gui)}})),
-            ?assertMatch({ok,_,_},quod_prolog:execute(Ns,{assertz,{lobby_vocabulary,Shared,quod_simplex:genesis_hash(Shared)}})),
+            ?assertMatch({ok,_,_},quod_prolog:execute(Ns,{assertz,{controllers_vocabulary,Shared,quod_simplex:genesis_hash(Shared)}})),
             Fun(C#{controllers=>Shared})
         after quod_agent_hosting_tests:stop_ontology(CSup),quod_agent_hosting_tests:stop_ontology(Sup),gen_server:stop(Foreign) end
     end,Sources).
-source(F) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++F)).
+source(F) ->
+    case F of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++F))
+    end.
 read(Ns,Goal) -> {ok,[#{'V':=V}],_}=quod_prolog:prove_ro(Ns,Goal),V.
 submit_read(C,G) ->
     {Bytes,Signature}=quod_personal_agent_tests:request(C,read,G),

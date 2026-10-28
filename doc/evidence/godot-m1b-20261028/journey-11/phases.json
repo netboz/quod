@@ -1,0 +1,68 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/tmp/quod-m1b-export-16/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-journey-11-private/identity",
+      "--node",
+      "https://127.0.0.1:44643",
+      "--ca",
+      "/tmp/quod-m1b-journey-11-private/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 29.868971157000487,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "reset",
+    "command": [
+      "/tmp/quod-m1b-export-16/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-journey-11-private/identity",
+      "--node",
+      "https://127.0.0.1:44643",
+      "--ca",
+      "/tmp/quod-m1b-journey-11-private/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 20.091809131001355,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "final",
+    "command": [
+      "/tmp/quod-m1b-export-16/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-journey-11-private/identity",
+      "--node",
+      "https://127.0.0.1:44643",
+      "--ca",
+      "/tmp/quod-m1b-journey-11-private/proxy-ca.pem"
+    ],
+    "child_exit": 1,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 31.43413302099725,
+    "godot_error_diagnostics": false,
+    "passed": false
+  }
+]

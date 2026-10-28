@@ -1,0 +1,6047 @@
+{
+  "baseline": "/tmp/quod-godot-m1a-handoff-922c7c06-20261028-01",
+  "preserved_unchanged": {
+    "m0": 688,
+    "m1a": 390,
+    "archived": 18
+  },
+  "groups": {
+    "specs-and-docs": {
+      "files": 341,
+      "added": 24,
+      "removed": 2,
+      "delta": 22
+    },
+    "tests": {
+      "files": 15,
+      "added": 1072,
+      "removed": 0,
+      "delta": 1072
+    },
+    "build-tools": {
+      "files": 1,
+      "added": 71,
+      "removed": 0,
+      "delta": 71
+    },
+    "production": {
+      "files": 41,
+      "added": 2015,
+      "removed": 1,
+      "delta": 2014
+    },
+    "generated-editor-metadata": {
+      "files": 12,
+      "added": 12,
+      "removed": 0,
+      "delta": 12
+    },
+    "m1b-evidence": {
+      "files": 337,
+      "added": 173289,
+      "removed": 0,
+      "delta": 173289
+    },
+    "coordination-and-generated": {
+      "files": 2,
+      "added": 164,
+      "removed": 0,
+      "delta": 164
+    }
+  },
+  "changes": [
+    {
+      "path": "README.md",
+      "group": "specs-and-docs",
+      "change": "modified",
+      "added": 5,
+      "removed": 0,
+      "delta": 5
+    },
+    {
+      "path": "client/godot-tests/.gitignore",
+      "group": "tests",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "client/godot-tests/Program.cs",
+      "group": "tests",
+      "change": "added",
+      "added": 117,
+      "removed": 0,
+      "delta": 117
+    },
+    {
+      "path": "client/godot-tests/Quod.Client.Tests.csproj",
+      "group": "tests",
+      "change": "added",
+      "added": 14,
+      "removed": 0,
+      "delta": 14
+    },
+    {
+      "path": "client/godot-tests/backup-interop.mjs",
+      "group": "tests",
+      "change": "added",
+      "added": 8,
+      "removed": 0,
+      "delta": 8
+    },
+    {
+      "path": "client/godot-tests/global.json",
+      "group": "tests",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot-tests/journey.py",
+      "group": "tests",
+      "change": "added",
+      "added": 231,
+      "removed": 0,
+      "delta": 231
+    },
+    {
+      "path": "client/godot-tests/local.py",
+      "group": "tests",
+      "change": "added",
+      "added": 72,
+      "removed": 0,
+      "delta": 72
+    },
+    {
+      "path": "client/godot-tests/packages.lock.json",
+      "group": "tests",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "client/godot-tests/tls.py",
+      "group": "tests",
+      "change": "added",
+      "added": 61,
+      "removed": 0,
+      "delta": 61
+    },
+    {
+      "path": "client/godot-tools/run.py",
+      "group": "build-tools",
+      "change": "added",
+      "added": 71,
+      "removed": 0,
+      "delta": 71
+    },
+    {
+      "path": "client/godot/.gitignore",
+      "group": "production",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "client/godot/Core/Accounts.cs",
+      "group": "production",
+      "change": "added",
+      "added": 114,
+      "removed": 0,
+      "delta": 114
+    },
+    {
+      "path": "client/godot/Core/Accounts.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/Forms.cs",
+      "group": "production",
+      "change": "added",
+      "added": 155,
+      "removed": 0,
+      "delta": 155
+    },
+    {
+      "path": "client/godot/Core/Forms.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/Identity.cs",
+      "group": "production",
+      "change": "added",
+      "added": 117,
+      "removed": 0,
+      "delta": 117
+    },
+    {
+      "path": "client/godot/Core/Identity.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/LocalStore.cs",
+      "group": "production",
+      "change": "added",
+      "added": 125,
+      "removed": 0,
+      "delta": 125
+    },
+    {
+      "path": "client/godot/Core/LocalStore.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/SignedView.cs",
+      "group": "production",
+      "change": "added",
+      "added": 113,
+      "removed": 0,
+      "delta": 113
+    },
+    {
+      "path": "client/godot/Core/SignedView.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/Term.cs",
+      "group": "production",
+      "change": "added",
+      "added": 115,
+      "removed": 0,
+      "delta": 115
+    },
+    {
+      "path": "client/godot/Core/Term.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/Transport.cs",
+      "group": "production",
+      "change": "added",
+      "added": 208,
+      "removed": 0,
+      "delta": 208
+    },
+    {
+      "path": "client/godot/Core/Transport.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/FormPanel.cs",
+      "group": "production",
+      "change": "added",
+      "added": 171,
+      "removed": 0,
+      "delta": 171
+    },
+    {
+      "path": "client/godot/FormPanel.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Main.cs",
+      "group": "production",
+      "change": "added",
+      "added": 327,
+      "removed": 0,
+      "delta": 327
+    },
+    {
+      "path": "client/godot/Main.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/OperationsPanel.cs",
+      "group": "production",
+      "change": "added",
+      "added": 121,
+      "removed": 0,
+      "delta": 121
+    },
+    {
+      "path": "client/godot/OperationsPanel.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/QuestionHub.cs",
+      "group": "production",
+      "change": "added",
+      "added": 159,
+      "removed": 0,
+      "delta": 159
+    },
+    {
+      "path": "client/godot/QuestionHub.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Quod.csproj",
+      "group": "production",
+      "change": "added",
+      "added": 17,
+      "removed": 0,
+      "delta": 17
+    },
+    {
+      "path": "client/godot/Quod.sln",
+      "group": "production",
+      "change": "added",
+      "added": 34,
+      "removed": 0,
+      "delta": 34
+    },
+    {
+      "path": "client/godot/README.md",
+      "group": "production",
+      "change": "added",
+      "added": 46,
+      "removed": 0,
+      "delta": 46
+    },
+    {
+      "path": "client/godot/SourcePanel.cs",
+      "group": "production",
+      "change": "added",
+      "added": 80,
+      "removed": 0,
+      "delta": 80
+    },
+    {
+      "path": "client/godot/SourcePanel.cs.uid",
+      "group": "generated-editor-metadata",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/export_presets.cfg",
+      "group": "production",
+      "change": "added",
+      "added": 14,
+      "removed": 0,
+      "delta": 14
+    },
+    {
+      "path": "client/godot/global.json",
+      "group": "production",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/main.tscn",
+      "group": "production",
+      "change": "added",
+      "added": 10,
+      "removed": 0,
+      "delta": 10
+    },
+    {
+      "path": "client/godot/packages.Debug.linux-x64.lock.json",
+      "group": "production",
+      "change": "added",
+      "added": 35,
+      "removed": 0,
+      "delta": 35
+    },
+    {
+      "path": "client/godot/packages.ExportRelease.linux-x64.lock.json",
+      "group": "production",
+      "change": "added",
+      "added": 26,
+      "removed": 0,
+      "delta": 26
+    },
+    {
+      "path": "client/godot/project.godot",
+      "group": "production",
+      "change": "added",
+      "added": 12,
+      "removed": 0,
+      "delta": 12
+    },
+    {
+      "path": "client/godot/tests/ExportChecks.cs",
+      "group": "tests",
+      "change": "added",
+      "added": 220,
+      "removed": 0,
+      "delta": 220
+    },
+    {
+      "path": "client/godot/tests/ExportChecks.cs.uid",
+      "group": "tests",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/tests/ExportLifecycle.cs",
+      "group": "tests",
+      "change": "added",
+      "added": 280,
+      "removed": 0,
+      "delta": 280
+    },
+    {
+      "path": "client/godot/tests/ExportLifecycle.cs.uid",
+      "group": "tests",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "client/native/README.md",
+      "group": "specs-and-docs",
+      "change": "modified",
+      "added": 5,
+      "removed": 0,
+      "delta": 5
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/README.md",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/backup-cancel-01-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 12,
+      "removed": 0,
+      "delta": 12
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/backup-cancel-01-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/backup-cancel-01/backup-cancel.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 12,
+      "removed": 0,
+      "delta": 12
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/backup-cancel-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 22,
+      "removed": 0,
+      "delta": 22
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/backup-interop-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/backup-interop-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-04/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-04/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-05/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-05/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-06/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-06/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-07/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-07/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-10/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-10/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-11/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-11/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-12/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-12/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-13/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-13/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-14/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 9,
+      "removed": 0,
+      "delta": 9
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-14/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-15/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-15/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-16/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-16/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-17/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-17/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-18/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-18/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-19/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-19/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-20/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-20/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-21/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-21/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-22/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-22/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-23/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-23/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-24/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/build-24/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-bootstrap/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-bootstrap/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 10,
+      "removed": 0,
+      "delta": 10
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-core-restore/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-core-restore/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13,
+      "removed": 0,
+      "delta": 13
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-core/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 144,
+      "removed": 0,
+      "delta": 144
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-core/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-export/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 66,
+      "removed": 0,
+      "delta": 66
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-export/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 10,
+      "removed": 0,
+      "delta": 10
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-restore-debug/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-restore-debug/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-restore-exportrelease/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-restore-exportrelease/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-toolchain/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 43,
+      "removed": 0,
+      "delta": 43
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/client-final-02-toolchain/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 9,
+      "removed": 0,
+      "delta": 9
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/close-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 35,
+      "removed": 0,
+      "delta": 35
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/close-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 158,
+      "removed": 0,
+      "delta": 158
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 16,
+      "removed": 0,
+      "delta": 16
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-02/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 139,
+      "removed": 0,
+      "delta": 139
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-02/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 17,
+      "removed": 0,
+      "delta": 17
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-03/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 143,
+      "removed": 0,
+      "delta": 143
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-03/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 17,
+      "removed": 0,
+      "delta": 17
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-04/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 6,
+      "removed": 0,
+      "delta": 6
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-04/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 17,
+      "removed": 0,
+      "delta": 17
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-05/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 144,
+      "removed": 0,
+      "delta": 144
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/core-05/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 17,
+      "removed": 0,
+      "delta": 17
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crash-01-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 14,
+      "removed": 0,
+      "delta": 14
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crash-01-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 19,
+      "removed": 0,
+      "delta": 19
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crash-01/crash-after-rename.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crash-01/crash-before-rename.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crash-01/crash-recover-after-rename.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crash-01/crash-recover-before-rename.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crash-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 90,
+      "removed": 0,
+      "delta": 90
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-01-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 212,
+      "removed": 0,
+      "delta": 212
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-01-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 17,
+      "removed": 0,
+      "delta": 17
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-01/crypto.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 204,
+      "removed": 0,
+      "delta": 204
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 20,
+      "removed": 0,
+      "delta": 20
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-02-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 31,
+      "removed": 0,
+      "delta": 31
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-02-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-02/crypto-result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-02/crypto.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 31,
+      "removed": 0,
+      "delta": 31
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-02/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 21,
+      "removed": 0,
+      "delta": 21
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-03-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-03-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-03/crypto-result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-03/crypto.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/crypto-03/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 22,
+      "removed": 0,
+      "delta": 22
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/development-notes.md",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 30,
+      "removed": 0,
+      "delta": 30
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 35,
+      "removed": 0,
+      "delta": 35
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-02/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 41,
+      "removed": 0,
+      "delta": 41
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-02/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-03/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 44,
+      "removed": 0,
+      "delta": 44
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-03/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-04/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 44,
+      "removed": 0,
+      "delta": 44
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-04/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-05/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-05/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-06/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 44,
+      "removed": 0,
+      "delta": 44
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-06/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-07/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 45,
+      "removed": 0,
+      "delta": 45
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-07/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-08/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 62,
+      "removed": 0,
+      "delta": 62
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-08/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-09/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 44,
+      "removed": 0,
+      "delta": 44
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-09/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-10/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 46,
+      "removed": 0,
+      "delta": 46
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-10/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-11/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 71,
+      "removed": 0,
+      "delta": 71
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-11/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-12/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 45,
+      "removed": 0,
+      "delta": 45
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-12/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-13/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 60,
+      "removed": 0,
+      "delta": 60
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-13/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-14/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 40,
+      "removed": 0,
+      "delta": 40
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-14/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-15/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 47,
+      "removed": 0,
+      "delta": 47
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-15/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-16/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 46,
+      "removed": 0,
+      "delta": 46
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-16/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-17/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 47,
+      "removed": 0,
+      "delta": 47
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-17/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-18/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 45,
+      "removed": 0,
+      "delta": 45
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-18/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-19/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 48,
+      "removed": 0,
+      "delta": 48
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-19/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-20/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 49,
+      "removed": 0,
+      "delta": 49
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-20/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-21/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 46,
+      "removed": 0,
+      "delta": 46
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-21/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-22/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 40,
+      "removed": 0,
+      "delta": 40
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/export-22/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 18,
+      "removed": 0,
+      "delta": 18
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/freeze-client.py",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 101,
+      "removed": 0,
+      "delta": 101
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/gate-campaign.py",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 138,
+      "removed": 0,
+      "delta": 138
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/gates-01-founding.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/gates-01-founding.json.ca.pem",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 11,
+      "removed": 0,
+      "delta": 11
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/gates-01-founding.json.https.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 49,
+      "removed": 0,
+      "delta": 49
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/gates-01-founding.json.trust.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/gates-01-result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 256,
+      "removed": 0,
+      "delta": 256
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/godot_m1b_fixture.erl",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 110,
+      "removed": 0,
+      "delta": 110
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 30,
+      "removed": 0,
+      "delta": 30
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 25,
+      "removed": 0,
+      "delta": 25
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-02/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-02/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 22,
+      "removed": 0,
+      "delta": 22
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-02/stop-marker.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 6,
+      "removed": 0,
+      "delta": 6
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-03/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 38,
+      "removed": 0,
+      "delta": 38
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-03/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 22,
+      "removed": 0,
+      "delta": 22
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-04/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/input-04/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/client-final-01-stop.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 11,
+      "removed": 0,
+      "delta": 11
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/client-final-02-manifest.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 998,
+      "removed": 0,
+      "delta": 998
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/fixture-01.erl",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 75,
+      "removed": 0,
+      "delta": 75
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/fixture-02.erl",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 95,
+      "removed": 0,
+      "delta": 95
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/fixture-04.erl",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 107,
+      "removed": 0,
+      "delta": 107
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/fixture-05.erl",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 108,
+      "removed": 0,
+      "delta": 108
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/fixture-final-02.erl",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 108,
+      "removed": 0,
+      "delta": 108
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-compiled-manifest.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 13197,
+      "removed": 0,
+      "delta": 13197
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-ct-objects.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 522,
+      "removed": 0,
+      "delta": 522
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-dependency-sources.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4365,
+      "removed": 0,
+      "delta": 4365
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-dialyzer-objects.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 522,
+      "removed": 0,
+      "delta": 522
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-eunit-objects.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 522,
+      "removed": 0,
+      "delta": 522
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-gate-campaign.py",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 138,
+      "removed": 0,
+      "delta": 138
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-generated-parser-sources.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 123,
+      "removed": 0,
+      "delta": 123
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-native-objects.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-release-objects.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 522,
+      "removed": 0,
+      "delta": 522
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-source-manifest.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2541,
+      "removed": 0,
+      "delta": 2541
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/gates-01-xref-objects.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 522,
+      "removed": 0,
+      "delta": 522
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/godot-artifacts.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 14,
+      "removed": 0,
+      "delta": 14
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/input-01-profile-source.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 6,
+      "removed": 0,
+      "delta": 6
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/input-02-profile-source.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 5,
+      "removed": 0,
+      "delta": 5
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/preedit-verification.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 11,
+      "removed": 0,
+      "delta": 11
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/server-03.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 38,
+      "removed": 0,
+      "delta": 38
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/server-04.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 36,
+      "removed": 0,
+      "delta": 36
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/server-05.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 36,
+      "removed": 0,
+      "delta": 36
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/server-final-01.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 40,
+      "removed": 0,
+      "delta": 40
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/server-final-02.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 49,
+      "removed": 0,
+      "delta": 49
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/server-final-03.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 47,
+      "removed": 0,
+      "delta": 47
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/server-reuse.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/session.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 8,
+      "removed": 0,
+      "delta": 8
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-link62.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-progress-01-body-retry-result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-progress-01-body-retry.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-progress-01-result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-progress-01.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 6,
+      "removed": 0,
+      "delta": 6
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-quo60.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-quo61.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-quo62.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/inputs/tracker-radar62.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-01-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 10,
+      "removed": 0,
+      "delta": 10
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-01-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 21,
+      "removed": 0,
+      "delta": 21
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-01/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-01/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 6,
+      "removed": 0,
+      "delta": 6
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-01/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-01/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 34,
+      "removed": 0,
+      "delta": 34
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-02-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 12,
+      "removed": 0,
+      "delta": 12
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-02-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 21,
+      "removed": 0,
+      "delta": 21
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-02/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-02/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 8,
+      "removed": 0,
+      "delta": 8
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-02/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-02/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 43,
+      "removed": 0,
+      "delta": 43
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-03-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-03-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 21,
+      "removed": 0,
+      "delta": 21
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-03/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-03/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-03/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-03/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 131,
+      "removed": 0,
+      "delta": 131
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-04-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 43,
+      "removed": 0,
+      "delta": 43
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-04-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 21,
+      "removed": 0,
+      "delta": 21
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-04/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-04/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 30,
+      "removed": 0,
+      "delta": 30
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-04/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 21,
+      "removed": 0,
+      "delta": 21
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-04/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 115,
+      "removed": 0,
+      "delta": 115
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-05-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3147,
+      "removed": 0,
+      "delta": 3147
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-05-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-05/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-05/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3143,
+      "removed": 0,
+      "delta": 3143
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-05/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-05/stop-marker.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 8,
+      "removed": 0,
+      "delta": 8
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-05/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 131,
+      "removed": 0,
+      "delta": 131
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-06-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1104,
+      "removed": 0,
+      "delta": 1104
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-06-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-06/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-06/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 1100,
+      "removed": 0,
+      "delta": 1100
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-06/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-06/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 139,
+      "removed": 0,
+      "delta": 139
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-07-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 55,
+      "removed": 0,
+      "delta": 55
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-07-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-07/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-07/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 51,
+      "removed": 0,
+      "delta": 51
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-07/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-07/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 139,
+      "removed": 0,
+      "delta": 139
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 245,
+      "removed": 0,
+      "delta": 245
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08/final.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 69,
+      "removed": 0,
+      "delta": 69
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 75,
+      "removed": 0,
+      "delta": 75
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 65,
+      "removed": 0,
+      "delta": 65
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08/reset.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-08/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 531,
+      "removed": 0,
+      "delta": 531
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-09-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 72,
+      "removed": 0,
+      "delta": 72
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-09-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-09/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-09/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 14,
+      "removed": 0,
+      "delta": 14
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-09/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-09/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 34,
+      "removed": 0,
+      "delta": 34
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-10-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 62,
+      "removed": 0,
+      "delta": 62
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-10-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-10/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-10/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 58,
+      "removed": 0,
+      "delta": 58
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-10/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 23,
+      "removed": 0,
+      "delta": 23
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-10/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 147,
+      "removed": 0,
+      "delta": 147
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 264,
+      "removed": 0,
+      "delta": 264
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 24,
+      "removed": 0,
+      "delta": 24
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11/final.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 72,
+      "removed": 0,
+      "delta": 72
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 85,
+      "removed": 0,
+      "delta": 85
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 68,
+      "removed": 0,
+      "delta": 68
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11/reset.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 45,
+      "removed": 0,
+      "delta": 45
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-11/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 563,
+      "removed": 0,
+      "delta": 563
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 281,
+      "removed": 0,
+      "delta": 281
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 24,
+      "removed": 0,
+      "delta": 24
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12/final.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 89,
+      "removed": 0,
+      "delta": 89
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 84,
+      "removed": 0,
+      "delta": 84
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12/phases.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 68,
+      "removed": 0,
+      "delta": 68
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12/reset.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 46,
+      "removed": 0,
+      "delta": 46
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-12/transport.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 744,
+      "removed": 0,
+      "delta": 744
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-final-01-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 179,
+      "removed": 0,
+      "delta": 179
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-final-01/certificate.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-final-01/final.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 21,
+      "removed": 0,
+      "delta": 21
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-final-01/fresh.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 84,
+      "removed": 0,
+      "delta": 84
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/journey-final-01/reset.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 45,
+      "removed": 0,
+      "delta": 45
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/launch-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/launch-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 19,
+      "removed": 0,
+      "delta": 19
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/launch-02/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/launch-02/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 19,
+      "removed": 0,
+      "delta": 19
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/build-01.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/build-02.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 31,
+      "removed": 0,
+      "delta": 31
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/build-03.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 223,
+      "removed": 0,
+      "delta": 223
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/build-09.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 17,
+      "removed": 0,
+      "delta": 17
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/client-final-01.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 5,
+      "removed": 0,
+      "delta": 5
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/client-final-02.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 8,
+      "removed": 0,
+      "delta": 8
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gate-campaign-01.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 7,
+      "removed": 0,
+      "delta": 7
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-ct.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 41,
+      "removed": 0,
+      "delta": 41
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-ct.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 76,
+      "removed": 0,
+      "delta": 76
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-dialyzer.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-dialyzer.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 16,
+      "removed": 0,
+      "delta": 16
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-eunit.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 42,
+      "removed": 0,
+      "delta": 42
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-eunit.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 127347,
+      "removed": 0,
+      "delta": 127347
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-native.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 42,
+      "removed": 0,
+      "delta": 42
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-native.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 192,
+      "removed": 0,
+      "delta": 192
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-release.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 41,
+      "removed": 0,
+      "delta": 41
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-release.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 25,
+      "removed": 0,
+      "delta": 25
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-xref.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 39,
+      "removed": 0,
+      "delta": 39
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/gates-01-xref.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 24,
+      "removed": 0,
+      "delta": 24
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/restore-01.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 5,
+      "removed": 0,
+      "delta": 5
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/restore-02.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 2,
+      "removed": 0,
+      "delta": 2
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/tool-fetch-01.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 61,
+      "removed": 0,
+      "delta": 61
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/logs/tool-fetch-02.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/qualification-manifest.py",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 108,
+      "removed": 0,
+      "delta": 108
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/questions-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 161,
+      "removed": 0,
+      "delta": 161
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/questions-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 24,
+      "removed": 0,
+      "delta": 24
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/run.py",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 44,
+      "removed": 0,
+      "delta": 44
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/serve.py",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 63,
+      "removed": 0,
+      "delta": 63
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/source-view-green-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/source-view-green-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 28,
+      "removed": 0,
+      "delta": 28
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/source-view-red-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/source-view-red-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 28,
+      "removed": 0,
+      "delta": 28
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 116,
+      "removed": 0,
+      "delta": 116
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01/certificate-0.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01/certificate-1.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01/expired.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 95,
+      "removed": 0,
+      "delta": 95
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01/trusted.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01/untrusted.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-01/wrong-host.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01-command/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 174,
+      "removed": 0,
+      "delta": 174
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01-command/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 15,
+      "removed": 0,
+      "delta": 15
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01/certificate-0.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 3,
+      "removed": 0,
+      "delta": 3
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01/certificate-1.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01/expired.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 95,
+      "removed": 0,
+      "delta": 95
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01/trusted.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01/untrusted.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tls-final-01/wrong-host.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 4,
+      "removed": 0,
+      "delta": 4
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tools-01/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 40,
+      "removed": 0,
+      "delta": 40
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tools-01/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 24,
+      "removed": 0,
+      "delta": 24
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tools-02/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 51,
+      "removed": 0,
+      "delta": 51
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tools-02/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 24,
+      "removed": 0,
+      "delta": 24
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tools-03/output.log",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 149,
+      "removed": 0,
+      "delta": 149
+    },
+    {
+      "path": "doc/evidence/godot-m1b-20261028/tools-03/result.json",
+      "group": "m1b-evidence",
+      "change": "added",
+      "added": 24,
+      "removed": 0,
+      "delta": 24
+    },
+    {
+      "path": "doc/gui-implementation-plan.md",
+      "group": "specs-and-docs",
+      "change": "modified",
+      "added": 14,
+      "removed": 2,
+      "delta": 12
+    },
+    {
+      "path": "nimbalyst-local/handoffs/godot-m1a-coordinator-verification.md",
+      "group": "coordination-and-generated",
+      "change": "added",
+      "added": 105,
+      "removed": 0,
+      "delta": 105
+    },
+    {
+      "path": "nimbalyst-local/handoffs/godot-m1b-prompt.md",
+      "group": "coordination-and-generated",
+      "change": "added",
+      "added": 59,
+      "removed": 0,
+      "delta": 59
+    },
+    {
+      "path": "priv/explorer/assets/Blocks-Da6yslYR.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/WebXRAbstractFeature-CS2nVe7u.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/WebXRControllerPointerSelection-D0S1PHrn.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/WebXRControllerPointerSelection.pure-BYTF8_rn.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/WebXRHandTracking-DjphlDDy.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/WebXRHandTracking.pure-P1bnMjt4.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/WebXRNearInteraction-DLPpo0G2.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/WebXRNearInteraction.pure-kxHJf9aQ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/World-gl5bGRSQ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/abstractEngine.cubeTexture.pure-C73zbGuh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/abstractEngine.pure-Diia1yaH.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/abstractEngine.texture.pure-Bzssuzig.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/animation.pure-CmqravjL.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/animationGroup-zdbg_xaA.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/animationGroup.pure-INU34P2Z.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/assetContainer-Cu0j4w2X.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/babylonFileLoader-B0ZYYS9H.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/background.fragment-CD_HU98M.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/background.fragment-CwbaO4nF.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/background.vertex-Bri1Razt.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/background.vertex-Dmha_LWV.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/backgroundUboDeclaration-ClJLip40.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/backgroundUboDeclaration-i4MsxPq1.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/bakedVertexAnimation-BU54QQoc.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/bakedVertexAnimation-QDGiwapH.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/baseTexture.pure-C-lZfTHh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/basisTextureLoader-tgIFaF29.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/bonesVertex-BkqeNXJR.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/bonesVertex-CJ_yq-6w.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/brdfTextureTools-sbZAcc9y.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/buffer.pure-CI9BSkNt.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/bufferUtils-BzL83JPG.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/bumpFragmentFunctions-Ca-1gWqn.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/bumpFragmentFunctions-MXJ6nFQp.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/clipPlaneFragmentDeclaration-qaQmcAD3.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/clipPlaneFragmentDeclaration-t7I2_ZlS.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/clipPlaneVertexDeclaration-CPtA85Ql.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/clipPlaneVertexDeclaration-Df9SJ_e3.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/clusteredLightingFunctions-L9oJQkOU.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/color.fragment-C6BEILGV.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/color.fragment-DhHClC_7.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/color.vertex-C4sJSD2Q.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/color.vertex-Ds9Jy9Lj.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/colorCurves-DIR6VjLm.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/colorCurves.pure-BTBmwczQ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/constants-Bahagp2t.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/cubemapToSphericalPolynomial-D1IRZppZ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/dds-CArqdeJh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/dds.pure-Ba5dRTva.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/ddsTextureLoader-WM3pS_OK.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/decalFragment-CvBK6CMD.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/decalFragment-DYiNNNYb.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/decorators-jaNTLUxa.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/decorators.serialization-DWw4TwmS.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/default.fragment-DkwKARH9.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/default.fragment-Mj6IagDZ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/default.vertex-CiWigZ6p.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/default.vertex-DTBDXVUU.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/defaultUboDeclaration-C53xcSdv.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/defaultUboDeclaration-bEX7kynB.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/devTools-Bh3wKyVb.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/domManagement-BqltO0ki.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/drawWrapper-cyRwRrOs.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/dumpTools-DUEOb0TG.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/easing-akdrC6A7.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/effectRenderer.pure-CcN-z0mF.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/engine.pure-B1WGCLF6.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/envTextureLoader-BF37nc_u.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/environmentTextureTools.pure-frlbQPbC.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/exrTextureLoader-CnzjmSCl.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fileTools.pure-kMSqHA2d.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphApplyForceBlock-CvkskYCO.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphApplyImpulseBlock-Dd5cPFvL.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphArrayIndexBlock-CfSlRoj6.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphAssetsContext-WtUyuDAI.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphAsyncExecutionBlock-CrmIyJXm.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphBezierCurveEasingBlock-DisGH2dZ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphBinaryOperationBlock-gLRc5cgN.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphBlock-Bpelovu8.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphBranchBlock-9CvYvxqr.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphCachedOperationBlock-DfwJo4cI.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphCancelDelayBlock-CUcCRLsc.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphCodeExecutionBlock-X0-sgY-i.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphConditionalDataBlock-CWa9FPrG.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphConsoleLogBlock-nd6k0tzP.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphConstantBlock-DQXV4TfL.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphContextBlock-DmYGtOnR.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphCoordinator-CylfRjCu.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphCounterBlock-DGP7056C.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphDataSwitchBlock-B1gLxZ7X.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphDebounceBlock-Dr1LAa2B.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphDebugBlock-Bij1X5Q6.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphDoNBlock-C_pYVXln.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphEasingBlock-B1OarmCn.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphEventBlock-BcI6bua8.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphExecutionBlock-CZZsSYcm.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphExecutionBlockWithOutSignal-DVyoFo2L.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphFlipFlopBlock-CCqOb5Vc.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphForLoopBlock-Cmwy7n_b.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphFunctionReferenceBlock-BtochffQ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGLTFDataProvider-BkOXkKUi.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGetAngularVelocityBlock-UK2zp2k-.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGetAssetBlock-DH6VsS2M.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGetLinearVelocityBlock-CsKz-Wru.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGetPhysicsMassPropertiesBlock-B2XeoaGv.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGetPropertyBlock-DpHe8auu.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGetSoundVolumeBlock-CA0HOM09.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphGetVariableBlock-CsgiYnSM.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphIndexOfBlock-DlVKykt5.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphInterpolationBlock-APkYTk8V.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphIsKeyPressedBlock-DI_53D_7.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphIsSoundPlayingBlock-B2_cOa_D.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphJsonPointerParserBlock-BGXjiat5.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphKeyDownEventBlock-B3ij35bA.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphKeyUpEventBlock-DdLI08Ap.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphKeyboardEventBlock-JJVVrtrf.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphMathBlocks-D4EpQygy.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphMathCombineExtractBlocks-BzhGWcth.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphMatrixMathBlocks-Bq5Xib6U.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphMeshPickEventBlock-C4cnjYg7.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphMultiGateBlock-B1_IBv72.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPauseAnimationBlock-jlZWRIGD.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPauseSoundBlock-D58fHdZf.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPhysicsCollisionEventBlock-D69IuupN.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPlayAnimationBlock-CCGoMS4z.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPlaySoundBlock-CMMmzOH1.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPointerDownEventBlock-BhOBuMNq.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPointerMoveEventBlock-BnU6Kp-_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPointerOutEventBlock-Ccaq8b2x.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPointerOverEventBlock-MnZk-fPu.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphPointerUpEventBlock-BClK3Il4.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphReceiveCustomEventBlock-DbwDq4J9.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphRichTypes-DhxT1rcO.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSceneReadyEventBlock-DFQ4b40g.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSceneTickEventBlock-DLCF1ucs.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSendCustomEventBlock-CUgpNdzV.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSequenceBlock-CmGQnNUK.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSetAngularVelocityBlock-D5PwyziH.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSetDelayBlock-D8SPvmd7.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSetLinearVelocityBlock-_4N6t5mZ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSetPhysicsMotionTypeBlock-CkpGQTIU.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSetPropertyBlock-Dh7o2qZe.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSetSoundVolumeBlock-BUgQvKJR.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSetVariableBlock-CcOotC0h.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSoundEndedEventBlock-CFdsUQvj.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphStopAnimationBlock-DKNfkR4G.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphStopSoundBlock-CRMw8wfi.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphSwitchBlock-D7OhEXnL.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphThrottleBlock-DXjdse9j.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphTransformCoordinatesSystemBlock-BvNp2kh6.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphTypeToTypeBlocks-oQyYqf-_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphUnaryOperationBlock-ByVDe9K4.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphVectorMathBlocks-CLBm3G9z.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphWaitAllBlock-BmzoV-Yv.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/flowGraphWhileLoopBlock-B3la1ixs.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fogFragment-Bi6O_OvH.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fogFragment-CAOKyGQD.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fogVertex-B90wzaBe.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fogVertex-D0bmc4KF.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fogVertexDeclaration-Bb9kDbrL.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fogVertexDeclaration-CiHbVcSR.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fresnelFunction-Dsi10JFC.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/fresnelFunction-UHAZHOAA.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplatting-CMUmUqdU.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplatting-D6cJ2qnl.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplatting.fragment-BTfWXIA-.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplatting.fragment-CCk-EFHg.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplatting.vertex-DM9QOxcj.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplatting.vertex-DjCiUIqV.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingFragmentDeclaration-DR-sWMnd.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingFragmentDeclaration-DdhsiUSn.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingMesh.pure-CnkYeiKx.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingUboDeclaration-D-E5L1Sy.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingVertexDeclaration-DALudBYc.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingVoxel.fragment-BEqZ9WEG.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingVoxel.fragment-D_ycHy0d.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingVoxel.vertex-B0qbjb2k.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/gaussianSplattingVoxel.vertex-CEU6YeyW.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/geometry.fragment-BsJDOR57.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/geometry.fragment-D1lDhhZc.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/geometry.vertex--Hf_Y38z.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/geometry.vertex-BtvWr9OO.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/glTF-DYnZCRFX.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/glTFLoader-By2zkh1F.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/glTFLoaderAnimation-Cu94HL_4.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/groundBuilder.pure-BcZOURDi.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/guid-BXdVC_j_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/harmonicsFunctions-B3KXS4Rq.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/harmonicsFunctions-CeqaCXUh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdr-CsjiN1iw.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrFiltering.fragment-B5QBgByA.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrFiltering.fragment-BdGy6EzB.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrFiltering.vertex-COSbMAY6.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrFiltering.vertex-D0M3wH6A.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrFilteringFunctions-Da1yugu7.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrFilteringFunctions-Djmq5OyP.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrIrradianceFiltering.fragment-QmFQOP4n.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrIrradianceFiltering.fragment-iYTBIlv-.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrIrradianceFiltering.vertex-CFN7uIG9.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrIrradianceFiltering.vertex-DOQV8qQx.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/hdrTextureLoader-C6uTaZrZ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/helperFunctions-CqkmJI0M.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/helperFunctions-DXk86ZpZ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblCdfDebug.fragment-CWM_JAoW.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblCdfDebug.fragment-DIrn_BEK.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblCdfx.fragment-DcN-2ogt.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblCdfx.fragment-DwJ2-o2J.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblCdfy.fragment-5MlLRTCx.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblCdfy.fragment-HwUiLPS_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblDominantDirection.fragment-CCy1bTDh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblDominantDirection.fragment-Cquz8kZX.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblIcdf.fragment-DyToMz0_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblIcdf.fragment-Ft9P55R5.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblScaledLuminance.fragment-CUwDIzRT.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iblScaledLuminance.fragment-pPRpXqfo.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/icoSphereBuilder.pure-CDdbxtbk.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/iesTextureLoader-2nmFcoLE.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/imageProcessing-CWl87Ndb.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/instancedMesh.pure-DCnnbl2k.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/keyboardEvents-CGYiptFb.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/ktxTextureLoader-D7ccZLlh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/layer.fragment-0pxcaZBS.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/layer.fragment-cp7lmKG1.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/light-DVZ47NP-.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/lightConstants-CII1uiDK.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/lightFragment-DhAfSIVK.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/lightsFragmentFunctions-BDN2ppzY.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/lightsFragmentFunctions-Daq0bQY1.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/locomotion-Bjb8_0Pm.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/logDepthDeclaration-BJAWQrwd.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/logDepthDeclaration-DWk2NRvi.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/logDepthFragment-C5lxT4l1.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/logDepthFragment-CxtJswLx.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/logDepthVertex-D5IUM6qd.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/logDepthVertex-DSD5XdGw.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/main-BJUxHBvj.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/mainUVVaryingDeclaration-BBamQlxR.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/mainUVVaryingDeclaration-B_7d0nc3.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/material.detailMapConfiguration-Di8xYSKQ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/material.pure-CFrm4afn.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/math.axis-CdvrxuQr.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/math.color-u9IZqo2z.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/math.color.pure-C2GhcK1J.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/math.path-Dq3Zpydh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/math.plane-BhFf0K94.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/math.scalar.functions-CwO92aAV.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/math.vector.pure-D6H1dffp.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/mesh-qA07tDwj.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/mesh.pure-BJvKPxUg.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/meshUboDeclaration-BATNZvmb.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/meshUboDeclaration-BmNu2KU_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/morphTargetsVertexGlobalDeclaration-BlztYTTH.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/morphTargetsVertexGlobalDeclaration-DdpoFiQG.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/multiMaterial-BcWjJvwm.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/node-DlLWIi_K.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/nodeMaterial.pure-Cezr3GMD.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/oitFragment-BYDkS-ga.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/oitFragment-C8x8_XsB.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbr.fragment-CEl0xczW.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbr.fragment-DJFnBNM3.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbr.vertex-Bez72Yhj.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbr.vertex-BmcrP5OA.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbrMaterial.pure-D0k1Vkbi.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbrMaterialLoadingAdapter-DwH2Pt9d.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbrUboDeclaration-CbPGRvOI.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/openpbrUboDeclaration-Dnhi8mvk.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbr.fragment-CNVAPpCj.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbr.fragment-YlMVzqb8.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbr.vertex-3K_UtFQc.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbr.vertex-B39_lOC2.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrBaseMaterial.pure-XRsd_WJh.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrDebug-2PTgo9v-.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrDebug-DKC47y8_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrMaterial-BLqo7gyu.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrMaterial.pure-DJnx-IEX.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrMaterialLoadingAdapter-CJIMwOVa.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrUboDeclaration--xFZEw0i.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pbrUboDeclaration-oed3_f2e.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/physicsImpostor.pure-DkIJUayU.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pointLight.pure-B84waGbJ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/pointerEvents-Dy-OQnYv.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/postProcess.pure-CnGgJZGo.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/prepass.defines-DwBbYFdE.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/proceduralTexture.pure-DdJd33F2.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/ray.core-CK9xcQ9Z.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/reflectionFunction-CGBv4yYw.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/reflectionFunction-CddHp5N-.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/renderTargetTexture.pure-Dq_UBn_U.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/rgbdDecode.fragment-feU_1Cct.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/rgbdDecode.fragment-zKCLSFFE.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/rgbdEncode.fragment-CVzwdxFN.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/rgbdEncode.fragment-DiXgHpU2.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/rolldown-runtime-QTnfLwEv.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/samplerFragmentDeclaration-3yaLawFX.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/samplerFragmentDeclaration-CEHqUfAO.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/samplerVertexImplementation-CXRxQSF_.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/samplerVertexImplementation-DUwTGCgo.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/scene.pure-BvBWBoUy.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sceneComponent-rYDjCZyp.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sceneLoader-Cg0Ztzas.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowLight-D54isEfv.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowMapFragment-BoTLCAqo.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowMapFragment-D6k-2Z6r.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowMapVertexMetric-B8mNEBYm.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowMapVertexMetric-CUxfA7LD.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowsFragmentFunctions-CKRR-aRY.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowsFragmentFunctions-s3BUxm53.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowsVertex-CRX0D69m.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/shadowsVertex-DMF6BtGm.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sphereBuilder.pure-CoWK4l66.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sphericalPolynomial.pure-Cx1iigtX.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/spotLight-D9HB_GxR.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/spotLight.pure-8VJW1OrE.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sprites.fragment-CT2uPhGd.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sprites.fragment-y-XPuTUl.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sprites.vertex-CZxaJ8CQ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/sprites.vertex-DJ9C-ZEv.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/standardMaterial-SpglAuph.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/standardMaterial.pure-BYKtadzs.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/texture.pure-DGgSB6FT.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/textureLoaderManager-DtxgKAjB.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/thinEngine-DALmLDis.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/thinEngine.pure-DHchjY-d.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/timer-BqcliT2I.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/timingTools-DOqIe2rd.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/tools-BzgjQTyH.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/tools.pure-EMYRFsIW.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/torusBuilder.pure-MgJudmtQ.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/universalCamera-B0mRdMen.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/universalCamera.pure-QJNzH9pg.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/utilityLayerRenderer-BBI_LO8X.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/utils-N5rsUTjt.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/vertexColorMixing-DPW6Is9y.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/vertexColorMixing-UCrnwszu.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/webRequest-CNElM_Yd.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/webXRDefaultExperience-DmEbMBEI.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/workerPool-aLlzPuNn.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/explorer/assets/world-scene-2y_MUqJG.js",
+      "group": "specs-and-docs",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/controller_preferences.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/gui_hud.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/gui_operation.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/gui_question.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/human_user_instance.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/node_execution.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/personal_agent.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_human_user.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_lens.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_measure.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_modelling.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_prolog.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_prolog_eidolons.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_rendering.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_signup.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/space.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/space_gui.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/space_view.pl",
+      "group": "production",
+      "change": "added",
+      "added": 0,
+      "removed": 0,
+      "delta": 0
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "group": "production",
+      "change": "modified",
+      "added": 11,
+      "removed": 1,
+      "delta": 10
+    },
+    {
+      "path": "test/quod_gui_question_tests.erl",
+      "group": "tests",
+      "change": "modified",
+      "added": 1,
+      "removed": 0,
+      "delta": 1
+    },
+    {
+      "path": "test/quod_source_view_tests.erl",
+      "group": "tests",
+      "change": "added",
+      "added": 50,
+      "removed": 0,
+      "delta": 50
+    }
+  ],
+  "note": "Relocation is not reduction. M1b retires no additional code. Coordinator/generated files and qualification evidence are separate."
+}

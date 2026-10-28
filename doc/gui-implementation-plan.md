@@ -473,9 +473,9 @@ do not rename them, raise constants or split transactions to evade them.
 ## 6. Questions and bounded current state
 
 The implemented transition layer is composed from
-[`gui_question.pl`](../priv/ontologies/gui_question.pl) in the responsible
-ontology and [`gui_hud.pl`](../priv/ontologies/gui_hud.pl) in the human ontology.
-The application composes [`gui_instance.pl`](../priv/ontologies/gui_instance.pl)
+[`gui_instance.pl`](../priv/ontologies/gui_instance.pl) in the responsible
+ontology and [`user_instance.pl`](../priv/ontologies/user_instance.pl) in the human ontology.
+The application uses the same shared instance source
 and declares `gui_question_policy(Form, HumanRef, ResponsibleRef)`.
 `gui_submit/4`, `gui_complete/1` and `gui_cancel/1` use the
 ordinary signed request and transaction owners. `gui_pending_questions/1`
@@ -524,8 +524,9 @@ That evidence participates in the retirement transaction's read set. Awaiting
 questions remain cancellable without an outcome. Reads and reconnects never
 redispatch retained requests.
 
-The shared `/api/views` subscription owner serves world, human HUD and selected
-question projections through signed anchored reads. HUD and question adapters
+The shared `/api/views` subscription owner serves world, human HUD, selected
+questions, offered operations, controller preferences and source-access projections
+through signed anchored reads. HUD and question adapters
 reuse the same connection, dependency, renewal and expiry machinery; they attach
 no physics subscription. The browser's question controller owns only local drafts
 and interaction locks. Submission and cancellation use the existing signed
@@ -535,6 +536,17 @@ changed schemas lock and preserve drafts with their original fields. Choosing
 current defaults is an explicit local action. Desktop and spatial forms share this controller
 and the existing workspace model. Pending questions are accessible through the
 world client's existing action menu as well as its desktop controls.
+
+Source inspection uses view kind `source_access` with the exact anchored read
+`prolog_inspect(ontology_ref(Target, Anchor), presentation, View)` at the pinned
+GUI tools owner. The existing Prolog inspection path decides `read_only` or
+`editable` and retains its Root/target permission dependencies. This is a
+closed read shape on the same subscription owner, not arbitrary socket queries
+or an additional permission engine. The adapter obtains authorization before
+starting its existing source cursor. Invalidation, expiry, denial, cancellation
+or disposal withdraws displayed source and cancels its reader; a retired cursor
+cannot publish into a replacement view. Reopening follows the ordinary signed
+view lifecycle and never substitutes valid empty source after a denied read.
 
 Public opening now commits through the native preparation and atomic transaction
 owners, including an authenticated receiver on a separate observer node. Live
@@ -628,7 +640,7 @@ controllers and cursor behavior. Generic forms have local drafts and explicit
 submission only. No duplicate source editor or ontology editing application.
 The same migration replaces the ground `gui_view/2` forms in
 [the GUI vocabulary](../priv/ontologies/quod_gui.pl), the workspace descriptors
-in [Prolog Eidolons](../priv/ontologies/quod_prolog_eidolons.pl),
+in [Prolog Eidolons](../priv/ontologies/gui_tools.pl),
 class-selected workspace recipes and their consumers/tests. Keep one view process type with
 explicit admitted world/GUI read goals, not a parallel GUI subscription owner.
 

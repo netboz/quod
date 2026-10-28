@@ -258,7 +258,7 @@ binary_and_compound_class_names_test() ->
     end).
 
 gui_types_and_defaults_are_shared_test() ->
-    with_fixture(source("quod_gui.pl"), fun(St) ->
+    with_fixture(quod_ct:gui_terms(), fun(St) ->
         Inputs = [{attribute, label, <<"Grid">>}],
         S = prove({with_build_plan, Inputs, {test_initialize, grid, id}}, St),
         holds({attribute, id, layout, grid}, S),

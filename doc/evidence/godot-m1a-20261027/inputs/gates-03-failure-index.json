@@ -1,0 +1,18 @@
+{
+  "campaign": "gates-03",
+  "child_exit": 1,
+  "timed_out": false,
+  "passed": 148,
+  "failed": 1,
+  "case": "quod_ask_SUITE:remote_signed_transaction_savepoints",
+  "line": 396,
+  "observed_result": "{normalized,{error,proof_unavailable}}",
+  "operation": "Fallback with two unchanged 1200-step local savepoint traversals",
+  "source_unchanged": true,
+  "unrun": [
+    "xref",
+    "dialyzer",
+    "release"
+  ],
+  "diagnosis": "Pending; request deadline and symbol admission must be distinguished using evidence, not inferred from elapsed time."
+}

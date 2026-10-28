@@ -1,0 +1,12 @@
+{
+  "interrupted_utc": "2026-10-28T05:00:02.794951+00:00",
+  "reason": "Root identified four required client boundaries remaining: required boolean/choice defaults, completed outcome aggregates, uncertain question barrier, unchanged source renewal cost. Prior completion credit is provisional and withdrawn pending corrective qualification. No external M1b snapshot was created at planned label 01.",
+  "preserved": {
+    "godot-m1b-result.md": "122c0598e08dff247eaf36c2ba0676a35544e25f9ef8ae3409abef7eaa73da5c",
+    "tracker-final-update62.json": "56ba6116d6be99f492f0bd9c088794be7ed66aae28c38eed4df81b90703b0a91",
+    "tracker-final-update60.json": "48af557cf3a6f033153042cb096d1558ed2d6716124d01e3ee391f67fdea1571",
+    "final-consistency.json": "ccb260831329b48c4edccc371d87b790379d1e7478cdb2fc5903abe51b2990ef",
+    "README.md": "2bfacce74397a2a545d324827a29cd4ec023c6a954000b23300c8663f5a599f8",
+    "scope-delta-final.json": "fda66b21f8bcc9cc272cc924b5d10b28801956c63c781b1ade61c4f2a0efcb5e"
+  }
+}

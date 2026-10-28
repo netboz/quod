@@ -1,0 +1,27 @@
+{
+  "worker_session": "8db34a85-ead5-4f20-b761-28a4a96a20c6",
+  "actual_model": "openai-codex:gpt-6.1-sol",
+  "requested_effort": "xhigh",
+  "effective_effort": "not exposed by get_session_summary",
+  "head": "d027f9f65bbce2f484f906c92bf07ebaa4669c38",
+  "branch": "worktree/pearl-stone",
+  "snapshot": "/home/yan/.cache/quod-m1b-artifacts/quod-godot-m1b-handoff-1e4ef676-20261028-02",
+  "snapshot_sha256": "d28277a70b5db41554ac9df5dede271c232fde041ead101ad380a1588dda1d4b",
+  "patch_sha256": "4279844ed3adcdeb7897ce982357c5bcb9061d8f489ba3488901ff66f0c7705d",
+  "checked": 18185,
+  "mismatches": [],
+  "added_paths": [
+    "doc/evidence/godot-m2-20261028/inputs/QUO-60.json",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-60.md",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-61.json",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-61.md",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-62.json",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-62.md",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-63.json",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-63.md",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-64.json",
+    "doc/evidence/godot-m2-20261028/inputs/QUO-64.md",
+    "nimbalyst-local/handoffs/godot-m1b-coordinator-verification.md",
+    "nimbalyst-local/handoffs/godot-m2-prompt.md"
+  ]
+}

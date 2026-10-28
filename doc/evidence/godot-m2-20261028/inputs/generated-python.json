@@ -1,0 +1,14 @@
+[
+  {
+    "origin": "doc/evidence/godot-m2-20261028/__pycache__/freeze-handoff.cpython-314.pyc",
+    "retained": "/home/yan/.cache/quod-m2-artifacts/generated-evidence-python/freeze-handoff.cpython-314.pyc",
+    "sha256": "7f2db50f46cd01956657f5a59a4aacdd5bc6f8adcf110d7ccb38d7431caf3451",
+    "category": "generated Python validation bytecode; never build input"
+  },
+  {
+    "origin": "doc/evidence/godot-m2-20261028/__pycache__/gate-campaign.cpython-314.pyc",
+    "retained": "/home/yan/.cache/quod-m2-artifacts/generated-evidence-python/gate-campaign.cpython-314.pyc",
+    "sha256": "001e695ad81c6a7782da0b6680f18308cb95609e4fbb49518c9c1e0bb331fda5",
+    "category": "generated Python validation bytecode; never build input"
+  }
+]

@@ -1,7 +1,7 @@
 -module(quod_personal_agent_tests).
 -include_lib("eunit/include/eunit.hrl").
 -export([with_personal/2, instruction/2, instruct/3, lookup/2, session/1,
-         request/3, await_result/3, await_runtime_ready/1]).
+         request/3, session/2, await_result/3, await_runtime_ready/1]).
 
 immediate_instruction_uses_distinct_actor_test_() ->
     {timeout, 60, fun() -> with_personal(fun exercise/1) end}.
@@ -194,7 +194,7 @@ another_human_cannot_read_or_sign_the_instruction_test_() ->
         {Instruction, Bytes} = instruction(Ctx, {assertz, private_work}),
         ?assertMatch({ok, _, {normalized, {committed, _, _}}}, instruct(Ctx, submit, Instruction)),
         {Key, _} = Pair = quod_identity:generate(), OtherNs = <<"other-human">>,
-        Sources = quod_prolog:read_terms(filename:join([code:priv_dir(quod), "ontologies", "human_user_instance.pl"])),
+        Sources = quod_prolog:read_terms(filename:join([code:priv_dir(quod), "ontologies", "user_instance.pl"])),
         Sup = quod_agent_hosting_tests:start_ontology(OtherNs, Dir, Node, [],
             Sources ++ [{instance_of, human_user, me}, {agent_key, me, Key, active}]),
         Other = Ctx#{human => {agent_instance_ref, OtherNs, quod_simplex:genesis_hash(OtherNs), me},
@@ -349,26 +349,36 @@ with_personal(Fun, Additional) ->
     Pair = {HumanKey, _} = quod_identity:generate(),
     Sources = lists:append([quod_prolog:read_terms(filename:join(
         [code:priv_dir(quod), "ontologies", File]))
-        || File <- ["human_user_instance.pl", "personal_agent.pl"]]),
+        || File <- ["user_instance.pl"]]),
     quod_agent_hosting_tests:with_host(fun(Ctx = #{namespace := Ns, node := Node}) ->
         Anchor = quod_simplex:genesis_hash(Ns),
         Human = {agent_instance_ref, Ns, Anchor, me},
         Agent = {agent_instance_ref, Ns, Anchor, personal},
-        {ok, _, _} = quod_prolog:execute(Ns, {assertz, {hosting_node, Node}}),
+        {ok, _, _} = quod_prolog:execute(Ns, {',',{assertz, {hosting_node, Node}},{assertz,{user_namespace,Ns}}}),
         Base = Ctx#{human => Human, human_pair => Pair, agent => Agent},
         Prep = request(Base, read, {personal_agent_preparation, {'Preparation'}}),
         {ok, _, {normalized, {read, _, {answers, _, [Answer]}}}} = submit(Prep),
         {ok, [{<<"V0">>, {prepared, Node, Key}}]} = quod_client_result:decode_binding(Answer),
         begin
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
-                submit(request(Base, execute, {personal_agent_initialize, Node, Key}))),
+                submit(request(Base, execute, {goal,{agent_hosted,personal,Node,1,Key}}))),
             {_, ActorPid} = installed(Agent),
             {ok, _, {normalized, {read, _, {answers, _, [Ready]}}}} = submit(Prep),
             ?assertEqual({ok, [{<<"V0">>, ready}]}, quod_client_result:decode_binding(Ready)),
             Fun(Base#{key => Key, actor_pid => ActorPid, session => session(Pair)})
         end
-    end, Sources ++ Additional ++
+    end, personal_fixture_sources(Sources,Additional) ++ Additional ++
         [{instance_of, human_user, me}, {agent_key, me, HumanKey, active}]).
+
+personal_fixture_sources(Sources, Additional) ->
+    case lists:any(fun({class_permission,space,create,_}) -> true; (_) -> false end,Additional) of
+        false -> Sources;
+        true -> [Clause || Clause <- Sources, not lists:member(Clause,
+            [{class_permission,space,create,{check,account_space_create}},
+             {class_permission,space,space_admit,{check,account_space_admit}},
+             {class_permission,space,space_enter,{check,account_new_space_entry}},
+             {class_permission,agent,space_enter,{check,account_initial_entry}}])]
+    end.
 
 exercise(Ctx = #{namespace := Ns, human := Human, agent := Agent}) ->
     %% A source-side target action admits only A, never a U request routed
@@ -470,7 +480,7 @@ instruction(Ctx = #{agent := {agent_instance_ref, Ns, Anchor, Instance}, key := 
     {Canonical, _, _} = erlog_int:term_instance(Goal, 0),
     {ok, Text} = quod_client_goal_parser:format(Canonical),
     {ok, InstanceText} = quod_client_goal_parser:format_clause(Instance),
-    {ok, Bytes} = quod_client_goal:encode(#{network_identity => <<42:256>>,
+    {ok, Bytes} = quod_client_goal:encode(#{network_identity => maps:get(network, Ctx, <<42:256>>),
         agent_namespace => Ns, agent_genesis_anchor => Anchor,
         agent_instance_text => InstanceText, signing_public_key => Key,
         operation_id => crypto:strong_rand_bytes(32),
@@ -483,9 +493,9 @@ request(Ctx, Mode, Goal) ->
     {ok, Text} = quod_client_goal_parser:format(Canonical),
     request_text(Ctx, Mode, Text).
 
-request_text(#{human := {agent_instance_ref, Ns, Anchor, Instance}, human_pair := {Key, _} = Pair}, Mode, Text) ->
+request_text(Ctx = #{human := {agent_instance_ref, Ns, Anchor, Instance}, human_pair := {Key, _} = Pair}, Mode, Text) ->
     {ok, InstanceText} = quod_client_goal_parser:format(Instance),
-    {ok, Bytes} = quod_client_goal:encode(#{network_identity => <<42:256>>,
+    {ok, Bytes} = quod_client_goal:encode(#{network_identity => maps:get(network, Ctx, <<42:256>>),
         agent_namespace => Ns, agent_genesis_anchor => Anchor,
         agent_instance_text => InstanceText, signing_public_key => Key,
         operation_id => crypto:strong_rand_bytes(32), not_after_ms => quod_time:now_ms() + 25000,
@@ -496,11 +506,13 @@ submit({Bytes, Signature}) -> quod_client_goal_ingress:submit(Bytes, Signature).
 instruct(#{session := Session}, Action, {Bytes, Signature}) ->
     quod_client_goal_ingress:instruction(Action, Session, Bytes, Signature, {127,0,0,1}).
 
-session({Key, _} = Pair) ->
+session(Pair) -> session(Pair, <<42:256>>).
+
+session({Key, _} = Pair, Network) ->
     Nonce = crypto:strong_rand_bytes(32),
     {ok, C} = quod_client_auth:issue_challenge(Key, Nonce, {127,0,0,1}),
     Id = maps:get(challenge_id, C),
-    {ok, Bytes} = quod_client_auth:challenge_bytes(<<42:256>>,
+    {ok, Bytes} = quod_client_auth:challenge_bytes(Network,
         application:get_env(quod, node_pubkey, undefined), Id, Key, Nonce,
         maps:get(server_nonce, C), maps:get(expires_ms, C)),
     {ok, Session} = quod_client_auth:complete_challenge(Id,

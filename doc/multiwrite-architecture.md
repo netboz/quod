@@ -131,6 +131,12 @@ Proof scopes, invocations, proxies, answers and distributed savepoints have
 no separate population ceilings in Erlang. Their retained state uses the
 proof's memory allowance and lifetime. Routers retain exact correlations
 under the same caller deadlines without imposing another count quota.
+Within one scope invocation, local choice points reuse the controller's exact
+unmaterialized batch token. Publishing a foreign selection, completing a frame,
+restoring a different batch or returning from reentrant work invalidates that
+assumption. Repeated local checkpoints/restores therefore make no controller
+round trips; real foreign changes retain the existing materialize/restore path.
+An allocation reply cannot reinstate a token invalidated during its wait.
 Participant and dependency vectors preserve every exact identity; canonical
 ordering, uniqueness and complete message bounds still apply. Invocation
 transcripts record every call before execution and share the complete sealed

@@ -390,7 +390,14 @@ exercise(Ctx, Ns) ->
         {assertz, {gui_children, tuning, [level, settings]}}])),
     ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})).
 
-source(File) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ File)).
+source(File) ->
+    case File of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ File))
+    end.
 fixture() -> quod_prolog:read_terms("test/fixtures/gui-components.pl").
 scope(Ns, Goal) -> {'::', Ns,
     {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.

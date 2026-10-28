@@ -1,0 +1,13 @@
+M1B_READY {"port":40837,"network":"TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw","control_port":38505,"ca":"/m1b/backend-ca.pem"}
+=WARNING REPORT==== 28-Oct-2026::03:46:11.721525 ===
+quod_prolog[human:MVxzqxrMgonQ9Q9eW3B9yoojhdY56_8XZrFId6EcqpA]: can_invoke refused a top-level goal at pinned height 11
+=ERROR REPORT==== 28-Oct-2026::03:48:15.866982 ===
+Error in process <0.836.0> with exit value:
+{{badmatch,{error,invalid_term}},
+ [{quod_lifecycle_single_path_tests,lobby_user_request,3,
+      [{file,"/work/test/quod_lifecycle_single_path_tests.erl"},{line,1901}]},
+  {quod_lifecycle_single_path_tests,submit_lobby,3,
+      [{file,"/work/test/quod_lifecycle_single_path_tests.erl"},{line,204}]},
+  {godot_m1b_fixture,control,2,
+      [{file,"/evidence/godot_m1b_fixture.erl"},{line,86}]}]}
+

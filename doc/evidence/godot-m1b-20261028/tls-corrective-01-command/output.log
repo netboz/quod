@@ -1,0 +1,7 @@
+usage: tls.py [-h] --export EXPORT --evidence EVIDENCE --private PRIVATE
+
+options:
+  -h, --help           show this help message and exit
+  --export EXPORT
+  --evidence EVIDENCE
+  --private PRIVATE

@@ -1,0 +1,25 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/local.py",
+    "--export",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final18/source/client/godot/dist/quod.x86_64",
+    "--phase",
+    "backup-cancel",
+    "--desktop",
+    "--evidence",
+    "doc/evidence/godot-m2-20261028/backup-cancel-final18",
+    "--private",
+    "/home/yan/.cache/quod-m2-artifacts/private/backup-cancel-final18"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T10:07:23Z",
+  "elapsed_seconds": 2.3729560375213623,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/backup-cancel-final18-command.log",
+  "raw_sha256": "5b093175467c6a0f6db82bafbeaec00871243447cd4dc54d10375f8f67346efa",
+  "sanitized_sha256": "5b093175467c6a0f6db82bafbeaec00871243447cd4dc54d10375f8f67346efa",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

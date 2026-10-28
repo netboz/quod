@@ -35,7 +35,7 @@ test('multiple ontology mark occurrences retain one exact instance and no body i
 })
 import { diagnosisGoal, viewGoal } from '../src/lens.js'
 
-// Exactly what a signed read of quod:lens returns for the authored lens: one
+// Exactly what a signed read of quod:gui returns for the authored lens: one
 // verdict mark and the components behind it, as quod_explorer_http renders a
 // binding. Keeping the fixture in the renderer's own spelling is the point —
 // the reader has to cope with what the node actually sends.
@@ -161,9 +161,9 @@ test('the reader enforces the shared structural-depth boundary', () => {
 test('the lens is asked by its flat binary name, with the dot the grammar needs',
      () => {
        assert.equal(viewGoal('work_licences', ['quod']),
-                    '<<"quod:lens">> :: (view(<<"work_licences">>,[<<"quod">>],Marks)).')
+                    '<<"quod:gui">> :: (view(<<"work_licences">>,[<<"quod">>],Marks)).')
        assert.equal(diagnosisGoal('work_licences', ['quod']),
-                    '<<"quod:lens">> :: (diagnosis(<<"work_licences">>,[<<"quod">>],Unmet)).')
+                    '<<"quod:gui">> :: (diagnosis(<<"work_licences">>,[<<"quod">>],Unmet)).')
      })
 
 test('binary identities and UTF-8 text survive lossless signed bindings', () => {

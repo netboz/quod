@@ -1,0 +1,200 @@
+{
+  "tests": 4251,
+  "failures": 31,
+  "child_exit": 1,
+  "timed_out": false,
+  "unrun": [
+    "ct",
+    "xref",
+    "dialyzer",
+    "release"
+  ],
+  "cases": [
+    {
+      "number": 1,
+      "case": "quod_physics_tests:-live_source_signed_view_test_/0-fun-11-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:live_source_signed_view_test_"
+    },
+    {
+      "number": 2,
+      "case": "quod_physics_tests:-foreign_signed_control_view_and_reconnect_test_/0-fun-14-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:foreign_signed_control_view_and_reconnect_test_"
+    },
+    {
+      "number": 3,
+      "case": "quod_physics_tests:-changed_control_view_retains_sequence_test_/0-fun-7-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:changed_control_view_retains_sequence_test_"
+    },
+    {
+      "number": 4,
+      "case": "quod_physics_tests:-ordinary_space_views_test_/0-fun-14-/0: ordinary-workshop",
+      "first_error": "?assertEqual(<<100,105,115,97,98,108,101,100>>, maps : get ( << \"selection\" >> , simulation_reply ( Socket , << \"projection\" >> ) ))",
+      "generator": "quod_physics_tests:ordinary_space_views_test_"
+    },
+    {
+      "number": 5,
+      "case": "quod_physics_tests:-ordinary_space_views_test_/0-fun-14-/0: ordinary-observatory",
+      "first_error": "?assertEqual(<<100,105,115,97,98,108,101,100>>, maps : get ( << \"selection\" >> , simulation_reply ( Socket , << \"projection\" >> ) ))",
+      "generator": "quod_physics_tests:ordinary_space_views_test_"
+    },
+    {
+      "number": 6,
+      "case": "quod_physics_tests:-navigation_dependencies_fence_view_test_/0-fun-11-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:navigation_dependencies_fence_view_test_"
+    },
+    {
+      "number": 7,
+      "case": "quod_physics_tests:-uncertain_renewal_attachment_closes_and_releases_test_/0-fun-4-/0",
+      "first_error": "{error,attachment_not_requested,",
+      "generator": "quod_physics_tests:uncertain_renewal_attachment_closes_and_releases_test_"
+    },
+    {
+      "number": 8,
+      "case": "quod_physics_tests:-signed_client_view_lifecycle_test_/0-fun-32-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:signed_client_view_lifecycle_test_"
+    },
+    {
+      "number": 9,
+      "case": "quod_physics_tests:-same_namespace_signed_chair_push_test_/0-fun-8-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:same_namespace_signed_chair_push_test_"
+    },
+    {
+      "number": 10,
+      "case": "quod_physics_tests:-generic_hinged_signed_view_recovery_test_/0-fun-2-/0",
+      "first_error": "?assertEqual(<<97,99,116,105,118,101>>, maps : get ( << \"selection\" >> , Initial ))",
+      "generator": "quod_physics_tests:generic_hinged_signed_view_recovery_test_"
+    },
+    {
+      "number": 11,
+      "case": "quod_physics_tests:-voxel_signed_view_delivers_only_bound_resident_chunks_test_/0-fun-15-/0",
+      "first_error": "?assertEqual(<<97,99,116,105,118,101>>, maps : get ( << \"selection\" >> , Projection ))",
+      "generator": "quod_physics_tests:voxel_signed_view_delivers_only_bound_resident_chunks_test_"
+    },
+    {
+      "number": 12,
+      "case": "quod_physics_tests:-voxel_signed_view_batches_large_resident_selection_test_/0-fun-8-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:voxel_signed_view_batches_large_resident_selection_test_"
+    },
+    {
+      "number": 13,
+      "case": "quod_physics_tests:-voxel_signed_camera_interest_reclaims_consumers_without_domain_writes_test_/0-fun-16-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:voxel_signed_camera_interest_reclaims_consumers_without_domain_writes_test_"
+    },
+    {
+      "number": 14,
+      "case": "quod_physics_tests:-voxel_camera_interest_refuses_its_signed_chunk_allowance_before_generation_test_/0-fun-5-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:voxel_camera_interest_refuses_its_signed_chunk_allowance_before_generation_test_"
+    },
+    {
+      "number": 15,
+      "case": "quod_physics_tests:-voxel_camera_interest_refuses_an_incoherent_window_before_generation_test_/0-fun-6-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:voxel_camera_interest_refuses_an_incoherent_window_before_generation_test_"
+    },
+    {
+      "number": 16,
+      "case": "quod_physics_tests:-voxel_camera_interest_admits_a_coherent_rebase_test_/0-fun-8-/0",
+      "first_error": "{error,",
+      "generator": "quod_physics_tests:voxel_camera_interest_admits_a_coherent_rebase_test_"
+    },
+    {
+      "number": 17,
+      "case": "quod_gui_examples_tests:examples/0",
+      "first_error": "{error,",
+      "generator": null
+    },
+    {
+      "number": 18,
+      "case": "quod_gui_examples_tests:world_library/0",
+      "first_error": "{error,",
+      "generator": null
+    },
+    {
+      "number": 19,
+      "case": "quod_gui_examples_tests:-voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_/0-fun-24-/0",
+      "first_error": "{error,",
+      "generator": "quod_gui_examples_tests:voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_"
+    },
+    {
+      "number": 20,
+      "case": "quod_gui_operations_tests:-prebound_creation_output_is_refused_test_/0-fun-1-/0",
+      "first_error": "{error,",
+      "generator": "quod_gui_operations_tests:prebound_creation_output_is_refused_test_"
+    },
+    {
+      "number": 21,
+      "case": "quod_gui_operations_tests:-execution_preserves_authored_output_aliases_test_/0-fun-5-/0",
+      "first_error": "{error,",
+      "generator": "quod_gui_operations_tests:execution_preserves_authored_output_aliases_test_"
+    },
+    {
+      "number": 22,
+      "case": "quod_gui_operations_tests:-transported_bound_goal_preserves_named_creation_result_test_/0-fun-6-/0",
+      "first_error": "{error,",
+      "generator": "quod_gui_operations_tests:transported_bound_goal_preserves_named_creation_result_test_"
+    },
+    {
+      "number": 23,
+      "case": "quod_gui_operations_tests:-offered_creation_and_instance_operation_test_/0-fun-12-/0",
+      "first_error": "{error,",
+      "generator": "quod_gui_operations_tests:offered_creation_and_instance_operation_test_"
+    },
+    {
+      "number": 24,
+      "case": "quod_gui_operations_tests:-binding_refuses_invalid_or_changed_contract_test_/0-fun-5-/0",
+      "first_error": "{error,",
+      "generator": "quod_gui_operations_tests:binding_refuses_invalid_or_changed_contract_test_"
+    },
+    {
+      "number": 25,
+      "case": "quod_gui_operations_tests:-foreign_recipe_is_anchored_and_selects_target_owned_form_test_/0-fun-3-/0",
+      "first_error": "See complete failure block",
+      "generator": "quod_gui_operations_tests:foreign_recipe_is_anchored_and_selects_target_owned_form_test_"
+    },
+    {
+      "number": 26,
+      "case": "quod_gui_operations_tests:-malformed_outputs_and_ambiguous_offers_are_refused_test_/0-fun-5-/0",
+      "first_error": "?assertEqual([], views ( C , Ns , Subject ))",
+      "generator": "quod_gui_operations_tests:malformed_outputs_and_ambiguous_offers_are_refused_test_"
+    },
+    {
+      "number": 27,
+      "case": "quod_lifecycle_single_path_tests:-default_lobby_physics_startup_test_/0-fun-31-/0",
+      "first_error": "{error,",
+      "generator": "quod_lifecycle_single_path_tests:default_lobby_physics_startup_test_"
+    },
+    {
+      "number": 28,
+      "case": "quod_lifecycle_single_path_tests:-lifecycle_single_path_test_/0-fun-37-/0:244",
+      "first_error": "{error,",
+      "generator": "quod_lifecycle_single_path_tests:lifecycle_single_path_test_"
+    },
+    {
+      "number": 29,
+      "case": "quod_lifecycle_single_path_tests:-lifecycle_single_path_test_/0-fun-5-/0:278",
+      "first_error": "?assert(length ( Hosted ) >= 4)",
+      "generator": "quod_lifecycle_single_path_tests:lifecycle_single_path_test_"
+    },
+    {
+      "number": 30,
+      "case": "quod_ontology_acl_acceptance_tests:run/0: module 'quod_ontology_acl_acceptance_tests'",
+      "first_error": "{error,",
+      "generator": null
+    },
+    {
+      "number": 31,
+      "case": "quod_space_tests:-ordinary_placement_and_shared_display_projection_test_/0-fun-13-/0",
+      "first_error": "?assertEqual(<<110,111,110,112,104,121,115,105,99,97,108>>, maps : get ( << \"selection\" >> , Projection ))",
+      "generator": "quod_space_tests:ordinary_placement_and_shared_display_projection_test_"
+    }
+  ]
+}

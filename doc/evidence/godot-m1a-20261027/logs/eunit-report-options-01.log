@@ -1,0 +1,36 @@
+Run EUnit Tests.
+Usage: rebar3 eunit [--app <app>] [--application <application>]
+                    [-c <cover>]
+                    [--cover_export_name <cover_export_name>]
+                    [-p <profile>] [-d <dir>] [-f <file>] [-m <module>]
+                    [-t <test>] [-s <suite>] [-g <generator>]
+                    [-v <verbose>] [--name <name>] [--sname <sname>]
+                    [--sys_config <sys_config>] [--setcookie <setcookie>]
+
+  --app                Comma separated list of application test suites to 
+                       run. Equivalent to `[{application, App}]`.
+  --application        Comma separated list of application test suites to 
+                       run. Equivalent to `[{application, App}]`.
+  -c, --cover          Generate cover data. Defaults to false.
+  --cover_export_name  Base name of the coverdata file to write
+  -p, --profile        Show the slowest tests. Defaults to false.
+  -d, --dir            Comma separated list of dirs to load tests from. 
+                       Equivalent to `[{dir, Dir}]`.
+  -f, --file           Comma separated list of files to load tests from. 
+                       Equivalent to `[{file, File}]`.
+  -m, --module         Comma separated list of modules to load tests from. 
+                       Equivalent to `[{module, Module}]`.
+  -t, --test           Comma separated list of tests to run. The format is 
+                       `Module:Func1+Func2`. Equivalent to `[{test, 
+                       Module, Function}]`.
+  -s, --suite          Comma separated list of modules to load tests from. 
+                       Equivalent to `[{module, Module}]`.
+  -g, --generator      Comma separated list of generators to load tests 
+                       from. The format is `Module:Func1+Func2`. 
+                       Equivalent to `[{generator, Module, Function}]`.
+  -v, --verbose        Verbose output. Defaults to false.
+  --name               Gives a long name to the node
+  --sname              Gives a short name to the node
+  --sys_config         List of application config files
+  --setcookie          Sets the cookie if the node is distributed
+

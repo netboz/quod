@@ -45,12 +45,12 @@ instance_of(ontology, ontology_ref(Namespace, Anchor)) :-
 
 class_eidolon(Class, prolog, source, recipe(Namespace, Anchor, prolog_editor)) :-
     nonvar(Class),
-    Namespace = <<"quod:prolog:eidolons">>,
+    Namespace = <<"quod:gui">>,
     quod:root::system_ontology(Namespace, Anchor).
 
 class_eidolon(ontology, inspection, Style, recipe(Namespace, Anchor, Style)) :-
     member(Style, [policy, interfaces, routes]),
-    Namespace = <<"quod:prolog:eidolons">>,
+    Namespace = <<"quod:gui">>,
     quod:root::system_ontology(Namespace, Anchor).
 
 entity_eidolons(Entity,Eidolons) :- entity_eidolons(Entity,_,_,Eidolons).

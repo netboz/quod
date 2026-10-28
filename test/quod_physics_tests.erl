@@ -195,7 +195,13 @@ live_source_signed_view_test_() ->
         {_,_,OldFrame,OldRef,_} = install_test_control(F#{node => Human},Pid,World,
             {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]},4),
         quod_physics:unwatch(Pid,OldRef), _ = gen_server:call(Pid,status),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
+        %% This fixture intentionally depicts no source content. Replace the
+        %% composed default, so a failed source read cannot become a dependency
+        %% before backtracking to this explicitly authored empty view.
+        [DefaultView] = [T || T = {':-',{world_view,_,_,_},_} <-
+            quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
+        commit(Ns,list_conjunction([{'$quod_retract_exact',DefaultView},
+            {assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}])),
         reconcile(Ns),
         Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
         Runtime = quod_reg:where({quod_runtime,Ns}), Token = make_ref(),
@@ -776,7 +782,7 @@ with_live_source(Ns,Fun) ->
         Anchor = quod_simplex:genesis_hash(Ns), Destination = {entity_ref,Ns,Anchor,room},
         World = {world_ref,Ns,Anchor,room}, Authority = {agent_instance_ref,Ns,Anchor,actor},
         Terms = quod_prolog:read_terms("priv/ontologies/quod_physics.pl") ++
-                (quod_prolog:read_terms("priv/ontologies/space.pl") ++
+                (quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++
                  quod_prolog:read_terms("test/fixtures/space-permissions.pl")) ++
             [{can_invoke,{'_'},Principal,{'_'},Source}, {isa,artifact,thing}, {instance_of,artifact,obstacle},
              {physics_definition,obstacle,1,{geometry,{box,250,1000,250},1}},
@@ -2772,7 +2778,7 @@ with_world(Ns, Fun, Transform) ->
     WithRendering = fun(F = #{directory := Dir, identity := Identity}) ->
         RenderingNs = <<"physics-test-rendering">>,
         Rendering = quod_agent_hosting_tests:start_ontology(RenderingNs, Dir, Identity,
-            quod_prolog:genesis_diff("priv/ontologies/quod_rendering.pl"),
+            quod_prolog:terms_to_diff(quod_ct:gui_terms()),
             [{can_invoke,{'_'},{node,maps:get(pubkey,Identity)},{'_'},RenderingNs}]),
         try
             commit(Ns, {assertz, {rendering_vocabulary, RenderingNs, quod_simplex:genesis_hash(RenderingNs)}}),
@@ -2786,7 +2792,7 @@ world_rules(Ns) ->
     Actor = {agent_instance_ref, Ns, {'_'}, actor},
     quod_prolog:read_terms("priv/ontologies/quod_physics.pl") ++
         quod_prolog:read_terms("priv/ontologies/quod_hinged.pl") ++
-        quod_prolog:read_terms("priv/ontologies/space.pl") ++
+        quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++
         quod_prolog:read_terms("test/fixtures/space-permissions.pl") ++ [{instance_of,physical_space,room}] ++
         [{can_invoke, {physics_store_request, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
          {can_invoke, {physics_activate, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
@@ -5377,7 +5383,7 @@ with_voxel_view(Fun,Distance,Resources,ExtraBodies,FieldSetup) ->
     with_voxel_world(fun(F = #{namespace := Ns,identity := Identity,directory := Dir}) ->
         ModellingNs = <<"physics-test-modelling">>,
         Modelling = quod_agent_hosting_tests:start_ontology(ModellingNs,Dir,Identity,
-            quod_prolog:genesis_diff("priv/ontologies/quod_modelling.pl"),
+            quod_prolog:terms_to_diff(quod_ct:gui_terms()),
             [{rendering_vocabulary,<<"physics-test-rendering">>,quod_simplex:genesis_hash(<<"physics-test-rendering">>)}]),
         try
         commit(Ns,{assertz,{modelling_vocabulary,ModellingNs,quod_simplex:genesis_hash(ModellingNs)}}),
@@ -5404,7 +5410,7 @@ with_voxel_view(Fun,Distance,Resources,ExtraBodies,FieldSetup) ->
         after Socket ! stop end
         after quod_agent_hosting_tests:stop_ontology(Modelling) end
     end,lists:append([quod_prolog:read_terms("priv/ontologies/" ++ Name) ||
-                      Name <- ["space_view.pl","voxel_world_view.pl"]])).
+                      Name <- ["quod_space.pl", "voxel_world_view.pl"]])).
 
 
 voxel_signed_camera_interest_reclaims_consumers_without_domain_writes_test_() ->

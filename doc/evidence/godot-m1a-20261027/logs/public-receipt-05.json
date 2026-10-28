@@ -1,0 +1,29 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "-v",
+    "/tmp/quod-m1a-gates-03/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1a-20261027:/evidence",
+    "-w",
+    "/work",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/usr/bin/env",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "escript",
+    "/evidence/verify-public-receipt.escript",
+    "/evidence/gates-03-founding.json",
+    "/evidence/gates-03-public-identity.json"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T01:04:06Z",
+  "elapsed_seconds": 1.5720129013061523,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

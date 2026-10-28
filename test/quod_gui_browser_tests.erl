@@ -14,8 +14,7 @@ run_browser(C = #{namespace := Ns, directory := Dir, storage := Storage}) ->
         Anchor = quod_simplex:genesis_hash(Ns),
         [edit(Ns,{assertz,Fact}) || Fact <- [
             {rendering_vocabulary,<<"creation-rendering">>,quod_simplex:genesis_hash(<<"creation-rendering">>)},
-            {lobby_provisioning,me,{linked,{ontology_ref,Ns,Anchor}}},
-            {lobby_space,room,[playing]}, {entity_scene,personal,{'_'},hidden},
+            {':-',{account_navigation,{entity_ref,Ns,Anchor,room},[playing]},true}, {entity_scene,personal,{'_'},hidden},
             {space_member,room,{entity_ref,Storage,quod_simplex:genesis_hash(Storage),<<"foreign-display">>}}]],
         [edit(Storage,{assertz,Fact}) || Fact <- [
             {':-',{instance_of,space,<<"foreign-display">>},true},
@@ -100,7 +99,7 @@ control(<<"verify">>,_,C=#{namespace:=Ns}) ->
 hold_creation(#{storage:=Ns},Edit) ->
     true = quod_reg:reg({host_test,local_proof}), put(conflict_edit,Edit),
     [Original={':-',{gui_form,Form,Fields,{submit,Control,Goal,Metadata}},Body}] =
-        [Rule || Rule={':-',{gui_form,_,_,_},_} <- quod_prolog:read_terms("priv/ontologies/space_gui.pl")],
+        [Rule || Rule={':-',{gui_form,_,_,_},_} <- quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
     Held = {':-',{gui_form,Form,Fields,{submit,Control,{',',Goal,test_local_wait},Metadata}},Body},
     put(conflict_forms,{Original,Held}), edit(Ns,{retract,Original}), edit(Ns,{assertz,Held}).
 

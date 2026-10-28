@@ -153,7 +153,7 @@ try {
   assert.notDeepEqual(owner.identity.provider.publicKey, guest.identity.provider.publicKey)
   const catalogue = await readSystemOntologies(owner.identity)
   assert(!catalogue.some(row => row.namespace === target.namespace))
-  const row = catalogue.find(row => row.namespace === 'quod:prolog')
+  const row = catalogue.find(row => row.namespace === 'quod:gui')
   assert(row)
   tools = { namespace: row.namespace, anchor: fromB64url(row.anchor) }
   workspace = { target, tools }

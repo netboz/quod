@@ -1,0 +1,6 @@
+{
+  "script": "doc/evidence/godot-m1a-20261027/inputs/public-receipt-02-verifier.escript",
+  "sha256": "8c9dbe97f34c4365fc0e919f36e40249b596e9da100a7890dabc75dc4ee1ebb0",
+  "child_exit": 127,
+  "failure": "erlog source parser rejected rendered operation value"
+}

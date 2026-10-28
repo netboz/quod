@@ -1,0 +1,43 @@
+{
+  "certificate_command": [
+    "openssl",
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-keyout",
+    "/tmp/quod-m1b-journey-02-private/proxy-key.pem",
+    "-out",
+    "/tmp/quod-m1b-journey-02-private/proxy-ca.pem",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-addext",
+    "basicConstraints=critical,CA:TRUE"
+  ],
+  "certificate_child_exit": 0,
+  "origin": "https://127.0.0.1:34983",
+  "expected_hostname": "127.0.0.1",
+  "ca_sha256": "9fa245f861a019e4487a9e1519652a1637973b83c3e0e56037a3bbbb307c529b",
+  "backend_ca_sha256": "b3506c9a53889d70cfb1844fd066444d82d5bebdae7b3160988b3b2b5b1d6741",
+  "certificate_validation": true,
+  "drops": {
+    "signup": 0,
+    "setup": 0,
+    "instruction": 0
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "route": "/api/auth/challenge",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false
+    }
+  ]
+}

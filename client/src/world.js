@@ -57,11 +57,11 @@ export async function readSpaceNavigation(identity, agent, reference = null, opt
   const reply = await signedGoal(identity, {
     mode: 'read', agent, goal: reference
       ? anchoredGoal(reference, compound('space_navigation', [reference.instance, variable('Modes')]))
-      : 'lobby_navigation(Lobby,Modes).',
+      : 'account_navigation(Space,Modes).',
   }, options)
   if (reply.result === 'fail') return null
   if (!reference) {
-    const [ns, anchor, instance] = args(readTerm(singleBinding(reply, 'Lobby')), 'entity_ref', 3)
+    const [ns, anchor, instance] = args(readTerm(singleBinding(reply, 'Space')), 'entity_ref', 3)
     reference = { namespace: textValue(ns), anchor: anchor.value, instance }
   }
   anchoredGoal(reference, reference.instance)

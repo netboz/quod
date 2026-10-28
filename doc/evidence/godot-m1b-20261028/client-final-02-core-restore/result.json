@@ -1,0 +1,13 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "Quod.Client.Tests.csproj",
+    "--locked-mode",
+    "--source",
+    "/tmp/quod-m1b-client-final-02/dependency-feed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.0401663720003853
+}

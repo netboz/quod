@@ -2,6 +2,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([with_receiver/3,commit/2,await_commit/1,await_operation/1]).
 -export([gui_socket/3,gui_session/1,gui_open_message/7]).
+-export([user_source_with_allowance/2]).
 
 %% Focused transition fixtures seed accepted rows. The live-opening fixture
 %% exercises native acceptance and the original atomic transaction together.
@@ -93,16 +94,16 @@ native_scope_cancellation_closes_receiver_worker_test_() ->
 native_presentation_uses_original_scope_and_closed_effect_codec_test_() ->
     {timeout,60,fun() ->
         Dir = filename:join("/tmp","quod-gui-native-effect-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-        Ctx = quod_lobby_tests:start(Dir), Parent = self(),
-        {HumanNs,HumanAnchor} = maps:get(agent,Ctx), Instance = {human_user,test_agent},
+        Instance = {human_user,test_agent},
+        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[],
+            user_source_with_allowance(Instance,2) ++ [{instance_of,human_user,Instance}]), Parent = self(),
+        {HumanNs,HumanAnchor} = maps:get(agent,Ctx),
         Human = {agent_instance_ref,HumanNs,HumanAnchor,Instance},
         {ok,HumanBytes} = quod_wire_term:encode_canonical(Human),
         {ok,Node} = application:get_env(quod,node_pubkey),
         GuiIdentity = {<<"quod:gui">>,quod_simplex:genesis_hash(<<"quod:gui">>)},
         {Hud,Monitor} = spawn_monitor(fun() -> gui_socket(Parent,#{peer => {127,0,0,1}}) end),
         try
-            commit(Ctx,assertions(source("gui_hud.pl") ++
-                [{instance_of,human_user,Instance},{gui_pending_allowance,Instance,2}])),
             Session = gui_session(Ctx),
             Hud ! {client,gui_open_message(Ctx,Session,gui_hud,HumanNs,none,0)},
             _ = gui_reply(Hud,<<"projection">>),
@@ -194,11 +195,11 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
             Start = fun(Name,Terms) -> quod_agent_hosting_tests:start_ontology(Name,Dir,Identity,[],[Admin|Terms]) end,
             {Gui,_} = quod_lobby_tests:start_namespace(<<"quod:gui">>,#{
                 node_id => maps:get(pubkey,Identity),identity => Identity,mode => create,
-                data_dir => filename:join(Dir,"gui"),genesis_diff => quod_prolog:terms_to_diff(source("quod_gui.pl")),
+                data_dir => filename:join(Dir,"gui"),genesis_diff => quod_prolog:terms_to_diff(quod_ct:gui_terms()),
                 external_predicate_modules => [quod_agent_predicates,quod_gui_predicates]}),
             {HumanKey,_} = HumanPair = quod_identity:generate(), HumanNs = <<"gui:open-human">>,
-            HumanOwner = Start(HumanNs,source("gui_hud.pl") ++ [
-                {instance_of,human_user,person},{agent_key,person,HumanKey,active},{gui_pending_allowance,person,4},
+            HumanOwner = Start(HumanNs,user_source_with_allowance(person,4) ++ [
+                {instance_of,human_user,person},{agent_key,person,HumanKey,active},
                 {can_invoke,{'_'},{agent_instance_ref,HumanNs,{'_'},person},{'_'},HumanNs}]),
             HumanAnchor = quod_simplex:genesis_hash(HumanNs), Human = {agent_instance_ref,HumanNs,HumanAnchor,person},
             HumanCtx = #{agent => {HumanNs,HumanAnchor},instance => <<"person.">>,key_pair => HumanPair,network => <<42:256>>},
@@ -329,7 +330,7 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 [Handler] = [Clause || Clause = {':-', {react_on,{assert,{gui_question,_,_,_,_,_,_}},
-                    {gui_complete,_}},_} <- source("gui_question.pl")],
+                    {gui_complete,_}},_} <- source("gui_instance.pl")],
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,scope(Ns,{retract,Handler}))),
                 fail(HumanCtx,scope(AppNs,{gui_open,settings,{0}})),
                 ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,{gui_pending_questions,{0}})),
@@ -342,7 +343,7 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 quod_agent_hosting_tests:stop_ontology(HumanOwner),
                 quod_agent_hosting_tests:stop_ontology(Gui),gen_server:stop(Journal),gen_server:stop(Foreign)
             end
-        end,source("gui_question.pl") ++ [{gui_pending_allowance,actor,4},{gui_completion_allowance,actor,30000}])
+        end,source("gui_instance.pl") ++ [{gui_pending_allowance,actor,4},{gui_completion_allowance,actor,30000}])
     end}.
 
 gui_projection(Hud) ->
@@ -400,7 +401,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
     {timeout, 120, fun() ->
         Dir = filename:join("/tmp", "quod-gui-questions-" ++
                             binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-        Ctx = quod_lobby_tests:start(Dir),
+        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[],source("user_instance.pl")),
         {ontology_ref, Lobby, _} = maps:get(lobby, Ctx),
         {_, Base} = maps:get(Lobby, maps:get(ontologies, Ctx)),
         {HumanNs, HumanAnchor} = maps:get(agent, Ctx),
@@ -419,7 +420,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
         {Responder, _} = quod_lobby_tests:start_namespace(ResponderNs, Base#{
             data_dir => filename:join(Dir, "responsible"),
             genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++
-                source("gui_question.pl") ++ [Admin, HudHelperGrant, {gui_completion_allowance, responder, 30000},
+                source("gui_instance.pl") ++ [Admin, HudHelperGrant, {gui_completion_allowance, responder, 30000},
                                              {agent_key, responder, PublicKey, active},
                                              {agent_key, other_responder, PublicKey, active}])}),
         ResponderAnchor = quod_simplex:genesis_hash(ResponderNs),
@@ -449,7 +450,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                  {gui_question_policy, another_form, Human, OtherActor},
                  {gui_vocabulary, <<"quod:gui">>, quod_simplex:genesis_hash(<<"quod:gui">>)}])}),
         try
-            commit(Ctx, scope(HumanNs, assertions(source("gui_hud.pl") ++
+            commit(Ctx, scope(HumanNs, assertions(
                 [{instance_of, human_user, HumanInstance},
                  {instance_of, human_user, OtherHumanInstance},
                  {agent_key, OtherHumanInstance, PublicKey, active}]))),
@@ -700,7 +701,22 @@ seed(Ctx, ResponderNs, HumanNs, Instance, Ref, Row) ->
     commit(Ctx, {transaction, {',', scope(ResponderNs, {assertz, Row}),
         scope(HumanNs, {assertz, {gui_pending, Instance, Ref}})}}).
 
-source(Name) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name)).
+%% The fixture authors its smaller HUD allowance at genesis, replacing the
+%% account template's default rather than admitting two policy answers.
+user_source_with_allowance(Instance,Limit) ->
+    [T || T<-source("user_instance.pl"), not user_allowance_clause(T)] ++
+        [{gui_pending_allowance,Instance,Limit}].
+user_allowance_clause({':-',{gui_pending_allowance,_,_},_}) -> true;
+user_allowance_clause(_) -> false.
+
+source(Name) ->
+    case Name of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name))
+    end.
 read(Ctx, Ns, Goal) -> quod_lobby_tests:read(Ctx, scope(Ns, Goal)).
 scope(Ns, Goal) -> {'::', Ns, {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.
 commit(Ctx, Goal) ->
@@ -754,9 +770,9 @@ committed_answer_automatically_completes_test_() ->
             Start = fun(Name, Terms) ->
                 quod_agent_hosting_tests:start_ontology(Name, Dir, Identity, [], [Admin | Terms])
             end,
-            Vocabulary = Start(<<"quod:gui">>, source("quod_gui.pl")),
+            Vocabulary = Start(<<"quod:gui">>, quod_ct:gui_terms()),
             HumanNs = <<"gui:auto-human">>,
-            HumanOwner = Start(HumanNs, source("gui_hud.pl") ++ [{instance_of, human_user, person}]),
+            HumanOwner = Start(HumanNs, source("user_instance.pl") ++ [{instance_of, human_user, person}]),
             Human = {agent_instance_ref, HumanNs, quod_simplex:genesis_hash(HumanNs), person},
             AppNs = <<"gui:auto-app">>,
             Callback = {':-', {settings_entered, {'N'}, {'M'}, {'L'}, {'A'}},
@@ -873,7 +889,7 @@ committed_answer_automatically_completes_test_() ->
                 quod_agent_hosting_tests:stop_ontology(HumanOwner),
                 quod_agent_hosting_tests:stop_ontology(Vocabulary)
             end
-        end, source("gui_question.pl"))
+        end, source("gui_instance.pl"))
     end}.
 
 node_request(#{node := {agent_instance_ref, Ns, Anchor, Instance}, identity := Identity}, Mode, Goal) ->
@@ -1144,6 +1160,7 @@ gui_open_message(Ctx, Session, Kind, Ns, Anchor, Q, ExtraExpiry) ->
     {Pub, _} = Pair = maps:get(key_pair, Ctx),
     Inner = case Kind of gui_hud -> <<"gui_pending_questions(View)">>;
         gui_question -> [<<"gui_question_form(">>, quod_client_goal_parser:value_text(Q), <<",View)">>];
+        source_access -> [<<"prolog_inspect(">>, quod_client_goal_parser:value_text(Q), <<",presentation,View)">>];
         gui_operations -> [<<"gui_operations(">>, quod_client_goal_parser:value_text(Q), <<",View)">>] end,
     Goal = iolist_to_binary([quod_client_goal_parser:value_text(Ns), " :: (current_ontology_identity(",
         quod_client_goal_parser:value_text(Ns), ",", quod_client_goal_parser:value_text(Anchor), "),", Inner, ")."]),

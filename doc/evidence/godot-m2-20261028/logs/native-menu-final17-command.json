@@ -1,0 +1,25 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/local.py",
+    "--export",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final17/source/client/godot/dist/quod.x86_64",
+    "--phase",
+    "menu",
+    "--desktop",
+    "--evidence",
+    "doc/evidence/godot-m2-20261028/native-menu-final17",
+    "--private",
+    "/home/yan/.cache/quod-m2-artifacts/private/native-menu-final17"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T09:55:30Z",
+  "elapsed_seconds": 3.633330821990967,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/native-menu-final17-command.log",
+  "raw_sha256": "468f0c0b674daa61d3111fe87b2c56a82a59d070bc3df93eb0bfa4aa52639735",
+  "sanitized_sha256": "468f0c0b674daa61d3111fe87b2c56a82a59d070bc3df93eb0bfa4aa52639735",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

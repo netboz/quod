@@ -1,0 +1,63 @@
+447878 getrandom(0x7ffe577caf89, 0x10, 0x1) = 0x10
+447878 getrandom(0x7fc1b9a201c0, 0x8, 0x1) = 0x8
+447878 getrandom(0x7fc1b9a2ff60, 0x20, 0) = 0x20
+447881 getrandom(0x7ffeb7aa7f59, 0x10, 0x1) = 0x10
+447881 getrandom(0x7fad3ba201c0, 0x8, 0x1) = 0x8
+447882 getrandom(0x7fffa4636579, 0x10, 0x1) = 0x10
+447882 getrandom(0x7fb2c98201c0, 0x8, 0x1) = 0x8
+447882 +++ exited with 0 +++
+447881 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=447882, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+447881 +++ exited with 0 +++
+447878 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=447881, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+447878 getrandom(0x7ffe577c9b40, 0x80, 0) = 0x80
+447878 getrandom(0x7ffe577c9b40, 0x80, 0) = 0x80
+448204 getrandom(0x7fc1b9a2fea0, 0x20, 0) = 0x20
+448213 +++ exited with 0 +++
+447878 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=448213, si_uid=1000, si_status=0, si_utime=3 /* 0.03 s */, si_stime=10 /* 0.10 s */} ---
+448221 +++ exited with 0 +++
+447878 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=448221, si_uid=1000, si_status=0, si_utime=3 /* 0.03 s */, si_stime=8 /* 0.08 s */} ---
+448230 +++ exited with 0 +++
+447878 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=448230, si_uid=1000, si_status=0, si_utime=2 /* 0.02 s */, si_stime=9 /* 0.09 s */} ---
+448253 +++ exited with 0 +++
+447878 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=448253, si_uid=1000, si_status=0, si_utime=9 /* 0.09 s */, si_stime=14 /* 0.14 s */} ---
+448263 getrandom(0x7fc1b9a2fde0, 0x20, 0) = 0x20
+448264 +++ exited with 0 +++
+447878 getrandom(0x1bdbb4b0, 0x30, 0)   = 0x30
+447878 --- SIGRT_2 {si_signo=SIGRT_2, si_code=SI_TKILL, si_pid=447878, si_uid=1000} ---
+448278 +++ exited with 0 +++
+448274 +++ exited with 0 +++
+448211 +++ exited with 0 +++
+448267 +++ exited with 0 +++
+448268 +++ exited with 0 +++
+447891 +++ exited with 0 +++
+447886 +++ exited with 0 +++
+447885 +++ exited with 0 +++
+447884 +++ exited with 0 +++
+447887 +++ exited with 0 +++
+447888 +++ exited with 0 +++
+447890 +++ exited with 0 +++
+447889 +++ exited with 0 +++
+447883 +++ exited with 0 +++
+448363 +++ exited with 0 +++
+448362 +++ exited with 0 +++
+448323 +++ exited with 0 +++
+448322 +++ exited with 0 +++
+448320 +++ exited with 0 +++
+448319 +++ exited with 0 +++
+448318 +++ exited with 0 +++
+448284 +++ exited with 0 +++
+448283 +++ exited with 0 +++
+448282 +++ exited with 0 +++
+448281 +++ exited with 0 +++
+448280 +++ exited with 0 +++
+448279 +++ exited with 0 +++
+448265 +++ exited with 0 +++
+448263 +++ exited with 0 +++
+448209 +++ exited with 0 +++
+448208 +++ exited with 0 +++
+448207 +++ exited with 0 +++
+448206 +++ exited with 0 +++
+448205 +++ exited with 0 +++
+448204 +++ exited with 0 +++
+448321 +++ exited with 0 +++
+447878 +++ exited with 0 +++

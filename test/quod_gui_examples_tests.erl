@@ -11,10 +11,12 @@ world_library_creation_names_ownership_and_entry_test_() ->
 
 world_library() ->
     Dir = filename:join("/tmp","quod-world-library-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-    Ctx = quod_lobby_tests:start(Dir,[],extended_system_catalogue,[]),
+    Instance = {human_user,test_agent},
+    Ctx = quod_lobby_tests:start(Dir,[],extended_system_catalogue,[],
+        quod_gui_question_tests:user_source_with_allowance(Instance,8) ++ [{instance_of,human_user,Instance}]),
     {ontology_ref,Lobby,_} = maps:get(lobby,Ctx),
     {_,Base} = maps:get(Lobby,maps:get(ontologies,Ctx)),
-    {HumanNs,HumanAnchor} = maps:get(agent,Ctx),Instance = {human_user,test_agent},
+    {HumanNs,HumanAnchor} = maps:get(agent,Ctx),
     Human = {agent_instance_ref,HumanNs,HumanAnchor,Instance},
     try with_responder(Ctx,Base,Human,fun({agent_instance_ref,ResponderNs,_,_}) ->
         {ok,[#{<<"V0">> := Node}],_} = read(Ctx,ResponderNs,{agent_hosted,responder,{0},{'_'},{'_'}}),
@@ -27,9 +29,7 @@ world_library() ->
             {lobby_vocabulary,<<"lobby-test-classes">>,quod_simplex:genesis_hash(<<"lobby-test-classes">>)},
             {rendering_vocabulary,<<"lobby-test-rendering">>,quod_simplex:genesis_hash(<<"lobby-test-rendering">>)},
             {modelling_vocabulary,<<"lobby-test-modelling">>,quod_simplex:genesis_hash(<<"lobby-test-modelling">>)}],
-        Files = ["space.pl","agent_instance.pl","quod_physics.pl","space_view.pl","lobby_instance.pl",
-                 "voxel_world.pl","voxel_world_view.pl","gui_instance.pl","gui_operation.pl","space_gui.pl","gui_question.pl",
-                 "voxel_world_gui.pl","lobby_worlds.pl"],
+        Files = ["quod_space.pl", "agent_instance.pl", "quod_physics.pl", "lobby_instance.pl", "voxel_world.pl", "voxel_world_view.pl", "gui_instance.pl", "voxel_world_gui.pl", "lobby_worlds.pl"],
         {Application,WorldConfig} = quod_lobby_tests:start_namespace(Ns,Base#{
             data_dir => filename:join(Dir,"worlds"),
             genesis_diff => quod_prolog:terms_to_diff(lists:append([source(F) || F <- Files]) ++ Facts)}),
@@ -37,8 +37,6 @@ world_library() ->
         true = quod_reg:subscribe({agent,Actor}),true = quod_reg:subscribe({agent_hosting,Ns}),
         true = quod_reg:subscribe({physics,Ns}),
         try
-            commit(Ctx,scope(HumanNs,assertions(source("gui_hud.pl") ++
-                [{instance_of,human_user,Instance},{gui_pending_allowance,Instance,8}]))),
             ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,Ns,{world_library,{0}})),
             ?assertMatch({ok,[#{<<"V0">> := setup_required}],_},read(Ctx,Ns,{world_library_status,{0}})),
             ?assertMatch({fail,_},read(Ctx#{instance => <<"human_user(other_agent).">>},Ns,{world_library,{0}})),
@@ -222,10 +220,12 @@ consume_world_terrain(Runtime,World,Pid,Ref,Current,Deadline) ->
 voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_() ->
     {timeout,120,fun() ->
         Dir = filename:join("/tmp","quod-voxel-gui-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[]),
+        Instance = {human_user,test_agent},
+        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[],
+            quod_gui_question_tests:user_source_with_allowance(Instance,4) ++ [{instance_of,human_user,Instance}]),
         {ontology_ref,Lobby,_} = maps:get(lobby,Ctx),
         {_,Base} = maps:get(Lobby,maps:get(ontologies,Ctx)),
-        {HumanNs,HumanAnchor} = maps:get(agent,Ctx), Instance = {human_user,test_agent},
+        {HumanNs,HumanAnchor} = maps:get(agent,Ctx),
         Human = {agent_instance_ref,HumanNs,HumanAnchor,Instance},
         try with_responder(Ctx,Base,Human,fun(Actor = {agent_instance_ref,ResponderNs,_,_}) ->
             Ns = <<"gui:voxel-world">>, Form = {voxel_generation,land},
@@ -249,13 +249,10 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                     {surface_limits,512,10000,10000},64,69120,1048576}},
                 {physics_structure,land,1},{physics_next_body,land,0},
                 {physics_allowances,land,{limits,8,8,128,1000000,{geometry,128,100000,100000}},16667,-9810,10000}],
-            Terms = lists:append([source(F) || F <- ["space.pl","quod_physics.pl","voxel_world.pl",
-                "space_view.pl","voxel_world_view.pl","gui_instance.pl","voxel_world_gui.pl"]]) ++ Facts,
+            Terms = lists:append([source(F) || F <- ["quod_space.pl", "quod_physics.pl", "voxel_world.pl", "voxel_world_view.pl", "gui_instance.pl", "voxel_world_gui.pl"]]) ++ Facts,
             {Application,_} = quod_lobby_tests:start_namespace(Ns,Base#{data_dir => filename:join(Dir,"terrain"),
                 genesis_diff => quod_prolog:terms_to_diff(Terms)}),
             try
-                commit(Ctx,scope(HumanNs,assertions(source("gui_hud.pl") ++
-                    [{instance_of,human_user,Instance},{gui_pending_allowance,Instance,4}]))),
                 lists:foreach(fun(F) -> commit(Ctx,scope(ResponderNs,{assertz,{gui_responder_policy,responder,
                     {form_ref,Ns,quod_simplex:genesis_hash(Ns),F},Human}})) end,
                     [Form,{voxel_excavation,land},{voxel_view_settings,land}]),
@@ -328,11 +325,13 @@ examples() ->
         [{attribute, personal_sky, preset_name, <<"Original">>},
          {atmosphere_panorama, belfast_sunset_puresky, <<"Belfast sunset">>},
          {atmosphere_panorama, dusk, <<"Dusk">>}],
-    Ctx = quod_lobby_tests:start(Dir, [], base_system_catalogue, LobbyTerms),
+    HumanInstance = {human_user, test_agent},
+    Ctx = quod_lobby_tests:start(Dir, [], base_system_catalogue, LobbyTerms,
+        quod_gui_question_tests:user_source_with_allowance(HumanInstance,4) ++
+            [{instance_of,human_user,HumanInstance}]),
     {ontology_ref, Lobby, _} = maps:get(lobby, Ctx),
     {_, Base} = maps:get(Lobby, maps:get(ontologies, Ctx)),
     {HumanNs, HumanAnchor} = maps:get(agent, Ctx),
-    HumanInstance = {human_user, test_agent},
     Human = {agent_instance_ref, HumanNs, HumanAnchor, HumanInstance},
     Admin = {can_invoke, {'_'}, Human, {'_'}, {'_'}},
     try with_responder(Ctx,Base,Human,fun(Actor) ->
@@ -370,8 +369,6 @@ examples() ->
                 ?assertEqual(First, read(Ctx, Ns, {gui_schema, Form, {0}, {1}}))
             end, Cases)
         end),
-        commit(Ctx, scope(HumanNs, assertions(source("gui_hud.pl") ++
-            [{instance_of, human_user, HumanInstance},{gui_pending_allowance,HumanInstance,4}]))),
         commit(Ctx, scope(Lobby, {assertz, {gui_question_policy, {atmosphere, personal_sky}, Human, Actor}})),
         commit(Ctx,scope(ResponderNs,{assertz,
             {gui_question_policy,{instrument_settings,Instrument},Human,Actor}})),
@@ -450,7 +447,7 @@ with_responder(Ctx,Base,Human,Fun) ->
     NodeNs = <<"gui:examples-node">>,
     {NodeOwner,_} = quod_lobby_tests:start_namespace(NodeNs,Base#{
         data_dir => filename:join(Dir,"node"),
-        genesis_diff => quod_prolog:terms_to_diff(source("node_execution.pl") ++
+        genesis_diff => quod_prolog:terms_to_diff(source("node_instance.pl") ++
             [{node_ontology,NodeNs},{instance_of,node,physical_node},{agent_key,physical_node,Pub,active}])}),
     Node = {agent_instance_ref,NodeNs,quod_simplex:genesis_hash(NodeNs),physical_node},
     {ok,NodeBlob} = quod_wire_term:encode_canonical(Node),
@@ -460,8 +457,7 @@ with_responder(Ctx,Base,Human,Fun) ->
     {Responder,_} = quod_lobby_tests:start_namespace(Ns,Base#{
         data_dir => filename:join(Dir,"responder"),
         external_predicate_modules => [quod_agent_predicates],
-        genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++ source("gui_question.pl") ++
-            source("gui_instance.pl") ++ source("instrument_configuration.pl") ++
+        genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++ source("gui_instance.pl") ++ source("instrument_configuration.pl") ++
             [{can_invoke,{'_'},Human,{'_'},Ns},
              {instance_of,instrument,analyzer_a},
              {instrument_configuration,analyzer_a,<<"Baseline">>,hold,20,0,false,[left],<<>>},
@@ -485,14 +481,16 @@ with_responder(Ctx,Base,Human,Fun) ->
             {ok,Value} -> application:set_env(quod,node_actor_principal,Value) end
     end.
 
-source(Name) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name)).
+source(Name) ->
+    case Name of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name))
+    end.
 scope(Ns, Goal) -> {'::', Ns, {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.
 read(Ctx, Ns, Goal) -> quod_lobby_tests:read(Ctx, scope(Ns, Goal)).
 commit(Ctx, Goal) ->
     quod_gui_question_tests:commit(Ctx,Goal).
-assertions(Terms) -> conjunction(quod_ct:source_assertions(Terms)).
-conjunction([Goal]) -> Goal;
-conjunction(Goals) ->
-    {Left, Right} = lists:split(length(Goals) div 2, Goals),
-    {',', conjunction(Left), conjunction(Right)}.
 kinds({component, _, Kind, _, Children}) -> [Kind | lists:append([kinds(C) || C <- Children])].

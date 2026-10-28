@@ -16,6 +16,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
+-export([gui_terms/0]).
 -export([eventually/2, stop_all/1, stop_ns/1, match_ok/1, ordinary_write_ok/1,
          peer_prove/3, peer_protocol_position/2, await_applied/3, await_operation_complete/3,
          datadir/2, generate_key_gt/1]).
@@ -45,7 +46,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 %% Manually founded legacy identities exercise retained-state migration and
 %% binding. Production enrollment derives its recipe only in quod:node.
 node_identity_options(Namespace, Instance, Key) ->
-    {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/node_execution.pl")),
+    {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/node_instance.pl")),
     [{terms, [{node_ontology, Namespace}, {instance_of, node, Instance},
               {agent_key, Instance, Key, active}]},
      {source, Source}, {external_predicate_modules, [quod_ontology_predicates]}].
@@ -1237,3 +1238,8 @@ peer_protocol_position(Peer, Ns) ->
     Owner = peer:call(Peer, quod_reg, where, [{quod_simplex, Ns}]),
     {running, State} = peer:call(Peer, sys, get_state, [Owner]),
     quod_simplex:test_protocol_position(State).
+
+%% The complete public GUI owner, in its actual founding source order.
+gui_terms() ->
+    lists:append([quod_prolog:read_terms(filename:join([code:priv_dir(quod),"ontologies",F]))
+        || F <- ["quod_gui.pl", "gui_measure.pl", "gui_scene.pl", "gui_tools.pl"]]).

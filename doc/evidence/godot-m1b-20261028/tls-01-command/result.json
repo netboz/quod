@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/tls.py",
+    "--export",
+    "/tmp/quod-m1b-export-14/quod.x86_64",
+    "--evidence",
+    "doc/evidence/godot-m1b-20261028/tls-01",
+    "--private",
+    "/tmp/quod-m1b-tls-01-private"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 3.4596786789988982
+}

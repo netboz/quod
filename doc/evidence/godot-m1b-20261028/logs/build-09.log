@@ -1,0 +1,17 @@
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Main.cs(166,42): warning CS8604: Possible null reference argument for parameter 'session' in 'SignedView.SignedView(SignedSession session, Actor human, Actor target, string kind, string goal)'. [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,42): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,65): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,88): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,116): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+
+Build FAILED.
+
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Main.cs(166,42): warning CS8604: Possible null reference argument for parameter 'session' in 'SignedView.SignedView(SignedSession session, Actor human, Actor target, string kind, string goal)'. [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,42): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,65): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,88): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs(48,116): error CS7036: There is no argument given that corresponds to the required parameter 'value' of 'CollectionExtensions.Remove<TKey, TValue>(IDictionary<TKey, TValue>, TKey, out TValue)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+    1 Warning(s)
+    4 Error(s)
+
+Time Elapsed 00:00:04.29

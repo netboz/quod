@@ -1,0 +1,21 @@
+{
+  "body_only_correction_attempts_per_item": 1,
+  "results": {
+    "62": {
+      "status": "failed",
+      "itemFieldsStored": true,
+      "localSnapshotStored": true,
+      "collaborativeBodyStored": false,
+      "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+    },
+    "60": {
+      "status": "failed",
+      "itemFieldsStored": true,
+      "localSnapshotStored": true,
+      "collaborativeBodyStored": false,
+      "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+    }
+  },
+  "local_get_is_not_publication_proof": true,
+  "visible_session_attribution_not_proven": true
+}

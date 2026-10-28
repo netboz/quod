@@ -1,0 +1,15 @@
+{
+  "command": [
+    "dotnet",
+    "run",
+    "--project",
+    "client/godot-tests/Quod.Client.Tests.csproj",
+    "--no-restore",
+    "--",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final05/source",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final05/public-backup.json"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.953306571995199
+}

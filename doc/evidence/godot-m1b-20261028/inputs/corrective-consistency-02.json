@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "server_campaign": "gates-01",
+  "server_gates_rerun_for_corrective_client": false,
+  "server_authored_inputs": 1427,
+  "server_dependency_inputs": 1094,
+  "server_compiled_outputs": 2054,
+  "server_native_outputs": 1,
+  "provider_original_objects": 650,
+  "client_campaign": "corrective-02",
+  "client_authored_inputs": 54,
+  "client_export_outputs": 195,
+  "source_unchanged": true
+}

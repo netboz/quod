@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m2-20261028/freeze-client.py",
+    "development-02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T05:58:17Z",
+  "elapsed_seconds": 26.584977865219116,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/client-development-02.log",
+  "raw_sha256": "d5790dd017bb7b45678a941080608072b62562122d3173ae41c104580d39730b",
+  "sanitized_sha256": "d5790dd017bb7b45678a941080608072b62562122d3173ae41c104580d39730b",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

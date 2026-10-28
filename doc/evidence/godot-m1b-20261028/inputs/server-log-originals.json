@@ -1,0 +1,47 @@
+[
+  {
+    "private_original": "/tmp/quod-m1b-live-01/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-01.log",
+    "sha256": "64fd5d2b37225a5f7da66a3763cd4b3ad8780ae451351874259e495393ad7fee"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-02/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-02.log",
+    "sha256": "6ab560450f50022635a9c9e68cb93ab04a382620d9574b9c07e7d7200dcb2392"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-03/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-03.log",
+    "sha256": "42a8a5775879c186948c88a4b72ea7277dc866e7f47ba9656ce78250c1f31976"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-04/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-04.log",
+    "sha256": "d607fc5d9ca628661aea2d9a0eb84b05ff4a36d29a09233f20ae01c31c6e5e04"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-05/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-05.log",
+    "sha256": "15548294156b2ba0f9bdc99f04d85e869a9db1a1b64e9ca154d407c8d3a29231"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-final-01/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-final-01.log",
+    "sha256": "74da4d6e8485bc8777e4e3e0622a60f956388a87142b1ee2383bd9951d6ed9d1"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-final-02/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-final-02.log",
+    "sha256": "824e1e9b19c0ea9afecaa5dacb3f47625b21d99147174d2ff33dfb0e7bfe5695"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-final-03/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-final-03.log",
+    "sha256": "993e0ed59bfcf91206bf40d244e80563549ced1f658ee622c7766f6b96dc5c0a"
+  },
+  {
+    "private_original": "/tmp/quod-m1b-live-final-04/server-raw.log",
+    "sanitized_copy_before_redaction": "doc/evidence/godot-m1b-20261028/logs/server-final-04.log",
+    "sha256": "f1da9ea0a9ebc9fef4e906035d6f622d771d94f7c08ea4a1b4ee9e89a54112cb"
+  }
+]

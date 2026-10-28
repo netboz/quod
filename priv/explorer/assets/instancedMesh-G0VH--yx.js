@@ -1,0 +1,1 @@
+import{n as e,t}from"./instancedMesh.pure-LUgaFfMM.js";e();export{t as InstancedMesh,e as RegisterInstancedMesh};

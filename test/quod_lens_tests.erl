@@ -1,9 +1,9 @@
 -module(quod_lens_tests).
 
-%% The `quod:lens` ontology (priv/ontologies/quod_lens.pl): a lens and its
+%% The `quod:gui` ontology (priv/ontologies/gui_tools.pl): a lens and its
 %% encoding declared apart, an encoding's preconditions actually refusing a
 %% picture the data does not support, and one authored lens over `quod:licence`
-%% producing descriptors that `quod:rendering` accepts.
+%% producing descriptors that `quod:gui` accepts.
 %%
 %% The end-to-end tests load both sources into one engine whose proof context is
 %% `quod:licence`, so the lens's `::` asks take the real self-ask path in
@@ -41,7 +41,7 @@ a_lens_and_its_encoding_are_separate_test() ->
         %% the encoding says how it is shown, and is reached through the lens
         ?assertEqual([<<"reach_columns">>],
                      solutions({'E'}, {encoding, {'E'}, <<"work_licences">>, {'_'}}, St)),
-        ?assertEqual([<<"quod:rendering">>],
+        ?assertEqual([<<"quod:gui">>],
                      solutions({'P'}, {encoding, <<"reach_columns">>, {'_'}, {'P'}}, St)),
         ?assertEqual([<<"box">>],
                      solutions({'K'}, {encoding_mark, <<"reach_columns">>, {'K'}}, St)),
@@ -105,20 +105,20 @@ an_undeclared_group_refuses_the_view_test() ->
 
 the_scene_bound_is_its_own_test() ->
     with_lens(fun(St) ->
-        ?assertEqual([256], solutions({'N'}, {limit, <<"marks">>, {'N'}}, St)),
+        ?assertEqual([256], solutions({'N'}, {lens_limit, <<"marks">>, {'N'}}, St)),
         Rows = [row(N, <<"gpl">>, 3, <<"a">>) || N <- lists:seq(1, 257)],
         fails({satisfied, {within, <<"marks">>}, Rows}, St),
         holds({satisfied, {within, <<"marks">>}, tl(Rows)}, St)
     end).
 
-%% The lens never produces more marks, or longer labels, than `quod:rendering`
+%% The lens never produces more marks, or longer labels, than `quod:gui`
 %% accepts. Each ontology owns its own bound; this is the check that the two
 %% agree, so neither has to restate the other's number.
 the_lens_bounds_sit_inside_the_presentation_bounds_test() ->
     Lens = terms(lens_source()),
     Present = terms(rendering_source()),
-    ?assertEqual(true, limit_of(Lens, <<"marks">>) =< limit_of(Present, <<"scene">>)),
-    ?assertEqual(true, limit_of(Lens, <<"label">>) =< limit_of(Present, <<"label">>)).
+    ?assertEqual(true, limit_of(Lens, lens_limit, <<"marks">>) =< limit_of(Present, limit, <<"scene">>)),
+    ?assertEqual(true, limit_of(Lens, lens_limit, <<"label">>) =< limit_of(Present, limit, <<"label">>)).
 
 %% --- the authored lens, end to end ------------------------------------------
 %% `quod:licence` ships the rules, not anybody's parts list, so each of these
@@ -243,7 +243,7 @@ a_height_channel_must_carry_an_ordinal_measure_test() ->
           "lens(<<\"by_family\">>, <<\"which families are here\">>).\n"
           "lens_subject(<<\"by_family\">>, <<\"quod:licence\">>, <<\"component\">>).\n"
           "lens_measure(<<\"by_family\">>, <<\"family\">>, <<\"nominal\">>).\n"
-          "encoding(<<\"family_columns\">>, <<\"by_family\">>, <<\"quod:rendering\">>).\n"
+          "encoding(<<\"family_columns\">>, <<\"by_family\">>, <<\"quod:gui\">>).\n"
           "encoding_mark(<<\"family_columns\">>, <<\"box\">>).\n"
           "encoding_layout(<<\"family_columns\">>, <<\"grouped_columns\">>).\n"
           "encoding_channel(<<\"family_columns\">>, <<\"high\">>, <<\"family\">>).\n"
@@ -329,14 +329,19 @@ has_float(_) -> false.
 
 %% --- helpers ---------------------------------------------------------------
 
-lens_source() -> filename:join(code:priv_dir(quod), "ontologies/quod_lens.pl").
+lens_source() -> filename:join(code:priv_dir(quod), "ontologies/gui_tools.pl").
 licence_source() -> filename:join(code:priv_dir(quod), "ontologies/quod_licence.pl").
-rendering_source() -> filename:join(code:priv_dir(quod), "ontologies/quod_rendering.pl").
+rendering_source() -> filename:join(code:priv_dir(quod), "ontologies/gui_scene.pl").
 
-terms(Path) -> quod_committed_projection:read_terms(Path).
+terms(Path) ->
+    case filename:basename(Path) of
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        _ -> quod_committed_projection:read_terms(Path)
+    end.
 
-limit_of(Terms, What) ->
-    [Max] = [N || {limit, W, N} <- Terms, W =:= What],
+limit_of(Terms, Predicate, What) ->
+    [Max] = [N || {P, W, N} <- Terms, P =:= Predicate, W =:= What],
     Max.
 
 row(Thing, Group, Rank, Text) -> {row, Thing, Group, Rank, Text}.

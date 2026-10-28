@@ -1,0 +1,6 @@
+{
+  "reason": "Input02 was mistakenly launched before inspecting export13 diagnostic failure; no managed application was loaded. Owned engine and missing-assembly dialog explicitly terminated. No qualification credit.",
+  "signal": "SIGTERM",
+  "engine_pid": 396179,
+  "dialog_pid": 396194
+}

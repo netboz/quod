@@ -1,0 +1,23 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=closing",
+    "M1B_NETWORK=prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+    "M1B_ORIGINAL=/tmp/quod-m1b-questions-01-private/original.json",
+    "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+    "/tmp/quod-m1b-export-22/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/tmp/quod-m1b-close-01-private/identity",
+    "--node",
+    "https://127.0.0.1:33349",
+    "--ca",
+    "/tmp/quod-m1b-live-05/backend-ca.pem"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 17.419867512002384
+}

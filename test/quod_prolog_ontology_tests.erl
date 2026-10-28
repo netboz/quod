@@ -330,7 +330,7 @@ read_view(St) -> quod_erlog_db_local_prove:wrap_state(St).
 
 with_editor(Facts, Fun) ->
     {ok, Terms} = erlog_io:read_file(filename:join(
-                     [code:priv_dir(quod), "ontologies", "quod_prolog.pl"])),
+                     [code:priv_dir(quod), "ontologies", "gui_tools.pl"])),
     CompilerStore = committed(Terms), TargetStore = committed(Facts),
     Compiler = wrap(CompilerStore), Target = wrap(TargetStore),
     try Fun(Compiler, Target, TargetStore)

@@ -1,0 +1,24 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=input",
+    "M1B_NETWORK=prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+    "M1B_ORIGINAL=/tmp/quod-m1b-questions-01-private/original.json",
+    "M1B_SCREENSHOT=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/desktop-final-01.png",
+    "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+    "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/tmp/quod-m1b-desktop-final-01-private/identity",
+    "--node",
+    "https://127.0.0.1:33349",
+    "--ca",
+    "/tmp/quod-m1b-live-05/backend-ca.pem"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 19.19747407900286
+}

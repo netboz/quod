@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "server_authored_inputs": 1427,
+  "server_dependency_inputs": 1094,
+  "server_compiled_outputs": 2054,
+  "provider_objects_retained_verified": 650,
+  "client_authored_inputs": 54,
+  "client_export_outputs": 195,
+  "runtime_recompiled_for_final_endpoint": false,
+  "production_profile_endpoint_receipt": "inputs/server-final-03.json",
+  "source_changed_after_qualification": false
+}

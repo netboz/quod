@@ -100,7 +100,7 @@ absence licenses uncertain-write replay or an ACL bypass.
 
 For a fresh network, found `quod:node` through the root action with its source,
 the ontology predicate module, and `node_identity_template(Source)` containing
-the reviewed `node_execution.pl` bytes. Then commit the exact class anchor in
+the reviewed `node_instance.pl` bytes. Then commit the exact class anchor in
 root's `system_ontology(Namespace, Anchor)` catalogue and
 `ontology_creation_policy/2`. No per-node hosting configuration is stored in root.
 

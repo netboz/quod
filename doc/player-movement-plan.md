@@ -15,12 +15,13 @@ Its advice is consultative and must be checked against the production owners.
 ## Project model and evidence
 
 [The agent vocabulary](../priv/ontologies/quod_agent.pl) defines
-`isa(agent, thing)`; [the human vocabulary](../priv/ontologies/quod_human_user.pl)
+`isa(agent, thing)`; [the human vocabulary](../priv/ontologies/quod_user.pl)
 defines `isa(human_user, agent)`. The shared vocabulary is not a global table
-of humans. [Signup](../priv/ontologies/quod_signup.pl) creates a concrete
+of humans. [Signup](../priv/ontologies/quod_user.pl) creates a concrete
 human instance and active key in its own ontology; the
-[instance template](../priv/ontologies/human_user_instance.pl) currently
-provides ownership and personal-lobby behavior.
+[instance template](../priv/ontologies/user_instance.pl) provides ownership and
+personal-agent behavior. Its setup constructs ordinary nonphysical S0; optional
+physical presets and later recursive entry/physics delivery retain their own scope.
 
 [Agent identity](../src/quod_agent_ref.erl) is the exact
 `agent_instance_ref(Namespace, GenesisAnchor, Instance)`. Identity, keys,
@@ -59,7 +60,7 @@ include colliders, frames, body types, joints and attachments. A controlled
 agent may require a body or related body group; an input adapter must not
 replace that composition with its own player collider.
 
-[Modelling](../priv/ontologies/quod_modelling.pl) describes representation.
+[Modelling](../priv/ontologies/gui_scene.pl) describes representation.
 [The mesh contract](eidolon-mesh-support.md#identity-and-future-physics)
 denies collision authority to visual bounds. Physical and visual definitions
 may share an authored source, but adopting physical geometry remains an

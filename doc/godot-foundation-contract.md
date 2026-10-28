@@ -34,8 +34,9 @@ histories remain ordinary instances outside this shared count.
 | `quod:space` | Space class, construction, extent, admission, entry and space forms/Eidolons | `quod_space.pl`; optional `space_physics.pl`, `space_terrain.pl`, `space_hinged.pl`, `space_environment.pl` templates |
 | `quod:user` | Human class, signup/allocation policy and private signup receipts | `quod_user.pl`; frozen private `user_instance.pl` composition, optional `user_names.pl` |
 
-These are planned filenames. The retirement map records their current source
-inputs. A composed file does not create another ontology. The generic startup
+The required compositions are authoritative. Optional filenames describe
+their later owner consolidation. The retirement map records the original
+inputs; M1a evidence records the bytes actually installed. A composed file does not create another ontology. The generic startup
 base remains exactly `common_predicates.pl`, `construction.pl`,
 `material_policy.pl` plus the existing governed predicate modules. Package
 hashes for that base and runtime are part of every qualification, since they
@@ -54,10 +55,12 @@ Pin dependencies to the exact anchors returned by founding, never names alone:
 `R`, `N`, `AClass`, `G`, `C`, `S`, `UClass` denote 32-byte anchors in the founding
 receipt. `AClass` is the shared agent-class anchor; personal A below is a distinct
 entity reference. These symbols are output slots, not invented genesis hashes. Random
-genesis incarnations make future anchor bytes unknowable before M1a. M1a must
-replace every slot with actual bytes and retain the complete receipt before
-crediting a fresh foundation. Old anchors from the frozen catalogue cannot be
-reused for changed definitions.
+genesis incarnations make future anchor bytes unknowable before founding.
+The [actual M1a receipt](evidence/godot-m1a-20261027/founding-receipt.md) binds all
+seven symbols to real bytes, with complete source/profile and private account
+receipts. Subsequent founding records its own returned anchors before crediting
+a fresh foundation. Old anchors from the frozen catalogue cannot be reused for
+changed definitions.
 
 | Consumer | Exact dependency binding in its founding terms |
 | --- | --- |
@@ -170,8 +173,11 @@ The existing lifecycle imposes two durable boundaries:
    not a constructor occurrence to replay on load. Resolve this original
    operation before beginning dependent setup; a lost reply never causes a new
    token, replacement U or new create request.
-2. U's explicit setup action prepares A's key using the existing custody read,
-   then in one transaction assigns its host/key, constructs S0 through Stage 1
+2. U's explicit setup action prepares A's key using the existing custody read.
+   The read also returns an executor-signed receipt binding the exact A, prior
+   assignment, destination and key. Setup verifies this immutable receipt against
+   its proof-bound executor without a live vault lookup. Then in one transaction
+   it assigns A's host/key, constructs S0 through Stage 1
    with explicit owner U, places A in S0 through `space_place/3` during that
    active construction, stores exact U/A/S0 results and marks setup
    complete. It consumes the signup receipt in that same multi-owner transition.
@@ -224,7 +230,7 @@ gui_operations(class_ref(StorageNs, StorageAnchor, space), Offers).
 gui_operation(class_ref(StorageNs, StorageAnchor, space), create,
               Revision, space_create_submit, Fields, Results).
 % Results = [result(space, entity_ref(StorageNs, StorageAnchor, GeneratedId)),
-%            result(location, placed(S0, Transform))].
+%            result(location, placed(S0, Transform)), result(owner, U)].
 ```
 
 These are shapes; real revisions/fields are taken from the signed offered view,
@@ -256,11 +262,12 @@ Resolve exact unit conversion in Prolog. An infinite extent has no finite box:
 the wireframe choice must explicitly report unavailable for that extent and
 offer the other actual Eidolons; it must never invent a finite bound or silently
 substitute the cube. Sub-millimetre rational extents also must not be rounded.
-The current integer-mm `mark/7` box plus `surface/5` vocabulary lacks an edge-only
-box with arbitrary exact-rational dimensions. M2 must extend the shared scene
-descriptor/validator/adapters for this concrete need (exact rational dimensions
-until conversion at the render boundary), not add a space-specific Godot mesh
-branch. Qualify asymmetric extents, rotation, odd/rational dimensions and picking.
+The M0 integer-mm `mark/7` box plus `surface/5` vocabulary lacked an edge-only
+box with arbitrary exact-rational dimensions. The shared `wire_box` kind carries
+positive reduced integer/rational millimetre dimensions until conversion at the
+render boundary. It has twelve edges independently of its dimensions, with no
+space-specific engine branch. M2 qualifies asymmetric extents, rotation,
+odd/rational dimensions and picking through that shared path.
 
 For a contents exterior, a selected space exposes its contents recursively.
 If S0 contains S1 and S1 contains S2 and both select contents, S2's contents
@@ -355,6 +362,14 @@ the resulting source manifest/recipe. Use existing `create_ontology/3` with
 creation action. Source bytes, ordering, compiled predicate-module hashes,
 runtime/common source hashes and lockfiles must all be retained. A filename or
 catalogue row does not grant source execution or founding authority.
+
+Private-account preparation uses ordered `source_file(Path,Sha256)` options.
+The existing source preparation owner resolves its normal consult path, reads
+one buffer, checks the raw SHA-256 and parses those same bytes. A mismatch
+returns `source_hash_mismatch(Index)` before founding. This keeps a complete
+private source program out of proof-answer transport while retaining the exact
+reviewed source recipe and existing material policy. Recovery uses the decided
+genesis; it never reopens these packaged files.
 
 1. Load the exact root seed/common/runtime artifact with the existing create
    configuration into a new disposable directory. Record R, the node key's

@@ -1,0 +1,2099 @@
+{
+  "command_receipts": {
+    "backup-cancel-01-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-export-22/quod.x86_64",
+        "--phase",
+        "backup-cancel",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/backup-cancel-01",
+        "--private",
+        "/tmp/quod-m1b-backup-cancel-01-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.2039505949978775
+    },
+    "backup-cancel-final-01-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-04/source/client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "--phase",
+        "backup-cancel",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/backup-cancel-final-01",
+        "--private",
+        "/tmp/quod-m1b-backup-cancel-final-01-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.9197438749979483
+    },
+    "backup-import-final-01-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-03/source/client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-03/source/client/godot/dist/quod.x86_64",
+        "--phase",
+        "backup-import",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/backup-import-final-01",
+        "--private",
+        "/tmp/quod-m1b-backup-import-final-01-private",
+        "--journey-private",
+        "/tmp/quod-m1b-journey-final-02-private",
+        "--node",
+        "https://127.0.0.1:37333",
+        "--ca",
+        "/tmp/quod-m1b-live-final-03/backend-ca.pem"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 20.162779348000186
+    },
+    "backup-import-final-02-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-04/source/client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "--phase",
+        "backup-import",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/backup-import-final-02",
+        "--private",
+        "/tmp/quod-m1b-backup-import-final-02-private",
+        "--journey-private",
+        "/tmp/quod-m1b-journey-final-03-private",
+        "--node",
+        "https://127.0.0.1:37333",
+        "--ca",
+        "/tmp/quod-m1b-live-final-03/backend-ca.pem"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 18.556894631998148
+    },
+    "backup-interop-01/result.json": {
+      "command": [
+        "env",
+        "-u",
+        "LD_LIBRARY_PATH",
+        "-u",
+        "LD_PRELOAD",
+        "node",
+        "client/godot-tests/backup-interop.mjs",
+        "/tmp/quod-m1b-crypto-03-private/exported-backup.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.25477301700084354
+    },
+    "backup-interop-final-01/result.json": {
+      "command": [
+        "env",
+        "-u",
+        "LD_LIBRARY_PATH",
+        "-u",
+        "LD_PRELOAD",
+        "node",
+        "/tmp/quod-m1b-client-final-04/source/client/godot-tests/backup-interop.mjs",
+        "/tmp/quod-m1b-crypto-final-02-private/exported-backup.json"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.04171662899898365
+    },
+    "backup-interop-final-02/result.json": {
+      "command": [
+        "env",
+        "-u",
+        "LD_LIBRARY_PATH",
+        "-u",
+        "LD_PRELOAD",
+        "node",
+        "client/godot-tests/backup-interop.mjs",
+        "/tmp/quod-m1b-crypto-final-02-private/exported-backup.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.5713745499997458
+    },
+    "build-04/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.938129818001471
+    },
+    "build-05/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.355463298001268
+    },
+    "build-06/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.125337722998665
+    },
+    "build-07/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.002159815001505
+    },
+    "build-10/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.096156993997283
+    },
+    "build-11/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.4444412470002135
+    },
+    "build-12/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.608012821001466
+    },
+    "build-13/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.934793477001222
+    },
+    "build-14/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.433557101001497
+    },
+    "build-15/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.995333599999867
+    },
+    "build-16/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.3470216069981689
+    },
+    "build-17/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.2740249940034118
+    },
+    "build-18/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.9528378079994582
+    },
+    "build-19/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.218117837997852
+    },
+    "build-20/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.20764906399927
+    },
+    "build-21/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.156280491999496
+    },
+    "build-22/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.1632584229992062
+    },
+    "build-23/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.361445504000585
+    },
+    "build-24/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "build",
+        "client/godot/Quod.csproj",
+        "--no-restore"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.812323401998583
+    },
+    "client-final-02-bootstrap/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tools/run.py",
+        "--bootstrap"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.298373322999396
+    },
+    "client-final-02-core/result.json": {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--no-restore",
+        "--",
+        "/tmp/quod-m1b-client-final-02/source",
+        "/tmp/quod-m1b-client-final-02/public-backup.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.592998920001264
+    },
+    "client-final-02-core-restore/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.Client.Tests.csproj",
+        "--locked-mode",
+        "--source",
+        "/tmp/quod-m1b-client-final-02/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.0401663720003853
+    },
+    "client-final-02-export/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tools/run.py",
+        "--export"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 12.672704627999337
+    },
+    "client-final-02-restore-debug/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.csproj",
+        "--locked-mode",
+        "-p:Configuration=Debug",
+        "-p:SelfContained=true",
+        "--source",
+        "/tmp/quod-m1b-client-final-02/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.060221345000173
+    },
+    "client-final-02-restore-exportrelease/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.csproj",
+        "--locked-mode",
+        "-p:Configuration=ExportRelease",
+        "-p:SelfContained=true",
+        "--source",
+        "/tmp/quod-m1b-client-final-02/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.4037794260002556
+    },
+    "client-final-02-toolchain/result.json": {
+      "command": [
+        "dotnet",
+        "--info"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.37881544300034875
+    },
+    "client-final-03-bootstrap/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tools/run.py",
+        "--bootstrap"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.342264585000521
+    },
+    "client-final-03-core/result.json": {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--no-restore",
+        "--",
+        "/tmp/quod-m1b-client-final-03/source",
+        "/tmp/quod-m1b-client-final-03/public-backup.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.7247630589990877
+    },
+    "client-final-03-core-restore/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.Client.Tests.csproj",
+        "--locked-mode",
+        "--source",
+        "/tmp/quod-m1b-client-final-03/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.915830988997186
+    },
+    "client-final-03-export/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tools/run.py",
+        "--export"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 13.13890233499842
+    },
+    "client-final-03-restore-debug/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.csproj",
+        "--locked-mode",
+        "-p:Configuration=Debug",
+        "-p:SelfContained=true",
+        "--source",
+        "/tmp/quod-m1b-client-final-03/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.8191227729985258
+    },
+    "client-final-03-restore-exportrelease/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.csproj",
+        "--locked-mode",
+        "-p:Configuration=ExportRelease",
+        "-p:SelfContained=true",
+        "--source",
+        "/tmp/quod-m1b-client-final-03/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.2223594339993724
+    },
+    "client-final-03-toolchain/result.json": {
+      "command": [
+        "dotnet",
+        "--info"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.3878169050003635
+    },
+    "client-final-04-bootstrap/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tools/run.py",
+        "--bootstrap"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.419160092998936
+    },
+    "client-final-04-core/result.json": {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--no-restore",
+        "--",
+        "/tmp/quod-m1b-client-final-04/source",
+        "/tmp/quod-m1b-client-final-04/public-backup.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.860133239002607
+    },
+    "client-final-04-core-restore/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.Client.Tests.csproj",
+        "--locked-mode",
+        "--source",
+        "/tmp/quod-m1b-client-final-04/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.376610923001863
+    },
+    "client-final-04-export/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tools/run.py",
+        "--export"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 16.79520417200183
+    },
+    "client-final-04-restore-debug/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.csproj",
+        "--locked-mode",
+        "-p:Configuration=Debug",
+        "-p:SelfContained=true",
+        "--source",
+        "/tmp/quod-m1b-client-final-04/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.6989425440006016
+    },
+    "client-final-04-restore-exportrelease/result.json": {
+      "command": [
+        "dotnet",
+        "restore",
+        "Quod.csproj",
+        "--locked-mode",
+        "-p:Configuration=ExportRelease",
+        "-p:SelfContained=true",
+        "--source",
+        "/tmp/quod-m1b-client-final-04/dependency-feed"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.9004960249985743
+    },
+    "client-final-04-toolchain/result.json": {
+      "command": [
+        "dotnet",
+        "--info"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.37623636700300267
+    },
+    "close-01/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=closing",
+        "M1B_NETWORK=prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+        "M1B_ORIGINAL=/tmp/quod-m1b-questions-01-private/original.json",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-22/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-close-01-private/identity",
+        "--node",
+        "https://127.0.0.1:33349",
+        "--ca",
+        "/tmp/quod-m1b-live-05/backend-ca.pem"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 17.419867512002384
+    },
+    "close-final-01/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=closing",
+        "M1B_NETWORK=K5U1NJEEwVcBuc03WHZCYfCry0dKxdA-LuIj_2QUhT8",
+        "M1B_ORIGINAL=/tmp/quod-m1b-journey-final-03-private/original.json",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-close-final-01-private/identity",
+        "--node",
+        "https://127.0.0.1:37333",
+        "--ca",
+        "/tmp/quod-m1b-live-final-03/backend-ca.pem"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 18.81563442499828
+    },
+    "core-01/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--",
+        "/home/yan/src/quod_worktrees/pearl-stone",
+        "/tmp/quod-m1b-public-backup.json"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 6.984661571998004
+    },
+    "core-02/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--no-restore",
+        "--",
+        "/home/yan/src/quod_worktrees/pearl-stone",
+        "/tmp/quod-m1b-public-backup-02.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 6.358065058000648
+    },
+    "core-03/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--no-restore",
+        "--",
+        "/home/yan/src/quod_worktrees/pearl-stone",
+        "/tmp/quod-m1b-public-backup-03.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 7.433229419999407
+    },
+    "core-04/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--no-restore",
+        "--",
+        "/home/yan/src/quod_worktrees/pearl-stone",
+        "/tmp/quod-m1b-public-backup-04.json"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.9200132059995667
+    },
+    "core-05/result.json": {
+      "command": [
+        "env",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "dotnet",
+        "run",
+        "--project",
+        "client/godot-tests/Quod.Client.Tests.csproj",
+        "--no-restore",
+        "--",
+        "/home/yan/src/quod_worktrees/pearl-stone",
+        "/tmp/quod-m1b-public-backup-05.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.369394034001743
+    },
+    "crash-01-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-export-17/quod.x86_64",
+        "--phase",
+        "crash",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crash-01",
+        "--private",
+        "/tmp/quod-m1b-crash-01-private",
+        "--journey-private",
+        "/tmp/quod-m1b-journey-11-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.536824381997576
+    },
+    "crash-final-01-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-03/source/client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-03/source/client/godot/dist/quod.x86_64",
+        "--phase",
+        "crash",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crash-final-01",
+        "--private",
+        "/tmp/quod-m1b-crash-final-01-private",
+        "--journey-private",
+        "/tmp/quod-m1b-journey-final-02-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.4477982129974407
+    },
+    "crash-final-02-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-04/source/client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "--phase",
+        "crash",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crash-final-02",
+        "--private",
+        "/tmp/quod-m1b-crash-final-02-private",
+        "--journey-private",
+        "/tmp/quod-m1b-journey-final-03-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.894545104001736
+    },
+    "crypto-01-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-export-14/quod.x86_64",
+        "--phase",
+        "crypto",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crypto-01",
+        "--private",
+        "/tmp/quod-m1b-crypto-01-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.3020047179998073
+    },
+    "crypto-02-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-export-15/quod.x86_64",
+        "--phase",
+        "crypto",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crypto-02",
+        "--private",
+        "/tmp/quod-m1b-crypto-02-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.3757683180010645
+    },
+    "crypto-03-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/local.py",
+        "--export",
+        "/tmp/quod-m1b-export-17/quod.x86_64",
+        "--phase",
+        "crypto",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crypto-03",
+        "--private",
+        "/tmp/quod-m1b-crypto-03-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.632230131999677
+    },
+    "crypto-final-01-command/result.json": {
+      "command": [
+        "env",
+        "M1B_REAL_EXPORT=/tmp/quod-m1b-client-final-03/source/client/godot/dist/quod.x86_64",
+        "M1B_RUNTIME_TRACE=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/logs/crypto-final-01-entropy.strace",
+        "python3",
+        "/tmp/quod-m1b-client-final-03/source/client/godot-tests/local.py",
+        "--export",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/runtime-entropy.sh",
+        "--phase",
+        "crypto",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crypto-final-01",
+        "--private",
+        "/tmp/quod-m1b-crypto-final-01-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 9.527439441000752
+    },
+    "crypto-final-02-command/result.json": {
+      "command": [
+        "env",
+        "M1B_REAL_EXPORT=/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "M1B_RUNTIME_TRACE=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/logs/crypto-final-02-entropy.strace",
+        "python3",
+        "/tmp/quod-m1b-client-final-04/source/client/godot-tests/local.py",
+        "--export",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/runtime-entropy.sh",
+        "--phase",
+        "crypto",
+        "--desktop",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/crypto-final-02",
+        "--private",
+        "/tmp/quod-m1b-crypto-final-02-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 9.999167475998547
+    },
+    "desktop-final-01/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=input",
+        "M1B_NETWORK=prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+        "M1B_ORIGINAL=/tmp/quod-m1b-questions-01-private/original.json",
+        "M1B_SCREENSHOT=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/desktop-final-01.png",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-desktop-final-01-private/identity",
+        "--node",
+        "https://127.0.0.1:33349",
+        "--ca",
+        "/tmp/quod-m1b-live-05/backend-ca.pem"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 19.19747407900286
+    },
+    "export-01/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-01/quod.x86_64"
+      ],
+      "exit": 1,
+      "diagnostic_failure": true,
+      "elapsed_seconds": 14.04687770199962
+    },
+    "export-02/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-02/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.852019158002804
+    },
+    "export-03/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-03/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 10.452346235000732
+    },
+    "export-04/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-04/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 10.77490045399827
+    },
+    "export-05/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-05/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 11.034386572002404
+    },
+    "export-06/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-06/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 10.563322103000246
+    },
+    "export-07/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-07/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 10.942744479001703
+    },
+    "export-08/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-08/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": true,
+      "elapsed_seconds": 9.231915644002584
+    },
+    "export-09/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-09/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 10.440728932000638
+    },
+    "export-10/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-10/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 9.665104383002472
+    },
+    "export-11/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-11/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": true,
+      "elapsed_seconds": 9.314618075000908
+    },
+    "export-12/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-12/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 10.145510573998763
+    },
+    "export-13/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-13/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": true,
+      "elapsed_seconds": 5.200296234001144
+    },
+    "export-14/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-14/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.057881329001248
+    },
+    "export-15/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-15/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.037029014998552
+    },
+    "export-16/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-16/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 4.761509218998981
+    },
+    "export-17/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-17/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 6.077873730002466
+    },
+    "export-18/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-18/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 6.463189074002003
+    },
+    "export-19/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-19/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 6.767478272999142
+    },
+    "export-20/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-20/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.921778682997683
+    },
+    "export-21/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-21/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.398006278999674
+    },
+    "export-22/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--export-release",
+        "Linux",
+        "/tmp/quod-m1b-export-22/quod.x86_64"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.137301316000958
+    },
+    "input-01/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=input",
+        "M1B_NETWORK=EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ",
+        "M1B_ORIGINAL=/tmp/quod-m1b-input-01-private/original.json",
+        "M1B_RESULT=/tmp/quod-m1b-input-01-private/result.json",
+        "XDG_DATA_HOME=/tmp/quod-m1b-input-01-private/data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-input-01-private/config",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-10/quod.x86_64",
+        "--headless",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-input-01-private/identity",
+        "--node",
+        "https://127.0.0.1:41587",
+        "--ca",
+        "/tmp/quod-m1b-live-02/backend-ca.pem"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 17.620324288996926
+    },
+    "input-02/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=input",
+        "M1B_NETWORK=TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw",
+        "M1B_ORIGINAL=/tmp/quod-m1b-journey-10-private/original.json",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-13/quod.x86_64",
+        "--headless",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-input-02-private/identity",
+        "--node",
+        "https://127.0.0.1:40837",
+        "--ca",
+        "/tmp/quod-m1b-live-04/backend-ca.pem"
+      ],
+      "exit": -15,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 47.35340282099787
+    },
+    "input-03/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=input",
+        "M1B_NETWORK=TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw",
+        "M1B_ORIGINAL=/tmp/quod-m1b-journey-10-private/original.json",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-14/quod.x86_64",
+        "--headless",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-input-03-private/identity",
+        "--node",
+        "https://127.0.0.1:40837",
+        "--ca",
+        "/tmp/quod-m1b-live-04/backend-ca.pem"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 20.930730351999955
+    },
+    "input-04/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=input",
+        "M1B_NETWORK=TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw",
+        "M1B_ORIGINAL=/tmp/quod-m1b-journey-10-private/original.json",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-14/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-input-04-private/identity",
+        "--node",
+        "https://127.0.0.1:40837",
+        "--ca",
+        "/tmp/quod-m1b-live-04/backend-ca.pem"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 23.54780245999791
+    },
+    "journey-01-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-02/quod.x86_64",
+        "--backend-port",
+        "46815",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-01/backend-ca.pem",
+        "--network",
+        "oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-01",
+        "--private",
+        "/tmp/quod-m1b-journey-01-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.2429664349983796
+    },
+    "journey-02-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-03/quod.x86_64",
+        "--backend-port",
+        "46815",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-01/backend-ca.pem",
+        "--network",
+        "oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-02",
+        "--private",
+        "/tmp/quod-m1b-journey-02-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 2.3936835229978897
+    },
+    "journey-03-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-04/quod.x86_64",
+        "--backend-port",
+        "46815",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-01/backend-ca.pem",
+        "--network",
+        "oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-03",
+        "--private",
+        "/tmp/quod-m1b-journey-03-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 61.16003227600231
+    },
+    "journey-04-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-05/quod.x86_64",
+        "--backend-port",
+        "46815",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-01/backend-ca.pem",
+        "--network",
+        "oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-04",
+        "--private",
+        "/tmp/quod-m1b-journey-04-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 64.37755837500299
+    },
+    "journey-05-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-06/quod.x86_64",
+        "--backend-port",
+        "41587",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-02/backend-ca.pem",
+        "--control-port",
+        "41255",
+        "--network",
+        "EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-05",
+        "--private",
+        "/tmp/quod-m1b-journey-05-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 84.33768204900116
+    },
+    "journey-06-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-07/quod.x86_64",
+        "--backend-port",
+        "41587",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-02/backend-ca.pem",
+        "--control-port",
+        "41255",
+        "--network",
+        "EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-06",
+        "--private",
+        "/tmp/quod-m1b-journey-06-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 19.920811547002813
+    },
+    "journey-07-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-09/quod.x86_64",
+        "--backend-port",
+        "41587",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-02/backend-ca.pem",
+        "--control-port",
+        "41255",
+        "--network",
+        "EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-07",
+        "--private",
+        "/tmp/quod-m1b-journey-07-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 19.60504754899739
+    },
+    "journey-08-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-10/quod.x86_64",
+        "--backend-port",
+        "41587",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-02/backend-ca.pem",
+        "--control-port",
+        "41255",
+        "--network",
+        "EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-08",
+        "--private",
+        "/tmp/quod-m1b-journey-08-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 84.3252264469993
+    },
+    "journey-09-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-12/quod.x86_64",
+        "--backend-port",
+        "44315",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-03/backend-ca.pem",
+        "--control-port",
+        "43055",
+        "--network",
+        "iN2MVrKoS3xO4e2YoTGy5WEIGSlTpT5JPlF8V0u2vC4",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-09",
+        "--private",
+        "/tmp/quod-m1b-journey-09-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 1.6411343519976072
+    },
+    "journey-10-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-12/quod.x86_64",
+        "--backend-port",
+        "40837",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-04/backend-ca.pem",
+        "--control-port",
+        "38505",
+        "--network",
+        "TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-10",
+        "--private",
+        "/tmp/quod-m1b-journey-10-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 25.189455774001544
+    },
+    "journey-11-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-16/quod.x86_64",
+        "--desktop",
+        "--backend-port",
+        "40837",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-04/backend-ca.pem",
+        "--control-port",
+        "38505",
+        "--network",
+        "TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-11",
+        "--private",
+        "/tmp/quod-m1b-journey-11-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 81.61680499200156
+    },
+    "journey-12-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-export-17/quod.x86_64",
+        "--desktop",
+        "--backend-port",
+        "33349",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-05/backend-ca.pem",
+        "--control-port",
+        "36579",
+        "--network",
+        "prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-12",
+        "--private",
+        "/tmp/quod-m1b-journey-12-private"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 84.30806965600277
+    },
+    "journey-final-01-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-02/source/client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-02/source/client/godot/dist/quod.x86_64",
+        "--desktop",
+        "--backend-port",
+        "37333",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-final-03/backend-ca.pem",
+        "--control-port",
+        "37301",
+        "--network",
+        "K5U1NJEEwVcBuc03WHZCYfCry0dKxdA-LuIj_2QUhT8",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-final-01",
+        "--private",
+        "/tmp/quod-m1b-journey-final-01-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 96.86715795299824
+    },
+    "journey-final-02-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-03/source/client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-03/source/client/godot/dist/quod.x86_64",
+        "--desktop",
+        "--backend-port",
+        "37333",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-final-03/backend-ca.pem",
+        "--control-port",
+        "37301",
+        "--network",
+        "K5U1NJEEwVcBuc03WHZCYfCry0dKxdA-LuIj_2QUhT8",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-final-02",
+        "--private",
+        "/tmp/quod-m1b-journey-final-02-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 97.16578356800164
+    },
+    "journey-final-03-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-04/source/client/godot-tests/journey.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "--desktop",
+        "--backend-port",
+        "37333",
+        "--backend-ca",
+        "/tmp/quod-m1b-live-final-03/backend-ca.pem",
+        "--control-port",
+        "37301",
+        "--network",
+        "K5U1NJEEwVcBuc03WHZCYfCry0dKxdA-LuIj_2QUhT8",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/journey-final-03",
+        "--private",
+        "/tmp/quod-m1b-journey-final-03-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 95.80397059700044
+    },
+    "launch-01/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--quit-after",
+        "10",
+        "--",
+        "--profile",
+        "/tmp/quod-m1b-first-empty-profile"
+      ],
+      "exit": 0,
+      "diagnostic_failure": true,
+      "elapsed_seconds": 0.8856788439989032
+    },
+    "launch-02/result.json": {
+      "command": [
+        "env",
+        "XDG_DATA_HOME=/tmp/quod-m1b-godot-data",
+        "XDG_CONFIG_HOME=/tmp/quod-m1b-godot-config",
+        "client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--path",
+        "client/godot",
+        "--quit-after",
+        "10",
+        "--",
+        "--profile",
+        "/tmp/quod-m1b-first-empty-profile-02"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.43470780399729847
+    },
+    "original-results-final-01/result.json": {
+      "command": [
+        "env",
+        "-u",
+        "LD_LIBRARY_PATH",
+        "-u",
+        "LD_PRELOAD",
+        "NODE_EXTRA_CA_CERTS=/tmp/quod-m1b-live-final-03/backend-ca.pem",
+        "node",
+        "doc/evidence/godot-m1b-20261028/original-results.mjs",
+        "/tmp/quod-m1b-journey-final-02-private",
+        "https://127.0.0.1:37333",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/inputs/original-results-final-01.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.8034842309971282
+    },
+    "original-results-final-02/result.json": {
+      "command": [
+        "env",
+        "-u",
+        "LD_LIBRARY_PATH",
+        "-u",
+        "LD_PRELOAD",
+        "NODE_EXTRA_CA_CERTS=/tmp/quod-m1b-live-final-03/backend-ca.pem",
+        "node",
+        "doc/evidence/godot-m1b-20261028/original-results.mjs",
+        "/tmp/quod-m1b-journey-final-03-private",
+        "https://127.0.0.1:37333",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/inputs/original-results-final-02.json"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 0.316450504000386
+    },
+    "questions-01/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=questions",
+        "M1B_NETWORK=prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+        "M1B_ORIGINAL=/tmp/quod-m1b-questions-01-private/original.json",
+        "M1B_CONTROL_PORT=36579",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-20/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-questions-01-private/identity",
+        "--node",
+        "https://127.0.0.1:33349",
+        "--ca",
+        "/tmp/quod-m1b-live-05/backend-ca.pem"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 27.235665608997806
+    },
+    "source-view-green-01/result.json": {
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--init",
+        "--network",
+        "none",
+        "-v",
+        "/tmp/quod-m1a-gates-04/source:/work:ro",
+        "-v",
+        "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+        "-v",
+        "/tmp/quod-m1b-source-view-green-01:/test",
+        "-w",
+        "/work",
+        "-e",
+        "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+        "--entrypoint",
+        "/bin/sh",
+        "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+        "-c",
+        "erl -noshell -pa /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval '[begin {ok,M}=compile:file(\"/code/\"++Dir++\"/\"++atom_to_list(M)++\".erl\",[{outdir,\"/test/ebin\"},{i,\"/work/include\"},report_errors,report_warnings]) end || {Dir,M}<-[{\"src\",quod_client_view},{\"test\",quod_gui_question_tests},{\"test\",quod_source_view_tests}]],true=code:add_patha(\"/test/ebin\"),case eunit:test(quod_source_view_tests,[verbose]) of ok->halt(0);_->halt(1) end.'"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 13.041355228000612
+    },
+    "source-view-red-01/result.json": {
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--init",
+        "--network",
+        "none",
+        "-v",
+        "/tmp/quod-m1a-gates-04/source:/work:ro",
+        "-v",
+        "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+        "-v",
+        "/tmp/quod-m1b-source-view-red-01:/test",
+        "-w",
+        "/work",
+        "-e",
+        "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+        "--entrypoint",
+        "/bin/sh",
+        "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+        "-c",
+        "erl -noshell -pa /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval '[begin {ok,M}=compile:file(\"/code/test/\"++atom_to_list(M)++\".erl\",[{outdir,\"/test/ebin\"},{i,\"/work/include\"},report_errors,report_warnings]) end || M<-[quod_gui_question_tests,quod_source_view_tests]],true=code:add_patha(\"/test/ebin\"),case eunit:test(quod_source_view_tests,[verbose]) of ok->halt(0);_->halt(1) end.'"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 8.772418745000323
+    },
+    "tls-01-command/result.json": {
+      "command": [
+        "python3",
+        "client/godot-tests/tls.py",
+        "--export",
+        "/tmp/quod-m1b-export-14/quod.x86_64",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/tls-01",
+        "--private",
+        "/tmp/quod-m1b-tls-01-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.4596786789988982
+    },
+    "tls-final-01-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-02/source/client/godot-tests/tls.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-02/source/client/godot/dist/quod.x86_64",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/tls-final-01",
+        "--private",
+        "/tmp/quod-m1b-tls-final-01-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 3.0734417129970097
+    },
+    "tls-final-02-command/result.json": {
+      "command": [
+        "python3",
+        "/tmp/quod-m1b-client-final-04/source/client/godot-tests/tls.py",
+        "--export",
+        "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+        "--evidence",
+        "doc/evidence/godot-m1b-20261028/tls-final-02",
+        "--private",
+        "/tmp/quod-m1b-tls-final-02-private"
+      ],
+      "exit": 0,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 5.593666855002084
+    },
+    "tools-01/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=tools",
+        "M1B_NETWORK=TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw",
+        "M1B_ORIGINAL=/tmp/quod-m1b-journey-11-private/original.json",
+        "M1B_CONTROL_PORT=38505",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-17/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-tools-01-private/identity",
+        "--node",
+        "https://127.0.0.1:40837",
+        "--ca",
+        "/tmp/quod-m1b-live-04/backend-ca.pem"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 17.336368874999607
+    },
+    "tools-02/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=tools",
+        "M1B_NETWORK=prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+        "M1B_ORIGINAL=/tmp/quod-m1b-journey-12-private/original.json",
+        "M1B_CONTROL_PORT=36579",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-18/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-tools-02-private/identity",
+        "--node",
+        "https://127.0.0.1:33349",
+        "--ca",
+        "/tmp/quod-m1b-live-05/backend-ca.pem"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 21.022445542999776
+    },
+    "tools-03/result.json": {
+      "command": [
+        "env",
+        "M1B_PHASE=tools",
+        "M1B_NETWORK=prGK4LEMhuiQjB6v3Ss1QqoLc2WJrKkXMqLVu0AJgKE",
+        "M1B_ORIGINAL=/tmp/quod-m1b-journey-12-private/original.json",
+        "M1B_CONTROL_PORT=36579",
+        "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+        "/tmp/quod-m1b-export-19/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--",
+        "--qualification",
+        "--profile",
+        "/tmp/quod-m1b-tools-03-private/identity",
+        "--node",
+        "https://127.0.0.1:33349",
+        "--ca",
+        "/tmp/quod-m1b-live-05/backend-ca.pem"
+      ],
+      "exit": 1,
+      "diagnostic_failure": false,
+      "elapsed_seconds": 23.85752952099938
+    }
+  },
+  "failed_or_incomplete": [
+    "backup-interop-final-01/result.json",
+    "build-14/result.json",
+    "core-01/result.json",
+    "core-04/result.json",
+    "crypto-01-command/result.json",
+    "export-01/result.json",
+    "export-08/result.json",
+    "export-11/result.json",
+    "export-13/result.json",
+    "input-02/result.json",
+    "input-03/result.json",
+    "input-04/result.json",
+    "journey-01-command/result.json",
+    "journey-02-command/result.json",
+    "journey-03-command/result.json",
+    "journey-04-command/result.json",
+    "journey-05-command/result.json",
+    "journey-06-command/result.json",
+    "journey-07-command/result.json",
+    "journey-08-command/result.json",
+    "journey-09-command/result.json",
+    "journey-10-command/result.json",
+    "journey-11-command/result.json",
+    "journey-12-command/result.json",
+    "launch-01/result.json",
+    "source-view-red-01/result.json",
+    "tools-01/result.json",
+    "tools-02/result.json",
+    "tools-03/result.json"
+  ],
+  "incomplete_historical_receipt": "journey03 child exit not captured by its original harness; not credited",
+  "early_nongating_logs_without_automatic_command_receipts": [
+    "tool-fetch-01",
+    "tool-fetch-02",
+    "restore-01",
+    "restore-02",
+    "build-01",
+    "build-02",
+    "build-03",
+    "build-09"
+  ],
+  "source_only_campaigns": [
+    "client-final-01 failed reader",
+    "client-final-02 passed",
+    "client-final-03 passed after unused-helper retirement",
+    "client-final-04 passed after consumed-setup retirement"
+  ],
+  "qualified_final_client": "client-final-04",
+  "qualified_final_journey": "journey-final-03",
+  "qualified_server": "gates-01"
+}

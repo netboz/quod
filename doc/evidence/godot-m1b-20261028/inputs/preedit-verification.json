@@ -1,0 +1,11 @@
+{
+  "snapshot_sha256": "f8f4eab927e5555acae573dacdc5e0d9c1fea1377181193ba06857e726f7e8d0",
+  "patch_sha256": "7d773e88503761b6771a631b17fd4e4f120cd3906778dd373181c65b6d3e18d9",
+  "manifest_entries": 17532,
+  "errors": [],
+  "extra_paths": [
+    "nimbalyst-local/handoffs/godot-m1a-coordinator-verification.md",
+    "nimbalyst-local/handoffs/godot-m1b-prompt.md"
+  ],
+  "missing_paths": []
+}

@@ -1,0 +1,245 @@
+fresh: Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+fresh: 
+fresh: PASS enabled action create-key
+fresh: M1B_STATE {"state":"offline","busy":true,"pending":null,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase."}
+fresh: M1B_STATE {"state":"offline","busy":false,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Identity saved durably. The active key is protected by private filesystem permissions. Export an encrypted backup separately."}
+fresh: PASS offline durable identity created
+fresh: PASS enabled action connect
+fresh: M1B_STATE {"state":"offline","busy":true,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Identity saved durably. The active key is protected by private filesystem permissions. Export an encrypted backup separately."}
+fresh: M1B_STATE {"state":"offline","busy":true,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticating the exact saved key\u2026"}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticated. Network: EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ"}
+fresh: PASS real challenge and authenticated network
+fresh: PASS enabled action register
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticated. Network: EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ"}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: PASS lost signup response retains original signed work
+fresh: PASS enabled action resolve
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Original outcomes resolved without submission."}
+fresh: PASS original fresh human recovered
+fresh: PASS enabled action prepare
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Original outcomes resolved without submission."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Account policy selected the existing account ontology human:tFkIObgkIG7npdmVIkxnfIWWeAl3n_8a9Ozxmf5So44, genesis i4rLHLMzZ0fdkWsAi4cr8WR3gzq_E2T4Ib36CsknWxY, for S0. This selection applies to initial setup."}
+fresh: PASS policy-selected existing S0 storage explained
+fresh: PASS enabled action setup
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Account policy selected the existing account ontology human:tFkIObgkIG7npdmVIkxnfIWWeAl3n_8a9Ozxmf5So44, genesis i4rLHLMzZ0fdkWsAi4cr8WR3gzq_E2T4Ib36CsknWxY, for S0. This selection applies to initial setup."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: PASS lost setup response retains original signed work
+fresh: PASS enabled action resolve
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Original outcomes resolved without submission."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Original outcomes resolved without submission."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: PASS real nonphysical empty S0 black interior
+fresh: PASS actual offered controller-preference operation
+fresh: PASS generic typed offered inputs rendered
+fresh: PASS keyboard focus reaches offered control
+fresh: INPUT_BEFORE text=240 editable=True visible=True focus=True
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: INPUT_AFTER text= draft=
+fresh: PASS keyboard edit preserves invalid intermediate numeric draft
+fresh: PASS invalid draft produces visible validation without dispatch
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: PASS offered selection edits exact typed value
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: PASS enabled action open-gui
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":5,"operation_available":false,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: PASS unsent cancel/reopen does not dispatch
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Checking the governed personal agent\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":true,"operation_status":"Checking the governed personal agent\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":true,"operation_status":"Checking the governed personal agent\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"An error occurred while sending the request. Original work retained; check its outcome.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+fresh: PASS lost instruction response retains exact original U and A work
+fresh: M1B_KILL_READY fresh
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 39242)
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "/usr/lib/python3.14/ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+ConnectionResetError: [Errno 104] Connection reset by peer
+----------------------------------------
+reset: Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+reset: 
+reset: PASS saved active key restored without backup passphrase
+reset: PASS enabled action connect
+reset: M1B_STATE {"state":"offline","busy":true,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Saved active identity restored from private local storage. Connect explicitly."}
+reset: M1B_STATE {"state":"offline","busy":true,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticating the exact saved key\u2026"}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Authenticated. Network: EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ"}
+reset: PASS real challenge and authenticated network
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Authenticated. Network: EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ"}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: PASS restart preserves exact U A S0 keys storage and pins
+reset: PASS real nonphysical empty S0 black interior
+reset: PASS actual offered controller-preference operation
+reset: PASS generic typed offered inputs rendered
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: PASS offered Reset selection uses the generic boolean control
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Checking the governed personal agent\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Checking the governed personal agent\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":true,"operation_status":"Checking the governed personal agent\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"An error occurred while sending the request. Original work retained; check its outcome.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+reset: PASS lost instruction response retains exact original U and A work
+reset: M1B_KILL_READY reset
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 58844)
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "/usr/lib/python3.14/ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+ConnectionResetError: [Errno 104] Connection reset by peer
+----------------------------------------
+final: Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+final: 
+final: PASS saved active key restored without backup passphrase
+final: PASS enabled action connect
+final: M1B_STATE {"state":"offline","busy":true,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Saved active identity restored from private local storage. Connect explicitly."}
+final: M1B_STATE {"state":"offline","busy":true,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticating the exact saved key\u2026"}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Authenticated. Network: EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ"}
+final: PASS real challenge and authenticated network
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Authenticated. Network: EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ"}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":1,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: PASS restart preserves exact U A S0 keys storage and pins
+final: PASS real nonphysical empty S0 black interior
+final: PASS actual offered controller-preference operation
+final: PASS generic typed offered inputs rendered
+final: PASS restart resolves original Save and Reset without dispatch
+final: PASS server retains exactly original Save and Reset associations
+final: PASS original result recovered without originating journal
+final: PASS original result recovered without originating journal
+final: PASS wrong identity refuses private account data
+final: PASS wrong history anchor refuses
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":true,"operation_status":"Current offered fields. Edits stay local until Submit.","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: PASS denied operation explicit production outcome
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: PASS invalid type refused by production offered binder
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: PASS invalid range refused by production offered binder
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: M1B_STATE {"state":"account-ready","busy":false,"pending":0,"world_accepted":true,"live_sockets":4,"operation_available":false,"operation_status":"Updating authorized view\u2026","status":"Inside the original ordinary S0. The interior is black; keyboard and mouse GUI are available."}
+final: PASS stale revision refused by production offered binder
+final: PASS enabled action disconnect
+final: M1B_STATE {"state":"offline","busy":false,"pending":0,"world_accepted":false,"live_sockets":4,"operation_available":null,"operation_status":null,"status":"Disconnected. Saved identity and original signed work remain local."}
+final: PASS disposed view consumers release every socket
+final: System.IO.DirectoryNotFoundException: Could not find a part of the path '/tmp/quod-m1b-export-10/doc/evidence/godot-m1b-20261028/journey-08/export-result.json'.
+final:    at Interop.ThrowExceptionForIoErrno(ErrorInfo errorInfo, String path, Boolean isDirError)
+final:    at Microsoft.Win32.SafeHandles.SafeFileHandle.Open(String path, OpenFlags flags, Int32 mode, Boolean failForSymlink, Boolean& wasSymlink, Func`4 createOpenException)
+final:    at Microsoft.Win32.SafeHandles.SafeFileHandle.Open(String fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, Int64 preallocationSize, UnixFileMode openPermissions, Int64& fileLength, UnixFileMode& filePermissions, Boolean failForSymlink, Boolean& wasSymlink, Func`4 createOpenException)
+final:    at System.IO.File.OpenHandle(String path, FileMode mode, FileAccess access, FileShare share, FileOptions options, Int64 preallocationSize)
+final:    at System.IO.File.WriteToFileAsync(String path, FileMode mode, ReadOnlyMemory`1 contents, Encoding encoding, CancellationToken cancellationToken)
+final:    at ExportChecks.Begin(Main application) in /home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportChecks.cs:line 112
+final: {"state":"offline","busy":false,"public_key":"BLRK6DH5XqoEOhc9ZafhIXq9B8Ih1tpi92qtorop1tM","network":null,"human":null,"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Saved identity and original signed work remain local."}
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 174, in <module>
+    raise RuntimeError('Export qualification phase failed: ' + phase)
+RuntimeError: Export qualification phase failed: final

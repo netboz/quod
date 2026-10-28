@@ -1,0 +1,19 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/local.py",
+    "--export",
+    "/tmp/quod-m1b-export-17/quod.x86_64",
+    "--phase",
+    "crash",
+    "--evidence",
+    "doc/evidence/godot-m1b-20261028/crash-01",
+    "--private",
+    "/tmp/quod-m1b-crash-01-private",
+    "--journey-private",
+    "/tmp/quod-m1b-journey-11-private"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.536824381997576
+}

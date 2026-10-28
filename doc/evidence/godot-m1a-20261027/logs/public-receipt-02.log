@@ -1,0 +1,10 @@
+escript: exception error: no match of right hand side value 
+                 {error,{1,erlog_parse,{expected,')'}}}
+  in function  'verify-public-receipt_escript__escript__1793__145443__825164__562':term/1 (/evidence/verify-public-receipt.escript:54)
+  in call from 'verify-public-receipt_escript__escript__1793__145443__825164__562':'-main/1-lc$^0/1-0-'/3 (/evidence/verify-public-receipt.escript:20)
+  in call from 'verify-public-receipt_escript__escript__1793__145443__825164__562':'-main/1-lc$^0/1-0-'/3 (/evidence/verify-public-receipt.escript:42)
+  in call from 'verify-public-receipt_escript__escript__1793__145443__825164__562':main/1 (/evidence/verify-public-receipt.escript:42)
+  in call from escript:run/2 (escript.erl:906)
+  in call from escript:start/1 (escript.erl:420)
+  in call from init:start_it/1 
+  in call from init:start_em/1 

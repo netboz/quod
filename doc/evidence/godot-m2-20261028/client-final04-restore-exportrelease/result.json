@@ -1,0 +1,15 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "Quod.csproj",
+    "--locked-mode",
+    "-p:Configuration=ExportRelease",
+    "-p:SelfContained=true",
+    "--source",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final04/dependency-feed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 1.4330684279993875
+}

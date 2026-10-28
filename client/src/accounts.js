@@ -5,9 +5,9 @@ import { b64url, fromB64url, storeActiveKeyProvider } from './key-provider.js'
 import { saveAgentReference } from './agent-references.js'
 import { binary, compound, renderTerm, variable } from './prolog-term.js'
 import { readTerm, readList } from './prolog-read.js'
-import { readAgentReference, readReference, readSpaceNavigation, singleBinding } from './world.js'
+import { readAgentReference, singleBinding } from './world.js'
 import { signedGoal, resolveSignedOperations, pendingSignedOperations, readSystemOntologies } from './signed-client.js'
-import { initializeSpace, initializeResource, committed } from './space-entry.js'
+import { committed } from './space-entry.js'
 import { signedOperationJournal } from './operation-journal.js'
 
 export function accountReference(identity) {
@@ -20,7 +20,7 @@ export async function createAccount(identity, options = {}) {
   if (pending.length) throw new Error('Account setup has an unresolved operation. Resolve it before starting another.')
   if (accountReference(identity)) throw new Error('This identity already has an account on this network.')
   const catalogue = await readSystemOntologies(identity, options)
-  const services = catalogue.filter(row => row.namespace === 'quod:signup')
+  const services = catalogue.filter(row => row.namespace === 'quod:user')
   if (services?.length !== 1) throw new Error('Open signup is not available on this network yet.')
   const service = services[0]
   const agent = { ...service,
@@ -41,7 +41,7 @@ export async function resumeAccounts(identity, options = {}) {
   const results = await resolveSignedOperations(identity, {
     ...options, journal, onTerminal: accountResult(identity, { ...options, journal }),
   })
-  // A resolved signup may have handed off to a new pending lobby operation.
+  // A resolved signup may have handed off to a new pending setup operation.
   // Count the journal after those handoffs, not the earlier resolution snapshot.
   const remaining = await pendingSignedOperations(identity, { journal })
   return { results, unresolved: remaining.length }
@@ -61,33 +61,11 @@ function accountResult(identity, options) {
         readAgentReference(singleBinding(reply, 'Account')), options)
       // The exact parent is replaced before sending; an unknown child outcome
       // remains in the existing operation journal.
-      await provisionLobby(identity, reference, { ...options, replaceOperation: operation.id })
-    } else if (['lobby', 'personal-agent'].includes(operation.context.step)) {
+      await setupAccount(identity, reference, { ...options, replaceOperation: operation.id })
+    } else if (operation.context.step === 'setup') {
       const reference = await rememberAccount(identity, { namespace: operation.agent.namespace,
         anchor: operation.agent.anchor, instanceText: operation.agent.instance_text }, options)
-      if (operation.context.step === 'lobby') {
-        const prepared = await initializeResource(identity, reference,
-          { ...reference, anchor: fromB64url(reference.anchor) }, 'personal_agent', [],
-          JSON.stringify([reference.namespace, reference.anchor, 'personal-agent']),
-          { ...options, replaceOperation: operation.id,
-            context: { flow: 'account', step: 'personal-agent' },
-            onTerminal: accountResult(identity, options) })
-        if (!prepared.ready) return
-      }
-      const navigation = await readSpaceNavigation(identity, reference, null, options)
-      if (operation.context.step === 'lobby') {
-        const lobby = readReference(singleBinding(reply, 'Lobby'))
-        if (!navigation || navigation.reference.namespace !== lobby.namespace ||
-            b64url(navigation.reference.anchor) !== b64url(lobby.anchor)) {
-          throw new Error('The account did not return its exact lobby space.')
-        }
-      }
-      if (!navigation) throw new Error('The account did not return its lobby space.')
-      await initializeSpace(identity, reference, navigation.reference,
-        { ...options, replaceOperation: operation.id, context: { flow: 'account', step: 'physical' },
-          onTerminal: accountResult(identity, options) })
-    } else if (operation.context.step === 'physical') {
-      return
+      checkSetup(reference, readTerm(singleBinding(reply, 'Setup')))
     } else {
       throw new Error('Unknown account operation; its recovery record has been retained.')
     }
@@ -125,21 +103,51 @@ export async function finishAccountSetup(identity, options = {}) {
   }
   const reference = accountReference(identity)
   if (!reference) throw new Error('This identity has no account on this network.')
-  return provisionLobby(identity, reference, { ...options, journal })
+  return setupAccount(identity, reference, { ...options, journal })
 }
 
-async function provisionLobby(identity, reference, options) {
-  const instance = renderTerm(readTerm(reference.instanceText.replace(/\.\s*$/, '')))
-  const goal = `lobby_provisioning(${instance}, State), `
-    + `(State = pending(_) -> provision_lobby(${instance}); State = linked(_)), lobby_reference(Lobby).`
+async function setupAccount(identity, reference, options) {
+  const preparation = await signedGoal(identity, { mode: 'read', agent: reference,
+    goal: 'account_setup_preparation(Preparation).' }, options)
+  const prepared = readTerm(singleBinding(preparation, 'Preparation'))
+  if (prepared.type !== 'compound') throw new Error('Account setup preparation is unavailable.')
+  if (prepared.functor === 'complete' && prepared.args.length === 1) {
+    checkSetup(reference, prepared.args[0])
+    return preparation
+  }
+  if (prepared.functor !== 'prepared' || prepared.args.length !== 3) {
+    throw new Error('Account setup preparation is invalid.')
+  }
+  const [storage, node, key] = prepared.args
+  const goal = `${renderTerm(compound('setup_account', [storage,node,key,variable('Setup')]))}.`
   const reply = await signedGoal(identity, { mode: 'execute', agent: reference, goal }, {
-    ...options, context: { flow: 'account', step: 'lobby' },
+    ...options, context: { flow: 'account', step: 'setup' },
     onTerminal: accountResult(identity, options),
   })
   if (!committed(reply) && reply.result !== 'pending') {
-    throw new Error('Your account exists, but lobby setup was refused.')
+    throw new Error('Your account exists, but setup was refused.')
   }
   return reply
+}
+
+function checkSetup(reference, result) {
+  if (result.type !== 'compound' || result.functor !== 'account' || result.args.length !== 6) {
+    throw new Error('The account setup result is invalid.')
+  }
+  const owner = readAgentReference(renderTerm(result.args[0]))
+  const agent = readAgentReference(renderTerm(result.args[1]))
+  if (owner.namespace !== reference.namespace || owner.anchor !== reference.anchor ||
+      owner.instanceText !== reference.instanceText || agent.namespace !== owner.namespace ||
+      agent.anchor !== owner.anchor || agent.instanceText === owner.instanceText) {
+    throw new Error('The account setup returned different identities.')
+  }
+  const storage = result.args[3]
+  if (storage.type !== 'compound' || storage.functor !== 'ontology_ref' || storage.args.length !== 2 ||
+      storage.args[0].type !== 'binary' || storage.args[1].type !== 'binary' ||
+      new TextDecoder().decode(storage.args[0].value) !== reference.namespace ||
+      b64url(storage.args[1].value) !== reference.anchor) {
+    throw new Error('The account setup returned different storage.')
+  }
 }
 
 async function rememberAccount(identity, reference, options) {

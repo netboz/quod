@@ -1,0 +1,23 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/tmp/quod-m1b-export-06/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-journey-05-private/identity",
+      "--node",
+      "https://127.0.0.1:39091",
+      "--ca",
+      "/tmp/quod-m1b-journey-05-private/proxy-ca.pem"
+    ],
+    "child_exit": -15,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 83.90464852199875,
+    "godot_error_diagnostics": true,
+    "passed": false
+  }
+]

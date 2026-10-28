@@ -5,7 +5,7 @@
 
 ontology_self_membership_does_not_run_a_bridge_during_user_admission_test() ->
     Terms = quod_committed_projection:read_terms(filename:join(
-        code:priv_dir(quod), "ontologies/human_user_instance.pl")),
+        code:priv_dir(quod), "ontologies/user_instance.pl")),
     with_classes(Terms ++ [{instance_of, human_user, me}], fun(St) ->
         Ns = <<"private:user">>,
         Verdict = quod_predicates:set_context(St,

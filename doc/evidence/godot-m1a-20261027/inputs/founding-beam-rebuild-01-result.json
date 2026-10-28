@@ -1,0 +1,31 @@
+{
+  "campaign": "gates-04",
+  "stage": "/tmp/quod-m1a-founding-beam-rebuild-01",
+  "source_manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1a-20261027/inputs/gates-04-source-manifest.json",
+  "compiled_inputs_copied": false,
+  "purpose": "EUnit-provider artifact reconstruction, not replacement qualification",
+  "objects": {
+    "quod_agent_predicates": {
+      "path": "doc/evidence/godot-m1a-20261027/artifacts/founding-eunit/quod_agent_predicates.beam",
+      "sha256": "7A660EA63B2A789B65EFF79ED55F86BB89D107EBC43E0C0027C60FE83A4161B9",
+      "reconstructed": true
+    },
+    "quod_ontology_predicates": {
+      "path": "doc/evidence/godot-m1a-20261027/artifacts/founding-eunit/quod_ontology_predicates.beam",
+      "sha256": "BFF600D58458E39409C46D84C1FA2435C3325D927C76D47A5E47C122108F7154",
+      "reconstructed": true
+    },
+    "quod_gui_predicates": {
+      "path": "doc/evidence/godot-m1a-20261027/artifacts/founding-eunit/quod_gui_predicates.beam",
+      "sha256": "0850DFB917115D17E4B4312EE0F0066F7633A16BE2160A80E6EA077DB8064C18",
+      "reconstructed": true
+    },
+    "quod_directory_predicates": {
+      "path": "doc/evidence/godot-m1a-20261027/artifacts/founding-eunit/quod_directory_predicates.beam",
+      "sha256": "228C0D9B67CE0E1B475F87FE6FD3CE6C36C8241A263F52089D0863E9ADAD86AA",
+      "reconstructed": true
+    }
+  },
+  "all_recorded_founding_digests_match": true,
+  "no_object_copied_into_clean_gate_stage": true
+}

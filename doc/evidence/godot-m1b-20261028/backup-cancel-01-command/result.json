@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/local.py",
+    "--export",
+    "/tmp/quod-m1b-export-22/quod.x86_64",
+    "--phase",
+    "backup-cancel",
+    "--desktop",
+    "--evidence",
+    "doc/evidence/godot-m1b-20261028/backup-cancel-01",
+    "--private",
+    "/tmp/quod-m1b-backup-cancel-01-private"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.2039505949978775
+}

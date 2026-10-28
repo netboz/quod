@@ -1,0 +1,24 @@
+{
+  "command": [
+    "dotnet",
+    "run",
+    "--no-build",
+    "--project",
+    "/home/yan/.cache/quod-m2-artifacts/private/operation-read-probe01/probe.csproj",
+    "--",
+    "/home/yan/.cache/quod-m2-artifacts/private/production07-m2/identity/active.json",
+    "/home/yan/.cache/quod-m2-artifacts/private/production07-m2-read-probe",
+    "https://127.0.0.1:44423",
+    "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-production07-server/backend-ca.pem"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T09:49:34Z",
+  "elapsed_seconds": 16.698535203933716,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/production07-m2-read-probe-command.log",
+  "raw_sha256": "a207020d3c4f618324fb6edbb4a7750b167b6fea4e99c394f1fb97a196ac9e6c",
+  "sanitized_sha256": "a207020d3c4f618324fb6edbb4a7750b167b6fea4e99c394f1fb97a196ac9e6c",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

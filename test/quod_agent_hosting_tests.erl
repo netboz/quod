@@ -923,7 +923,7 @@ node_execution_policy_installs_through_ordinary_signed_goal_test_() ->
                      Submit({assertz, {can_execute_for, Ns, Anchor, true}})),
         ?assertMatch({ok, _, {normalized, {failed, _}}},
                      Submit({node_authorized_goal, Ns, Anchor, true})),
-        Source = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+        Source = filename:join(code:priv_dir(quod), "ontologies/node_instance.pl"),
         [SourceRule] = [Term || {':-', {node_authorized_goal, _, _, _}, _} = Term
                           <- quod_prolog:read_terms(Source)],
         RuleText = iolist_to_binary([erlog_io:writeq1(SourceRule), $.]),
@@ -1609,7 +1609,7 @@ with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
     ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
     {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "keys"), unlock_file => Unlock}),
     NodeNs = <<"host-test-node">>,
-    NodeExecution = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+    NodeExecution = filename:join(code:priv_dir(quod), "ontologies/node_instance.pl"),
     NodeDiff = case NodePolicy of
         current -> quod_prolog:genesis_diff(NodeExecution);
         legacy -> []

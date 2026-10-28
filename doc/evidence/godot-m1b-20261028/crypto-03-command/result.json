@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/local.py",
+    "--export",
+    "/tmp/quod-m1b-export-17/quod.x86_64",
+    "--phase",
+    "crypto",
+    "--desktop",
+    "--evidence",
+    "doc/evidence/godot-m1b-20261028/crypto-03",
+    "--private",
+    "/tmp/quod-m1b-crypto-03-private"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.632230131999677
+}

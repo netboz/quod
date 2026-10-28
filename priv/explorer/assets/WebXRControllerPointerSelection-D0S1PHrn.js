@@ -1,1 +1,0 @@
-import{n as e,t}from"./WebXRControllerPointerSelection.pure-BYTF8_rn.js";t();export{t as RegisterWebXRControllerPointerSelection,e as WebXRControllerPointerSelection};

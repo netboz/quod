@@ -59,13 +59,13 @@ root_catalogue_query(ontology_creation_policy(_, _)).
 root_catalogue_query(peer_admitted(_, _, _, _)).
 
 %% Source reading and editing are distinct authorities over an exact identity.
-%% Private root/signup state remains restricted; public systems expose all
+%% Private root/user state remains restricted; public systems expose all
 %% stored clauses, independently of their callable domain APIs.
 system_source_access(ontology_ref(Namespace, Anchor), Access) :-
     system_source_target(Namespace, Anchor),
     current_principal(Principal),
     (root_administrator_agent(Principal) -> Access = editable
-    ; Namespace \== <<"quod:root">>, Namespace \== <<"quod:signup">>,
+    ; Namespace \== <<"quod:root">>, Namespace \== <<"quod:user">>,
       Access = read_only).
 
 system_source_target(<<"quod:root">>, Anchor) :-

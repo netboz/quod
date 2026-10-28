@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "env",
+    "-u",
+    "LD_LIBRARY_PATH",
+    "-u",
+    "LD_PRELOAD",
+    "node",
+    "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+    "/home/yan/src/quod",
+    "8db34a85-ead5-4f20-b761-28a4a96a20c6",
+    "tracker_update",
+    "{\"id\": \"QUO-63\", \"status\": \"in-development\", \"progress\": 80}"
+  ],
+  "exit": 0,
+  "stdout": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"structured\\\":{\\\"action\\\":\\\"updated\\\",\\\"id\\\":\\\"tsk_01M5YNM08XQG5GVZGTJNYFKHKQ\\\",\\\"issueNumber\\\":63,\\\"issueKey\\\":\\\"QUO-63\\\",\\\"issueKeyStatus\\\":\\\"assigned\\\",\\\"type\\\":\\\"task\\\",\\\"typeTags\\\":[\\\"task\\\"],\\\"title\\\":\\\"M2 \u2014 Create and recover an empty space through Godot\\\",\\\"changes\\\":{\\\"status\\\":{\\\"from\\\":\\\"in-development\\\",\\\"to\\\":\\\"in-development\\\"},\\\"progress\\\":{\\\"from\\\":0,\\\"to\\\":80}}},\\\"summary\\\":\\\"Updated tracker item QUO-63:\\\\n- **Status**: in-development\\\"}\"}],\"isError\":false}\n",
+  "stderr": "",
+  "meaning": "Metadata-only implementation progress. Final clean qualification remains open; parent M2 and all M3 remain uncredited. No collaborative body update."
+}

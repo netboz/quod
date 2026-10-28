@@ -38,7 +38,8 @@ inside an independent wrapper. No knowledge-base state crosses this boundary.
           metadata :: term(),
           base_batches = [] :: [opaque_id()],
           current_lineage = none :: lineage(),
-          frames = [] :: [#frame{}]
+          frames = [] :: [#frame{}],
+          checkpoint_batch = none :: none | {allocating, reference()} | {ready, opaque_id()}
          }).
 
 -define(KEY, '$quod_transaction_scope').
@@ -103,7 +104,10 @@ current_selection(St) ->
     case get(?KEY) of
         #state{base_batches = BaseBatches,
                current_lineage = Lineage,
-               frames = Frames} ->
+               frames = Frames} = State ->
+            %% Publishing a selection lets foreign work materialize its live
+            %% batches. No later local checkpoint may assume they are unused.
+            put_state(State#state{checkpoint_batch = none}),
             Tokens = quod_erlog_db_local_prove:live_transaction_tokens(St),
             TokenBatches = lists:filtermap(
                              fun({batch, BatchId}) -> {true, BatchId};
@@ -147,7 +151,9 @@ activate(_St) ->
             PendingOuterFirst =
                 [FrameId || #frame{frame_id = FrameId, tx_id = none} <-
                                 lists:reverse(Frames0)],
-            activate_pending(PendingOuterFirst, State0);
+            State = State0#state{checkpoint_batch = none},
+            put_state(State),
+            activate_pending(PendingOuterFirst, State);
         undefined ->
             ok
     end.
@@ -202,9 +208,9 @@ finish_frame(FrameId, Mode) ->
             case finish_active(Frame, State0, Mode) of
                 {ok, ParentLineage} ->
                     put_state(State0#state{current_lineage = ParentLineage,
-                                           frames = Rest});
+                                           frames = Rest, checkpoint_batch = none});
                 ignored ->
-                    put_state(State0#state{frames = Rest})
+                    put_state(State0#state{frames = Rest, checkpoint_batch = none})
             end;
         #state{} when Mode =:= best_effort ->
             ok;
@@ -243,7 +249,7 @@ checkpoint_token() ->
             case Lineage of
                 none -> Pending;
                 _ ->
-                    case request(State0, {allocate, Lineage}) of
+                    case checkpoint_batch(State0, Lineage) of
                         {ok, BatchId} -> [{batch, BatchId} | Pending];
                         {error, Reason} -> throw({quod_ask_error, Reason});
                         _ -> throw({quod_ask_error,
@@ -252,6 +258,26 @@ checkpoint_token() ->
             end;
         undefined ->
             []
+    end.
+
+%% The controller owns batch authority. Within one invocation, purely local
+%% choice points share its still-unmaterialized token without another round trip.
+checkpoint_batch(#state{checkpoint_batch = {ready, BatchId}}, _Lineage) ->
+    {ok, BatchId};
+checkpoint_batch(State, Lineage) ->
+    Ref = make_ref(),
+    put_state(State#state{checkpoint_batch = {allocating, Ref}}),
+    case request(State, {allocate, Lineage}) of
+        {ok, BatchId} = Reply ->
+            %% A controller wait can dispatch reentrant work. Its invalidation
+            %% must survive this reply instead of restoring a stale assumption.
+            case state() of
+                #state{checkpoint_batch = {allocating, Ref}} = Current ->
+                    put_state(Current#state{checkpoint_batch = {ready, BatchId}});
+                _ -> ok
+            end,
+            Reply;
+        Other -> Other
     end.
 
 -doc "Restore the distributed batches correlated with one local DB checkpoint.".
@@ -283,7 +309,10 @@ pending_baseline(_FrameId, []) -> false.
 restore_batches(_Lineage, [], _State) -> ok;
 restore_batches(none, _BatchIds, _State) ->
     throw({quod_ask_error, {protocol_error, session_binding}});
+restore_batches(_Lineage, [BatchId], #state{checkpoint_batch = {ready, BatchId}}) ->
+    ok;
 restore_batches(Lineage, BatchIds, State) ->
+    put_state(State#state{checkpoint_batch = none}),
     case request(State, {restore, Lineage, BatchIds}) of
         ok -> ok;
         {error, Reason} -> throw({quod_ask_error, Reason});
@@ -389,7 +418,8 @@ state() ->
 put_state(#state{} = State) -> _ = put(?KEY, State), ok.
 
 restore_previous(undefined) -> _ = erase(?KEY), ok;
-restore_previous(#state{} = Previous) -> _ = put(?KEY, Previous), ok.
+restore_previous(#state{} = Previous) ->
+    put_state(Previous#state{checkpoint_batch = none}).
 
 valid_sorted_ids([], _Previous) -> true;
 valid_sorted_ids([Id | Rest], none) ->

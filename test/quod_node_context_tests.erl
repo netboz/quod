@@ -9,7 +9,7 @@ permitted_recovery_helper_cannot_borrow_node_privileges_test_() ->
             identity := Identity, directory := Directory}) ->
           %% The hosting fixture supplies an unrestricted testing grant. Use
           %% the actual node admission clauses for this security boundary.
-          NodePolicy = policy_terms("node_execution.pl"),
+          NodePolicy = policy_terms("node_instance.pl"),
           Admissions = [Clause || Clause <- NodePolicy, admission_clause(Clause)],
           commit(NodeNs, conjunction(
             [{abolish, {'/', can_invoke, 4}},
@@ -58,7 +58,7 @@ node_self_hosting_alternatives_do_not_lend_authority_test() ->
     Goals = [{assertz, {ontology_hosting_policy, Name, Anchor}},
              {host_ontology, Ref, Name, Anchor, private},
              {request_ontology_hosting, Ref, Ref, Name, Anchor, private}],
-    with_policy("node_execution.pl",
+    with_policy("node_instance.pl",
                 [{node_ontology, element(1, Node)},
                  {instance_of, node, physical_node},
                  %% Even an additional explicit self hosting grant cannot
@@ -78,10 +78,10 @@ node_keeps_independent_hosting_requests_test() ->
     NodeRef = reference(Node, physical_node),
     User = identity(<<"human:caller">>, 6),
     UserRef = reference(User, human),
-    Signup = identity(<<"quod:signup">>, 7),
+    Signup = identity(<<"quod:user">>, 7),
     Name = <<"human:caller/lobby">>,
     Anchor = <<8:256>>,
-    with_policy("node_execution.pl",
+    with_policy("node_instance.pl",
                 [{node_ontology, element(1, Node)},
                  {instance_of, node, physical_node},
                  {can_host_ontology, UserRef, NodeRef, Name, Anchor, discoverable}],
@@ -147,7 +147,7 @@ root_keeps_delegated_creation_entry_for_other_callers_test() ->
     Root = identity(<<"quod:root">>, 17),
     User = identity(<<"human:new">>, 18),
     Ref = reference(User, human),
-    Signup = identity(<<"quod:signup">>, 19),
+    Signup = identity(<<"quod:user">>, 19),
     with_policy("quod_root.pl", [], fun(Est) ->
         %% Entry is public; the ordinary action must still prove its delegated
         %% creation policy. This does not assert that arbitrary creation works.

@@ -307,6 +307,30 @@ initial_preparation_requires_exact_committed_pure_policy_test() ->
                 [{agent_host, 4}, {agent_key, 3}, {can_prepare_agent_key, 5}]],
             ?assert(lists:member({prepare_agent_key_custody, 5}, Bridges)),
             ?assertEqual({ok, #{'Key' => Key}}, signing_proof([Grant], true, Goal)),
+            #{identity := Executor} = quod_ct:signed_goal_fixture(#{}),
+            Options = #{signer => Executor},
+            ReceiptGoal = erlang:append_element(Goal, {'Receipt'}),
+            {ok, #{'Key' := Key, 'Receipt' := Receipt}} =
+                signing_proof([Grant], true, ReceiptGoal, Options),
+            Verify = {prepared_agent_key_custody,AgentRef,none,0,NodeRef,Key,Receipt},
+            %% The portable receipt is an immutable proof input. Its check
+            %% needs no vault access and records no live-observation bridge.
+            ?assertEqual({{ok,#{}},#{},[]}, signing_proof([], false, Verify,
+                Options#{dependencies => true})),
+            [?assertEqual(fail,signing_proof([],false,Bad,Options)) || Bad <-
+                [setelement(2,Verify,setelement(4,AgentRef,other)),
+                 setelement(3,Verify,NodeRef),setelement(4,Verify,1),
+                 setelement(5,Verify,CallerRef),setelement(6,Verify,<<1:256>>),
+                 setelement(7,Verify,<<0:512>>)]],
+            #{identity := OtherExecutor} = quod_ct:signed_goal_fixture(#{}),
+            ?assertEqual(fail,signing_proof([],false,Verify,#{signer=>OtherExecutor})),
+            ?assertEqual(fail,signing_proof([],false,Verify,
+                Options#{identity=>{<<"foreign">>,<<3:256>>}})),
+            %% Even a lost vault cannot turn verification into request-time
+            %% repair. Assignment policy remains separate from this evidence.
+            ok = gen_server:stop(quod_reg:where({agent_vault,node})),
+            ?assertEqual({ok,#{}},signing_proof([],false,Verify,Options)),
+            {ok,_} = quod_agent_vault:start_link(Config),
             ?assertEqual(fail, signing_proof([], true, Goal)),
             %% Read preparation confers no assignment or active-key facts.
             ?assertEqual(fail, signing_proof([Grant], true, {agent_host, worker, {'_'}, {'_'}, {'_'}})),
@@ -562,7 +586,8 @@ signing_proof(Facts, ReadOnly, Goal) -> signing_proof(Facts, ReadOnly, Goal, #{}
 signing_proof(Facts, ReadOnly, Goal, Options) ->
     {ok, DefaultSource} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl")),
     KB = quod_ct:action_kb(maps:get(source, Options, DefaultSource), [quod_agent_predicates], Facts),
-    Session = quod_proof_session:start(KB, #{read_set => true, read_only => ReadOnly}),
+    Session = quod_proof_session:start(KB, #{read_set => true, read_only => ReadOnly,
+                                           signer => maps:get(signer,Options,none)}),
     Id = crypto:strong_rand_bytes(16),
     {Ns, _} = Identity = maps:get(identity, Options, {<<"agents">>, <<3:256>>}),
     Context = case maps:get(kind, Options, proof) of

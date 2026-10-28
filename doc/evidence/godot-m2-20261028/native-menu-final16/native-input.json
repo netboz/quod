@@ -1,0 +1,28 @@
+[
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 748257,
+    "before_pid": 748257,
+    "after_pid": 748257
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 748257,
+    "before_pid": 748257,
+    "after_pid": 748257
+  }
+]

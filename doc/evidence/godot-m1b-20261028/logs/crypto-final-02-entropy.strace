@@ -1,0 +1,63 @@
+458170 getrandom(0x7ffffa54f2a9, 0x10, 0x1) = 0x10
+458170 getrandom(0x7ff52f6201c0, 0x8, 0x1) = 0x8
+458170 getrandom(0x7ff52f62af60, 0x20, 0) = 0x20
+458171 getrandom(0x7fff97c95c49, 0x10, 0x1) = 0x10
+458171 getrandom(0x7f6a2e8201c0, 0x8, 0x1) = 0x8
+458174 getrandom(0x7ffdf5af2649, 0x10, 0x1) = 0x10
+458174 getrandom(0x7f44f32201c0, 0x8, 0x1) = 0x8
+458174 +++ exited with 0 +++
+458171 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=458174, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+458171 +++ exited with 0 +++
+458170 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=458171, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+458170 getrandom(0x7ffffa54de60, 0x80, 0) = 0x80
+458170 getrandom(0x7ffffa54de60, 0x80, 0) = 0x80
+458289 getrandom(0x7ff52f62aea0, 0x20, 0) = 0x20
+458308 +++ exited with 0 +++
+458170 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=458308, si_uid=1000, si_status=0, si_utime=11 /* 0.11 s */, si_stime=17 /* 0.17 s */} ---
+458310 +++ exited with 0 +++
+458170 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=458310, si_uid=1000, si_status=0, si_utime=10 /* 0.10 s */, si_stime=17 /* 0.17 s */} ---
+458312 +++ exited with 0 +++
+458170 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=458312, si_uid=1000, si_status=0, si_utime=10 /* 0.10 s */, si_stime=16 /* 0.16 s */} ---
+458314 +++ exited with 0 +++
+458170 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=458314, si_uid=1000, si_status=0, si_utime=10 /* 0.10 s */, si_stime=16 /* 0.16 s */} ---
+458350 getrandom(0x7ff52f62ade0, 0x20, 0) = 0x20
+458351 +++ exited with 0 +++
+458170 getrandom(0x7fd4bd9eb640, 0x30, 0) = 0x30
+458170 --- SIGRT_2 {si_signo=SIGRT_2, si_code=SI_TKILL, si_pid=458170, si_uid=1000} ---
+458396 +++ exited with 0 +++
+458392 +++ exited with 0 +++
+458307 +++ exited with 0 +++
+458365 +++ exited with 0 +++
+458366 +++ exited with 0 +++
+458197 +++ exited with 0 +++
+458192 +++ exited with 0 +++
+458193 +++ exited with 0 +++
+458191 +++ exited with 0 +++
+458190 +++ exited with 0 +++
+458195 +++ exited with 0 +++
+458196 +++ exited with 0 +++
+458194 +++ exited with 0 +++
+458182 +++ exited with 0 +++
+458590 +++ exited with 0 +++
+458591 +++ exited with 0 +++
+458421 +++ exited with 0 +++
+458415 +++ exited with 0 +++
+458414 +++ exited with 0 +++
+458413 +++ exited with 0 +++
+458412 +++ exited with 0 +++
+458411 +++ exited with 0 +++
+458403 +++ exited with 0 +++
+458400 +++ exited with 0 +++
+458399 +++ exited with 0 +++
+458397 +++ exited with 0 +++
+458353 +++ exited with 0 +++
+458292 +++ exited with 0 +++
+458291 +++ exited with 0 +++
+458290 +++ exited with 0 +++
+458289 +++ exited with 0 +++
+458402 +++ exited with 0 +++
+458350 +++ exited with 0 +++
+458294 +++ exited with 0 +++
+458293 +++ exited with 0 +++
+458398 +++ exited with 0 +++
+458170 +++ exited with 0 +++

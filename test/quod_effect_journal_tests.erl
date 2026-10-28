@@ -1095,7 +1095,7 @@ fixture(State) ->
 group_fixture(Pub, Seed, RootAnchor) ->
     Ns = <<"effect:group-test">>,
     Options = [{source_file, list_to_binary(filename:join([code:priv_dir(quod), "ontologies", File]))}
-               || File <- ["agent_instance.pl", "space.pl", "quod_physics.pl"]],
+               || File <- ["agent_instance.pl", "quod_space.pl", "quod_physics.pl"]],
     Action = {create_ontology, Ns, Options},
     Desired = {ontology_hosted, Ns},
     {ok, Structural} = quod_ontology:validate_action(Action),

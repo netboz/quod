@@ -1,0 +1,49 @@
+{
+  "passed": true,
+  "transport": "HTTPS",
+  "certificate_validation": true,
+  "catalogue_count": 6,
+  "source_hashes": [
+    {
+      "namespace": "quod:gui",
+      "sha256": "06265acf4cef9b17189e64dcbcfd04fe74f46bf87d2fe0c703632d5ded7bf5b0"
+    },
+    {
+      "namespace": "quod:controllers",
+      "sha256": "5ac0ec7dc8bfe0fb6bb62fffbb789a5ffa06eefcaf22910c2b60c16a896de182"
+    },
+    {
+      "namespace": "quod:space",
+      "sha256": "02f09f40b6cb19b9290d6578d412e0d1e205dab1fd0c8e1c1b2914441e9f1aba"
+    }
+  ],
+  "writes": 2,
+  "save": {
+    "bindings": [
+      {
+        "Results": "[result(revision,3)]"
+      }
+    ],
+    "result": "ok",
+    "request_digest": "zvSh4sWVKzLVwjKFKN2wlQMBwfh6j4S13TOq-U0E3PY",
+    "ns": "human:R8tXvap-O3s521WE06SRZDK0bvROwRFNfPpd8s9SHWQ",
+    "tx_id": "d1996a890ee0bc2607f643e3433504a4c1a0bb9e029ed6beefdce890af7bc5b0",
+    "anchor": "677eed031b1e69f491c4278945073ed7a678577927b09761ffb037f009342d32",
+    "operation_id": "Arx3jnPVmGkGEULuI1dEJGHOo_Kb6A27PSjUJy3GmR4"
+  },
+  "reset": {
+    "bindings": [
+      {
+        "Results": "[result(revision,4)]"
+      }
+    ],
+    "result": "ok",
+    "request_digest": "HmluXok5F_m26Tf9dFd5u193XgyzI7LPw0BMVJKwEJ4",
+    "ns": "human:R8tXvap-O3s521WE06SRZDK0bvROwRFNfPpd8s9SHWQ",
+    "tx_id": "f8d44f875e8464e97d80ef1d2c8125feb8a6821905106d63b8ea1ed99436ea1d",
+    "anchor": "677eed031b1e69f491c4278945073ed7a678577927b09761ffb037f009342d32",
+    "operation_id": "qRdeCKCsJz9VJbCQtDQmSCY-4SKoo3a2fM_PAtUcxFY"
+  },
+  "original_results_recovered": 2,
+  "recovery_writes": 0
+}

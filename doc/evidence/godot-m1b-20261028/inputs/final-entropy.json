@@ -1,0 +1,8 @@
+{
+  "actual_export": "/tmp/quod-m1b-client-final-03/source/client/godot/dist/quod.x86_64",
+  "trace": "doc/evidence/godot-m1b-20261028/logs/crypto-final-01-entropy.strace",
+  "syscall_count": 12,
+  "successful_32_byte_blocking_calls": 3,
+  "entropy_buffers_logged": false,
+  "meaning": "Actual application OS CSPRNG calls accompany source use of the pinned runtime RandomNumberGenerator. Distinct samples alone are not evidence of entropy strength."
+}

@@ -59,6 +59,7 @@ conveniences around that preparation and execution code.
 -ifdef(TEST).
 -type input_option() ::
         {source_file, file:filename()} |
+        {source_file, file:filename(), <<_:256>>} |
         {source, unicode:chardata()} |
         {terms, [term()]}.
 -endif.
@@ -359,6 +360,11 @@ normalize_option_shapes([{source_file, Path0} | Rest], AccRev) ->
         error ->
             {error, invalid_options}
     end;
+normalize_option_shapes([{source_file, Path0, <<_:256>> = Hash} | Rest], AccRev) ->
+    case source_path(Path0) of
+        {ok, Path} -> normalize_option_shapes(Rest, [{source_file, Path, Hash} | AccRev]);
+        error -> {error, invalid_options}
+    end;
 normalize_option_shapes(
   [{external_predicate_modules, Modules} | Rest], AccRev) ->
     case quod_predicates:valid_module_names(Modules) of
@@ -404,7 +410,9 @@ load_option({terms, Terms}, _Index) ->
 load_option({source, Chars}, Index) when is_list(Chars) ->
     read_source(Chars, Index);
 load_option({source_file, Path}, Index) when is_binary(Path) ->
-    read_source_file(Path, Index);
+    read_source_file(Path, none, Index);
+load_option({source_file, Path, <<_:256>> = Hash}, Index) when is_binary(Path) ->
+    read_source_file(Path, Hash, Index);
 load_option(_Unknown, _Index) ->
     {error, invalid_options}.
 
@@ -443,29 +451,34 @@ read_source(Chars, Index) ->
             {error, {source_error, Index, 0, {ErrorClass, ErrorReason}}}
     end.
 
-read_source_file(Path, Index) ->
-    Result =
-        try erlog_io:read_file(Path)
-        catch CatchClass:CatchReason -> {caught, CatchClass, CatchReason}
-        end,
-    case Result of
-        {ok, Terms} ->
-            case proper_list(Terms) of
-                true -> {ok, Terms};
-                false -> source_file_error(Index, Path, invalid_terms)
+%% Hash and parse one read. A filename cannot substitute different bytes after
+%% policy selected an immutable recipe, and preparation never reopens the file.
+read_source_file(Path, Expected, Index) ->
+    case read_source_bytes(Path) of
+        {ok, Bytes} ->
+            Actual = crypto:hash(sha256, Bytes),
+            case Expected =:= none orelse Expected =:= Actual of
+                false -> {error, {source_file_hash_mismatch, Index, Expected, Actual}};
+                true -> read_source(binary_to_list(Bytes), Index)
             end;
-        {error, {Line, Module, Detail}} when is_integer(Line) ->
-            {error, {source_error, Index, Line, {Module, Detail}}};
-        {error, ErrorReason} ->
-            source_file_error(Index, Path, ErrorReason);
-        {error, einval, ErrorReason} ->
-            source_file_error(Index, Path, {error, einval, ErrorReason});
-        {exit, einval, ErrorReason} ->
-            source_file_error(Index, Path, {exit, einval, ErrorReason});
-        {caught, ErrorClass, ErrorReason} ->
-            source_file_error(Index, Path, {ErrorClass, ErrorReason});
-        Other ->
-            source_file_error(Index, Path, {unexpected, Other})
+        {error, Reason} -> source_file_error(Index, Path, Reason)
+    end.
+
+%% Preserve erlog's consult-path lookup, including its byte-oriented input.
+read_source_bytes(Path) ->
+    Paths = application:get_env(erlog, consult_path, ["."]),
+    case file:path_open(Paths, Path, [read, binary]) of
+        {ok, File, _Resolved} ->
+            try read_source_bytes(File, [])
+            after file:close(File) end;
+        {error, _} = Error -> Error
+    end.
+
+read_source_bytes(File, Chunks) ->
+    case file:read(File, 65536) of
+        {ok, Chunk} -> read_source_bytes(File, [Chunk | Chunks]);
+        eof -> {ok, iolist_to_binary(lists:reverse(Chunks))};
+        {error, _} = Error -> Error
     end.
 
 source_file_error(Index, Path, Reason) ->

@@ -1,0 +1,9 @@
+Error! Failed to eval: 
+{ok,quod_lifecycle_single_path_tests}=compile:file("/m1b/quod_lifecycle_single_path_tests.erl",[export_all,{outdir,"/m1b/ebin"},{i,"/work/include"}]),
+{ok,godot_m1b_fixture}=compile:file("/evidence/godot_m1b_fixture.erl",[{outdir,"/m1b/ebin"}]),
+true=code:add_patha("/m1b/ebin"),godot_m1b_fixture:start(),halt().
+
+
+Runtime terminating during boot ({undef,[{quod_client,routes,[],[]},{godot_m1b_fixture,endpoint,3,[{file,"/evidence/godot_m1b_fixture.erl"},{line,54}]},{godot_m1b_fixture,start,0,[{file,"/evidence/godot_m1b_fixture.erl"},{line,46}]},{erl_eval,do_apply,7,[{file,"erl_eval.erl"},{line,920}]},{erl_eval,exprs,6,[{file,"erl_eval.erl"},{line,276}]},{init,start_it,1,[]},{init,start_em,1,[]},{init,do_boot,3,[]}]})
+
+Crash dump is being written to: erl_crash.dump...

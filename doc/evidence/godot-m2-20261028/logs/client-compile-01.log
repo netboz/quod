@@ -1,0 +1,15 @@
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(25,48): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(26,47): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(27,47): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(28,46): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+
+Build FAILED.
+
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(25,48): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(26,47): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(27,47): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/ScenePanel.cs(28,46): error CS8310: Operator '/' cannot be applied to operand 'new(float, float, float)' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+    0 Warning(s)
+    4 Error(s)
+
+Time Elapsed 00:00:04.21

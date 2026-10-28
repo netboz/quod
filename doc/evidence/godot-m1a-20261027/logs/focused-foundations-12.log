@@ -1,0 +1,32 @@
+===> Verifying dependencies...
+===> Analyzing applications...
+===> Compiling accept
+===> Compiling ctx
+===> Compiling quic
+===> Compiling quantile_estimator
+===> Compiling prometheus
+===> Compiling prometheus_httpd
+===> Compiling ssl_verify_fun
+===> Compiling tls_certificate_check
+===> Compiling opentelemetry_api
+===> Compiling opentelemetry
+===> Compiling gproc
+===> Compiling hpack
+===> Compiling chatterbox
+===> Compiling acceptor_pool
+===> Compiling grpcbox
+===> Compiling opentelemetry_exporter
+===> Compiling erlang_qq
+===> Compiling typerefl
+===> Compiling getopt
+===> Compiling hocon
+===> Compiling erlog
+===> Compiling ranch
+===> Compiling cowlib
+===> Compiling cowboy
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+=INFO REPORT==== 27-Oct-2026::21:30:48.595187 ===
+SIGTERM received - shutting down
+

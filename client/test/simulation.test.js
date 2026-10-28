@@ -414,14 +414,14 @@ test('navigation returns an exact space and every signed dependency without chan
   const result = await readSpaceNavigation(identity, agent, null, { post: async (url, body) => {
     seen.push({ url, request: Buffer.from(body.request, 'base64url').toString() })
     return { result: 'ok', dependencies: [{ ns: 'foreign-policy', genesis_anchor: Buffer.alloc(32).toString('base64url'), height: '9007199254740993' }],
-      bindings: [{ Lobby: `entity_ref(<<"room">>,<<"${anchor}">>,gallery)`, Modes: '[playing,edition]' }] }
+      bindings: [{ Space: `entity_ref(<<"room">>,<<"${anchor}">>,gallery)`, Modes: '[playing,edition]' }] }
   } })
   assert.equal(result.reference.namespace, 'room')
   assert.equal(result.reference.anchor.length, 32)
   assert.deepEqual(result.reference.instance, atom('gallery'))
   assert.equal(result.dependencies[0].height, '9007199254740993')
   assert.equal(seen[0].url, '/api/goals/read')
-  assert.ok(seen[0].request.includes('lobby_navigation(Lobby,Modes).'))
+  assert.ok(seen[0].request.includes('account_navigation(Space,Modes).'))
   assert.ok(seen[0].request.includes('human.'))
 })
 

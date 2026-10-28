@@ -1,0 +1,5 @@
+{
+  "outcome": "failed partial copy retained",
+  "destination": "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-development-01/retained-end-state",
+  "reason": "Host UID cannot read fixture-container-owned0600 vault/key files. Finally unpaused the owned VM. No permissions were weakened; source remains intact."
+}

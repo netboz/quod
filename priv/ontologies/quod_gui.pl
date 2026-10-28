@@ -35,10 +35,16 @@ gui_query(gui_valid_values(_)).
 gui_query(gui_value(_, _, _)).
 gui_query(gui_initial_value(_, _, _)).
 gui_query(gui_default_value(_, _, _)).
+gui_query(instance_of(_, _)).
+gui_query(have_attribute(_, _, _)).
+gui_query(attribute(_, _, _)).
+gui_query(eidolon(_, _, _)).
+gui_query(class_eidolon(_, _, _, _)).
 gui_query(Goal) :- public_source_query(Goal).
 
 isa(gui_component, thing).
 isa(question, thing).
+isa(eidolon, thing).
 isa(container, gui_component).
 isa(form, container).
 isa(panel, container).
@@ -370,3 +376,10 @@ gui_opening_allowed(gui_opening(ontology_ref(GuiNs, GuiAnchor), Reference,
               gui_receiver_accept(HumanInstance, Receiver, Capacity)).
 
 gui_prepared(Opening) :- '$quod_gui_prepared'(Opening).
+
+%% Public vocabulary selectors share this one foundation admission policy.
+gui_query(Goal) :- measure_query(Goal).
+gui_query(Goal) :- rendering_query(Goal).
+gui_query(Goal) :- modelling_query(Goal).
+gui_query(Goal) :- lens_query(Goal).
+gui_query(Goal) :- prolog_query(Goal).

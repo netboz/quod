@@ -65,7 +65,7 @@ already share their controllers with spatial presentation.
 [lobby_instance.pl](../priv/ontologies/lobby_instance.pl) obtains GUI views
 through an anchored vocabulary reference. This is existing usage, not the
 scope or required entry point of the GUI framework. The
-[Prolog eidolon library](../priv/ontologies/quod_prolog_eidolons.pl) associates
+[Prolog eidolon library](../priv/ontologies/gui_tools.pl) associates
 a subject, tool ontology and form without transferring ownership of the subject.
 These are the paths to generalize for component-associated forms.
 
@@ -105,8 +105,8 @@ one control. A renderer mesh name is never the domain identity.
 
 The current path is grounded in
 [common class recipe discovery](../priv/ontologies/common_predicates.pl),
-[rendering descriptors](../priv/ontologies/quod_rendering.pl),
-[workspace recipe output](../priv/ontologies/quod_prolog_eidolons.pl) and
+[rendering descriptors](../priv/ontologies/gui_scene.pl),
+[workspace recipe output](../priv/ontologies/gui_tools.pl) and
 [client decoding](../client/src/world.js). `class_eidolon/4` associates a class,
 purpose and style with an exact recipe; `entity_eidolons/2` discovers choices.
 The existing recipe can return a semantic `workspace(...)`, so not every GUI
@@ -130,10 +130,11 @@ do not claim it is already implemented or invent a competing scene graph.
 ## Ownership proposal
 
 Extend `quod:gui` for semantic controls, typed values, composition, validation
-contracts and reusable form rules. Propose `quod:gui:eidolons` for shared
-component appearances, using the existing separation
-between domain meaning and representation seen in materials and Prolog tools.
-Reuse `quod:rendering`, `quod:modelling` and `quod:measure`. Do not create an
+contracts and reusable form rules. The seven-foundation composition also owns
+shared appearances, exact measurement, rendering/model descriptors and portable
+inspection recipes in `quod:gui`; see the
+[foundation contract](godot-foundation-contract.md). Domain meaning and
+representation remain separate declarations under that owner. Do not create an
 ontology or runtime process for each widget. Catalogue entries and source access
 follow [system ontology ACLs](system-ontology-acls.md).
 
@@ -146,8 +147,8 @@ The client controller owns unsubmitted edits, focus, pointer capture and
 temporary validation feedback. The renderer owns meshes, textures and local
 feedback. Session/runtime owners supply authenticated delivery and observations
 of connection lifecycle, without becoming a second domain engine. Private
-preferences belong in an authorized user ontology; `quod:human_user` remains
-shared vocabulary.
+preferences belong in an authorized user ontology; `quod:user` holds shared
+human vocabulary and private signup receipts under its source policy.
 
 ```mermaid
 flowchart TD
@@ -264,10 +265,10 @@ An arbitrary string supplied by the client is not proof of committed submission.
 ### Automatic agent binding
 
 Derive the default human recipient from the existing authenticated proof context.
-The [signup rules](../priv/ontologies/quod_signup.pl) found a personal ontology
+The [signup rules](../priv/ontologies/quod_user.pl) found a personal ontology
 with `instance_of(human_user, me)` and `agent_key(me, Key, active)`, returning
 `agent_instance_ref(Namespace, Anchor, me)`. The shared
-[human vocabulary](../priv/ontologies/quod_human_user.pl) declares
+[human vocabulary](../priv/ontologies/quod_user.pl) declares
 `isa(human_user, agent)`. The browser creates the signing key; enrollment links
 it to this instance. Key creation or a login session alone is not enrollment.
 
@@ -581,7 +582,7 @@ Rotary knobs adjust values; their circular appearance does not turn them into
 push buttons or radio choices.
 
 Sliders need a range, unit, step and visible value, with an alternative for
-precise entry. Reuse `quod:measure` for domain quantities. Dragging changes a
+precise entry. Reuse `quod:gui`'s exact measurement algebra for domain quantities. Dragging changes a
 local draft; the ontology determines which explicit event submits a meaningful
 change. Do not commit every render frame or pointer sample.
 

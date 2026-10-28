@@ -1,0 +1,13 @@
+{
+  "ct_passed": 148,
+  "ct_failed": 1,
+  "case": "quod_ask_SUITE:remote_gui_opening_observer_receiver",
+  "child_exit": 1,
+  "timed_out": false,
+  "source_unchanged": true,
+  "unrun": [
+    "xref",
+    "dialyzer",
+    "release"
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "label": "production07",
+  "client": "final15",
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/serve.py",
+    "production07-server",
+    "--stage",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-gates02/source",
+    "--profile",
+    "prod",
+    "--qualified"
+  ],
+  "commands": [
+    {
+      "label": "production07-m2",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/run.py",
+        "production07-m2-command",
+        "--",
+        "python3",
+        "client/godot-tests/journey.py",
+        "--journey",
+        "spaces",
+        "--desktop",
+        "--export",
+        "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final15/source/client/godot/dist/quod.x86_64",
+        "--backend-port",
+        "44423",
+        "--backend-ca",
+        "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-production07-server/backend-ca.pem",
+        "--control-port",
+        "36755",
+        "--network",
+        "P3uoVZFCJN61MtGt5iSxUCwWcAlTxgAXl09jJ5dU53E",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/production07-m2",
+        "--private",
+        "/home/yan/.cache/quod-m2-artifacts/private/production07-m2"
+      ],
+      "child_exit": 1,
+      "elapsed_seconds": 30.138392609995208
+    },
+    {
+      "label": "production07-m2-read-probe",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/run.py",
+        "production07-m2-read-probe-command",
+        "--",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--project",
+        "/home/yan/.cache/quod-m2-artifacts/private/operation-read-probe01/probe.csproj",
+        "--",
+        "/home/yan/.cache/quod-m2-artifacts/private/production07-m2/identity/active.json",
+        "/home/yan/.cache/quod-m2-artifacts/private/production07-m2-read-probe",
+        "https://127.0.0.1:44423",
+        "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-production07-server/backend-ca.pem"
+      ],
+      "child_exit": 0,
+      "elapsed_seconds": 16.779318220003915
+    }
+  ],
+  "passed": false,
+  "endpoint": {
+    "port": 44423,
+    "network": "P3uoVZFCJN61MtGt5iSxUCwWcAlTxgAXl09jJ5dU53E",
+    "control_port": 36755,
+    "ca": "/m1b/backend-ca.pem"
+  },
+  "failure": "Failed production07-m2",
+  "server_child_exit": 0
+}

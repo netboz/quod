@@ -95,15 +95,35 @@ domain configuration. A lost assignment race may leave inert encrypted custody;
 it grants no authority and is not automatically deleted during an uncertain
 operation.
 
+For initial assignment that must select the prepared key, the six-argument
+form additionally returns an executor-signed receipt. The receipt signs the
+canonical `[AgentRef, OldHost, OldEpoch, Destination, Key]` bytes with the
+`quod.prepared-agent-custody.v1` domain prefix and a zero separator. It binds
+preparation to an exact history, prior assignment, destination and public key.
+`prepared_agent_key_custody/6` verifies those supplied bytes against the signer
+already bound to the executing proof. This check has a proof-bound dependency;
+it does not inspect the vault or assert that a live service is ready. It refuses
+a different executor, so preparation and assignment must use the selected
+hosting executor. The receipt survives reconnect and restart with that identity.
+It grants no assignment authority and does not replace current committed
+assignment policy. Operational loss of custody remains a visible service failure.
+
 ## Immediate personal instructions
 
-[personal_agent.pl](../priv/ontologies/personal_agent.pl) composes with the human
+[user_instance.pl](../priv/ontologies/user_instance.pl) composes with the human
 instance and shared agent hosting rules. The human U and hosted instance
 `personal` (A) have distinct references and keys in the same containing ontology.
 `personal_agent/2` discovers A and its current public key. Preparation and initial
 assignment use `prepare_agent_key_custody/6` and the existing `agent_hosted/4`
-action; account enrollment uses the shared resource initializer and operation
-journal to finish those steps. Existing ontologies require authorized source
+action. Signup creates U and retains its original receipt and hosting intention.
+An authorized `account_setup_preparation/1` read prepares the same existing A's
+custody and returns `prepared_key(Key, Receipt)` in the preparation. The
+`setup_account/4` input carries that pair; setup verifies the receipt before it
+assigns A's host/key, constructs ordinary S0
+owned by U in the explicitly selected existing account storage, places A while
+construction authorization is active, records the complete result, and consumes
+the signup receipt in one atomic transition. A complete setup read returns its
+original references and pins without another preparation or write. Existing ontologies require authorized source
 composition; opening an account never rewrites its ontology.
 
 For [empty-space construction](spaces.md#empty-creation), A can query its exact

@@ -1,0 +1,5 @@
+{
+  "private_originals": "/home/yan/.cache/quod-m2-artifacts/quod-godot-m2-handoff-8db34a85-20261028-01-private-logs",
+  "files": [],
+  "rule": "All numeric Erlang binaries of exactly 32 or 64 bytes, including public identifiers; complete raw logs remain private outside this snapshot."
+}

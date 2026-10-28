@@ -1,0 +1,90 @@
+[
+  {
+    "phase": "crash-before-rename",
+    "case": "crash-before-rename",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-crash-final-02-private/before-rename",
+      "--node",
+      "https://localhost:14570",
+      "--ca",
+      ""
+    ],
+    "child_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "passed": true
+  },
+  {
+    "phase": "crash-recover",
+    "case": "crash-recover-before-rename",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-crash-final-02-private/before-rename",
+      "--node",
+      "https://localhost:14570",
+      "--ca",
+      ""
+    ],
+    "child_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "passed": true
+  },
+  {
+    "boundary": "before-rename",
+    "source_active_sha256": "0ba821ef358dd9a3c632f1185e66f5d32862806217aed7c5455b898e33ac136d",
+    "recovered_active_sha256": "0ba821ef358dd9a3c632f1185e66f5d32862806217aed7c5455b898e33ac136d",
+    "original_signed_outbox_count": 1
+  },
+  {
+    "phase": "crash-after-rename",
+    "case": "crash-after-rename",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-crash-final-02-private/after-rename",
+      "--node",
+      "https://localhost:14570",
+      "--ca",
+      ""
+    ],
+    "child_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "passed": true
+  },
+  {
+    "phase": "crash-recover",
+    "case": "crash-recover-after-rename",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-crash-final-02-private/after-rename",
+      "--node",
+      "https://localhost:14570",
+      "--ca",
+      ""
+    ],
+    "child_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "passed": true
+  },
+  {
+    "boundary": "after-rename",
+    "source_active_sha256": "0ba821ef358dd9a3c632f1185e66f5d32862806217aed7c5455b898e33ac136d",
+    "recovered_active_sha256": "2d8e0006211abdc3168c3da80ae6555c92f9c194646e52e5916dc483e255985e",
+    "original_signed_outbox_count": 1
+  }
+]

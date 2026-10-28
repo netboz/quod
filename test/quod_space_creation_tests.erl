@@ -1,6 +1,6 @@
 -module(quod_space_creation_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([with_spaces/2, with_models/2]).
+-export([with_spaces/2, with_spaces/3, with_models/2]).
 
 signed_empty_space_results_and_recovery_test_() ->
     [{atom_to_list(Lane), {timeout, 90, fun() -> with_spaces(fun(C) ->
@@ -146,32 +146,111 @@ authorization_and_lookup_failures_never_fall_back_test_() ->
         denied_creation(C, Target, [placement(ref(Dest,absent))])
     end) end}.
 
+initial_occupants_use_existing_refs_and_atomic_constructor_scope_test_() ->
+    [{atom_to_list(Lane), {timeout,90,fun() -> with_spaces(fun(C=#{namespace:=Ns,storage:=Foreign,agent:=Agent}) ->
+        Target = case Lane of local -> Ns; _ -> Foreign end,
+        Occupant = case Lane of local -> ref(Ns,personal); foreign -> ref(Target,resident) end,
+        OccupantOwner=element(2,Occupant), OccupantId=element(4,Occupant),
+        Inputs = [{part,initial_occupants,[{attribute,entities,[Occupant]}]}],
+        %% An inherited constructor failure happens after the shared space
+        %% constructor has admitted the existing occupant. Construction,
+        %% assignment and admission must all unwind.
+        Broken = [{isa,broken_space,space},{':-',{constructor,broken_space,{'S'},{'_'}},
+            conj([{space_placement,{'S'},Occupant,1},{fail_with_reason,injected_after_initial_admission}])}],
+        [edit(Target,{assertz,Rule}) || Rule <- Broken],
+        Before = instances(Target),
+        Failed = at_target(C,Target,{with_build_plan,Inputs,{assert,{instance_of,broken_space,{'_'}}}}),
+        {ok,_,{normalized,{failed,Reasons}}} = signed_result(C,Failed),
+        {ok,Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+        ?assert(lists:member(injected_after_initial_admission,Decoded)),
+        ?assertEqual(Before,instances(Target)), holds(OccupantOwner,{space_assignment,OccupantId,0,none}),
+        ?assertMatch({ok,[#{'Rows':=[]}],_},quod_prolog:prove_ro(Target,
+            {findall,{'S'},{space_placement,{'S'},Occupant,{'_'}},{'Rows'}})),
+        OtherOwner=case Lane of local -> Foreign; foreign -> Ns end,
+        Imported=ref(OtherOwner,resident),
+        {ok,_,{normalized,{failed,ScopeReasons}}}=signed_result(C,at_target(C,Target,
+            creation_goal([{part,initial_occupants,[{attribute,entities,[Imported]}]}]))),
+        {ok,ScopeDecoded}=quod_wire_term:decode_failure_reasons(ScopeReasons),
+        ?assert(lists:member(initial_occupants_require_local_storage,ScopeDecoded)),
+        ?assertEqual(Before,instances(Target)),
+        holds(OtherOwner,{space_assignment,resident,0,none}),
+        %% Duplicate or nonexistent participants are rejected without leaving
+        %% a partially classified destination or changing source membership.
+        [denied_creation(C,Target,[{part,initial_occupants,[{attribute,entities,Entities}]}])
+            || Entities <- [[Occupant,Occupant],[ref(Ns,absent)],
+                [{entity_ref,Ns,<<0:256>>,personal}]]],
+        {Bindings,_,_} = create(C,Target,Inputs),
+        [{_,Space={entity_ref,Target,_,Id}},_] = Bindings,
+        holds(Target,{attribute,Id,owner,maps:get(human,C)}),
+        holds(OccupantOwner,{space_assignment,OccupantId,1,Space}),
+        holds(Target,{space_placement,Id,Occupant,1}),
+        %% Shared S's matching class name/pin has not become this local class
+        %% owner or a constructor dispatch target. The returned reference is
+        %% exactly the explicitly selected storage identity.
+        ?assertNotEqual(Agent,Space),
+        empty_resources(C,Target,Id,[Occupant]),
+        %% Without the part, ordinary foreign empty creation still works.
+        case Lane of foreign -> create(C,Target,[]); local -> ok end
+    end,[{instance_of,agent,resident},
+        {':-',{creation_entry,{'Actor'},{instance,resident},{space_enter,{'_'},{'_'},placement}},
+            {creation_actor,{'Actor'}}},
+        {':-',{creation_admission,{'Actor'},{construction,{'Class'},{'S'},{'Inputs'}},
+                    {space_admit,{'_'},{'_'},placement}},
+                conj([{creation_actor,{'Actor'}},admission_enabled,{member,{'Class'},[space,broken_space]},
+                    {member,{part,initial_occupants,{'_'}},{'Inputs'}}])}]) end}} || Lane <- [local,foreign]].
+
 with_spaces(Fun) ->
     with_spaces(Fun, []).
 
 with_spaces(Fun, Extra) ->
-    Sources = source("space.pl") ++ source("space_view.pl") ++ fixture() ++ Extra,
+    with_spaces(Fun, Extra, source("quod_space.pl")).
+
+with_spaces(Fun, Extra, SpaceSource) ->
+    Sources = SpaceSource ++ fixture() ++ Extra,
     quod_personal_agent_tests:with_personal(fun(C = #{namespace := Ns, agent := A,
                                                     directory := Dir, identity := Node}) ->
         {ok, Foreign} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir,"foreign")}),
         Measure = <<"creation-measure">>, Target = <<"creation-storage">>, Dest = <<"creation-destination">>,
-        MSup = quod_agent_hosting_tests:start_ontology(Measure,Dir,Node,[],source("quod_measure.pl")),
+        MSup = quod_agent_hosting_tests:start_ontology(Measure,Dir,Node,[],source("gui_measure.pl")),
         MeasureRef = {measure_vocabulary,Measure,quod_simplex:genesis_hash(Measure)},
-        Terms = Sources ++ [MeasureRef, {creation_actor,A}, storage_open,
+        Digest = crypto:hash(sha256, space_source()),
+        Template = <<"creation-space-template">>,
+        SSup = quod_agent_hosting_tests:start_ontology(Template,Dir,Node,[],
+            [{space_template_hash,Digest},
+             {can_invoke,{',',{current_ontology_identity,Template,{'_'}},{space_template_hash,{'_'}}},
+                 {'_'},{'_'},Template}]),
+        Recipe = [{space_vocabulary,Template,quod_simplex:genesis_hash(Template)},
+                  {space_source_digest,Digest}],
+        Terms = Sources ++ Recipe ++ [MeasureRef, {creation_actor,A}, storage_open,
             {':-', {can_invoke,{'_'},A,{'_'},{'_'}},storage_open}],
         TSup = quod_agent_hosting_tests:start_ontology(Target,Dir,Node,[],Terms),
         DSup = quod_agent_hosting_tests:start_ontology(Dest,Dir,Node,[],Terms),
-        edit(Ns, conj([{assertz,MeasureRef},{assertz,{creation_actor,A}},
+        edit(Ns, conj([{assertz,R} || R <- Recipe] ++ [{assertz,MeasureRef},{assertz,{creation_actor,A}},
             {assertz,{can_invoke,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},
                 {space_accept_placement,room,{'_'},{'_'}}}, A, {'_'}, Ns}},
             {assertz,{can_invoke,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},
-                {space_assignment,{'_'},{'_'},{'_'}}}, A, {'_'}, Ns}}])),
+                {space_assignment,{'_'},{'_'},{'_'}}}, A, {'_'}, Ns}},
+            {assertz,{can_invoke,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},
+                {space_place,personal,{'_'},{'_'}}}, A, {'_'}, Ns}},
+            {assertz,{can_invoke,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},
+                {',',{space_assignment,personal,{'Revision'},none},
+                     {space_place,personal,{'Revision'},{'Destination'}}}}, A, {'_'}, Ns}}])),
         try Fun(C#{storage=>Target,destination=>Dest,measure=>Measure})
-        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [DSup,TSup,MSup]],
+        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [DSup,TSup,SSup,MSup]],
               gen_server:stop(Foreign) end
     end, Sources).
 
-source(File) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File)).
+space_source() ->
+    {ok,Bytes} = file:read_file(filename:join(code:priv_dir(quod),"ontologies/quod_space.pl")), Bytes.
+
+source(File) ->
+    case File of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File))
+    end.
 fixture() -> quod_prolog:read_terms("test/fixtures/space-creation.pl").
 ref(Ns, Entity) -> {entity_ref,Ns,quod_simplex:genesis_hash(Ns),Entity}.
 placement(Ref) -> {attribute,placement,{at,Ref,{transform,10,20,30,0,0,0}}}.
@@ -236,8 +315,12 @@ fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
 edit(Ns,Goal) -> ?assertMatch({ok,_,_},quod_prolog:execute(Ns,Goal)).
 conj([G]) -> G;
 conj([G|Rest]) -> {',',G,conj(Rest)}.
-empty_resources(C,Target,Id) ->
-    [fails(Target,G) || G <- [{space_contains,Id,{'_'}},{instance_of,physical_space,Id},
+empty_resources(C,Target,Id) -> empty_resources(C,Target,Id,[]).
+empty_resources(C,Target,Id,ExpectedContents) ->
+    {ok,[#{'Contents' := Contents}],_} = quod_prolog:prove_ro(Target,
+        {findall,{'E'},{space_contains,Id,{'E'}},{'Contents'}}),
+    ?assertEqual(lists:sort(ExpectedContents),lists:sort(Contents)),
+    [fails(Target,G) || G <- [{instance_of,physical_space,Id},
         {instance_of,voxel_world,Id},{instance_of,sky_sphere,{'_'}},{physics_space,Id,{'_'},{'_'}},
         {physics_body_definition,Id,{'_'},{'_'},{'_'},{'_'},{'_'}},{voxel_world,{'_'}}]],
     [begin
@@ -249,8 +332,8 @@ empty_resources(C,Target,Id) ->
 
 with_models(#{namespace := Ns, directory := Dir, identity := Node}, Fun) ->
     Render = <<"creation-rendering">>, Model = <<"creation-modelling">>,
-    RSup = quod_agent_hosting_tests:start_ontology(Render,Dir,Node,[],source("quod_rendering.pl")),
-    MSup = quod_agent_hosting_tests:start_ontology(Model,Dir,Node,[],source("quod_modelling.pl") ++
+    RSup = quod_agent_hosting_tests:start_ontology(Render,Dir,Node,[],source("gui_scene.pl")),
+    MSup = quod_agent_hosting_tests:start_ontology(Model,Dir,Node,[],source("gui_scene.pl") ++
         [{rendering_vocabulary,Render,quod_simplex:genesis_hash(Render)}]),
     edit(Ns,{assertz,{modelling_vocabulary,Model,quod_simplex:genesis_hash(Model)}}),
     try Fun()

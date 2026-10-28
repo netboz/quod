@@ -1,0 +1,6 @@
+{
+  "executed_script": "verify-public-receipt.escript",
+  "preserved_as": "doc/evidence/godot-m1a-20261027/inputs/public-receipt-01-verifier.escript",
+  "sha256": "7e9d40893f163fb5bd1706854cc1c8d906ab4cf1c0ae8cb65b0f0aca0bce86c8",
+  "command_receipt": "logs/public-receipt-01.json"
+}

@@ -1,6 +1,6 @@
 -module(quod_rendering_tests).
 
-%% The `quod:rendering` ontology (priv/ontologies/quod_rendering.pl): the bounded
+%% The `quod:gui` ontology (priv/ontologies/gui_scene.pl): the bounded
 %% mark vocabulary a renderer is given. What is checked here is that the schema
 %% actually refuses a malformed descriptor — a missing field, a reordered one, a
 %% colour that is not one, a label that is too long, a float where a whole
@@ -15,7 +15,7 @@ kinds_declare_their_fields_in_order_test() ->
     with_rendering(fun(St) ->
         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
         ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
-                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>],
+                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
                      lists:sort(Kinds)),
         %% Every kind's fields are declared at consecutive positions from 1, so
         %% the order a descriptor must use is the order they are written in.
@@ -28,6 +28,22 @@ kinds_declare_their_fields_in_order_test() ->
           end, Kinds),
         ?assertEqual([<<"width">>, <<"height">>, <<"depth">>],
                      solutions({'F'}, {geometry_field, <<"box">>, {'_'}, {'F'}}, St))
+    end).
+
+exact_edge_box_retains_rational_lengths_test() ->
+    with_rendering(fun(St) ->
+        Width = {'/',1,3}, Height = 100001, Depth = {'/',1001,2},
+        Size = [{f,<<"width">>,Width},{f,<<"height">>,Height},{f,<<"depth">>,Depth}],
+        Mark = sized(<<"wire_box">>,Size),
+        holds({well_formed_mark,Mark},St),
+        Expected = {mark,<<"edges">>,<<"wire_box">>,Size,{transform,10,20,30,15,35,75},
+            {surface,<<"#FFFFFF">>,0,700,0,[]},unlabelled,depicts_nothing},
+        holds({model,[{part,<<"edges">>,{wire_box,Width,Height,Depth},
+            {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,[]},
+            unlabelled,depicts_nothing}],[Expected]},St),
+        [fails({well_formed_mark,sized(<<"wire_box">>,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
+            || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]],
+        fails({well_formed_mark,sized(<<"box">>,Size)},St)
     end).
 
 a_well_formed_mark_test() ->
@@ -176,7 +192,7 @@ the_class_view_is_derived_test() ->
     with_rendering(fun(St) ->
         holds({isa, mark, thing}, St),
         ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
-                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>],
+                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
         ?assertEqual([<<"diameter">>, <<"height">>],
                      solutions({'F'}, {attribute, <<"cylinder">>, field, {'F'}}, St))
@@ -199,9 +215,7 @@ vocabulary_fits_the_genesis_budget_test() ->
         Terms = quod_committed_projection:read_terms(filename:join("priv/ontologies", Name)),
         quod_ct:assert_material_admissible(Terms),
         ?assertNot(lists:any(fun has_float/1, Terms))
-    end, ["quod_rendering.pl", "quod_modelling.pl", "quod_material.pl",
-          "quod_material_eidolons.pl", "quod_environment.pl",
-          "quod_environment_eidolons.pl"]).
+    end, ["gui_scene.pl", "quod_material.pl", "quod_material_eidolons.pl", "quod_environment.pl", "quod_environment_eidolons.pl"]).
 
 texture_bindings_are_typed_and_unique_test() ->
     with_rendering(fun(St) ->
@@ -246,8 +260,7 @@ parent_order_prevents_cycles_and_dangling_children_test() ->
     end).
 
 model_recipes_preserve_body_and_attachment_references_test() ->
-    {ok, Modelling} = file:read_file("priv/ontologies/quod_modelling.pl"),
-    with_committed_rendering(Modelling, fun(_Committed, St) ->
+    with_rendering(fun(St) ->
         Body = {part,<<"body">>,group,{body_pose,42,7},no_surface,unlabelled,
                 {depicts,<<"objects">>,<<7:256>>,object}},
         Child = {part,<<"child">>,group,{relative,<<"body">>,{body_pose,43,8}},
@@ -324,7 +337,6 @@ mesh_mark() ->
 
 %% --- helpers ---------------------------------------------------------------
 
-source() -> filename:join(code:priv_dir(quod), "ontologies/quod_rendering.pl").
 
 box(Id) -> sized_with(Id, <<"box">>,
                       [{f, <<"width">>, 400}, {f, <<"height">>, 400},
@@ -357,7 +369,7 @@ with_rendering(Fun) ->
 
 with_committed_rendering(Extra, Fun) ->
     Base = quod_committed_projection:new_est(),
-    Loaded = load_terms(quod_committed_projection:read_terms(source()), Base),
+    Loaded = load_terms(quod_ct:gui_terms(), Base),
     Committed = quod_ct:commit_kb(load_source(Extra, Loaded)),
     St = quod_erlog_db_local_prove:wrap_state(Committed, #{read_set => true}),
     try Fun(Committed, St)

@@ -183,7 +183,7 @@ export default function World() {
       void readSystemOntologies(identity).then(ontologies => {
         if (active) setCatalogue(ontologies)
         // This menu entry opens the authored licence lens over licence data.
-        const installed = ['quod:lens', 'quod:licence'].every(namespace =>
+        const installed = ['quod:gui', 'quod:licence'].every(namespace =>
           ontologies.some(ontology => ontology.namespace === namespace))
         if (active) setLicenceCheck({ identity, reason: installed ? null
           : 'Licence lens unavailable: this network has not registered its lens and licence ontologies.' })

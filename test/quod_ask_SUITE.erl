@@ -124,7 +124,7 @@ node_enrollment_remote_custodian(Config) ->
     NodeAnchor = peer:call(Source, quod_simplex, genesis_hash, [NodeNs]),
     start_brahms(Source, NodeNs, SourceAddr, []),
     {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
-                                                 "ontologies/node_execution.pl")),
+                                                 "ontologies/node_instance.pl")),
     HostNs = <<"node:remote-custodian">>,
     Options = quod_ct:node_identity_options(HostNs, me, HostKey),
     {ok, [#{'A' := HostAnchor}], _} = peer:call(Custodian, quod_prolog, execute,
@@ -767,7 +767,7 @@ remote_gui_opening_observer_receiver(Config) ->
             genesis_diff => quod_prolog:terms_to_diff(Terms)}],15000)
     end,
     GuiNs = <<"quod:gui">>, NodeNs = <<"gui:remote-node">>, AppNs = <<"gui:remote-app">>,
-    GuiAnchor = Start(GuiNs,Source("quod_gui.pl") ++ [{can_invoke,true,{'_'},{'_'},GuiNs}],
+    GuiAnchor = Start(GuiNs,quod_ct:gui_terms() ++ [{can_invoke,true,{'_'},{'_'},GuiNs}],
                       [quod_agent_predicates,quod_gui_predicates]),
     start_brahms(Owner,GuiNs,OwnerAddr,[]),
     start_join_namespace(Receiver,ReceiverKey,GuiNs,GuiAnchor,[OwnerAddr],Config),
@@ -775,16 +775,16 @@ remote_gui_opening_observer_receiver(Config) ->
     ok = peer:call(Receiver,?MODULE,enrollment_wait_ready,[GuiNs,true],15000),
     ?assertMatch(#{role := observer},peer:call(Receiver,quod_simplex,status,[GuiNs])),
     HumanNs = <<"gui:remote-human">>, HumanInstance = {human_user,test_agent},
-    HumanAnchor = Start(HumanNs,Source("gui_hud.pl") ++ [
+    HumanAnchor = Start(HumanNs,quod_gui_question_tests:user_source_with_allowance(HumanInstance,2) ++ [
         {agent_key,HumanInstance,?config(agent_pub,Config),active},
-        {instance_of,human_user,HumanInstance},{gui_pending_allowance,HumanInstance,2},
+        {instance_of,human_user,HumanInstance},
         {can_invoke,{'_'},{agent_instance_ref,HumanNs,{'_'},HumanInstance},{'_'},HumanNs}],
         [quod_agent_predicates]),
     Human = {agent_instance_ref,HumanNs,HumanAnchor,HumanInstance},
     Ctx = #{agent => {HumanNs,HumanAnchor},key_pair => ?config(agent_key,Config),
             network => ?config(network_id,Config)},
     Admin = {can_invoke,{'_'},Human,{'_'},{'_'}},
-    NodeAnchor = Start(NodeNs,Source("node_execution.pl") ++ [Admin,
+    NodeAnchor = Start(NodeNs,Source("node_instance.pl") ++ [Admin,
         {can_invoke,{'_'},{node,OwnerKey},{'_'},NodeNs},
         {node_ontology,NodeNs},{instance_of,node,physical_node},{agent_key,physical_node,OwnerKey,active}],
         [quod_agent_predicates]),
@@ -802,8 +802,8 @@ remote_gui_opening_observer_receiver(Config) ->
     VaultConfig = #{directory => filename:join(?config(priv_dir,Config),"remote-gui-keys"),unlock_file => Unlock},
     ok = peer:call(Owner,application,set_env,[quod,agent_vault,VaultConfig]),
     {ok,_} = peer:call(Owner,supervisor,restart_child,[quod_reg:via({sup,node}),quod_agent_vault]),
-    AppAnchor = Start(AppNs,Source("agent_instance.pl") ++ Source("gui_question.pl") ++
-        Source("gui_instance.pl") ++ quod_prolog:read_terms(filename:join([
+    AppAnchor = Start(AppNs,Source("agent_instance.pl") ++ Source("gui_instance.pl") ++
+        quod_prolog:read_terms(filename:join([
             filename:dirname(code:which(?MODULE)),"fixtures","gui-components.pl"])) ++ [Admin,
         {gui_vocabulary,GuiNs,GuiAnchor},{gui_pending_allowance,actor,2},{gui_completion_allowance,actor,30000},
         {can_assign_agent_host,Human,actor,none,0,Node,{'_'}},

@@ -67,8 +67,8 @@ space, physics process or accumulating answer history.
 ## Shared lifecycle and presentation
 
 The responsible actor's ontology composes
-[gui_question.pl](../priv/ontologies/gui_question.pl); the human's ontology
-composes [gui_hud.pl](../priv/ontologies/gui_hud.pl). The application grants its
+[gui_instance.pl](../priv/ontologies/gui_instance.pl); the human's ontology
+composes [user_instance.pl](../priv/ontologies/user_instance.pl). The application grants its
 normal domain authority through `gui_question_policy/3`. The shared committed
 assertion reaction correlates accepted fields to the retained completion request;
 neither example declares `react_on` or sends a client-provided executable goal.
@@ -251,14 +251,18 @@ authored rendering allowance reports the resource, required amount and limit;
 the user can return to the lobby and choose a smaller distance without changing
 the saved terrain or disabling its physics owner.
 
-Fresh human creation lists [human_user_instance.pl](../priv/ontologies/human_user_instance.pl),
+Fresh human creation uses the ordered hash-guarded composition of
+[user_instance.pl](../priv/ontologies/user_instance.pl),
 [agent_instance.pl](../priv/ontologies/agent_instance.pl),
-[personal_agent.pl](../priv/ontologies/personal_agent.pl) and
-[gui_hud.pl](../priv/ontologies/gui_hud.pl) as `user_source_file/1` components
-in the signup ontology. The ordinary creation path freezes their complete
-contents into one genesis. The human behavior supplies the HUD allowance;
-the shared HUD owns receiving and pending references. The personal actor uses
+[quod_space.pl](../priv/ontologies/quod_space.pl) and
+[gui_instance.pl](../priv/ontologies/gui_instance.pl) authored by
+[quod_user.pl](../priv/ontologies/quod_user.pl). The ordinary creation owner
+checks each source hash and freezes the parsed contents into one genesis.
+The private user behavior owns the HUD allowance, receiving and pending
+references. The personal actor uses
 its own vault key and the existing hosting lifecycle, independently of U's
-browser key. Existing human and lobby
+browser key. Signup's subsequent authorized setup creates ordinary parentless
+S0 in the explicitly selected account storage and places that same A there;
+it does not commission the optional physical lobby preset. Existing human and lobby
 ontologies need explicit authorized source composition; opening the workspace
 never installs or repairs source.

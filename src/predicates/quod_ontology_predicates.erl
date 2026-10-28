@@ -234,6 +234,7 @@ failure_reason({join_ontology, _, _, _}, Reason) -> {ontology_join_failed,Reason
 creation_reason({material_limit, founding, _, _, _} = Reason) -> Reason;
 creation_reason({invalid_material_policy, founding} = Reason) -> Reason;
 creation_reason({source_file_error, Index, _Path, _Reason}) -> {source_file_error,Index};
+creation_reason({source_file_hash_mismatch, Index, _, _}) -> {source_hash_mismatch,Index};
 creation_reason({already_configured, _Ns}) -> already_hosted;
 creation_reason(_Reason) -> start_failed.
 

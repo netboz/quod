@@ -1,0 +1,23 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/journey.py",
+    "--export",
+    "/tmp/quod-m1b-export-12/quod.x86_64",
+    "--backend-port",
+    "44315",
+    "--backend-ca",
+    "/tmp/quod-m1b-live-03/backend-ca.pem",
+    "--control-port",
+    "43055",
+    "--network",
+    "iN2MVrKoS3xO4e2YoTGy5WEIGSlTpT5JPlF8V0u2vC4",
+    "--evidence",
+    "doc/evidence/godot-m1b-20261028/journey-09",
+    "--private",
+    "/tmp/quod-m1b-journey-09-private"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 1.6411343519976072
+}

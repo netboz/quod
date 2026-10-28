@@ -1,0 +1,248 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.09s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1048 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1673 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1673 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Running Common Test suites...
+%%% quod_m1a_savepoint_diag_SUITE: 
+
+----------------------------------------------------
+2026-10-28 01:24:48.244
+M1a savepoint diagnostic asker: #{requests => #{},
+                                  errors =>
+                                   [{quod_ask,ask_error,
+                                     {scope_expired,{binary,5}}},
+                                    {quod_client_result,normalize_error,
+                                     {scope_expired,{binary,5}}}],
+                                  wall_us => 29507003,runtime_ms => 18471}
+
+
+----------------------------------------------------
+2026-10-28 01:24:48.255
+M1a savepoint diagnostic target: #{requests =>
+                                       #{allocate =>
+                                             #{count => 10507,
+                                               total_us => 15614317,
+                                               max_us => 6155},
+                                         finish =>
+                                             #{count => 1,total_us => 2902,
+                                               max_us => 2902},
+                                         activate =>
+                                             #{count => 2,total_us => 3682,
+                                               max_us => 2144},
+                                         restore =>
+                                             #{count => 8405,
+                                               total_us => 12548979,
+                                               max_us => 5435}},
+                                   errors => [],wall_us => 29514797,
+                                   runtime_ms => 19191}
+
+
+----------------------------------------------------
+2026-10-28 01:24:48.267
+M1a savepoint diagnostic third: #{requests => #{},errors => [],
+                                  wall_us => 29511333,runtime_ms => 2961}
+
+
+%%% quod_m1a_savepoint_diag_SUITE ==> savepoints: FAILED
+%%% quod_m1a_savepoint_diag_SUITE ==> 
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { committed , [ _ ] , { group_outcome , _ , _ , _ } } } }, submit_signed_execute ( Config , Fallback ))
+  expected: = { ok , _ , { normalized , { committed , [ _ ] , { group_outcome , _ , _ , _ } } } }
+       got: {ok,
+             #{request =>
+                #{mode => execute,agent_namespace => <<"pets">>,
+                  agent_genesis_anchor =>
+                   <<REDACTED_DISPOSABLE_BINARY_32>>,
+                  not_after_ms => 1793150689215,parser_version => 1,
+                  network_identity =>
+                   <<REDACTED_DISPOSABLE_BINARY_32>>,
+                  operation_id =>
+                   <<REDACTED_DISPOSABLE_BINARY_32>>,
+                  signing_public_key =>
+                   <<REDACTED_DISPOSABLE_BINARY_32>>,
+                  agent_instance_text => <<"human_user(test_agent).">>,
+                  goal_text =>
+                   <<"animals::transaction((third::true, tx_wire_local_choices_562(1200), ((assertz(tx_wire_removed_562(2)), third::assertz(tx_wire_removed_562(2)), fail); (assertz(tx_wire_kept_562(3)), tx_wire_local_choices_562(1200), third::assertz(tx_wire_kept_562(3)))))).">>},
+               signature =>
+                <<REDACTED_DISPOSABLE_BINARY_64>>,
+               variables => [],
+               request_digest =>
+                <<REDACTED_DISPOSABLE_BINARY_32>>,
+               request_bytes =>
+                <<113,117,111,100,46,97,103,101,110,116,46,103,111,97,108,46,
+                  118,49,0,1,121,64,185,75,57,168,220,145,42,239,201,71,108,49,
+                  110,147,153,74,146,103,255,167,54,75,177,196,229,225,124,68,
+                  225,25,231,36,179,157,45,71,68,244,77,245,247,168,59,227,170,
+                  46,205,237,143,238,158,98,109,182,106,167,123,51,190,0,66,
+                  176,160,17,1,140,7,233,159,131,140,149,198,185,195,184,211,
+                  138,196,129,217,20,42,97,223,50,197,102,219,74,95,89,14,0,4,
+                  112,101,116,115,149,14,218,142,44,101,104,116,62,223,27,31,
+                  161,193,90,228,84,219,234,124,241,198,68,143,145,26,132,22,
+                  225,135,40,97,0,0,0,23,104,117,109,97,110,95,117,115,101,114,
+                  40,116,101,115,116,95,97,103,101,110,116,41,46,1,1,0,0,1,161,
+                  128,28,31,191,0,0,0,254,97,110,105,109,97,108,115,58,58,116,
+                  114,97,110,115,97,99,116,105,111,110,40,40,116,104,105,114,
+                  100,58,58,116,114,117,101,44,32,116,120,95,119,105,114,101,
+                  95,108,111,99,97,108,95,99,104,111,105,99,101,115,95,53,54,
+                  50,40,49,50,48,48,41,44,32,40,40,97,115,115,101,114,116,122,
+                  40,116,120,95,119,105,114,101,95,114,101,109,111,118,101,100,
+                  95,53,54,50,40,50,41,41,44,32,116,104,105,114,100,58,58,97,
+                  115,115,101,114,116,122,40,116,120,95,119,105,114,101,95,114,
+                  101,109,111,118,101,100,95,53,54,50,40,50,41,41,44,32,102,97,
+                  105,108,41,59,32,40,97,115,115,101,114,116,122,40,116,120,95,
+                  119,105,114,101,95,107,101,112,116,95,53,54,50,40,51,41,41,
+                  44,32,116,120,95,119,105,114,101,95,108,111,99,97,108,95,99,
+                  104,111,105,99,101,115,95,53,54,50,40,49,50,48,48,41,44,32,
+                  116,104,105,114,100,58,58,97,115,115,101,114,116,122,40,116,
+                  120,95,119,105,114,101,95,107,101,112,116,95,53,54,50,40,51,
+                  41,41,41,41,41,41,46>>,
+               goal =>
+                {'::',
+                 {'$quod_symbol',<<"animals">>},
+                 {{'$quod_symbol',<<"transaction">>},
+                  {',',
+                   {'::',
+                    {'$quod_symbol',<<"third">>},
+                    {'$quod_symbol',<<"true">>}},
+                   {',',
+                    {{'$quod_symbol',<<"tx_wire_local_choices_562">>},1200},
+                    {';',
+                     {',',
+                      {{'$quod_symbol',<<"assertz">>},
+                       {{'$quod_symbol',<<"tx_wire_removed_562">>},2}},
+                      {',',
+                       {'::',
+                        {'$quod_symbol',<<"third">>},
+                        {{'$quod_symbol',<<"assertz">>},
+                         {{'$quod_symbol',<<"tx_wire_removed_562">>},2}}},
+                       {'$quod_symbol',<<"fail">>}}},
+                     {',',
+                      {{'$quod_symbol',<<"assertz">>},
+                       {{'$quod_symbol',<<"tx_wire_kept_562">>},3}},
+                      {',',
+                       {{'$quod_symbol',<<"tx_wire_local_choices_562">>},1200},
+                       {'::',
+                        {'$quod_symbol',<<"third">>},
+                        {{'$quod_symbol',<<"assertz">>},
+                         {{'$quod_symbol',<<"tx_wire_kept_562">>},3}}}}}}}}}},
+               operation_ref =>
+                {operation,<<"pets">>,
+                 <<REDACTED_DISPOSABLE_BINARY_32>>,
+                 <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,0,18,97,103,
+                   101,110,116,95,105,110,115,116,97,110,99,101,95,114,101,102,
+                   104,2,97,1,109,0,0,0,4,112,101,116,115,104,2,97,1,109,0,0,0,
+                   32,149,14,218,142,44,101,104,116,62,223,27,31,161,193,90,
+                   228,84,219,234,124,241,198,68,143,145,26,132,22,225,135,40,
+                   97,104,2,97,4,108,0,0,0,2,104,2,97,0,109,0,0,0,10,104,117,
+                   109,97,110,95,117,115,101,114,104,2,97,0,109,0,0,0,10,116,
+                   101,115,116,95,97,103,101,110,116,106,106>>,
+                 <<REDACTED_DISPOSABLE_BINARY_32>>},
+               goal_blob =>
+                <<131,104,2,97,4,108,0,0,0,3,104,2,97,0,109,0,0,0,2,58,58,104,
+                  2,97,0,109,0,0,0,7,97,110,105,109,97,108,115,104,2,97,4,108,
+                  0,0,0,2,104,2,97,0,109,0,0,0,11,116,114,97,110,115,97,99,116,
+                  105,111,110,104,2,97,4,108,0,0,0,3,104,2,97,0,109,0,0,0,1,44,
+                  104,2,97,4,108,0,0,0,3,104,2,97,0,109,0,0,0,2,58,58,104,2,97,
+                  0,109,0,0,0,5,116,104,105,114,100,104,2,97,0,109,0,0,0,4,116,
+                  114,117,101,106,104,2,97,4,108,0,0,0,3,104,2,97,0,109,0,0,0,
+                  1,44,104,2,97,4,108,0,0,0,2,104,2,97,0,109,0,0,0,25,116,120,
+                  95,119,105,114,101,95,108,111,99,97,108,95,99,104,111,105,99,
+                  101,115,95,53,54,50,104,2,97,2,98,0,0,4,176,106,104,2,97,4,
+                  108,0,0,0,3,104,2,97,0,109,0,0,0,1,59,104,2,97,4,108,0,0,0,3,
+                  104,2,97,0,109,0,0,0,1,44,104,2,97,4,108,0,0,0,2,104,2,97,0,
+                  109,0,0,0,7,97,115,115,101,114,116,122,104,2,97,4,108,0,0,0,
+                  2,104,2,97,0,109,0,0,0,19,116,120,95,119,105,114,101,95,114,
+                  101,109,111,118,101,100,95,53,54,50,104,2,97,2,97,2,106,106,
+                  104,2,97,4,108,0,0,0,3,104,2,97,0,109,0,0,0,1,44,104,2,97,4,
+                  108,0,0,0,3,104,2,97,0,109,0,0,0,2,58,58,104,2,97,0,109,0,0,
+                  0,5,116,104,105,114,100,104,2,97,4,108,0,0,0,2,104,2,97,0,
+                  109,0,0,0,7,97,115,115,101,114,116,122,104,2,97,4,108,0,0,0,
+                  2,104,2,97,0,109,0,0,0,19,116,120,95,119,105,114,101,95,114,
+                  101,109,111,118,101,100,95,53,54,50,104,2,97,2,97,2,106,106,
+                  106,104,2,97,0,109,0,0,0,4,102,97,105,108,106,106,104,2,97,4,
+                  108,0,0,0,3,104,2,97,0,109,0,0,0,1,44,104,2,97,4,108,0,0,0,2,
+                  104,2,97,0,109,0,0,0,7,97,115,115,101,114,116,122,104,2,97,4,
+                  108,0,0,0,2,104,2,97,0,109,0,0,0,16,116,120,95,119,105,114,
+                  101,95,107,101,112,116,95,53,54,50,104,2,97,2,97,3,106,106,
+                  104,2,97,4,108,0,0,0,3,104,2,97,0,109,0,0,0,1,44,104,2,97,4,
+                  108,0,0,0,2,104,2,97,0,109,0,0,0,25,116,120,95,119,105,114,
+                  101,95,108,111,99,97,108,95,99,104,111,105,99,101,115,95,53,
+                  54,50,104,2,97,2,98,0,0,4,176,106,104,2,97,4,108,0,0,0,3,104,
+                  2,97,0,109,0,0,0,2,58,58,104,2,97,0,109,0,0,0,5,116,104,105,
+                  114,100,104,2,97,4,108,0,0,0,2,104,2,97,0,109,0,0,0,7,97,115,
+                  115,101,114,116,122,104,2,97,4,108,0,0,0,2,104,2,97,0,109,0,
+                  0,0,16,116,120,95,119,105,114,101,95,107,101,112,116,95,53,
+                  54,50,104,2,97,2,97,3,106,106,106,106,106,106,106,106,106,106>>,
+               agent_ref_blob =>
+                <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,0,18,97,103,
+                  101,110,116,95,105,110,115,116,97,110,99,101,95,114,101,102,
+                  104,2,97,1,109,0,0,0,4,112,101,116,115,104,2,97,1,109,0,0,0,
+                  32,149,14,218,142,44,101,104,116,62,223,27,31,161,193,90,
+                  228,84,219,234,124,241,198,68,143,145,26,132,22,225,135,40,
+                  97,104,2,97,4,108,0,0,0,2,104,2,97,0,109,0,0,0,10,104,117,
+                  109,97,110,95,117,115,101,114,104,2,97,0,109,0,0,0,10,116,
+                  101,115,116,95,97,103,101,110,116,106,106>>},
+             {normalized,{error,proof_unavailable}}}
+      line: 396
+
+EXPERIMENTAL: Writing retry specification at /work/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Failed 1 tests. Passed 0 tests. 
+Results written to "/work/_build/test/logs/index.html".
+===> Failures occurred running tests: 1

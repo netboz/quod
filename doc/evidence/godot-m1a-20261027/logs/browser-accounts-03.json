@@ -1,0 +1,15 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "--test-isolation=none",
+    "--test-reporter=tap",
+    "client/test/accounts.test.js"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T22:37:54Z",
+  "elapsed_seconds": 0.11556839942932129,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

@@ -1,5 +1,10 @@
 # Quod native viewer
 
+This is the legacy Rust-linked viewer. The active identity/GUI replacement is
+the [clean Godot .NET client](../godot/README.md). These sources and their known
+XR failures remain for the asset, scene and hardware obligations whose clean
+replacement is still assigned to M2–M5; the new client does not import them.
+
 A small Linux Godot client using Quod's existing APIs. On first launch, choose
 **Create my key** (or import a backup). This step runs entirely offline and saves
 the key locally. Next, enter the node address and port and press **Connect**.

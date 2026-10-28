@@ -1,0 +1,87 @@
+{
+  "responses": [
+    {
+      "response": "inputs/final-update-01-body-retry-result.json",
+      "outer_isError": false,
+      "bodyWrite": {
+        "status": "failed",
+        "itemFieldsStored": true,
+        "localSnapshotStored": true,
+        "collaborativeBodyStored": false,
+        "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+      }
+    },
+    {
+      "response": "inputs/final-update-01-result.json",
+      "outer_isError": false,
+      "bodyWrite": {
+        "status": "failed",
+        "itemFieldsStored": true,
+        "localSnapshotStored": true,
+        "collaborativeBodyStored": false,
+        "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+      }
+    },
+    {
+      "response": "inputs/progress-update-01-result.json",
+      "outer_isError": false,
+      "bodyWrite": {
+        "status": "failed",
+        "itemFieldsStored": true,
+        "localSnapshotStored": true,
+        "collaborativeBodyStored": false,
+        "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+      }
+    },
+    {
+      "response": "inputs/qualification-progress-update-01-result.json",
+      "outer_isError": false,
+      "bodyWrite": {
+        "status": "failed",
+        "itemFieldsStored": true,
+        "localSnapshotStored": true,
+        "collaborativeBodyStored": false,
+        "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+      }
+    },
+    {
+      "response": "inputs/qualification-progress-update-02-result.json",
+      "outer_isError": false,
+      "bodyWrite": {
+        "status": "failed",
+        "itemFieldsStored": true,
+        "localSnapshotStored": true,
+        "collaborativeBodyStored": false,
+        "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+      }
+    },
+    {
+      "response": "inputs/qualification-progress-update-02-retry-01-result.json",
+      "outer_isError": false,
+      "bodyWrite": {
+        "status": "failed",
+        "itemFieldsStored": true,
+        "localSnapshotStored": true,
+        "collaborativeBodyStored": false,
+        "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+      }
+    },
+    {
+      "response": "inputs/review-progress-update-03-result.json",
+      "outer_isError": false,
+      "bodyWrite": {
+        "status": "failed",
+        "itemFieldsStored": true,
+        "localSnapshotStored": true,
+        "collaborativeBodyStored": false,
+        "message": "The item fields and local body snapshot were saved, but the body was not stored in collaborative tracker content. Retry the body write before treating it as available to collaborators."
+      }
+    }
+  ],
+  "directed_retry_responses": [
+    "inputs/qualification-progress-update-02-retry-01-result.json",
+    "inputs/final-update-01-body-retry-result.json"
+  ],
+  "collaborative_success_confirmed": false,
+  "conclusion": "All inspected body writes saved local snapshots but definitively failed collaborative storage. Exact directed retries also failed. No uncertain write is retried or shared-body success claimed."
+}

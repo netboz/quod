@@ -1,0 +1,22 @@
+[
+  {
+    "phase": "backup-cancel",
+    "case": "backup-cancel",
+    "command": [
+      "/tmp/quod-m1b-export-22/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-backup-cancel-01-private/identity",
+      "--node",
+      "https://localhost:14570",
+      "--ca",
+      ""
+    ],
+    "child_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "passed": true
+  }
+]

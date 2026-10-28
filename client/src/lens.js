@@ -10,7 +10,7 @@ import { binary, compound, list, renderTerm, variable } from './prolog-term.js'
 import { signedGoal } from './signed-client.js'
 import { readMarks } from './marks.js'
 
-const LENS_ONTOLOGY = 'quod:lens'
+const LENS_ONTOLOGY = 'quod:gui'
 const encoder = new TextEncoder()
 
 export function viewGoal(lens, parameters) {
@@ -49,7 +49,7 @@ async function readDiagnosis(identity, agent, lens, parameters, options) {
   return (reply.bindings ?? []).map(({ Unmet }) => Unmet)
 }
 
-// `<<"quod:lens">> :: (Goal).` — the ontology is named by its flat binary name,
+// `<<"quod:gui">> :: (Goal).` — the ontology is named by its flat binary name,
 // and the terminating dot belongs to the signed text, not to what a caller types.
 function askGoal(goal) {
   return `${renderTerm(text(LENS_ONTOLOGY))} :: (${renderTerm(goal)}).`

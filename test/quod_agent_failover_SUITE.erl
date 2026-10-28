@@ -483,7 +483,7 @@ start_root(Founder, Nodes) ->
 
 start_node_ontology(N = #{node_namespace := Ns, public_key := Pub}) ->
     {ok, Execution} = erlog_io:read_file(filename:join(code:priv_dir(quod),
-                                                     "ontologies/node_execution.pl")),
+                                                     "ontologies/node_instance.pl")),
     Principal = {agent_instance_ref, Ns, {'_'}, physical_node},
     SigningPrincipal = {agent_instance_ref, Ns, {'NodeAnchor'}, physical_node},
     SigningRead = {'::', ?NS,

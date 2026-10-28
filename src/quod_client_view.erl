@@ -64,6 +64,7 @@ decode_command(Bytes) ->
                 <<_:256>> = Anchor = Decode(Anchor64),
                 Kind = case KindText of <<"world">> -> world; <<"gui_hud">> -> gui_hud;
                          <<"gui_question">> -> gui_question; <<"gui_operations">> -> gui_operations;
+                         <<"source_access">> -> source_access;
                          <<"controller_preferences">> -> controller_preferences end,
                 {open, Session, Decode(Request64), Signature, Ns, Anchor, Kind};
             #{<<"type">> := <<"gui_prepared">>, <<"token">> := Token64,
@@ -217,6 +218,14 @@ gui_view_goal(gui_operations,{_,Subject,{0}}) ->
 gui_view_goal(controller_preferences,{_,Human,{0}}) ->
     case quod_wire_term:is_ground(Human) of
         true -> {ok,Human,{controller_preferences_view,Human,{0}}};
+        false -> error
+    end;
+gui_view_goal(source_access,{_,Target = {_,Ns,Anchor},_,{0}})
+  when is_binary(Ns), byte_size(Ns) > 0, byte_size(Ns) =< 255,
+       is_binary(Anchor), byte_size(Anchor) =:= 32 ->
+    case quod_wire_term:encode_canonical(Target) =:=
+         quod_wire_term:encode_canonical({ontology_ref,Ns,Anchor}) of
+        true -> {ok,Target,{prolog_inspect,Target,presentation,{0}}};
         false -> error
     end;
 gui_view_goal(_,_) -> error.
@@ -406,7 +415,8 @@ dependencies_ready(S) ->
     lists:all(fun({_,_,_,R}) -> R end,maps:values(maps:get(follows,S))).
 
 open_view({answers, Height, [Binding]}, Digest, Expiry, S = #{kind := Kind})
-  when Kind =:= gui_hud; Kind =:= gui_question; Kind =:= gui_operations; Kind =:= controller_preferences ->
+  when Kind =:= gui_hud; Kind =:= gui_question; Kind =:= gui_operations;
+       Kind =:= controller_preferences; Kind =:= source_access ->
     {ok, Pairs} = quod_client_result:decode_binding(Binding),
     case proplists:get_value(<<"View">>, Pairs, missing) of
         missing -> reply(#{type => unavailable, reason => invalid_projection},release(S));

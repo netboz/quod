@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tools/run.py",
+    "--build"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T06:30:31Z",
+  "elapsed_seconds": 4.983526945114136,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/scene-raster-compile01.log",
+  "raw_sha256": "2cb7da2dd05ec121839240e190676045ecb57765f4eb885b89ca7c46f4e2281a",
+  "sanitized_sha256": "2cb7da2dd05ec121839240e190676045ecb57765f4eb885b89ca7c46f4e2281a",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

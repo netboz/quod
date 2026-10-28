@@ -1,0 +1,8 @@
+{"command": ["dotnet", "--info"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 0.3775848709992715}
+{"command": ["python3", "client/godot-tools/run.py", "--bootstrap"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 5.189390628998808}
+{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=Debug", "-p:SelfContained=true", "--source", "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final04/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 2.1219347639998887}
+{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=ExportRelease", "-p:SelfContained=true", "--source", "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final04/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 1.4330684279993875}
+{"command": ["python3", "client/godot-tools/run.py", "--export"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 10.09719058299379}
+{"command": ["dotnet", "restore", "Quod.Client.Tests.csproj", "--locked-mode", "--source", "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final04/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 0.976417408004636}
+{"command": ["dotnet", "run", "--project", "client/godot-tests/Quod.Client.Tests.csproj", "--no-restore", "--", "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final04/source", "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final04/public-backup.json"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 3.039536099000543}
+{"stage": "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final04", "authored_inputs": 58, "dependency_archives": 8, "export_outputs": 195, "passed": true}

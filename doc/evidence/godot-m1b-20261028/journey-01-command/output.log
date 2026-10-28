@@ -1,0 +1,10 @@
+fresh: Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+fresh: 
+fresh: ERROR: Scene path was specified on the command line, but this Godot binary was compiled without support for path overrides. Aborting.
+fresh: To be able to use it, use the `disable_path_overrides=no` SCons option when compiling Godot.
+fresh: 
+fresh:    at: start (main/main.cpp:4108)
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 166, in <module>
+    raise RuntimeError('Export qualification phase failed: ' + phase)
+RuntimeError: Export qualification phase failed: fresh

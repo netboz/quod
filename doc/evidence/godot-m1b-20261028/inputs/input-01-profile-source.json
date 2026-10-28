@@ -1,0 +1,6 @@
+{
+  "source_profile": "/tmp/quod-m1b-journey-07-private/identity/active.json",
+  "sha256": "ea1d14f48402660c58e35fc85102896793eca2610cbb37fc27f879c22df3221f",
+  "test_copy": "/tmp/quod-m1b-input-01-private/identity/active.json",
+  "original_failed_profile_unchanged": true
+}

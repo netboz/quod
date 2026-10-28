@@ -1,0 +1,17 @@
+{
+  "qualification_only_inputs": {
+    "/usr/bin/wtype": {
+      "sha256": "d760e193e31b65f6158462fdb295c101780495ae760852301a42cfb907357bc5",
+      "bytes": 22712
+    }
+  },
+  "command": [
+    "pacman",
+    "-Q",
+    "wtype"
+  ],
+  "child_exit": 0,
+  "stdout": "wtype 0.4-2\n",
+  "stderr": "",
+  "role": "Actual Wayland virtual-keyboard delivery. Only space/Return on the owned test application; no user credentials/configuration."
+}

@@ -1,0 +1,4 @@
+======================== EUnit ========================
+quod_source_view_tests: -source_authorization_is_retained_and_withdrawn_test_/0-fun-11- (module 'quod_source_view_tests')...[4.902 s] ok
+=======================================================
+  Test passed.

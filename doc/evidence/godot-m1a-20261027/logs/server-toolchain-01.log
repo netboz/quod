@@ -1,0 +1,5 @@
+rustc 1.90.0 (1159e78c4 2025-09-14)
+cargo 1.90.0 (840b83a10 2025-07-30)
+rebar 3.26.0 on Erlang/OTP 28 Erts 16.4.0.2
+OTP=28 ERTS=16.4.0.2
+OTP_VERSION=28.5.0.2

@@ -133,6 +133,59 @@ exact_selection_materializes_only_live_batches_test() ->
         PidC ! stop
     end.
 
+local_checkpoints_reuse_controller_authority_until_foreign_work_test() ->
+    Handle = start_context(crypto:strong_rand_bytes(32)),
+    SessionA = quod_proof_session:start(committed([]), #{}),
+    SessionB = quod_proof_session:start(committed([]), #{}),
+    PidB = spawn(fun wait/0),
+    try
+        ScopeA = register_local_scope(<<"a">>, 1, self(), SessionA),
+        ScopeB = register_local_scope(<<"b">>, 2, PidB, SessionB),
+        ActorA = actor(ScopeA), ActorB = actor(ScopeB),
+        ok = quod_proof_context:register_invocation(ActorA, empty_selection()),
+        Frame = opaque_id(),
+        {ok, Lineage, _} = quod_proof_context:tx_request(ActorA, {activate, none, [Frame]}),
+        ok = quod_proof_context:register_invocation(ActorB, selection(Lineage, [])),
+        {ok, _} = quod_transaction_scope:with_invocation(
+          ActorA, selection(Lineage, []), {origin, Handle}, fun() ->
+            [{batch, First}] = Token = quod_transaction_scope:checkpoint_token(),
+            MFA = {quod_proof_context, tx_request, 2},
+            1 = erlang:trace_pattern(MFA, true, [call_count]),
+            try
+                lists:foreach(fun(_) ->
+                    ?assertEqual(Token, quod_transaction_scope:checkpoint_token()),
+                    ?assertEqual(ok, quod_transaction_scope:restore_token(Token))
+                end, lists:seq(1, 3 * 1025)),
+                ?assertEqual({call_count, 0}, erlang:trace_info(MFA, call_count))
+            after erlang:trace_pattern(MFA, false, [call_count]) end,
+
+            %% A published selection may materialize the former local token.
+            _ = quod_transaction_scope:current_selection(committed([])),
+            ok = quod_proof_context:materialize(selection(Lineage, [First]), ActorB),
+            [{batch, Second}] = quod_transaction_scope:checkpoint_token(),
+            ?assertNotEqual(First, Second),
+            prove_write(SessionB, {after_checkpoint, removed}),
+            ok = quod_transaction_scope:restore_token(Token),
+            ?assertNot(has_assert({after_checkpoint, removed},
+                                 quod_proof_session:local_changes(SessionB))),
+
+            %% Reentrant work can materialize a suspended invocation's token.
+            [{batch, BeforeReentry}] = quod_transaction_scope:checkpoint_token(),
+            {ok, _} = quod_transaction_scope:with_invocation(
+              ActorB, selection(Lineage, [BeforeReentry]), {origin, Handle}, fun() ->
+                ok = quod_proof_context:materialize(
+                       selection(Lineage, [BeforeReentry]), ActorB)
+              end),
+            [{batch, AfterReentry}] = quod_transaction_scope:checkpoint_token(),
+            ?assertNotEqual(BeforeReentry, AfterReentry),
+            ok
+          end)
+    after
+        quod_proof_context:stop(fun(_Scope) -> ok end, fun(_Proxy) -> ok end),
+        quod_proof_session:stop(SessionA), quod_proof_session:stop(SessionB),
+        PidB ! stop
+    end.
+
 unmaterialized_batches_reuse_only_exact_actor_and_lineage_test() ->
     _ = start_context(crypto:strong_rand_bytes(32)),
     SessionA = quod_proof_session:start(committed([]), #{}),

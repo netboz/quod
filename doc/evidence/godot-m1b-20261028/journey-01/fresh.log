@@ -1,0 +1,6 @@
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+ERROR: Scene path was specified on the command line, but this Godot binary was compiled without support for path overrides. Aborting.
+To be able to use it, use the `disable_path_overrides=no` SCons option when compiling Godot.
+
+   at: start (main/main.cpp:4108)

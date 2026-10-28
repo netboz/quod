@@ -1,0 +1,25 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=scene",
+    "M1B_RESULT=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/scene-final18-result.json",
+    "M2_SCENE_CAPTURE=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/scene-final18.png",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final18/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m2-artifacts/private/scene-final18"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T10:05:56Z",
+  "elapsed_seconds": 3.277085065841675,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/scene-final18-command.log",
+  "raw_sha256": "9805369e9dfca10f0c20b0f370f7c80021ee5c4bc9ad147aabbafc77142b7fcd",
+  "sanitized_sha256": "9805369e9dfca10f0c20b0f370f7c80021ee5c4bc9ad147aabbafc77142b7fcd",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

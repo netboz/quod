@@ -1,0 +1,21 @@
+{
+  "command": [
+    "env",
+    "M1B_REAL_EXPORT=/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/source/client/godot/dist/quod.x86_64",
+    "M1B_RUNTIME_TRACE=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/logs/crypto-corrective-02-entropy.strace",
+    "python3",
+    "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/source/client/godot-tests/local.py",
+    "--export",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/runtime-entropy.sh",
+    "--phase",
+    "crypto",
+    "--desktop",
+    "--evidence",
+    "doc/evidence/godot-m1b-20261028/crypto-corrective-02",
+    "--private",
+    "/tmp/quod-m1b-crypto-corrective-02-private"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 5.452213069998834
+}

@@ -1,0 +1,14 @@
+{
+  "command": [
+    "npm",
+    "--prefix",
+    "client",
+    "test"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T21:51:02Z",
+  "elapsed_seconds": 2.125562906265259,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

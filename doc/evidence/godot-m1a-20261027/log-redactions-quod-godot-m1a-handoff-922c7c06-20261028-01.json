@@ -1,0 +1,36 @@
+{
+  "private_originals": "/tmp/quod-godot-m1a-handoff-922c7c06-20261028-01-private-logs",
+  "files": [
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/gates-03-ct.log",
+      "raw_sha256": "5968ef91bd4cac03a3daa608b232105a68d33e750729199c77019400066a150c",
+      "redacted_sha256": "eaf798022e47dfb083c48810f66b128622d90b6ec0e84b71e2ebf247dfa79bff",
+      "replacements": 8
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/gates-03-eunit.log",
+      "raw_sha256": "fe2ff22f457024d654d4149f22f73de23247047a3146069fd166797517a295f6",
+      "redacted_sha256": "de66ac537cea11d438ce97d9e294db0a9e84cf7644637dd1bfeaf76dd869a745",
+      "replacements": 685
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/gates-04-eunit.log",
+      "raw_sha256": "53846697a0beb84d75d69a36d6e05440fcf98bf57b80d7c9a8f5ba919ba6006f",
+      "redacted_sha256": "47a4b58e61482c72b39525476968555365c722df071add098ac42ec05a204edb",
+      "replacements": 685
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/remote-savepoints-diagnosis-01.log",
+      "raw_sha256": "b6890050fdb515757c9d3289df4e975777933dfb147869409e581ed0a3d6f08f",
+      "redacted_sha256": "a4710de2b62489a07512f8f2e5fb1871f29c891e0d4d6c5100f40019bf6d552e",
+      "replacements": 8
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/transaction-scope-regressions-01.log",
+      "raw_sha256": "d6fc4abecf6e80ee50ec56a25c7bd8b33da529df04eff14fc594fa5df603d107",
+      "redacted_sha256": "1aa466a3eb42e08b5d675a23c0674b2a86be3e0c2a01605bb12528b242c30803",
+      "replacements": 2
+    }
+  ],
+  "rule": "All numeric Erlang binaries of exactly 32 or 64 bytes, including public identifiers; complete raw logs remain private outside this snapshot."
+}

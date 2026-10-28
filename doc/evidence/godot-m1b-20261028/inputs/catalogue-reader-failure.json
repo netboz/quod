@@ -1,0 +1,20 @@
+{
+  "child_exit": 1,
+  "expected_api_rows": 7,
+  "observed_api_names": [
+    "quod:agent",
+    "quod:controllers",
+    "quod:gui",
+    "quod:node",
+    "quod:space",
+    "quod:user"
+  ],
+  "reason": "The reader counted bootstrap Root as a system_ontology row. The existing contract is Root plus six registered service foundations. network_id is the Root genesis anchor. Product code and qualification gates did not fail.",
+  "source_references": [
+    "src/quod_client_http.erl:189",
+    "src/quod_ontology.erl:282",
+    "doc/evidence/godot-m1a-20261027/README.md:69"
+  ],
+  "full_response_retained": false,
+  "correction": "Use a separately labeled production fixture to capture the six rows and explicit Root anchor; do not fabricate the missing response."
+}

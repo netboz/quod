@@ -137,8 +137,7 @@ competing_exclusive_admissions_test_() ->
 
 with_spaces(Fun) -> with_spaces(Fun, []).
 with_spaces(Fun, ExtraSource) ->
-    Source = quod_prolog:read_terms("priv/ontologies/space.pl") ++
-             quod_prolog:read_terms("priv/ontologies/space_view.pl") ++
+    Source = quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++
              quod_prolog:read_terms("test/fixtures/space-permissions.pl") ++
              quod_prolog:read_terms("priv/ontologies/quod_physics.pl"),
     Node = {agent_instance_ref, <<"host-test-node">>, {'_'}, physical_node},
@@ -475,9 +474,9 @@ ordinary_placement_and_shared_display_projection_test_() ->
             b := B, node := Node, subject := Subject, identity := Identity}) ->
         Model = <<"space-test-modelling">>, Rendering = <<"space-test-rendering">>,
         RenderingSup = start(C, Rendering,
-            quod_prolog:read_terms("priv/ontologies/quod_rendering.pl"), #{}),
+            quod_ct:gui_terms(), #{}),
         ModelSup = start(C, Model,
-            quod_prolog:read_terms("priv/ontologies/quod_modelling.pl") ++
+            quod_ct:gui_terms() ++
             [{rendering_vocabulary, Rendering, quod_simplex:genesis_hash(Rendering)}], #{}),
         try
             [edit(Ns, {transaction, conjunction([

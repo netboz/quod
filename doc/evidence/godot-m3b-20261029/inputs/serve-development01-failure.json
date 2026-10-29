@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m3b-20261029/serve.py",
+    "development01",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-preflight01/source",
+    "--profile",
+    "test",
+    "--qualified"
+  ],
+  "child_exit": 1,
+  "error": "FileNotFoundError: [Errno 2] No such file or directory: '/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-development01'",
+  "disposition": "New evidence runner now creates its private parent directory. No endpoint started."
+}

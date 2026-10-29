@@ -632,6 +632,8 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
     ?assertEqual([{result,agent,Actor},{result,location,{placed,S1,{transform,0,0,0,0,0,0}}},
                   {result,revision,3}],m1a_output(EnterResult)),
     ?assertEqual(S1,m1a_read(User,{account_navigation,{0},[playing,edition]})),
+    ?assertEqual({navigation,3,{placed,S1,{transform,0,0,0,0,0,0}},[playing,edition]},
+        m1a_read(User,{account_navigation,{0}})),
     %% An old offer names the original slot, rather than rebasing itself.
     Before=m2_state([Ns]), {{failed,_},_}=m2_create(C,Ns,Enter,[]),
     ?assertEqual(Before,m2_state([Ns])),
@@ -650,6 +652,9 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
     {Left,_}=m2_create(C,Ns,Leave,[]),m3a_committed(Left),
     ?assertEqual([{result,agent,Actor},{result,location,unplaced},{result,revision,10}],m1a_output(Left)),
     ?assertEqual(unplaced,m1a_read(User,{space_location,personal,{0}})),
+    ?assertEqual({navigation,10,unplaced,[playing,edition]},m1a_read(User,{account_navigation,{0}})),
+    ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},submit_lobby(Other,read,
+        {'::',Ns,{',',{current_ontology_identity,Ns,element(3,S0)},{account_navigation,{0}}}})),
     m3a_enter(User,C,S0,11),
     m3a_entry_conflict(User,C,S0,S1),
     Fresh=C#{session=>quod_personal_agent_tests:session(maps:get(human_pair,C),maps:get(network,C))},

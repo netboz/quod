@@ -1,0 +1,42 @@
+{
+  "complete": false,
+  "freeze_child_exit": 1,
+  "reason": "PermissionError: [Errno 13] Permission denied reading a root-owned Cargo incremental lock",
+  "full_log": "/tmp/quod-m3b-8b352c53/freeze-handoff-01.log",
+  "full_log_sha256": "85e776e43d00b336b766b2a9a4e56587f66837201f8e5850073ee456e1fa93d9",
+  "product_qualification_unchanged": true,
+  "artifacts": {
+    "untracked.tar.xz": {
+      "sha256": "f2e915bfd6b63e06487d7536d12e1d7a3d4cd6589ce58c802b272bc451ea9cab",
+      "bytes": 2071052
+    },
+    "local-release-outputs.tar.gz": {
+      "sha256": "0be7ca8d4c71939edf9ca1f7f52e2c4309a940ce30b2a65db014e62f7c5199a0",
+      "bytes": 40655669
+    },
+    "server-compiled-outputs.tar.gz": {
+      "sha256": "a7fbe13e832d2a93c0a44dca066ea3a0ae13ca8c59d09858a5ec09bb6faeed4f",
+      "bytes": 40308452
+    },
+    "source-manifest.json": {
+      "sha256": "7acddb9221fff1c9364b6e2f7674dab7e937ea79076b4c90c2f8b46853ef8548",
+      "bytes": 5760643
+    },
+    "source-status.json": {
+      "sha256": "9eb5368ecd3165ca62f9f51b62508e9921f891b8cb3ef748ce8f817f3df187f4",
+      "bytes": 1391
+    },
+    "base.tar.gz": {
+      "sha256": "92c9accaf167fdf835fe8dcf221eb27817eff74abf1d009721cb9e4caadc35d9",
+      "bytes": 2039952724
+    },
+    "derived-rebar-outputs.tar.gz": {
+      "sha256": "294037c5b53cd751a0e32b6b4395dfe9036e5a4e5a1a211ed86f116cc63860e5",
+      "bytes": 4106247
+    },
+    "tracked.patch": {
+      "sha256": "1526bb39d01c7a8799a698d6606b437c8e220ba7d797c961209ad0c038bdc726",
+      "bytes": 89430
+    }
+  }
+}

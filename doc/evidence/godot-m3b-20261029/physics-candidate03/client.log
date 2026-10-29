@@ -1,0 +1,34 @@
+WARNING: xdg-toplevel-icon protocol not found! Cannot set window icon.
+     at: init (platform/linuxbsd/wayland/wayland_thread.cpp:5642)
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+OpenGL API 3.3.0 NVIDIA 615.71.09 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4090
+
+PASS real shared-domain view streams one leaf and one explicitly controlled body for three independent appearances
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS exact signed viewer owns the selected streamed control binding
+PASS physical owner work observation precedes unchanged client renewals
+PASS unchanged live physical renewals have zero watched history/install/write/sync work
+PASS unchanged live physical renewals retain engine resources
+PASS unchanged live physical renewals preserve the world run structure and native incarnation while renewing delivery custody
+PASS a desired stop received during an in-flight drive is admitted next through the same signed serial lane
+PASS desktop physics scene holds keyboard focus
+M2_NATIVE_KEY hold-w
+M2_NATIVE_KEY release-w
+PASS native desktop key input advances the server-controlled body through actual streamed frames
+PASS real source geometry change updates every independent appearance through the retained view
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS a real nested body traverses its source frame and contacts the root-domain floor while client poses track that same native world
+PASS source and frame changes preserve the independent world's native identity and work
+PASS unavailable source withdraws affected presentation picking and control
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS genuine committed repair preserves independent native identity and work
+PASS unavailable source withdraws affected presentation picking and control
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS genuine committed repair preserves independent native identity and work
+PASS actual rendered placement agrees with the native sample through the selected nonidentity interior frame
+PASS actual desktop raster contains the authoritative shared-domain geometry
+PASS GPU raster of real shared-domain native body appearances retained
+M3_PHYSICS_PASS

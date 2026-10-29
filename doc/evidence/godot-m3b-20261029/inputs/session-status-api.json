@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"sessionId\": \"8b352c53-1f93-4e4c-8d1f-c5f41e8efbb8\",\n  \"title\": \"Godot M3b live views and recovery\",\n  \"status\": \"running\",\n  \"lastActivity\": 1793236791506,\n  \"updatedAt\": 1793238993293,\n  \"provider\": \"openai-codex\",\n  \"model\": \"openai-codex:gpt-6.1-sol\",\n  \"createdBySessionId\": \"ed9cd520-b2a4-4607-a8f5-ff99d08f3e46\",\n  \"agentRole\": \"standard\",\n  \"waitingForInput\": false\n}"
+    }
+  ],
+  "isError": false
+}

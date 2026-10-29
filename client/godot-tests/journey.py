@@ -27,7 +27,7 @@ p.add_argument('--network', required=True)
 p.add_argument('--evidence', type=Path, required=True)
 p.add_argument('--private', type=Path, required=True)
 p.add_argument('--desktop', action='store_true')
-p.add_argument('--journey', choices=['gui', 'spaces'], default='gui')
+p.add_argument('--journey', choices=['gui', 'spaces', 'navigation'], default='gui')
 a = p.parse_args()
 a.evidence = a.evidence.resolve()
 a.evidence.mkdir(parents=True, exist_ok=False)
@@ -46,6 +46,8 @@ record_lock = threading.Lock()
 drops = {'signup': 0, 'setup': 0, 'instruction': 0}
 faults = {'question_reply_lost': 0, 'question_unknown_error': 0}
 question_error_armed = False
+instruction_drop_armed = None
+instruction_drop_operations = []
 injections = {'duplicate_projection': 0, 'late_after_refresh': 0, 'prior_socket_projection': 0}
 native_focus = []
 first_projections = {}
@@ -68,7 +70,12 @@ class Proxy(BaseHTTPRequestHandler):
         else:
             self.forward()
     def do_POST(self):
-        global question_error_armed
+        global question_error_armed, instruction_drop_armed
+        if self.path == '/qualification/arm-instruction-drop':
+            body=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))
+            if body.get('operation') not in ('enter','leave') or instruction_drop_armed is not None:
+                self.json_reply(400,{'error':'invalid fault selection'}); return
+            instruction_drop_armed=body['operation']; self.json_reply(200,{'armed':instruction_drop_armed}); return
         if self.path == '/qualification/arm-question-error':
             self.rfile.read(int(self.headers.get('Content-Length', '0')))
             with record_lock: question_error_armed = True
@@ -77,7 +84,7 @@ class Proxy(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self.forward()
     def forward(self):
-        global question_error_armed
+        global question_error_armed, instruction_drop_armed
         body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
         encoded = json.loads(body).get('request') if body else None
         request = base64.urlsafe_b64decode(encoded + '=' * ((-len(encoded)) % 4)) if encoded else b''
@@ -117,6 +124,8 @@ class Proxy(BaseHTTPRequestHandler):
                 if flow in drops and response.status < 300 and drops[flow] < (2 if flow == 'instruction' and a.journey == 'gui' else 1):
                     drops[flow] += 1
                     lose = True
+                if flow=='instruction' and response.status<300 and instruction_drop_armed is not None:
+                    drops[flow]+=1; lose=True; instruction_drop_operations.append(instruction_drop_armed); instruction_drop_armed=None
                 if flow == 'question' and response.status < 300 and faults['question_reply_lost'] == 0:
                     faults['question_reply_lost'] += 1; lose = True
                 reply = json.loads(content)
@@ -208,7 +217,9 @@ threading.Thread(target=server.serve_forever, daemon=True).start()
 origin = f'https://127.0.0.1:{server.server_port}'
 results = []
 try:
-    for phase in (('fresh', 'reset', 'final') if a.journey == 'gui' else ('m2-fresh', 'm2-final')):
+    phases={'gui':('fresh','reset','final'),'spaces':('m2-fresh','m2-final'),
+            'navigation':('m3-fresh','m3-created','m3-entered','m3-left','m3-final','m3-negative-recovered')}[a.journey]
+    for phase in phases:
         env = dict(os.environ, M1B_PHASE=phase, M1B_NETWORK=a.network,
                    M1B_ORIGINAL=str(a.private / 'original.json'), M1B_RESULT=str(a.evidence / 'export-result.json'),
                    M1B_OLD_OFFER=str(a.private / 'old-offer.json'), M1B_CONTROL_PORT=str(a.control_port),
@@ -217,6 +228,8 @@ try:
                    XDG_DATA_HOME=str(a.private / 'data'), XDG_CONFIG_HOME=str(a.private / 'config'), DOTNET_ROOT=str(a.private / 'no-installed-runtime'))
         if a.journey == 'spaces' and a.desktop:
             env['M2_SCREENSHOT'] = str((a.evidence / 'space-ui.png').resolve())
+        if a.journey=='navigation':
+            env.update(M3_ROUTE=str(a.private/'route.json'),M3_SCENE_CAPTURE=str(a.evidence/'recursive-scene.png'),M1B_RESULT=str(a.evidence/(phase+'-result.json')))
         display = ['--display-driver', 'wayland'] if a.desktop else ['--headless']
         command = [str(a.export.resolve())] + display + ['--', '--qualification', '--profile', str(a.private / 'identity'), '--node', origin, '--ca', str(ca)]
         start = time.monotonic()
@@ -255,7 +268,7 @@ try:
                     child.kill()
                     killed = True
         exit_code = child.wait(timeout=10)
-        expected = -9 if phase in ('fresh', 'reset', 'm2-fresh') else 0
+        expected = -9 if phase in ('fresh', 'reset', 'm2-fresh','m3-fresh','m3-created','m3-entered') else 0
         result = {'phase': phase, 'command': command, 'child_exit': exit_code, 'expected_exit': expected,
                   'external_sigkill_at_observed_seam': killed, 'elapsed_seconds': time.monotonic() - start,
                   'godot_error_diagnostics': 'ERROR:' in text, 'passed': exit_code == expected and 'ERROR:' not in text}
@@ -268,8 +281,10 @@ try:
     ids = [r['request_sha256'] for r in mutations]
     if len(ids) != len(set(ids)):
         raise RuntimeError('A signed mutation was submitted twice')
-    if drops != {'signup': 1, 'setup': 1, 'instruction': 2 if a.journey == 'gui' else 1}:
+    if drops != {'signup': 1, 'setup': 1, 'instruction': {'gui':2,'spaces':1,'navigation':3}[a.journey]}:
         raise RuntimeError('Required response-loss cases were not exercised')
+    if a.journey=='navigation' and instruction_drop_operations!=['enter','leave']:
+        raise RuntimeError('Required actual Enter and Leave reply-loss seams were not observed')
     if a.journey == 'gui' and faults != {'question_reply_lost': 1, 'question_unknown_error': 1}:
         raise RuntimeError('Required deferred-question uncertainty cases were not exercised')
     if not all(injections.values()): raise RuntimeError('Required stale and duplicate projection cases were not exercised')

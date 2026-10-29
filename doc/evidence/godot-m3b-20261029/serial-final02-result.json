@@ -1,0 +1,24 @@
+{
+  "client": "final02",
+  "passed": false,
+  "results": [
+    {
+      "journey": "navigation",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/campaign.py",
+        "final-navigation-final02",
+        "--client",
+        "final02",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "navigation",
+        "--desktop"
+      ],
+      "child_exit": 0
+    }
+  ]
+}

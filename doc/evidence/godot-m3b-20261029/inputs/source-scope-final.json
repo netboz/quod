@@ -1,0 +1,229 @@
+{
+  "against_head": "f716ddf5e578df957a5b18421a0727a32c634f87",
+  "rows": [
+    {
+      "path": "client/godot-tests/Program.cs",
+      "added": 44,
+      "removed": 1,
+      "tracked": true,
+      "kind": "tests",
+      "sha256": "2205dfb3b715bf6f489238c2b1aa9a1cd57bfe38ddd599922bc90382e7380320",
+      "mode": 420
+    },
+    {
+      "path": "client/godot-tests/desktop_input.py",
+      "added": 3,
+      "removed": 2,
+      "tracked": true,
+      "kind": "tests",
+      "sha256": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26",
+      "mode": 420
+    },
+    {
+      "path": "client/godot-tests/journey.py",
+      "added": 21,
+      "removed": 6,
+      "tracked": true,
+      "kind": "tests",
+      "sha256": "c42b11e172bc018a109a8c672df07f801f2e01ea2c6918116373e93256776399",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/Core/Scene.cs",
+      "added": 19,
+      "removed": 3,
+      "tracked": true,
+      "kind": "production",
+      "sha256": "79794d8e392d5757ae6b231a239ba4a9d130afd8a7a134624ecddd74846e8372",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/Core/SignedView.cs",
+      "added": 22,
+      "removed": 10,
+      "tracked": true,
+      "kind": "production",
+      "sha256": "1317281c87bdcb725ab0bec34951ee676529793e6c68f96480dddbf5f08a0629",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/Main.cs",
+      "added": 100,
+      "removed": 24,
+      "tracked": true,
+      "kind": "production",
+      "sha256": "b3e804de4eb1846cf1c003779bf1e9ec31f4c46c1d17d5a8c8369062f6ab8fb2",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/OperationsPanel.cs",
+      "added": 15,
+      "removed": 1,
+      "tracked": true,
+      "kind": "production",
+      "sha256": "e95706af1250dd987e804fd5e9e345227893e4b8325f36af027fa9083e9f02ad",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/README.md",
+      "added": 13,
+      "removed": 1,
+      "tracked": true,
+      "kind": "specifications",
+      "sha256": "44175d4371d919d0772b263513087daf8a1a3d767ec0acf8baae71deaa2be07b",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/ScenePanel.cs",
+      "added": 116,
+      "removed": 12,
+      "tracked": true,
+      "kind": "production",
+      "sha256": "aa030cfd233962bd81a805247641fbea1751dd3edc066c99071460ff5718ee85",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/tests/ExportChecks.cs",
+      "added": 5,
+      "removed": 3,
+      "tracked": true,
+      "kind": "tests",
+      "sha256": "b7319c7d9f23c1d0db145517151e295240d3a4ed0073181cfe74b8b0e362407c",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/tests/ExportLifecycle.cs",
+      "added": 5,
+      "removed": 0,
+      "tracked": true,
+      "kind": "tests",
+      "sha256": "7f29c9e68a92ca79493c652a645048b9b11189110d65ce660401c474c145802f",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/tests/SpaceChecks.cs",
+      "added": 6,
+      "removed": 6,
+      "tracked": true,
+      "kind": "tests",
+      "sha256": "ac4099b44b11f4bcecc3935c3b3373df33c06c471d9e532749a0b89b2ed08b45",
+      "mode": 420
+    },
+    {
+      "path": "doc/physics-native.md",
+      "added": 8,
+      "removed": 0,
+      "tracked": true,
+      "kind": "specifications",
+      "sha256": "461580a6d602f0fb2e8d9c7947a457b5f3235ce3f98b99da73448f8dcc915409",
+      "mode": 420
+    },
+    {
+      "path": "doc/spaces.md",
+      "added": 9,
+      "removed": 0,
+      "tracked": true,
+      "kind": "specifications",
+      "sha256": "9d5fb5f9d9ae65f68cf5be395d8c15fb73923caa0f16a7abcaf3ebfae64c5659",
+      "mode": 420
+    },
+    {
+      "path": "nimbalyst-local/handoffs/godot-m3b-prompt.md",
+      "added": 12,
+      "removed": 5,
+      "tracked": true,
+      "kind": "coordination",
+      "sha256": "614d3d114d7da72d333b728b615d5b187b50d4d170fa699c06d4e13c20359711",
+      "mode": 420
+    },
+    {
+      "path": "priv/ontologies/user_instance.pl",
+      "added": 7,
+      "removed": 1,
+      "tracked": true,
+      "kind": "production",
+      "sha256": "2993ac2ef2e3a9ab2142780dbb21b28c271d44130db5ead43901023e9fa00b99",
+      "mode": 420
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "added": 15,
+      "removed": 5,
+      "tracked": true,
+      "kind": "production",
+      "sha256": "b4b512676fb7fa514784f5dd5daa9fdd0ba571cfa956987a44544bfeb27c30e0",
+      "mode": 420
+    },
+    {
+      "path": "test/quod_lifecycle_single_path_tests.erl",
+      "added": 5,
+      "removed": 0,
+      "tracked": true,
+      "kind": "tests",
+      "sha256": "749de71b7c5278fd2924854d5104528e2b038904a9744255abfadcff4d15d8a9",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/Core/PhysicsInput.cs",
+      "added": 72,
+      "removed": 0,
+      "tracked": false,
+      "kind": "production",
+      "sha256": "01b4d9fcd74cb181c6bc4ff0ab79875947978eed8be9e0ae9d2804c92cba8d03",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/Core/World.cs",
+      "added": 161,
+      "removed": 0,
+      "tracked": false,
+      "kind": "production",
+      "sha256": "b04df71cf933c5e2fe1f2e93a97773e23ffe2b38599e2016f01b564d57a0f700",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/tests/NavigationChecks.cs",
+      "added": 185,
+      "removed": 0,
+      "tracked": false,
+      "kind": "tests",
+      "sha256": "fe6e66040ffb60891b1951f70327969bc56d4f96e3d7a3f2c8bc7e636ebfdaa0",
+      "mode": 420
+    },
+    {
+      "path": "client/godot/tests/PhysicsChecks.cs",
+      "added": 151,
+      "removed": 0,
+      "tracked": false,
+      "kind": "tests",
+      "sha256": "c19a8472ab2256212c8ae8fabddbfb8442744016ee8595fdd445150739c9fa93",
+      "mode": 420
+    }
+  ],
+  "totals": {
+    "production": {
+      "added": 527,
+      "removed": 56,
+      "net": 471
+    },
+    "tests": {
+      "added": 425,
+      "removed": 18,
+      "net": 407
+    },
+    "specifications": {
+      "added": 30,
+      "removed": 1,
+      "net": 29
+    },
+    "coordination": {
+      "added": 12,
+      "removed": 5,
+      "net": 7
+    }
+  },
+  "production_relocations": 0,
+  "ontology_relocations": 0,
+  "inherited_tracked_coordination": "nimbalyst-local/handoffs/godot-m3b-prompt.md",
+  "untracked_evidence_and_generated_agents_separate": true
+}

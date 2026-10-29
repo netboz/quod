@@ -17,6 +17,14 @@ public partial class Main : Control
     SignedSession? session;
     Accounts? accounts;
     readonly List<SignedView> views = [];
+    SignedView? worldView;
+    Task retiredWorld = Task.CompletedTask;
+    Navigation? navigation;
+    bool navigationAvailable;
+    WorldProjection? projection;
+    long worldIncarnation;
+    PhysicsInput? controls;
+    Task worldChanges=Task.CompletedTask;
     CancellationTokenSource? action;
     Task activeAction = Task.CompletedTask;
     Task backupWork = Task.CompletedTask;
@@ -52,6 +60,7 @@ public partial class Main : Control
         Add(address, "connect", "Connect", Connect); Add(address, "disconnect", "Disconnect", () => { Disconnect(); return Task.CompletedTask; });
         root.AddChild(status); root.AddChild(location); root.AddChild(controllers);
         scene = new() { Name = "space-scene" }; root.AddChild(scene);
+        scene.Drive += (direction,_) => controls?.Drive(direction.X,direction.Y,direction.Z);
         scene.Selected += exact => {
             if (accounts?.Human == null || session == null) return;
             if (operations == null) { operations = new() { Name = "operations" }; body.AddChild(operations); operations.Changed += Notify; }
@@ -64,6 +73,7 @@ public partial class Main : Control
         Add(actions, "resolve", "Check original outcomes", Resolve);
         Add(actions, "open-gui", "Account operations", OpenGui);
         Add(actions, "create-operations", "Create / operations", OpenStorage);
+        Add(actions, "location-operations", "Current space operations", OpenLocation);
         Add(actions, "inspect", "Source / inspection", OpenTools);
         root.AddChild(body);
         endpoint.TextChanged += _ => SettingsChanged(); ca.TextChanged += _ => SettingsChanged();
@@ -116,6 +126,8 @@ public partial class Main : Control
     {
         if (key == null || store == null) throw new InvalidOperationException("Create/import a key first.");
         CloseSession(); long expected = incarnation;
+        await ViewsDisposed;
+        if (disposed || closing || expected!=incarnation) return;
         store.Update(s => { s.Endpoint = endpoint.Text; s.CaFile = ca.Text; });
         var connecting = new SignedSession(key, store, new Transport(endpoint.Text, ca.Text));
         session = connecting; status.Text = "Authenticating the exact saved key…"; Notify();
@@ -157,7 +169,7 @@ public partial class Main : Control
         if (disposed || expected != incarnation) return;
         state = accounts.Human == null ? "signed-in-no-account" : accounts.Setup == null ? "setup-pending" : "account-ready";
         status.Text = accounts.Uncertain ? "The original outcome is still unknown. No operation was resubmitted." : "Original outcomes resolved without submission.";
-        if (accounts.Setup != null && !worldAccepted) await PresentAccount();
+        if (accounts.Setup != null && views.Count == 0) await PresentAccount();
     }
     void RequireSession()
     { if (session == null || accounts == null) throw new InvalidOperationException("Connect first."); }
@@ -169,30 +181,23 @@ public partial class Main : Control
         string Reference(Actor a) => $"{a.Namespace} / {a.InstanceText} @ {a.Anchor}";
         location.Text = $"U: {Reference(human)}\nA: {Reference(personal)}\nS0: {Reference(space)}\nS0 storage: the existing account ontology {human.Namespace} @ {human.Anchor}";
         var consumer = session!;
-        async Task<string> WorldGoal(CancellationToken cancellation) {
-            var navigation = await consumer.Read(human, "account_navigation(Space,Modes).", cancellation);
-            if (Actor.FromTerm(Json.Binding(navigation, "Space")) != space || !Json.Binding(navigation, "Modes").Items.Any(t => t.Name == "playing"))
-                throw new FormatException("Navigation differs from the original setup result.");
-            var dependencies = navigation["dependencies"]?.AsArray() ?? throw new FormatException("Missing navigation dependencies.");
-            var terms = dependencies.Select(row => Term.Call("dependency", Term.Text(Json.S(row, "ns")),
-                Term.Binary(Identity.Decode(Json.S(row, "genesis_anchor"))), Term.Number(Json.S(row, "height")))).ToArray();
-            var goal = Term.Call("client_world_view", Term.Parse(space.InstanceText.TrimEnd('.')), Term.Atom("playing"), Term.List(terms), Term.Variable("View"));
-            return SignedSession.ViewGoal(space, goal);
-        }
+        controls?.Dispose(); controls=new(consumer,human);
+        controls.Suspended += reason => { status.Text="Control suspended: "+reason; Notify(); };
         foreach (var view in views) view.Dispose(); views.Clear();
-        var world = new SignedView(session!, human, space, "world", "") { BeforeOpen = WorldGoal }; views.Add(world);
-        world.Projection += message => {
-            string selection = Quod.Client.Json.S(message, "selection");
-            var marks = Term.Parse(Quod.Client.Json.S(message, "marks")); marks.Ground();
-            try {
-                if (selection != "nonphysical") throw new FormatException("This client checkpoint requires an offered nonphysical scene.");
-                scene.Apply(marks); worldAccepted = true;
-                status.Text = "Inside the original ordinary S0. Keyboard and mouse GUI are available; scene geometry is presentation only.";
-            } catch (Exception error) { scene.Withdraw(); worldAccepted = false; location.Text = "Space presentation unavailable: " + error.Message; }
-            Notify();
+        var route = new SignedView(consumer,human,human,"navigation",SignedSession.ViewGoal(human,Term.Call("account_navigation",Term.Variable("View")))); views.Add(route);
+        route.Projection += message => {
+            var next = Navigation.Decode(message);
+            if (navigation != null && next.Revision < navigation.Revision) return;
+            if (navigation?.Revision == next.Revision && navigation.Location.ToString() != next.Location.ToString())
+                throw new FormatException("Conflicting committed location.");
+            bool same = navigation?.Revision == next.Revision && navigation.Location.ToString() == next.Location.ToString();
+            bool wasAvailable = navigationAvailable; navigation = next; navigationAvailable=true;
+            location.Text = $"U: {Reference(human)}\nA: {Reference(personal)}\nS0: {Reference(space)}\nCurrent location: {next.Location} (assignment {next.Revision})";
+            if (!same || !wasAvailable || (next.Space != null && worldView == null)) OpenWorld(consumer,human,next.Space);
+            UpdateButtons(); Notify();
         };
-        world.Withdrawn += reason => { scene.Withdraw(); worldAccepted = false; location.Text = "Space unavailable: " + reason; Notify(); };
-        _ = world.Start();
+        route.Withdrawn += reason => { navigationAvailable=false; SuspendWorld(); location.Text = "Location unavailable: " + reason; UpdateButtons(); Notify(); };
+        _ = route.Start();
         var preferences = new SignedView(consumer, human, human, "controller_preferences", SignedSession.ViewGoal(human,
             Term.Call("controller_preferences_view", Term.Parse(human.InstanceText.TrimEnd('.')), Term.Variable("View")))); views.Add(preferences);
         preferences.Projection += message => {
@@ -205,6 +210,62 @@ public partial class Main : Control
         questions?.Dispose(); questions = new(consumer, accounts, store!, body, Notify); questions.Start();
         await OpenGui();
     }
+    void RetireWorld()
+    {
+        worldIncarnation++;
+        var completion = worldView?.Completion ?? Task.CompletedTask; worldView?.Dispose(); worldView=null;
+        retiredWorld = retiredWorld.IsCompleted ? completion : Task.WhenAll(retiredWorld,completion);
+        projection=null; controls?.Withdraw(); worldAccepted=false; scene?.Withdraw();
+    }
+    void OpenWorld(SignedSession consumer,Actor human,Actor? space)
+    {
+        if (space == null) { SuspendWorld(); status.Text="Unplaced. Open an explicitly selected existing space's offered operations to enter it."; return; }
+        if (worldView?.Completion?.IsCompleted==true) RetireWorld();
+        if (worldView != null) { ScheduleWorldChange(false); return; }
+        long expected = worldIncarnation;
+        async Task<(Actor Target,string Goal)?> WorldGoal(CancellationToken cancellation) {
+            var read = await consumer.Read(human,"account_navigation(Navigation).",cancellation);
+            var route=Json.Binding(read,"Navigation").Require("navigation",3);
+            if(route[1].Kind=="atom" && route[1].Name=="unplaced") return null;
+            var selected = Actor.FromTerm(route[1].Require("placed",2)[0]);
+            if (!route[2].Items.Any(t => t.Name == "playing")) throw new FormatException("Playing view unavailable.");
+            var dependencies = read["dependencies"]?.AsArray() ?? throw new FormatException("Missing navigation dependencies.");
+            var terms = dependencies.Select(row => Term.Call("dependency",Term.Text(Json.S(row,"ns")),
+                Term.Binary(Identity.Decode(Json.S(row,"genesis_anchor"))),Term.Number(Json.S(row,"height")))).ToArray();
+            return (selected,SignedSession.ViewGoal(selected,Term.Call("client_world_view",Term.Parse(selected.InstanceText.TrimEnd('.')),Term.Atom("playing"),Term.List(terms),Term.Variable("View"))));
+        }
+        var view = new SignedView(consumer,human,space,"world","") { BeforeOpen=WorldGoal }; worldView=view;
+        view.Projection += message => {
+            if (expected != worldIncarnation) return;
+            try {
+                if (!navigationAvailable || navigation?.Space != view.Target) { WithdrawWorld("Committed location changed."); return; }
+                var next = new WorldProjection(message,view.Target,human); scene.Apply(next); projection=next; worldAccepted=true;
+                controls?.Present(next);
+                status.Text="Current committed space. Click a subject for its offered operations; focus the scene for WASD/QE and right-drag viewing.";
+                if (next.Sample != null) _ = view.Send(next.Acknowledgement());
+            } catch (Exception error) { WithdrawWorld(error.Message); }
+            UpdateButtons(); Notify();
+        };
+        view.Message += message => {
+            if (expected != worldIncarnation || Json.S(message,"type") != "simulation_frame" || projection == null) return;
+            try { if (projection.Advance(message)) { scene.ApplyFrame(); controls?.Present(projection); _ = view.Send(projection.Acknowledgement()); Notify(); } }
+            catch (Exception error) { WithdrawWorld(error.Message); Notify(); }
+        };
+        view.Withdrawn += reason => { if (expected == worldIncarnation) { WithdrawWorld(reason); Notify(); } };
+        _ = view.Start();
+    }
+    void SuspendWorld() { WithdrawWorld("Location is being verified."); if (worldView != null) ScheduleWorldChange(true); }
+    void ScheduleWorldChange(bool suspend)
+    { var next=ChangeWorld(suspend); worldChanges=worldChanges.IsCompleted ? next : Task.WhenAll(worldChanges,next); }
+    async Task ChangeWorld(bool suspend)
+    {
+        try { if (worldView is SignedView view) { if (suspend) await view.Suspend(); else await view.Reopen(); } }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { if (!disposed && !closing) { WithdrawWorld(error.Message); Notify(); } }
+    }
+    void WithdrawWorld(string reason)
+    { projection=null; controls?.Withdraw(); scene.Withdraw(); worldAccepted=false; status.Text="Space unavailable: " + reason; UpdateButtons(); }
+    public override void _Process(double delta) => controls?.Tick(delta);
     Task OpenGui()
     {
         RequireSession(); if (accounts!.Human == null) throw new InvalidOperationException("No human account reference.");
@@ -217,7 +278,14 @@ public partial class Main : Control
         RequireSession();
         if (accounts!.Setup == null) throw new InvalidOperationException("Complete account setup first.");
         if (operations == null) { operations = new() { Name = "operations" }; body.AddChild(operations); operations.Changed += Notify; }
-        operations.OpenStorage(session!, accounts); return Task.CompletedTask;
+        operations.OpenStorage(session!, accounts,navigationAvailable ? navigation?.Space : null); return Task.CompletedTask;
+    }
+    Task OpenLocation()
+    {
+        RequireSession(); var space = navigationAvailable ? navigation?.Space : null;
+        if (space==null) throw new InvalidOperationException("Current location is unavailable or unplaced.");
+        if (operations == null) { operations=new() { Name="operations" }; body.AddChild(operations); operations.Changed+=Notify; }
+        operations.OpenSubject(session!,accounts!,space,space.Entity); return Task.CompletedTask;
     }
     Task OpenTools()
     {
@@ -229,7 +297,11 @@ public partial class Main : Control
     void CloseSession()
     {
         incarnation++;
+        RetireWorld(); navigation=null; navigationAvailable=false;
         var completions = views.Select(v => v.Completion ?? Task.CompletedTask).ToList();
+        completions.Add(retiredWorld);
+        completions.Add(worldChanges);
+        if(controls!=null) { controls.Dispose(); completions.Add(controls.Completion); controls=null; }
         if (questions != null) completions.Add(questions.Completion);
         if (operations != null) completions.Add(operations.Completion);
         questions?.Dispose(); questions = null;
@@ -263,6 +335,7 @@ public partial class Main : Control
     {
         if (what == NotificationWMCloseRequest) _ = CloseApplication();
         if (what == NotificationApplicationFocusOut) GetViewport()?.GuiReleaseFocus();
+        if (what == NotificationApplicationFocusOut) scene?.ReleaseInput();
     }
     void UpdateButtons()
     {
@@ -280,12 +353,15 @@ public partial class Main : Control
         buttons["resolve"].Disabled |= accounts == null;
         buttons["open-gui"].Disabled |= accounts?.Setup == null;
         buttons["create-operations"].Disabled |= accounts?.Setup == null;
+        buttons["location-operations"].Disabled |= accounts?.Setup == null || !navigationAvailable || navigation?.Space == null || !worldAccepted;
         buttons["inspect"].Disabled |= accounts?.Human == null;
     }
     void Notify() { if (!disposed && IsInsideTree()) EmitSignal(SignalName.Changed); }
     public string Inspect() => JsonSerializer.Serialize(new { state, busy, public_key = key?.PublicText,
         network = session?.Network, human = accounts?.Human, setup = accounts?.Setup?.ToString(),
         pending = store?.Snapshot?.Pending.Count, world_accepted = worldAccepted, live_sockets = SignedView.LiveSockets, ignored_projections = SignedView.IgnoredProjections, question_receiver_ready = questions?.Ready,
+        current_location = navigationAvailable ? navigation?.Location.ToString() : null, assignment_revision = navigationAvailable ? navigation?.Revision.ToString() : null,
+        physical_selection = projection?.Selection, physical_tick = projection?.Sample?.Tick, scene_count = scene?.Count,
         operation_available = operations?.Available, operation_status = operations?.StatusText, status = status.Text });
     internal LocalStore ActiveStore => store ?? throw new InvalidOperationException("No active store.");
     internal SignedSession ActiveSession => session ?? throw new InvalidOperationException("No active session.");

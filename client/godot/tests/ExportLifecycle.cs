@@ -333,6 +333,11 @@ public partial class ExportChecks
             await Until(() => State["world_accepted"]!.GetValue<bool>() && State["operation_available"]?.GetValue<bool>() == true);
             var expected = JsonNode.Parse(await File.ReadAllTextAsync(Env("M1B_ORIGINAL")))!;
             Check(State["public_key"]!.ToString() == expected["public_key"]!.ToString() && State["human"]!.ToJsonString() == expected["human"]!.ToJsonString() && State["setup"]!.ToString() == expected["setup"]!.ToString(), "encrypted account backup restores same U A S0 key pins and original results");
+            if(System.Environment.GetEnvironmentVariable("M3_ROUTE") is string routePath) {
+                var route=JsonNode.Parse(await File.ReadAllTextAsync(routePath))!;var space=Term.Parse(Json.S(route,"s1"));
+                Check(State["current_location"]?.ToString()==Term.Call("placed",space,Term.Parse("transform(0,0,0,0,0,0)")).ToString(),"fresh-device native encrypted backup reopens committed S1 instead of original setup S0");
+                Check(app.ActiveStore.Snapshot!.Pending.Count==0 && app.ActiveAccounts.Outcomes.Any(o=>o["bindings"]?.AsArray().Any(b=>b?["Results"]!=null)==true),"fresh installed device recovers original results from server associations without an originating journal");
+            }
         } else {
             await File.WriteAllTextAsync(browserBackup, Json.S(corpus, "bundle"));
             await BackupWidget(false, browserBackup, "wrong passphrase", false);

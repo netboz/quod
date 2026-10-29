@@ -15,8 +15,14 @@ account_setup_state(State) :-
     ; account_setup(me, complete(State))).
 
 account_navigation(Space, [playing, edition]) :-
+    account_navigation(navigation(_,placed(Space,_),[playing,edition])).
+
+%% Current location is the existing exclusive assignment, including unplaced.
+%% The original setup result remains immutable and supplies no navigation state.
+account_navigation(navigation(Revision,Location,[playing,edition])) :-
     current_principal(Owner), human_user_owner(Owner),
-    account_setup(me, complete(_)), space_location(personal, placed(Space, _)).
+    account_setup(me, complete(_)), space_assignment(personal,Revision,_),
+    space_location(personal,Location).
 
 account_source_pins(Pins) :-
     findall(pins(AClass, G, C, S, Digest),

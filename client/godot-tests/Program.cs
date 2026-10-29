@@ -52,7 +52,7 @@ static class Tests
                 }
             }
             Check(verified == 100, "all 100 real production fixtures including Reset");
-            Store(key); Forms(); Outcomes(); Scenes();
+            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames();
             Console.WriteLine("CORE_PASS checks=" + checks); return 0;
         } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
@@ -74,6 +74,49 @@ static class Tests
         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace("'/'(1,3)","0.5") + "]")), "floating scene dimensions refuse");
         Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace(anchor,"<<\"wrong\">>") + "]")), "wrong depicted anchor refuses");
         Reject(() => new Length(BigInteger.One << 2000,1).RenderMetres(), "unrenderable finite extent refuses explicitly");
+    }
+    static void WorldFrames()
+    {
+        var anchor=Term.Binary(new byte[32]); var space=new Actor("world-fixture",Identity.Encode(new byte[32]),"room.");
+        var nav=new JsonObject { ["value"]="navigation(18446744073709551616,unplaced,[playing,edition])",["dependencies"]="[]" };
+        var location=Navigation.Decode(nav);
+        Check(location.Space==null && location.Revision==BigInteger.One<<64,"unplaced navigation preserves a wide committed assignment revision");
+        nav["value"]="navigation(1,missing,[playing,edition])";
+        Reject(()=>Navigation.Decode(nav),"unknown navigation does not become unplaced");
+        string depicts=$"depicts(<<\"source\">>,{anchor},object)";
+        var marks=Term.Parse($"[mark(<<\"body\">>,<<\"group\">>,[],body_pose(18446744073709551615,1),no_surface,unlabelled,{depicts}),mark(<<\"copy\">>,<<\"group\">>,[],body_frame_pose(18446744073709551615,1),no_surface,unlabelled,{depicts})]");
+        var frame=new JsonObject { ["schema"]=2,["units"]="metres_seconds",["space"]="local",
+            ["world"]=$"world_ref(<<\"world-fixture\">>,{anchor},room)",["authority"]=Term.Call("agent_instance_ref",space.Entity.Args).ToString(),
+            ["epoch"]="1",["generation"]="1",["incarnation"]=Identity.Encode(new byte[32]),["registration"]=Identity.Encode(new byte[32]),
+            ["structure"]="1",["tick"]="7",["origin_seq"]="0",["origin_mm"]=new JsonArray("18446744073709551617","0","0"),
+            ["poses"]=new JsonArray(new JsonObject { ["body"]="18446744073709551615",["revision"]="1",
+                ["position"]=new JsonArray(1.0,2.0,3.0),["rotation"]=new JsonArray(0.0,0.0,0.0,1.0) }) };
+        var projection=new JsonObject { ["view"]="current",["selection"]="active",["marks"]=marks.ToString(),["control"]="none",
+            ["view_frame"]=$"view_frame({space.Entity},[],[body_frame(18446744073709551615,1,<<\"source-path\">>,[])])",["frame"]=frame };
+        var world=new WorldProjection(projection,space);
+        Check(world.Sample!.Origin[0]==BigInteger.Parse("18446744073709551617") && world.Marks[0].Pose.Body==ulong.MaxValue && world.BodyFrames.Count==1,"wide exact origins and body IDs survive independent appearances");
+        var control=Term.Parse($"control(agent_instance_ref(<<\"world-fixture\">>,{anchor},room),1,controlled_agent(pilot,1,18446744073709551615,1,motion(free,2000,1600,1000,query_limits(2,0,8,128),[]),viewpoint(eye,pose(vector(0,100,0),rotation(0,0,0)),view_only)))");
+        Check(ControlBinding.Decode(control,space,world.Sample)?.Body==ulong.MaxValue,"native control binds the exact signed principal and authoritative body");
+        Reject(()=>ControlBinding.Decode(control,space with {InstanceText="another."},world.Sample),"another principal cannot acquire the projected control binding");
+        Reject(()=>ControlBinding.Decode(Term.Parse(control.ToString().Replace("view_only","unsupported_tracking")),space,world.Sample),"unqualified tracking mapping cannot silently become a desktop viewpoint");
+        var message=new JsonObject { ["view"]="current",["frame"]=frame.DeepClone() };
+        Check(!world.Advance(message),"duplicate native cursor does no presentation work");
+        message["frame"]!["tick"]="6";Check(!world.Advance(message),"older native tick is ignored");
+        message["frame"]!["tick"]="8"; message["view"]="retired";Check(!world.Advance(message),"retired view cannot move current bodies");
+        message["view"]="current"; message["frame"]!["registration"]=Identity.Encode(Enumerable.Repeat((byte)1,32).ToArray());
+        Check(!world.Advance(message),"retired native registration cannot move current bodies");
+        message["frame"]=frame.DeepClone(); message["frame"]!["poses"]![0]!["position"]![0]=99.0;
+        Reject(()=>world.Advance(message),"changed pose at the same cursor refuses");
+        message["frame"]=frame.DeepClone(); message["frame"]!["tick"]="8"; message["frame"]!["poses"]=new JsonArray();
+        Reject(()=>world.Advance(message),"missing required body refuses instead of using static pose");
+        message["frame"]=frame.DeepClone();message["frame"]!["tick"]="8";message["frame"]!["origin_mm"]![0]="18446744073709551618";
+        Reject(()=>world.Advance(message),"a later tick cannot change the exact origin without advancing its origin sequence");
+        message["frame"]=frame.DeepClone(); message["frame"]!["tick"]="8";
+        Check(world.Advance(message) && world.Sample.Tick==8,"a real native advance still applies");
+        projection["view_frame"]=$"view_frame({space.Entity},[],[])";
+        Reject(()=>new WorldProjection(projection,space),"missing decorative source receipt refuses");
+        projection["selection"]="unavailable";
+        Reject(()=>new WorldProjection(projection,space),"unavailable physical selection never becomes an empty successful scene");
     }
     static void Store(Identity key)
     {

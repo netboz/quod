@@ -18,8 +18,9 @@ def deliver(line, pid, desktop, records):
         if before.get('pid') != pid:
             commands.append(['hyprctl', 'dispatch', 'hl.dsp.focus({window="pid:' + str(pid) + '"})'])
         key=line.split()[1]
-        if key not in ('space','Return','F24'):raise RuntimeError('Unsupported native key')
-        commands.append(['wtype', '-k', key])
+        if key in ('hold-w','release-w'):commands.append(['ydotool','key','17:1' if key=='hold-w' else '17:0'])
+        elif key in ('space','Return','F24'):commands.append(['wtype', '-k', key])
+        else:raise RuntimeError('Unsupported native key')
     else:
         payload=json.loads(line.split(' ',1)[1])
         windows=json.loads(subprocess.check_output(['hyprctl','-j','clients']))

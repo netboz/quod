@@ -63,6 +63,7 @@ decode_command(Bytes) ->
                 <<_:512>> = Signature = Decode(Signature64),
                 <<_:256>> = Anchor = Decode(Anchor64),
                 Kind = case KindText of <<"world">> -> world; <<"gui_hud">> -> gui_hud;
+                         <<"navigation">> -> navigation;
                          <<"gui_question">> -> gui_question; <<"gui_operations">> -> gui_operations;
                          <<"source_access">> -> source_access;
                          <<"controller_preferences">> -> controller_preferences end,
@@ -90,6 +91,7 @@ decode_command(Bytes) ->
                 true = Seq > 0 andalso Seq < (1 bsl 64),
                 {terrain_interest,View,Seq,{X,Y,Z}};
             #{<<"type">> := <<"ack">>} = Ack -> Ack;
+            #{<<"type">> := <<"close">>} -> close_view;
             _ -> error
         end
     catch error:_ -> error end.
@@ -110,6 +112,7 @@ command({gui_prepared, Token, Accepted}, S) -> gui_prepared(Token, Accepted, S);
 command({gui_activated, Token, Status}, S) -> gui_activated(Token, Status, S);
 command({open, Session, Bytes, Signature, Ns, Anchor, Kind}, S) ->
     open_request(Session,Bytes,Signature,Ns,Anchor,Kind,S);
+command(close_view,S) -> {ok,release(S)};
 command(#{<<"type">> := <<"ack">>, <<"view">> := View, <<"tick">> := Tick,<<"origin_seq">> := OriginSequence},
         S = #{view := View, pid := Pid, ref := Ref, tick := Tick,origin_sequence := OriginSequence}) ->
     quod_physics:ack(Pid, Ref, binary_to_integer(Tick),binary_to_integer(OriginSequence)), {ok, S};
@@ -205,6 +208,8 @@ view_request(Kind,#{goal_text := Text,parser_version := Version},Ns,Anchor) ->
 
 gui_view_goal(gui_hud,{_,{0}}) ->
     {ok,hud,{gui_pending_questions,{0}}};
+gui_view_goal(navigation,{_,{0}}) ->
+    {ok,navigation,{account_navigation,{0}}};
 gui_view_goal(gui_question,{_,Question,{0}}) ->
     case quod_wire_term:is_ground(Question) of
         true -> {ok,Question,{gui_question_form,Question,{0}}};
@@ -258,9 +263,7 @@ open_result(_, S) -> reply(#{type => unavailable, reason => view_not_authorized_
 %% A fresh proof may replace an unchanged view without retiring its consumer.
 %% Actual dependency changes still take the ordinary invalidation/read path.
 install_dependencies(Dependencies,Pending,S = #{candidate_timer := _}) ->
-    Retained = lists:sort([{Ns,maps:get(Ns,maps:get(anchors,S)),H} ||
-        {Ns,H} <- maps:to_list(maps:get(heights,S))] ++
-        [{Ns,Anchor,H} || {Ns,Anchor,H,_} <- maps:values(maps:get(follows,S))]),
+    Retained = view_dependencies(S),
     case lists:sort(Dependencies) =:= Retained andalso dependencies_ready(S)
          andalso dependency_owners_current(S) of
         true -> snapshot_dependencies(S#{pending => Pending});
@@ -274,6 +277,11 @@ install_dependencies(Dependencies,Pending,S) ->
         {ok,Followed} -> snapshot_dependencies(Followed);
         {error,Followed} -> reply(#{type => unavailable,reason => dependency_unavailable},release(Followed))
     end.
+
+view_dependencies(S) ->
+    lists:sort([{Ns,maps:get(Ns,maps:get(anchors,S)),H} ||
+        {Ns,H} <- maps:to_list(maps:get(heights,S))] ++
+        [{Ns,Anchor,H} || {Ns,Anchor,H,_} <- maps:values(maps:get(follows,S))]).
 
 dependency_owners_current(S) ->
     Owners = maps:get(owners,S),
@@ -416,7 +424,7 @@ dependencies_ready(S) ->
 
 open_view({answers, Height, [Binding]}, Digest, Expiry, S = #{kind := Kind})
   when Kind =:= gui_hud; Kind =:= gui_question; Kind =:= gui_operations;
-       Kind =:= controller_preferences; Kind =:= source_access ->
+       Kind =:= controller_preferences; Kind =:= source_access; Kind =:= navigation ->
     {ok, Pairs} = quod_client_result:decode_binding(Binding),
     case proplists:get_value(<<"View">>, Pairs, missing) of
         missing -> reply(#{type => unavailable, reason => invalid_projection},release(S));
@@ -425,7 +433,9 @@ open_view({answers, Height, [Binding]}, Digest, Expiry, S = #{kind := Kind})
             case view_receiver(Kind,Next) of
                 {ok,Receiver,Registered} ->
                     reply(maps:merge(#{type => projection,kind => Kind,view => b64(Digest),height => decimal(Height),
-                        expires_ms => decimal(Expiry),value => quod_client_goal_parser:value_text(View)},Receiver),
+                        expires_ms => decimal(Expiry),value => quod_client_goal_parser:value_text(View),
+                        dependencies => quod_client_goal_parser:value_text(
+                            [{dependency,N,A,H} || {N,A,H} <- view_dependencies(Next)])},Receiver),
                         retire_gui_presentations(Kind,View,Registered#{installed => true}));
                 {error,Reason} -> reply(#{type => unavailable,reason => Reason},release(Next))
             end

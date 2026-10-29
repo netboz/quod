@@ -1,0 +1,15 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "Quod.csproj",
+    "--locked-mode",
+    "-p:Configuration=Debug",
+    "-p:SelfContained=true",
+    "--source",
+    "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-development09/dependency-feed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.4399894119997043
+}

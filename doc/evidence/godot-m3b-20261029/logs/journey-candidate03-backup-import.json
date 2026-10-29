@@ -1,0 +1,33 @@
+{
+  "command": [
+    "env",
+    "M3_ROUTE=/home/yan/.cache/quod-m3b-artifacts/private/journey-candidate03/route.json",
+    "python3",
+    "client/godot-tests/local.py",
+    "--phase",
+    "backup-import",
+    "--export",
+    "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-candidate03/source/client/godot/dist/quod.x86_64",
+    "--journey-private",
+    "/home/yan/.cache/quod-m3b-artifacts/private/journey-candidate03",
+    "--node",
+    "https://127.0.0.1:36447",
+    "--ca",
+    "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-journey-candidate03-server/backend-ca.pem",
+    "--evidence",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/journey-candidate03-backup-import",
+    "--private",
+    "/home/yan/.cache/quod-m3b-artifacts/private/journey-candidate03-backup-import",
+    "--desktop"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T02:14:42Z",
+  "elapsed_seconds": 20.268718004226685,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/journey-candidate03-backup-import.log",
+  "raw_sha256": "18864ca7a54f75b41d6d1c28573792538c8a7732b92f5b7c75ffa324e2f14adf",
+  "sanitized_sha256": "18864ca7a54f75b41d6d1c28573792538c8a7732b92f5b7c75ffa324e2f14adf",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

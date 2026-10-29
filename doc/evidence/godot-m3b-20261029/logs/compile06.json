@@ -1,0 +1,18 @@
+{
+  "command": [
+    "dotnet",
+    "build",
+    "client/godot/Quod.csproj",
+    "--no-restore"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T01:50:08Z",
+  "elapsed_seconds": 4.780969858169556,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/compile06.log",
+  "raw_sha256": "39e84c7e22c2b42e636f6f39c3ee28790cfa12ceaf0ab2904ccb9df36206c29a",
+  "sanitized_sha256": "39e84c7e22c2b42e636f6f39c3ee28790cfa12ceaf0ab2904ccb9df36206c29a",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

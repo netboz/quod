@@ -51,7 +51,19 @@ the original outcome is known. Changed schemas retain compatible draft fields
 but require explicit adoption. Recovery displays original result bindings and
 returned subjects through the existing signed outcome owners.
 
-Entry and recursive scene/physics composition are M3.
+Current location comes from the committed assignment's live navigation view;
+the original account/S0 results stay unchanged. Current-space operations and
+exact-subject selection use the ordinary offered Enter/Leave forms. Creation
+retains its selected-storage path inside any current space and does not enter.
+An explicitly unplaced agent keeps navigation subscribed without a scene.
+
+Recursive parent-first marks, absolute body poses and decorative source-frame
+poses share the scene adapter. Native samples retain world/run/structure and
+registration fences; missing or unavailable sources withdraw presentation and
+control. Physical WASD/QE positions move an observer camera; right-drag changes its viewing angle.
+An explicitly selected controlled body instead uses the signed native control
+lane and authoritative viewpoint. Focus loss releases local input. No collision
+or domain simulation runs in the client.
 XR/hardware qualification remains separately reported. The legacy native viewer
 retains its uncovered asset/XR obligations until their replacement qualifies;
 it is not a dependency of this client. The shared [QUO-62](nimbalyst://QUO-62)

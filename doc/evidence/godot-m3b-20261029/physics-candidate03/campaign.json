@@ -1,0 +1,69 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/serve.py",
+    "physics-candidate03-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-preflight01/source",
+    "--profile",
+    "test",
+    "--qualified",
+    "--physics"
+  ],
+  "passed": true,
+  "native_input": [
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:1"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 360794,
+      "before_pid": 360794,
+      "after_pid": 360794
+    },
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:0"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 360794,
+      "before_pid": 360794,
+      "after_pid": 360794
+    }
+  ],
+  "endpoint": {
+    "port": 35387,
+    "physics": true,
+    "control_port": 46399,
+    "network": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACo"
+  },
+  "private_key_transfer": {
+    "command": [
+      "docker",
+      "cp",
+      "quod-m3b-live-physics-candidate03-server:/m1b/viewer.json",
+      "/home/yan/.cache/quod-m3b-artifacts/private/physics-candidate03/viewer.json"
+    ],
+    "child_exit": 0
+  },
+  "client_command": [
+    "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-candidate03/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m3b-artifacts/private/physics-candidate03/identity"
+  ],
+  "client_child_exit": 0,
+  "final_input_release_exit": 0,
+  "server_child_exit": 0
+}

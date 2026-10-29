@@ -1,5 +1,6 @@
 using Godot;
 using Quod.Client;
+using BigInteger = System.Numerics.BigInteger;
 
 // Shared mark adapter. Geometry is presentation only: no collision bodies or
 // local simulation. Picking resolves the occurrence's exact depicted subject.
@@ -10,16 +11,22 @@ public partial class ScenePanel : SubViewportContainer
     readonly SubViewport viewport = new() { Name = "scene-viewport", Size = new(1000, 400), OwnWorld3D = true, TransparentBg = false, HandleInputLocally = false };
     readonly Node3D root = new() { Name = "scene-marks" };
     readonly Camera3D camera = new() { Name = "scene-camera", Current = true, Near = 0.05f, Far = 1000 };
+    WorldProjection? world;
+    bool looking;
+    readonly HashSet<Key> held = [];
+    public event Action<Vector3,Vector3>? Drive;
+    public bool Controlled { get; set; }
     public event Action<Term>? Selected;
     public int Rebuilt { get; private set; }
     public int Count => occurrences.Count;
     public string[] Ids => occurrences.Keys.ToArray();
     public override void _Ready()
     {
-        CustomMinimumSize = new(600, 360); SizeFlagsHorizontal = SizeFlags.ExpandFill; Stretch = true; MouseFilter = MouseFilterEnum.Stop;
+        CustomMinimumSize = new(600, 360); SizeFlagsHorizontal = SizeFlags.ExpandFill; Stretch = true; MouseFilter = MouseFilterEnum.Stop; FocusMode = FocusModeEnum.All;
         AddChild(viewport); viewport.AddChild(root); viewport.AddChild(camera);
         viewport.FindWorld3D().Environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = Colors.Black };
         camera.Position = new(0, 0, 5);
+        FocusExited += ReleaseInput;
     }
     static Vector3[] Corners(Vector3 size) => [
         new Vector3(-size.X,-size.Y,-size.Z)/2,new Vector3(size.X,-size.Y,-size.Z)/2,
@@ -27,16 +34,57 @@ public partial class ScenePanel : SubViewportContainer
         new Vector3(-size.X,-size.Y,size.Z)/2,new Vector3(size.X,-size.Y,size.Z)/2,
         new Vector3(-size.X,size.Y,size.Z)/2,new Vector3(size.X,size.Y,size.Z)/2];
     static readonly (int A, int B)[] Edges = [(0,1),(2,3),(4,5),(6,7),(0,2),(1,3),(4,6),(5,7),(0,4),(1,5),(2,6),(3,7)];
-    static Transform3D Pose(int[] p)
+    static float Finite(double value)
+    { float result = (float)value; if (!float.IsFinite(result)) throw new FormatException("Scene coordinate exceeds the engine's numeric range."); return result; }
+    static Basis RotationBasis(float x,float y,float z) => new Basis(Vector3.Back,z)*new Basis(Vector3.Up,y)*new Basis(Vector3.Right,x);
+    static Basis RotationBasis(BigInteger[] p) => RotationBasis(Mathf.DegToRad((float)p[3]),Mathf.DegToRad((float)p[4]),Mathf.DegToRad((float)p[5]));
+    static Transform3D Pose(BigInteger[] p)
     {
-        var basis = new Basis(Vector3.Back, Mathf.DegToRad(p[5])) * new Basis(Vector3.Up, Mathf.DegToRad(p[4])) * new Basis(Vector3.Right, Mathf.DegToRad(p[3]));
-        return new(basis, new(p[0] / 1000f, p[1] / 1000f, p[2] / 1000f));
+        return new(RotationBasis(p), new(Finite((double)p[0]/1000), Finite((double)p[1]/1000), Finite((double)p[2]/1000)));
     }
-    public void Apply(Term terms)
+    static Transform3D BodyInFrame(PhysicsSample sample,BodySample body,ScenePose[] chain)
     {
-        var marks = SceneMark.Decode(terms); var next = new Dictionary<string, Occurrence>();
+        // Subtract the exact common integer anchor before float conversion,
+        // matching the native frame owner rather than rounding a world origin.
+        BigInteger[] anchor = chain.Length == 0 ? [0,0,0] : chain[0].Transform![..3];
+        var source = Transform3D.Identity;
+        for (int i=0;i<chain.Length;i++) {
+            var p = chain[i].Transform!.ToArray(); if (i==0) { p[0]=p[1]=p[2]=0; }
+            source *= Pose(p);
+        }
+        var position = new Vector3(Finite((double)(sample.Origin[0]-anchor[0])/1000+body.Position[0]),
+            Finite((double)(sample.Origin[1]-anchor[1])/1000+body.Position[1]),Finite((double)(sample.Origin[2]-anchor[2])/1000+body.Position[2]));
+        var q = body.Rotation;
+        return source.AffineInverse() * new Transform3D(new Basis(new Quaternion((float)q[0],(float)q[1],(float)q[2],(float)q[3]).Normalized()),position);
+    }
+    static Dictionary<string,Transform3D> Transforms(SceneMark[] marks,WorldProjection? projection)
+    {
+        var transforms = new Dictionary<string,Transform3D>();
+        foreach (var mark in marks) {
+            var parent = mark.Parent == null ? Transform3D.Identity : transforms[mark.Parent];
+            Transform3D pose;
+            if (mark.Pose.Transform is BigInteger[] authored) pose = parent * Pose(authored);
+            else {
+                var sample = projection?.Sample ?? throw new FormatException("Authoritative frame unavailable.");
+                var key = (mark.Pose.Body!.Value,mark.Pose.Revision);
+                var chain = mark.Pose.Reframed ? projection!.BodyFrames[key] : projection!.ViewFrames;
+                pose = BodyInFrame(sample,sample.Bodies[key],chain);
+                if (mark.Pose.Reframed) pose = parent * pose;
+            }
+            if (!pose.IsFinite()) throw new FormatException("Scene frame exceeds the engine's numeric range.");
+            transforms.Add(mark.Id,pose);
+        }
+        return transforms;
+    }
+    public void Apply(Term terms) => Apply(SceneMark.Decode(terms),null);
+    public void Apply(WorldProjection projection) => Apply(projection.Marks,projection);
+    void Apply(SceneMark[] marks,WorldProjection? projection)
+    {
+        var next = new Dictionary<string, Occurrence>();
         // Validate and convert the complete candidate before changing the scene.
-        var sizes = marks.ToDictionary(m => m.Id, m => m.Size.Length == 0 ? Vector3.Zero : new Vector3(m.Size[0].RenderMetres(), m.Size[1].RenderMetres(), m.Size[2].RenderMetres()));
+        var transforms = Transforms(marks,projection);
+        var sizes = marks.ToDictionary(m => m.Id, m => m.Size.Length == 0 ? Vector3.Zero : m.Kind=="sphere"
+            ? Vector3.One*m.Size[0].RenderMetres() : new Vector3(m.Size[0].RenderMetres(), m.Size[1].RenderMetres(), m.Size[2].RenderMetres()));
         bool changed = false;
         foreach (var mark in marks) {
             if (occurrences.TryGetValue(mark.Id, out var old) && old.Mark.Signature == mark.Signature) { next.Add(mark.Id, old); continue; }
@@ -48,7 +96,8 @@ public partial class ScenePanel : SubViewportContainer
                     var lines = new ImmediateMesh(); lines.SurfaceBegin(Mesh.PrimitiveType.Lines);
                     foreach (var edge in Edges) { lines.SurfaceAddVertex(corners[edge.A]); lines.SurfaceAddVertex(corners[edge.B]); }
                     lines.SurfaceEnd(); mesh = lines;
-                } else mesh = new BoxMesh { Size = sizes[mark.Id] };
+                } else if (mark.Kind=="sphere") mesh=new SphereMesh { Radius=sizes[mark.Id].X/2,Height=sizes[mark.Id].X };
+                else mesh = new BoxMesh { Size = sizes[mark.Id] };
                 node.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = new StandardMaterial3D {
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = Color.FromString(mark.Colour, Colors.White), CullMode = BaseMaterial3D.CullModeEnum.Disabled } });
             }
@@ -58,11 +107,32 @@ public partial class ScenePanel : SubViewportContainer
         foreach (var item in next.Values) {
             var parent = item.Mark.Parent == null ? root : next[item.Mark.Parent].Node;
             if (item.Node.GetParent() != parent) item.Node.Reparent(parent, false);
-            item.Node.Transform = Pose(item.Mark.Transform);
+            item.Node.Transform = item.Mark.Parent == null ? transforms[item.Mark.Id]
+                : transforms[item.Mark.Parent].AffineInverse() * transforms[item.Mark.Id];
         }
         foreach (var old in occurrences.Values) if (!next.TryGetValue(old.Mark.Id, out var current) || old.Node != current.Node) { old.Node.GetParent()?.RemoveChild(old.Node); old.Node.QueueFree(); changed = true; }
         occurrences.Clear(); foreach (var pair in next) occurrences.Add(pair.Key, pair.Value);
+        world = projection;
         if (changed) FrameScene();
+        MountCamera();
+    }
+    public void ApplyFrame()
+    {
+        if (world == null) return;
+        var transforms = Transforms(world.Marks,world);
+        foreach (var item in occurrences.Values) item.Node.Transform = item.Mark.Parent == null ? transforms[item.Mark.Id]
+            : transforms[item.Mark.Parent].AffineInverse() * transforms[item.Mark.Id];
+        MountCamera();
+    }
+    void MountCamera()
+    {
+        Controlled=world?.Controlled != null;
+        if (world?.Controlled is not ControlBinding binding) return;
+        var sample=world.Sample!; var pose=BodyInFrame(sample,sample.Bodies[(binding.Body,binding.Revision)],world.ViewFrames);
+        var local=binding.Viewpoint.Require("pose",2);
+        var p=local[0].Require("vector",3).Select(v=>Finite((double)v.Integer/1000)).ToArray();
+        var r=local[1].Require("rotation",3).Select(v=>Finite((double)v.Integer/1000)).ToArray();
+        camera.Transform=pose*new Transform3D(RotationBasis(r[0],r[1],r[2]),new(p[0],p[1],p[2]));
     }
     void FrameScene()
     {
@@ -94,6 +164,12 @@ public partial class ScenePanel : SubViewportContainer
                 var inverse = item.Node.GlobalTransform.AffineInverse();
                 var origin = inverse * camera.ProjectRayOrigin(point); var direction = inverse.Basis * camera.ProjectRayNormal(point);
                 var size = item.Corners[7] - item.Corners[0];
+                if (item.Mark.Kind=="sphere") {
+                    float b=origin.Dot(direction),c=origin.LengthSquared()-size.X*size.X/4,disc=b*b-direction.LengthSquared()*c;
+                    if (disc>=0) { float distance=(-b-Mathf.Sqrt(disc))/direction.LengthSquared();
+                        if (distance>=0 && distance<nearest) { nearest=distance; hit=item; } }
+                    continue;
+                }
                 float near = 0, far = float.PositiveInfinity;
                 for (int axis = 0; axis < 3; axis++) {
                     if (Math.Abs(direction[axis]) < 1e-12f) { if (Math.Abs(origin[axis]) > size[axis] / 2) { far = -1; break; } }
@@ -102,18 +178,46 @@ public partial class ScenePanel : SubViewportContainer
                 if (near <= far && near < nearest) { nearest = near; hit = item; }
             }
         }
-        while (hit != null) { if (hit.Mark.Subject != null) return hit.Mark.Subject; hit = hit.Mark.Parent == null ? null : occurrences[hit.Mark.Parent]; }
-        return null;
+        return hit==null ? null : Subject(hit);
     }
+    Term? Subject(Occurrence? item)
+    { while (item!=null) { if (item.Mark.Subject!=null) return item.Mark.Subject; item=item.Mark.Parent==null ? null : occurrences[item.Mark.Parent]; } return null; }
+    public string[] SubjectIds(Term subject) => occurrences.Values.Where(o=>o.Corners.Length>0 && Subject(o)?.ToString()==subject.ToString()).Select(o=>o.Mark.Id).ToArray();
     public Vector2 Project(string id, Vector3 local) => camera.UnprojectPosition(occurrences[id].Node.GlobalTransform * local);
     public Vector3[] WorldCorners(string id) => occurrences[id].Corners.Select(p => occurrences[id].Node.GlobalTransform * p).ToArray();
+    public Transform3D WorldPose(string id) => occurrences[id].Node.GlobalTransform;
+    public void ReleaseInput()
+    { bool active = held.Count != 0; held.Clear(); looking=false; if (active && Controlled) Drive?.Invoke(Vector3.Zero,Vector3.Zero); }
+    public override void _Process(double delta)
+    {
+        if (Controlled || held.Count == 0) return;
+        var input = Direction(); camera.Position += camera.Basis * input * (float)delta * 3;
+    }
+    Vector3 Direction() => new((held.Contains(Key.D)?1:0)-(held.Contains(Key.A)?1:0),
+        (held.Contains(Key.E)?1:0)-(held.Contains(Key.Q)?1:0),(held.Contains(Key.S)?1:0)-(held.Contains(Key.W)?1:0));
+    Vector3 DomainDirection()
+    {
+        var basis=Basis.Identity;
+        foreach (var frame in world?.ViewFrames ?? []) basis*=RotationBasis(frame.Transform!);
+        return basis*camera.Basis*Direction();
+    }
     public override void _GuiInput(InputEvent @event)
     {
+        if (@event is InputEventKey key && key.PhysicalKeycode is Key.W or Key.A or Key.S or Key.D or Key.Q or Key.E) {
+            if (key.Echo) return;
+            if (key.Pressed) held.Add(key.PhysicalKeycode); else held.Remove(key.PhysicalKeycode);
+            if (Controlled) Drive?.Invoke(DomainDirection(),Vector3.Zero); AcceptEvent();
+        }
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right } look) { looking=look.Pressed; GrabFocus(); AcceptEvent(); }
+        if (@event is InputEventMouseMotion motion && looking && !Controlled) {
+            camera.RotateY(-motion.Relative.X*.004f); camera.RotateObjectLocal(Vector3.Right,-motion.Relative.Y*.004f); AcceptEvent();
+        }
         if (@event is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left } click) {
+            GrabFocus();
             var scaled = click.Position * ((Vector2)viewport.Size / Size); var subject = Pick(scaled);
             if (subject != null) Selected?.Invoke(subject); AcceptEvent();
         }
     }
     public void Withdraw()
-    { foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) item.Node.QueueFree(); occurrences.Clear(); }
+    { ReleaseInput(); Controlled=false; world=null; foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) { item.Node.GetParent()?.RemoveChild(item.Node); item.Node.QueueFree(); } occurrences.Clear(); }
 }

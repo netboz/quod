@@ -920,6 +920,14 @@ obligations survive renewal; uncertainty still stops control without resubmissio
 An uncertain attachment closes the socket, whose death releases any registration
 installed by a late local call. The socket alone owns the view expiry timer.
 
+The same socket may open a different exact interior after committed navigation;
+ordered open processing detaches its prior native registration before attaching
+the next selection. `close` releases the current view's subscriptions/resources
+while retaining the transport. This allows an independently authorized navigation
+consumer to keep observing an explicitly unplaced agent. Portable projections
+also carry their exact signed proof dependencies as functional `dependency/3`
+terms; these are evidence, not authority to select an unproved history.
+
 Durable changes, owner death, expiry and structural invalidation require a fresh
 signed read. Installation waits use owner notices, not polling. The ordinary
 view rereads navigation when refreshing. One scene update owner installs marks

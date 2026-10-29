@@ -195,15 +195,15 @@ public partial class ExportChecks
         Check(Actor.FromTerm(firstSpace).Namespace==human.Namespace && Result(first,"owner").ToString()==setup[0].ToString(),"recovered generated reference and owner retain selected storage and distinct U identity");
         Check(Result(first,"location").Require("placed",2)[0].ToString()==s0.ToString(),"original result contains exact containing space and placement");
         Check(scene.Count==2,"original S1 appears in S0 through the selected shared exterior recipe");
-        string firstId=Actor.FromTerm(firstSpace).InstanceText.TrimEnd('.'); firstId=Term.Parse(firstId).TextValue+"/space";
+        string firstId=scene.SubjectIds(firstSpace).Single();
         await PickSpace(scene,firstId,Vector3.Zero,firstSpace);
         await Until(()=>panel.Available);
-        Check(((Label)panel.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()) && panel.Current==null && panel.StatusText=="No offered operations for this subject.",
-            "reconnect-first picking selects the existing space before any account or creation button and accepts its valid empty offer list");
+        Check(((Label)panel.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()) && panel.Current?.Name=="enter",
+            "reconnect-first picking selects the existing space and its ordinary Enter offer before any account or creation button");
         var unopened=new OperationsPanel { Name="unopened-subject-probe" }; app.AddChild(unopened);
         var firstActor=Actor.FromTerm(firstSpace);
         await PanelResponse(unopened,()=>unopened.OpenSubject(app.ActiveSession,app.ActiveAccounts,firstActor,firstSpace),()=>unopened.Available);
-        Check(unopened.Current==null && unopened.StatusText=="No offered operations for this subject." &&
+        Check(unopened.Current?.Name=="enter" &&
             ((Label)unopened.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()),
             "a newly constructed generic panel opens an exact picked subject without prior account/storage initialization");
         var wrongAnchor=firstActor with { Anchor=Identity.Encode(new byte[32]) };
@@ -243,7 +243,7 @@ public partial class ExportChecks
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"normal GUI selects the real finite wireframe recipe");
         var wire=Result(SpaceResults(panel.LastOutcome!),"space");
         await Until(()=>scene.Count>=6);
-        string wireId=Actor.FromTerm(wire).InstanceText.TrimEnd('.'); wireId=Term.Parse(wireId).TextValue+"/extent";
+        string wireId=scene.SubjectIds(wire).Single();
         var corners=scene.WorldCorners(wireId);
         Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-100)<.0001f,"actual created default wireframe has100 metre width");
         Check(scene.Pick(scene.Project(wireId,new Vector3(0,-50,-50)))?.ToString()==wire.ToString(),"picking the created wireframe resolves its actual generated reference");
@@ -283,7 +283,7 @@ public partial class ExportChecks
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"rational lengths create through the same authored generic form and constructor");
         Check(Result(SpaceResults(panel.LastOutcome!),"location").ToString()==Term.Call("placed",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))).ToString(),"normal GUI explicit placement preserves the selected exact destination and pose");
         var rational=Result(SpaceResults(panel.LastOutcome!),"space"); await Until(()=>scene.Count>=8);
-        string rationalId=Actor.FromTerm(rational).InstanceText.TrimEnd('.'); rationalId=Term.Parse(rationalId).TextValue+"/extent";
+        string rationalId=scene.SubjectIds(rational).Single();
         corners=scene.WorldCorners(rationalId);
         Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-1f/3000)<.000001f &&
             Math.Abs(corners.Max(v=>v.Y)-corners.Min(v=>v.Y)-1.001f)<.000001f,"actual Prolog rational millimetres reach engine geometry without integer rounding");

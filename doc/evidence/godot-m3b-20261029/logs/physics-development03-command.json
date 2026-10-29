@@ -1,0 +1,23 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m3b-20261029/physics-campaign.py",
+    "physics-development03",
+    "--client",
+    "development05",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-preflight01/source",
+    "--profile",
+    "test"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T01:56:16Z",
+  "elapsed_seconds": 13.349149465560913,
+  "child_exit": 1,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/physics-development03-command.log",
+  "raw_sha256": "4476246748de0e3edf03f6385a9968a22d729da513765598d7cbb856d1503790",
+  "sanitized_sha256": "4476246748de0e3edf03f6385a9968a22d729da513765598d7cbb856d1503790",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

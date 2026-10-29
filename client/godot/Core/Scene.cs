@@ -26,7 +26,22 @@ public sealed record Length(BigInteger Numerator, BigInteger Denominator)
         return result;
     }
 }
-public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, int[] Transform, string Colour, Term Label, Term? Subject, string Signature)
+public sealed record ScenePose(BigInteger[]? Transform, ulong? Body, ulong Revision, bool Reframed)
+{
+    public static ScenePose Decode(Term pose)
+    {
+        if (pose.Name is "body_pose" or "body_frame_pose") {
+            var body = pose.Require(pose.Name, 2);
+            ulong id = checked((ulong)body[0].Integer), revision = checked((ulong)body[1].Integer);
+            if (revision == 0) throw new FormatException("Invalid body revision.");
+            return new(null, id, revision, pose.Name == "body_frame_pose");
+        }
+        var values = pose.Require("transform", 6).Select(x => x.Integer).ToArray();
+        if (values.Skip(3).Any(x => x < 0 || x >= 360)) throw new FormatException("Invalid scene rotation.");
+        return new(values, null, 0, false);
+    }
+}
+public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, ScenePose Pose, string Colour, Term Label, Term? Subject, string Signature)
 {
     public static SceneMark[] Decode(Term scene)
     {
@@ -39,10 +54,10 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
                 var relative = pose.Require("relative", 2); parent = relative[0].TextValue; pose = relative[1];
                 if (parent == id || !seen.Contains(parent)) throw new FormatException("Missing, cyclic or unordered scene parent.");
             }
-            var transform = pose.Require("transform", 6).Select(x => checked((int)x.Integer)).ToArray();
-            if (transform.Skip(3).Any(x => x < 0 || x >= 360)) throw new FormatException("Invalid scene rotation.");
+            var transform = ScenePose.Decode(pose);
             string[] fields = kind switch {
                 "box" or "wire_box" => ["width", "height", "depth"],
+                "sphere" => ["diameter"],
                 "group" => [], _ => throw new FormatException("Unsupported scene geometry: " + kind) };
             if (a[2].Items.Length != fields.Length) throw new FormatException("Wrong geometry field count.");
             var sizes = a[2].Items.Select((row, i) => {
@@ -70,6 +85,7 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
                 if (depicts[0].TextValue.Length == 0 || depicts[1].Kind != "binary" || depicts[1].Bytes.Length != 32) throw new FormatException("Missing exact depicted history.");
                 subject = Term.Call("entity_ref", depicts);
             }
+            if (transform.Body != null && subject == null) throw new FormatException("A body occurrence requires an exact subject.");
             return new SceneMark(id, kind, sizes, parent, transform, colour, label, subject, term.ToString());
         }).ToArray();
     }

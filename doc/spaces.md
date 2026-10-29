@@ -289,6 +289,15 @@ the agent unplaced. Storage and display references do not supply an inferred
 parent or destination. Completed-account travel grants are separate from the
 constructor's initial-placement grant.
 
+The account's owner-authorized `account_navigation/1` returns
+`navigation(AssignmentRevision, Location, Modes)` from the same assignment and
+location queries, including an explicit `unplaced`. Its signed `navigation` view
+uses the existing view owner and retained dependency lifecycle. Setup's original
+S0 result remains immutable. A client retires scene/control on invalidation and
+opens only the current exact placed space; an unplaced client keeps navigation
+subscribed and may open an explicitly selected existing subject's ordinary Enter
+offer. `account_navigation/2` remains the placed-location query for world reads.
+
 `space_represent(Space, BeforeStyle, BeforePose, Style, Pose)` checks the exact
 source values and committed `space_represent` instance policy. A changed
 representation invokes the admitting destination's physical consequence in the

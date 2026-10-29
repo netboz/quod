@@ -20,25 +20,29 @@ public sealed class SignedView : IDisposable
     ulong expires;
     long version;
     long opening;
-    bool disposed;
+    bool disposed, suspended;
+    readonly TaskCompletionSource connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public event Action<JsonNode>? Projection;
     public event Action<string>? Withdrawn;
     public event Action<JsonNode>? Message;
     public Task? Completion { get; private set; }
-    public Func<CancellationToken, Task<string>>? BeforeOpen { get; init; }
+    public Func<CancellationToken, Task<(Actor Target,string Goal)?>>? BeforeOpen { get; init; }
+    public Actor Target { get; private set; }
     public static int LiveSockets { get; private set; }
     public static long IgnoredProjections { get; private set; }
     public SignedView(SignedSession session, Actor human, Actor target, string kind, string goal)
     {
         this.session = session; this.human = human; this.target = target; this.kind = kind; this.goal = goal;
+        Target=target;
         socket = session.Transport.Socket();
     }
     public Task Start() => Completion = Receive();
+    public Task Renew() => Open();
     async Task Receive()
     {
         LiveSockets++;
         try {
-            await socket.ConnectAsync(session.Transport.SocketUri, lifetime.Token); await Open();
+            await socket.ConnectAsync(session.Transport.SocketUri, lifetime.Token); connected.TrySetResult(); await Open();
             var buffer = new byte[16384];
             while (!lifetime.IsCancellationRequested) {
                 using var text = new MemoryStream(); WebSocketReceiveResult part;
@@ -51,19 +55,27 @@ public sealed class SignedView : IDisposable
             }
         } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception error) { if (!disposed) Discard(error.Message); }
-        finally { socket.Dispose(); LiveSockets--; }
+        finally { connected.TrySetCanceled(); socket.Dispose(); LiveSockets--; }
     }
     async Task Open()
     {
-        if (disposed) return;
+        if (disposed || suspended) return;
         long attempt = ++opening;
-        string prepared = BeforeOpen == null ? goal : await BeforeOpen(lifetime.Token);
-        if (disposed || attempt != opening) return;
-        var signed = session.Sign(human, prepared); expected = Identity.Digest(signed.Bytes);
+        (Actor Target,string Goal)? prepared = BeforeOpen == null ? (target,goal) : await BeforeOpen(lifetime.Token);
+        if (disposed || suspended || attempt != opening) return;
+        if(prepared==null) { Discard("No placed view is selected."); await Send(new() { ["type"]="close" }); return; }
+        Target=prepared.Value.Target;
+        var signed = session.Sign(human, prepared.Value.Goal); expected = Identity.Digest(signed.Bytes);
         await Send(new() { ["type"] = "open", ["view_kind"] = kind, ["session_id"] = session.SessionId,
             ["request"] = Json.S(signed.Body, "request"), ["signature"] = Json.S(signed.Body, "signature"),
-            ["view_namespace"] = target.Namespace, ["view_anchor"] = target.Anchor });
+            ["view_namespace"] = Target.Namespace, ["view_anchor"] = Target.Anchor });
     }
+    // Reuse the socket so the server releases its prior native registration
+    // before attaching the next exact interior, in transport order.
+    public async Task Reopen()
+    { suspended=false; Discard("Updating authorized view…"); await connected.Task.WaitAsync(lifetime.Token); await Open(); }
+    public async Task Suspend()
+    { suspended=true; Discard("View suspended."); await connected.Task.WaitAsync(lifetime.Token); await Send(new() { ["type"]="close" }); }
     public async Task Send(JsonObject message)
     {
         await sends.WaitAsync(lifetime.Token);
@@ -85,7 +97,7 @@ public sealed class SignedView : IDisposable
                 authorization?.Cancel(); authorization?.Dispose(); authorization = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
                 current = expected; expected = null; expires = nextExpiry; long installed = ++version;
                 Projection?.Invoke(message); _ = ExpireOrRenew(installed, authorization.Token); break;
-            default: if (current != null && SignedSession.Now < expires) Message?.Invoke(message); break;
+            default: if (current != null && SignedSession.Now < expires && (message["view"] == null || message["view"]!.ToString() == current)) Message?.Invoke(message); break;
         }
     }
     async Task ExpireOrRenew(long installed, CancellationToken cancellation)

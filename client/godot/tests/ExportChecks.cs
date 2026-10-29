@@ -53,7 +53,8 @@ public partial class ExportChecks : Node
             string phase = Env("M1B_PHASE");
             if (phase == "menu") { await NativeMenu(); return; }
             if (phase == "scene") { await SceneAdapter(); return; }
-            bool fresh = phase is "fresh" or "questions" or "m2-fresh";
+            if (phase == "physics") { await PhysicsJourney(); return; }
+            bool fresh = phase is "fresh" or "questions" or "m2-fresh" or "m3-fresh";
             if (phase == "tls") { await Tls(); return; }
             if (phase is "crypto" or "backup-import" or "backup-cancel" or "crash-before-rename" or "crash-after-rename" or "crash-recover") {
                 await LocalQualification(phase); return;
@@ -70,14 +71,15 @@ public partial class ExportChecks : Node
                 await Press("setup");
                 if (State["setup"] == null) { Check(State["pending"]!.GetValue<int>() > 0, "lost setup response retains original signed work"); await Press("resolve"); }
             }
-            await Until(() => State["world_accepted"]!.GetValue<bool>() && State["operation_available"]?.GetValue<bool>() == true);
+            await Until(() => (State["world_accepted"]!.GetValue<bool>() || (phase=="m3-left" && State["current_location"]?.ToString()=="unplaced")) && State["operation_available"]?.GetValue<bool>() == true);
             var original = new JsonObject { ["public_key"] = State["public_key"]!.DeepClone(), ["human"] = State["human"]!.DeepClone(), ["setup"] = State["setup"]!.DeepClone() };
             string previousPath = Env("M1B_ORIGINAL");
             if (fresh) await File.WriteAllTextAsync(previousPath, original.ToJsonString());
             else Check(original.ToJsonString() == await File.ReadAllTextAsync(previousPath), "restart preserves exact U A S0 keys storage and pins");
-            Check(State["world_accepted"]!.GetValue<bool>(), "real nonphysical empty S0 black interior");
+            Check(State["world_accepted"]!.GetValue<bool>() || (phase=="m3-left" && State["scene_count"]!.GetValue<int>()==0), "current committed placed or explicitly unplaced location is presented");
             Check(((Button)app.FindChild("setup", true, false)).Disabled && ((Button)app.FindChild("register", true, false)).Disabled, "recovered complete account retires signup and consumed setup actions");
             var operations = app.FindChild("operations", true, false) as OperationsPanel ?? throw new Exception("Missing generic operations panel");
+            if (phase.StartsWith("m3-")) { await SpaceNavigation(phase,original); return; }
             if (operations.Current == null) {
                 var human = app.ActiveAccounts.Human!;
                 Console.WriteLine("M2_EMPTY_OFFER_SCOPE " + ((Label)operations.FindChild("operation-scope",true,false)).Text);

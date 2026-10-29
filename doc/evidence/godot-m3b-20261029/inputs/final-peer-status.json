@@ -1,0 +1,41 @@
+{
+  "checked_before_freeze": true,
+  "results": [
+    {
+      "status": "fulfilled",
+      "value": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"sessionId\": \"922c7c06-1acb-4c2b-9141-fccf4ab4c947\",\n  \"title\": \"M1a foundation implementation\",\n  \"status\": \"idle\",\n  \"lastActivity\": 1793236726809,\n  \"updatedAt\": 1793236726602,\n  \"provider\": \"openai-codex\",\n  \"model\": \"openai-codex:gpt-6.1-sol\",\n  \"createdBySessionId\": null,\n  \"agentRole\": \"standard\",\n  \"waitingForInput\": false\n}"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "status": "fulfilled",
+      "value": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"sessionId\": \"8d55a3f3-e558-46e2-afbb-2e028558f371\",\n  \"title\": \"M3a server checkpoint implementation\",\n  \"status\": \"idle\",\n  \"lastActivity\": 1793234777553,\n  \"updatedAt\": 1793234777349,\n  \"provider\": \"openai-codex\",\n  \"model\": \"openai-codex:gpt-6.1-sol\",\n  \"createdBySessionId\": null,\n  \"agentRole\": \"standard\",\n  \"waitingForInput\": false\n}"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "status": "fulfilled",
+      "value": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"sessionId\": \"ed9cd520-b2a4-4607-a8f5-ff99d08f3e46\",\n  \"title\": \"Godot consolidation coordination\",\n  \"status\": \"idle\",\n  \"lastActivity\": 1793241565176,\n  \"updatedAt\": 1793241564955,\n  \"provider\": \"openai-codex\",\n  \"model\": \"openai-codex:gpt-6.1-sol\",\n  \"createdBySessionId\": \"dae4037e-4241-4c96-8f50-118adfe9162c\",\n  \"agentRole\": \"standard\",\n  \"waitingForInput\": false\n}"
+          }
+        ],
+        "isError": false
+      }
+    }
+  ]
+}

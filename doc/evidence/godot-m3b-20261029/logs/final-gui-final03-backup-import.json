@@ -1,0 +1,31 @@
+{
+  "command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/inputs/final-gui-final03-drivers/local.py",
+    "--phase",
+    "backup-import",
+    "--export",
+    "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final03/source/client/godot/dist/quod.x86_64",
+    "--journey-private",
+    "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03",
+    "--node",
+    "https://127.0.0.1:40157",
+    "--ca",
+    "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-final-gui-final03-server/backend-ca.pem",
+    "--evidence",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/final-gui-final03-backup-import",
+    "--private",
+    "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03-backup-import",
+    "--desktop"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T02:35:27Z",
+  "elapsed_seconds": 19.30587077140808,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/final-gui-final03-backup-import.log",
+  "raw_sha256": "8a48bc5ae3e5b430abd84db3100db917728c4d801092fbacd48da62ac7171ac6",
+  "sanitized_sha256": "8a48bc5ae3e5b430abd84db3100db917728c4d801092fbacd48da62ac7171ac6",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

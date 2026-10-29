@@ -1,0 +1,184 @@
+PASS browser backup public identity
+PASS unknown encrypted-backup version refuses
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS challenge signature
+PASS wrong backup passphrase
+PASS GCM tamper
+PASS new encrypted backup restores original identity
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS all 100 real production fixtures including Reset
+PASS unchanged read exact original key
+PASS unchanged read exact original key
+PASS unchanged read exact original key
+PASS unchanged update does not replace active file
+PASS second writer lease
+PASS portable backup retains exact account references
+PASS restart retains account identity
+PASS durability failure remains visible
+PASS failed durability blocks later overwrites until reopen
+PASS reopen observes original post-rename result
+PASS durability failure preserves original key
+PASS insecure active file
+PASS corrupt store never replaced
+PASS symlink refuses
+PASS nested generic fields preserve above-uint64 integers
+PASS offered numeric step
+PASS choice membership
+PASS unsupported descriptor explicit refusal
+PASS unsupported executable descriptor property
+PASS nonground projection
+PASS required unchecked and empty defaults remain displayable
+PASS required defaults still need edits before submission
+PASS empty required selection still refuses submission
+PASS edited required fields retain exact typed bindings
+PASS initial boolean type stays strict
+PASS initial choice membership stays strict
+PASS completed vector preserves aggregate all_applied
+PASS direct vector preserves aggregate all_applied
+PASS completed vector preserves aggregate all_rejected
+PASS direct vector preserves aggregate all_rejected
+PASS completed vector preserves aggregate mixed
+PASS direct vector preserves aggregate mixed
+PASS completed without an aggregate cannot install account refs
+PASS scene retains odd and submillimetre exact rational lengths and parent
+PASS rational conversion occurs at engine boundary without millimetre rounding
+PASS scene keeps exact anchored subject independent of occurrence
+PASS default wireframe extent is 100 metres
+PASS wide exact fractions convert without intermediate double overflow
+PASS orphan relative scene refuses
+PASS duplicate scene occurrence refuses
+PASS unreduced scene rational refuses
+PASS floating scene dimensions refuse
+PASS wrong depicted anchor refuses
+PASS unrenderable finite extent refuses explicitly
+PASS unplaced navigation preserves a wide committed assignment revision
+PASS unknown navigation does not become unplaced
+PASS wide exact origins and body IDs survive independent appearances
+PASS native control binds the exact signed principal and authoritative body
+PASS another principal cannot acquire the projected control binding
+PASS unqualified tracking mapping cannot silently become a desktop viewpoint
+PASS duplicate native cursor does no presentation work
+PASS older native tick is ignored
+PASS retired view cannot move current bodies
+PASS retired native registration cannot move current bodies
+PASS changed pose at the same cursor refuses
+PASS missing required body refuses instead of using static pose
+PASS a later tick cannot change the exact origin without advancing its origin sequence
+PASS a real native advance still applies
+PASS missing decorative source receipt refuses
+PASS unavailable physical selection never becomes an empty successful scene
+CORE_PASS checks=183

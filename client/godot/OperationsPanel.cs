@@ -38,6 +38,7 @@ public partial class OperationsPanel : VBoxContainer
     readonly VBoxContainer results = new() { Name = "operation-results" };
     readonly LineEdit exactNamespace = new() { Name = "exact-storage-namespace", PlaceholderText = "Existing storage namespace" };
     readonly LineEdit exactAnchor = new() { Name = "exact-storage-anchor", PlaceholderText = "Exact genesis anchor (base64url)" };
+    readonly LineEdit exactEntity = new() { Name="exact-subject-instance",PlaceholderText="Existing entity (functional term)",Text="me" };
     Button defaults = null!, exactTarget = null!;
     CancellationTokenSource? work;
     long generation;
@@ -58,6 +59,16 @@ public partial class OperationsPanel : VBoxContainer
                 var chosen = new Actor(exactNamespace.Text, Identity.Encode(bytes), "me."); AddTarget(chosen);
                 storage.Select(targets.IndexOf(chosen) + 1); _ = ChooseStorage(chosen);
             } catch (Exception error) { status.Text = error.Message; Changed?.Invoke(); }
+        });
+        var instance = new HBoxContainer(); targeting.AddChild(instance); instance.AddChild(exactEntity);
+        Button(instance,"open-exact-subject","Open existing subject operations",() => {
+            if (busy || disposed) return;
+            try {
+                var entity=Term.Parse(exactEntity.Text.TrimEnd('.')); entity.Ground();
+                var chosen=new Actor(exactNamespace.Text,Identity.Encode(Identity.Decode(exactAnchor.Text)),entity+".");
+                if (chosen.Namespace.Length==0 || Identity.Decode(chosen.Anchor).Length!=32) throw new FormatException("An exact existing namespace and anchor are required.");
+                PresentSubject(chosen,chosen.Entity);
+            } catch (Exception error) { status.Text=error.Message; Changed?.Invoke(); }
         });
         storage.ItemSelected += index => { if (index > 0) _ = ChooseStorage(targets[(int)index - 1]); };
         classSelector.ItemSelected += index => { if (index > 0) PresentSubject(target, Term.Call("class_ref", Term.Text(target.Namespace), Term.Binary(Identity.Decode(target.Anchor)), classes[(int)index - 1])); };
@@ -84,17 +95,19 @@ public partial class OperationsPanel : VBoxContainer
         if (disposed) return;
         storage.Disabled = classSelector.Disabled = selector.Disabled = exactTarget.Disabled = value;
         exactNamespace.Editable = exactAnchor.Editable = !value;
+        exactEntity.Editable = !value;
     }
     public void Open(SignedSession session, Accounts accounts)
     { OpenSubject(session, accounts, accounts.Human!, accounts.Human!.Entity); }
     public void OpenSubject(SignedSession session, Accounts accounts, Actor chosen, Term exact)
     { if (busy || disposed) return; Initialize(session, accounts); targeting.Hide(); PresentSubject(chosen, exact); }
-    public void OpenStorage(SignedSession session, Accounts accounts)
+    public void OpenStorage(SignedSession session, Accounts accounts,Actor? currentSpace=null)
     {
         if (busy || disposed) return;
         Initialize(session, accounts); Invalidate(); targeting.Show(); targets.Clear(); storage.Clear(); storage.AddItem("Choose storage ontology");
         foreach (var choice in accounts.Catalogue.Append(human)) AddTarget(choice with { InstanceText = "me." });
         if (accounts.Setup is Term setup) AddTarget(Actor.FromTerm(setup.Require("account", 6)[2]) with { InstanceText = "me." });
+        if (currentSpace != null) AddTarget(currentSpace with { InstanceText="me." });
         classSelector.Clear(); classSelector.AddItem("Choose a class");
         scope.Text = "No storage selected."; status.Text = "Select storage, class and an offered operation.";
     }
@@ -176,6 +189,7 @@ public partial class OperationsPanel : VBoxContainer
         if (Current == null || !Available || busy || Draft(Current).Settled || accounts.Uncertain || !FormPanel.Validate() ||
             Draft(Current).Revision != Current.Revision.ToString() || Current.Availability == "unavailable") return;
         var offered = Current; var buffer = Draft(offered); string goal = offered.Goal(FormPanel.Draft); long expected = generation;
+        LastOutcome=null;
         var consumer = session; var owner = human; var selectedTarget = target;
         SetBusy(true); work = new(); var running = work; FormPanel.Lock(true); status.Text = "Checking the governed personal agent…"; Changed?.Invoke();
         try {

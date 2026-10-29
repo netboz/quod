@@ -1,0 +1,21 @@
+{
+  "attempt01": {
+    "command": [
+      "python3",
+      "/tmp/quod-m3b-coordinator-verify-01.py"
+    ],
+    "observed_exec_session": 89047,
+    "actual_child_exit": 1,
+    "receipt": "verification-attempt01.json"
+  },
+  "attempt02": {
+    "command": [
+      "python3",
+      "/tmp/quod-m3b-coordinator-verify-02.py"
+    ],
+    "observed_exec_session": 63892,
+    "actual_child_exit": 0,
+    "receipt": "verification.json"
+  },
+  "no_product_build_or_tests_rerun": true
+}

@@ -131,6 +131,8 @@ inactive_physics_source_authoring_preserves_world_test_() ->
         end || File <- ["agent_instance.pl", "quod_physics.pl", "quod_hinged.pl"]],
         Edits = source_predicate_drafts(iolist_to_binary(
             [Sources, "\n", ColdName, "(ready).\n"])),
+        {ok, SpaceSource} = file:read_file(filename:join(code:priv_dir(quod),"ontologies/quod_space.pl")),
+        Existing = maps:from_list(source_predicate_drafts(SpaceSource)),
         try
             lists:foreach(fun({Ns, Space, {Sup, Config}}) ->
                 Anchor = quod_simplex:genesis_hash(Ns),
@@ -159,7 +161,7 @@ inactive_physics_source_authoring_preserves_world_test_() ->
                 end,
                 Publish = fun({Indicator, Draft}) ->
                     Baseline = editor_source(Ctx, Target, Indicator),
-                    ?assertEqual(<<>>, Baseline),
+                    ?assertEqual(maps:get(Indicator,Existing,<<>>), Baseline),
                     Edit = inactive_source_edit(
                         compile_source_edit(Ctx, Target, Indicator, Baseline, Draft)),
                     commit_editor_goal(Ctx, Edit),
@@ -288,35 +290,41 @@ lobby_projection_recovery_test_() ->
                                     {world_view, personal_lobby, playing, {0}}}},
             {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, Goal),
             ?assertEqual(8, length(Scene)),
-            ?assertMatch({mark, <<"floor/model">>, <<"mesh">>,
+            Floor = quod_ct:scene_mark_id(Scene, {entity_ref,Ns,Anchor,floor}),
+            Roof = quod_ct:scene_mark_id(Scene, {entity_ref,Ns,Anchor,personal_roof}),
+            Sky = quod_ct:scene_mark_id(Scene, {entity_ref,Ns,Anchor,personal_sky}),
+            Console = quod_ct:scene_mark_id(Scene, {entity_ref,Ns,Anchor,console}),
+            FloorModel = <<Floor/binary,"/model">>, RoofId = <<Roof/binary,"/model">>,
+            SkyId = <<Sky/binary,"/sky">>, ConsoleModel = <<Console/binary,"/model">>,
+            ?assertMatch({mark, FloorModel, <<"mesh">>,
                           {mesh_asset, {asset,
                               <<"766c7015b7281f6009838145a06ae8c8b61c37bfc6116be16aaeaba1d8b817ee">>, _}, _,
                            {scale, 1000}, {frame, {aabb, -9000, -570, -9000, 9000, 1000, 9000},
                             {pivot, 0, 0, 0}, _}, _},
-                          {relative,<<"floor">>,{transform, 0, 0, 0, 0, 0, 0}}, asset_surfaces, unlabelled, depicts_nothing},
-                         lists:keyfind(<<"floor/model">>, 2, Scene)),
-            ?assertMatch({mark,<<"floor">>,<<"group">>,[],_,_,_,{depicts,Ns,Anchor,floor}},
-                         lists:keyfind(<<"floor">>,2,Scene)),
-            ?assertMatch({mark, <<"roof">>, <<"group">>, [], _, _, _,
-                          {depicts, Ns, Anchor, personal_roof}}, lists:keyfind(<<"roof">>, 2, Scene)),
-            RoofModel = lists:keyfind(<<"roof/model">>, 2, Scene),
-            ?assertMatch({mark, <<"roof/model">>, <<"mesh">>,
+                          {relative,Floor,{transform, 0, 0, 0, 0, 0, 0}}, asset_surfaces, unlabelled, depicts_nothing},
+                         lists:keyfind(FloorModel, 2, Scene)),
+            ?assertMatch({mark,Floor,<<"group">>,[],_,_,_,{depicts,Ns,Anchor,floor}},
+                         lists:keyfind(Floor,2,Scene)),
+            ?assertMatch({mark, Roof, <<"group">>, [], _, _, _,
+                          {depicts, Ns, Anchor, personal_roof}}, lists:keyfind(Roof, 2, Scene)),
+            RoofModel = lists:keyfind(RoofId, 2, Scene),
+            ?assertMatch({mark, RoofId, <<"mesh">>,
                           {mesh_asset, {asset,
                               <<"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121">>, _}, _,
                            {scale, 1000}, _, _},
-                          {relative, <<"roof">>, _}, asset_surfaces, unlabelled, depicts_nothing}, RoofModel),
+                          {relative, Roof, _}, asset_surfaces, unlabelled, depicts_nothing}, RoofModel),
             {ok, [#{<<"V0">> := Edition}], _} = read(Ctx,
                 {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, {world_view, personal_lobby, edition, {0}}}}),
-            ?assertEqual(RoofModel, lists:keyfind(<<"roof/model">>, 2, Edition)),
-            ?assertMatch({mark, <<"sky/sky">>, <<"sky_sphere">>,
+            ?assertEqual(RoofModel, lists:keyfind(RoofId, 2, Edition)),
+            ?assertMatch({mark, SkyId, <<"sky_sphere">>,
                           [{f, <<"diameter">>, 80000}],
-                          {relative,<<"sky">>,{transform, 0, 0, 0, 0, 75, 0}}, _, unlabelled,
+                          {relative,Sky,{transform, 0, 0, 0, 0, 75, 0}}, _, unlabelled,
                           {depicts, Ns, Anchor, personal_sky}},
-                         lists:keyfind(<<"sky/sky">>, 2, Scene)),
-            ?assert(lists:member({mark, <<"console">>, <<"group">>, [],
+                         lists:keyfind(SkyId, 2, Scene)),
+            ?assert(lists:member({mark, Console, <<"group">>, [],
                {transform, 0, 0, 3850, 0, 0, 0}, no_surface, unlabelled,
                {depicts, Ns, Anchor, console}}, Scene)),
-            ?assertMatch({mark, <<"console/model">>, <<"mesh">>,
+            ?assertMatch({mark, ConsoleModel, <<"mesh">>,
                           {mesh_asset, {asset,
                               <<"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04">>,
                               <<"model/gltf-binary">>}, <<"gltf2-static-v1">>,
@@ -324,9 +332,9 @@ lobby_projection_recovery_test_() ->
                            {frame, {aabb, -921, -929, -898, 881, 904, 894},
                             {pivot, 0, -929, 0}, {front, <<"-z">>}},
                            {resources, 5357484, 1227580, 31379, 50000, 1, 1, 4194304}},
-                          {relative, <<"console">>, _}, asset_surfaces,
+                          {relative, Console, _}, asset_surfaces,
                           {label, <<"PROLOG CONSOLE">>, <<"above">>}, depicts_nothing},
-                         lists:keyfind(<<"console/model">>, 2, Scene)),
+                         lists:keyfind(ConsoleModel, 2, Scene)),
             %% Expected identity is proved before any scene content is selected.
             ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
                 {',', {current_ontology_identity, Ns, <<0:256>>},
@@ -350,9 +358,9 @@ lobby_projection_recovery_test_() ->
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                          submit(Ctx, execute, TuneSky)),
             {ok, [#{<<"V0">> := ChangedScene}], _} = read(Ctx, Goal),
-            ?assertMatch({mark, <<"sky/sky">>, <<"sky_sphere">>, _,
-                          {relative,<<"sky">>,{transform, 0, 0, 0, 0, 215, 0}}, _, _, _},
-                         lists:keyfind(<<"sky/sky">>, 2, ChangedScene)),
+            ?assertMatch({mark, SkyId, <<"sky_sphere">>, _,
+                          {relative,Sky,{transform, 0, 0, 0, 0, 215, 0}}, _, _, _},
+                         lists:keyfind(SkyId, 2, ChangedScene)),
             %% The exact same ledger restores the lobby; no creation event or
             %% model facts are replayed into another database.
             {Sup, Config} = maps:get(Ns, maps:get(ontologies, Ctx)),
@@ -422,11 +430,14 @@ local_subclass_inherits_eidolons_controls_and_workspace_test_() ->
                          [Id || {eidolon,playing,solid,{recipe, <<"lobby-test-classes">>, _, Id}} <- Choices]),
             %% An unresolved choice affects this device, not the entire world.
             {ok, [#{<<"V0">> := Ambiguous}], _} = read(Ctx, Scope({world_view, personal_lobby, playing, {0}})),
-            ?assert(lists:keymember(<<"sky">>, 2, Ambiguous)),
-            ?assert(lists:keymember(<<"floor">>, 2, Ambiguous)),
+            SkyId = quod_ct:scene_mark_id(Scene,{entity_ref,Ns,Anchor,personal_sky}),
+            FloorId = quod_ct:scene_mark_id(Scene,{entity_ref,Ns,Anchor,floor}),
+            StatusId = quod_ct:scene_mark_id(Scene,{entity_ref,Ns,Anchor,console},<<"eidolon-status">>),
+            ?assert(lists:keymember(SkyId, 2, Ambiguous)),
+            ?assert(lists:keymember(FloorId, 2, Ambiguous)),
             ?assertMatch({mark, _, <<"group">>, _, _, no_surface,
                           {label, <<"Choose an eidolon">>, <<"above">>}, _},
-                         lists:keyfind(<<"console/eidolon-status">>, 2, Ambiguous))
+                         lists:keyfind(StatusId, 2, Ambiguous))
         after stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
@@ -609,14 +620,16 @@ modelling_and_material_libraries_test_() ->
             ?assertMatch({fail, _}, quod_prolog:prove_ro(
                 <<"lobby-test-classes">>,
                 {panorama_asset, belfast_sunset_puresky, {'_'}, {'_'}})),
-            {ontology_ref, LobbyNs, _} = maps:get(lobby, Ctx),
+            {ontology_ref, LobbyNs, LobbyAnchor} = maps:get(lobby, Ctx),
             {ok, [#{<<"V0">> := Playing}], _} = Ask(LobbyNs, {world_view, personal_lobby, playing, {0}}),
             {ok, [#{<<"V0">> := Edition}], _} = Ask(LobbyNs, {world_view, personal_lobby, edition, {0}}),
             ?assertNotEqual(Playing, Edition),
-            ?assertMatch({mark, <<"console/model">>, <<"mesh">>, _, _, _, _, _},
-                         lists:keyfind(<<"console/model">>, 2, Playing)),
-            ?assertMatch({mark, <<"console/screen">>, <<"plane">>, _, _, _, _, _},
-                         lists:keyfind(<<"console/screen">>, 2, Edition))
+            ConsoleModel = quod_ct:scene_mark_id(Playing,{entity_ref,LobbyNs,LobbyAnchor,console},<<"model">>),
+            ConsoleScreen = quod_ct:scene_mark_id(Edition,{entity_ref,LobbyNs,LobbyAnchor,console},<<"screen">>),
+            ?assertMatch({mark, ConsoleModel, <<"mesh">>, _, _, _, _, _},
+                         lists:keyfind(ConsoleModel, 2, Playing)),
+            ?assertMatch({mark, ConsoleScreen, <<"plane">>, _, _, _, _, _},
+                         lists:keyfind(ConsoleScreen, 2, Edition))
         after stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
@@ -1337,7 +1350,9 @@ shared_editor_titles(Ctx, Ns) ->
     {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, editor_scope(Ns, {world_view, personal_lobby, playing, {0}})),
     ?assertEqual(Heights, maps:map(fun(At, _) -> quod_prolog:applied(At) end,
                                   maps:get(ontologies, Ctx))),
+    Anchor = quod_simplex:genesis_hash(Ns),
     [begin
+        Prefix = quod_ct:scene_mark_id(Scene,{entity_ref,Ns,Anchor,Entity}),
         MeshId = <<Prefix/binary, "/model">>,
         Id = case lists:keyfind(MeshId, 2, Scene) of
             false -> <<Prefix/binary, "/top-sign">>;
@@ -1345,7 +1360,7 @@ shared_editor_titles(Ctx, Ns) ->
         end,
         {mark, Id, _, _, _, _, {label, Title, _}, _} = lists:keyfind(Id, 2, Scene),
         Title
-     end || Prefix <- [<<"console">>, <<"console_b">>]].
+     end || Entity <- [console, console_b]].
 
 large_signed_source_edit_does_not_return_inspection_scratch_test_() ->
     {timeout, 90, fun() ->

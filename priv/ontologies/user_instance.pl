@@ -66,7 +66,10 @@ setup_account(Storage, Node, Custody, Result) :-
 class_permission(space, create, check(account_space_create)).
 class_permission(space, space_admit, check(account_space_admit)).
 class_permission(space, space_enter, check(account_new_space_entry)).
-class_permission(agent, space_enter, check(account_initial_entry)).
+class_permission(agent, space_enter, check(account_agent_entry)).
+class_permission(agent, space_leave, check(account_agent_leave)).
+class_permission(space, space_visit, check(account_space_visit)).
+class_permission(space, space_represent, check(account_space_represent)).
 
 account_space_create(Owner, class(space), create(Inputs)) :-
     account_setup(me, pending(account)),
@@ -95,13 +98,22 @@ account_initial_entry(Owner, instance(personal),
     space_enter(entity_ref(Ns, Anchor, personal), entity_ref(Ns, Anchor, _), placement)) :-
     account_setup(me, pending(account)), account_owner_policy(Owner),
     Owner = agent_instance_ref(Ns, Anchor, me).
+account_agent_entry(Actor, Subject, Operation) :- account_initial_entry(Actor,Subject,Operation).
+account_agent_entry(Actor, instance(personal),
+    space_enter(entity_ref(Ns,Anchor,personal),_,placement)) :-
+    account_setup(me,complete(_)), account_personal_actor(Actor,_),
+    Actor = agent_instance_ref(Ns,Anchor,personal).
+account_agent_leave(Actor, instance(personal),
+    space_leave(entity_ref(Ns,Anchor,personal),_,placement)) :-
+    account_setup(me,complete(_)), account_personal_actor(Actor,_),
+    Actor = agent_instance_ref(Ns,Anchor,personal).
 account_space_admit(Owner, construction(space, Space, Inputs),
     space_admit(entity_ref(Ns, Anchor, Space), entity_ref(Ns, Anchor, personal), placement)) :-
     account_space_create(Owner, class(space), create(Inputs)).
 
 %% Later construction is distinct from onboarding's initial-occupant grant.
-%% Only the active new-space constructor gets source entry; A's own travel
-%% remains separately denied until its entry/leave policy is authored.
+%% Only the active new-space constructor gets this source-entry grant. A's
+%% later travel uses the distinct committed agent entry/leave policies above.
 account_new_space_entry(Actor, construction(space, Space, Inputs),
     space_enter(entity_ref(_, _, Space), _, placement)) :-
     account_space_create(Actor, class(space), create(Inputs)).
@@ -109,8 +121,34 @@ account_space_admit(Actor, instance(Space),
     space_admit(entity_ref(Ns, Anchor, Space), Source, placement)) :-
     account_setup(me, complete(_)), account_personal_actor(Actor, Owner),
     Actor = agent_instance_ref(Ns, Anchor, personal),
-    attribute(Space, owner, Owner),
-    Source \== entity_ref(Ns, Anchor, personal).
+    attribute(Space, owner, Owner), term_variables(Source,[]).
+
+%% Reads and callbacks retain the original personal actor and exact history.
+space_travel_agent(Actor) :-
+    account_setup(me,complete(_)), current_principal(Principal),
+    (human_user_owner(Principal) -> personal_agent(Actor,_)
+    ; once(account_personal_actor(Principal,_)), Actor = Principal).
+account_space_visit(Principal,instance(Space),space_visit(Actor,_)) :-
+    account_setup(me,complete(_)),
+    Actor = agent_instance_ref(Ns,Anchor,personal),
+    attribute(Space,owner,Owner), Owner = agent_instance_ref(Ns,Anchor,me),
+    (Principal = Owner, account_owner_policy(Owner)
+    ; Principal = Actor, account_personal_actor(Actor,Owner)).
+account_space_represent(Principal,instance(Space),space_represent(_,_,_,_)) :-
+    account_setup(me,complete(_)), attribute(Space,owner,Owner),
+    (Principal = Owner, account_owner_policy(Owner)
+    ; account_personal_actor(Principal,Owner)).
+can_invoke((current_ontology_identity(Ns,Anchor),space_travel(personal,_,_,_,_)),
+           Actor,_,Ns) :-
+    Actor = agent_instance_ref(Ns,Anchor,personal), account_personal_actor(Actor,_).
+can_invoke((current_ontology_identity(Ns,Anchor),space_release_placement(Space,_,_,_)),
+           Actor,_,Ns) :-
+    Actor = agent_instance_ref(Ns,Anchor,personal), account_setup(me,complete(_)),
+    attribute(Space,owner,agent_instance_ref(Ns,Anchor,me)).
+can_invoke((current_ontology_identity(Ns,Anchor),space_representation_changed(Space,_)),
+           Actor,_,Ns) :-
+    Actor = agent_instance_ref(Ns,Anchor,personal), account_personal_actor(Actor,_),
+    attribute(Space,owner,agent_instance_ref(Ns,Anchor,me)).
 
 %% The exact anchored callback is entered by the existing atomic placement
 %% owner. This grants neither arbitrary A invocation nor source-side consent.
@@ -137,6 +175,7 @@ personal_agent_owner(Owner) :-
     findall(Human, human_user_owner(Human), [Owner]).
 personal_agent_query(personal_agent_owner(_)).
 personal_agent_query(space_location(personal, _)).
+personal_agent_query(space_travel_agent(_)).
 can_invoke((current_ontology_identity(Ns, Anchor), Query),
            agent_instance_ref(Ns, Anchor, personal), _, Ns) :-
     personal_agent_query(Query).

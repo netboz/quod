@@ -1,0 +1,148 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_names_SUITE:restart_recovery result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery-migrate.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_names_suite.src.html#restart_recovery-1">quod_names_SUITE:restart_recovery/1</a> (click for source code)
+
+=== Config value:
+
+    [{target,&lt;0.8916.0&gt;},
+     {asker,&lt;0.8917.0&gt;},
+     {target_pub,&lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+     {target_key,{&lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                  &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;}},
+     {asker_pub,&lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+     {target_addr,{"127.0.0.1",15990}},
+     {asker_addr,{"127.0.0.1",15991}},
+     {names_anchor,&lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+     {names_source,"/work/_build/test/lib/quod/priv/ontologies/quod_names.pl"},
+     {names_count,1449371},
+     {agent_genesis,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/naming_agent.pl"},
+     {watchdog,&lt;0.8915.0&gt;},
+     {tc_logfile,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/quod_names_suite.restart_recovery.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/work/_build/test/lib/quod/test/quod_names_SUITE_data/"},
+     {priv_dir,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/"}]
+
+=== Current directory is "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16"
+
+=== Started at 2026-10-28 20:23:55
+
+<br />
+=SUPERVISOR REPORT==== 28-Oct-2026::20:23:55.873410 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,&lt;0.271.0&gt;},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [&lt;&lt;"quod:names"&gt;&gt;,
+                                     #{mode =&gt; create,seed_peers =&gt; [],
+                                       role =&gt; member,
+                                       node_id =&gt;
+                                           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                                       genesis_file =&gt;
+                                           "/work/_build/test/lib/quod/priv/ontologies/quod_names.pl",
+                                       data_dir =&gt;
+                                           "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/names_target_quod:names"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+=CRASH REPORT==== 28-Oct-2026::20:23:55.874033 ===
+  crasher:
+    initial call: quod_prolog:init/1
+    pid: &lt;0.671.0&gt;
+    registered_name: []
+    exception exit: genesis_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [&lt;0.242.0&gt;,&lt;0.189.0&gt;,&lt;0.175.0&gt;,&lt;0.174.0&gt;]
+    message_queue_len: 0
+    messages: []
+    links: [&lt;0.242.0&gt;]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 987
+    stack_size: 29
+    reductions: 180
+  neighbours:
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::20:23:55.874229 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: start_error
+    reason: genesis_unavailable
+    offender: [{pid,undefined},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [&lt;&lt;"quod:names"&gt;&gt;,
+                                     #{mode =&gt; create,seed_peers =&gt; [],
+                                       role =&gt; member,
+                                       node_id =&gt;
+                                           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                                       genesis_file =&gt;
+                                           "/work/_build/test/lib/quod/priv/ontologies/quod_names.pl",
+                                       data_dir =&gt;
+                                           "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/names_target_quod:names"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::20:23:55.874397 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,&lt;0.243.0&gt;},
+               {id,quod_simplex},
+               {mfargs,{quod_simplex,start_link,
+                                     [&lt;&lt;"quod:names"&gt;&gt;,
+                                      #{mode =&gt; create,seed_peers =&gt; [],
+                                        role =&gt; member,
+                                        node_id =&gt;
+                                            &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                                        genesis_file =&gt;
+                                            "/work/_build/test/lib/quod/priv/ontologies/quod_names.pl",
+                                        data_dir =&gt;
+                                            "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/names_target_quod:names"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+<a name="end"></a>
+
+
+=== Ended at 2026-10-28 20:23:56
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Oct 28 2026 20:23:55<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

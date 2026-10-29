@@ -3,6 +3,31 @@
 %% This file contains framework mechanics only. Domain rules belong in the
 %% ontology that owns them.
 
+%% Exact anchored scope entry. Keep the identity check inside the destination
+%% and the ordinary invocation policy around the complete selected goal.
+no_follow(in_ontology/3).
+in_ontology(Namespace,Anchor,Goal) :-
+    Namespace::(current_ontology_identity(Namespace,Anchor),Goal).
+
+%% Cardinality over all answers, including duplicates. Callers leave selected
+%% outputs fresh until this check finishes, so a bound output cannot hide an
+%% alternative. findall retains ordinary proof/dependency and failure rules.
+no_follow(unique_solution/1).
+unique_solution(Goal) :-
+    term_variables(Goal,Variables), findall(Variables,Goal,[Variables]).
+
+%% Portable identifiers use the existing canonical digest and lower-case hex.
+%% Both scene occurrences and physical frame receipts share this formatter.
+no_follow(term_hex_digest/2).
+term_hex_digest(Term,Id) :-
+    term_digest(Term,Digest), binary_codes(Digest,Bytes),
+    digest_hex_codes(Bytes,Codes), binary_codes(Id,Codes).
+digest_hex_codes([],[]).
+digest_hex_codes([Byte|Bytes],[High,Low|Codes]) :-
+    H is Byte // 16, L is Byte mod 16,
+    digest_hex_digit(H,High), digest_hex_digit(L,Low), digest_hex_codes(Bytes,Codes).
+digest_hex_digit(N,Code) :- (N < 10 -> Code is N + 48; Code is N + 87).
+
 %% One signed selection at the visible space. Navigation dependencies are
 %% opened under ordinary scope ACLs; the client endpoint checks their exact
 %% heights against the proof's retained dependency envelope before installation.
@@ -27,14 +52,29 @@ client_view_dependencies([dependency(Ns, Anchor, _) | Rest]) :-
     client_view_dependencies(Rest).
 
 client_space_selection(Space, Marks, Selection) :-
-    (space_instance(Space, physical_space) ->
-        (findall(S, physics_client_view(Space, Marks, S), [Selection]) -> true
+    (space_simulation_domain(Space,world_ref(Ns,A,W),_,Path) ->
+        (Ns::(current_ontology_identity(Ns,A),physics_client_view(W,Marks,Physical),
+               physics_view_frames(W,Path,Frames),physics_scene_frames(W,Marks,BodyFrames)),
+         client_simulation_frame(Space,Frames,BodyFrames,Physical,Selection) -> true
+        ; Selection = unavailable)
+    ; space_instance(Space, physical_space) ->
+        (findall(S, physics_client_view(Space, Marks, S), [Physical]),
+         physics_scene_frames(Space,Marks,BodyFrames),
+         client_simulation_frame(Space,[],BodyFrames,Physical,Selection) -> true
         ; Selection = unavailable)
     ; current_principal(Principal),
       findall(S, physics_control(Space, Principal, _, S), Bindings),
       (Bindings = [] -> Selection = nonphysical
       ; Bindings = [none] -> Selection = nonphysical
       ; Selection = unavailable)).
+
+client_simulation_frame(Space,Frames,BodyFrames,
+    simulation_view(World,Authority,Epoch,Generation,Token,Structure,Control),
+    simulation_view(World,Authority,Epoch,Generation,Token,Structure,Control,
+                    view_frame(entity_ref(Ns,A,Space),Frames,BodyFrames))) :-
+    current_ontology_identity(Ns,A).
+client_simulation_frame(_,_,_,Selection,Selection) :-
+    member(Selection,[disabled,denied,recovering,unavailable]).
 
 %% Code is an eidolon of every class. The root catalogue supplies the exact
 %% recipe identity; an absent editing ontology simply offers no such recipe.

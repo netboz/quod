@@ -250,8 +250,8 @@ with_operations(Fun) ->
     end,Sources,SpaceSource).
 
 production_space_offer({':-',{class_eidolon,space,{operation,class},_,_},_}) -> true;
-production_space_offer({':-',{eidolon,Name,_,_},_}) ->
-    lists:member(Name,[space_create,space_create_exact,space_create_infinite]);
+production_space_offer({':-',{eidolon,_,{subject,_,{class,space}},
+    {operation,{space_create,_}}},_}) -> true;
 production_space_offer(_) -> false.
 
 create_view(C,Ns) -> [View] = views(C,Ns,class_ref(Ns,space)), View.

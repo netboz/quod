@@ -227,6 +227,9 @@ geometry_constraint(Kind, _) :-
 placed(body_pose(Body, Revision)) :-
     integer(Body), Body >= 0, Body < 18446744073709551616,
     integer(Revision), Revision > 0, Revision < 18446744073709551616.
+%% A decorative occurrence re-expresses the one streamed domain pose in the
+%% body's admitted source frame before its occurrence's parent transform.
+placed(body_frame_pose(Body, Revision)) :- placed(body_pose(Body,Revision)).
 placed(transform(X, Y, Z, RX, RY, RZ)) :-
     offset(X), offset(Y), offset(Z),
     turn(RX), turn(RY), turn(RZ).
@@ -235,6 +238,7 @@ placed(relative(Parent, Transform)) :-
     attachment_pose(Transform).
 attachment_pose(transform(X,Y,Z,RX,RY,RZ)) :- placed(transform(X,Y,Z,RX,RY,RZ)).
 attachment_pose(body_pose(Body, Revision)) :- placed(body_pose(Body, Revision)).
+attachment_pose(body_frame_pose(Body, Revision)) :- placed(body_frame_pose(Body, Revision)).
 
 offset(V) :-
     integer(V),
@@ -338,6 +342,7 @@ parent_order([mark(Id, _, _, At, _, _, _) | Rest], Seen) :-
     available_parent(At, Seen), parent_order(Rest, [Id | Seen]).
 available_parent(transform(_, _, _, _, _, _), _Seen).
 available_parent(body_pose(_, _), _Seen).
+available_parent(body_frame_pose(_, _), _Seen).
 available_parent(relative(Parent, _), Seen) :- member(Parent, Seen).
 
 every_mark([]).
@@ -417,8 +422,10 @@ model_geometry(Kind, Expressions, Size) :-
 model_transform(transform(EX, EY, EZ, ERX, ERY, ERZ), transform(X, Y, Z, RX, RY, RZ)) :-
     X is EX, Y is EY, Z is EZ, RX is ERX, RY is ERY, RZ is ERZ.
 model_transform(body_pose(Body, Revision), body_pose(Body, Revision)).
+model_transform(body_frame_pose(Body, Revision), body_frame_pose(Body, Revision)).
 model_transform(relative(Parent, At), relative(Parent, Placed)) :-
-    (At = transform(_, _, _, _, _, _); At = body_pose(_, _)), model_transform(At, Placed).
+    (At = transform(_, _, _, _, _, _); At = body_pose(_, _); At = body_frame_pose(_,_)),
+    model_transform(At, Placed).
 
 shape(group, <<"group">>, []).
 shape(box(W, H, D), <<"box">>,
@@ -539,3 +546,4 @@ scoped_transform(Prefix, relative(Parent, At), relative(Scoped, At)) :-
 scoped_transform(Prefix, transform(X,Y,Z,RX,RY,RZ),
                  relative(Prefix, transform(X,Y,Z,RX,RY,RZ))).
 scoped_transform(Prefix, body_pose(Body,Revision), relative(Prefix,body_pose(Body,Revision))).
+scoped_transform(Prefix, body_frame_pose(Body,Revision),relative(Prefix,body_frame_pose(Body,Revision))).

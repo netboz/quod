@@ -1,0 +1,5 @@
+{
+  "stopped_utc": "2026-10-28T13:25:37.546823+00:00",
+  "reason": "The owner observer compared an encoded authenticated principal with a decoded agent reference. Source inspection proved the barrier could not arm; cancel this invalid diagnostic fixture without crediting it.",
+  "action": "Stop only this disposable preflight container; retain mounted source, data and logs."
+}

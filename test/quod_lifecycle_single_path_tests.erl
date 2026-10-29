@@ -105,8 +105,8 @@ default_lobby_physics_startup_test_() ->
             commit_root({assertz, {ontology_creator_agent, Owner}}),
             {ok, _, _} = quod_prolog:execute(ActorNs,
                 {assertz, {can_host_ontology, Owner, Node, Ns, {'Anchor'}, discoverable}}),
-            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
-                submit_lobby(User, execute, {physical_fixture_found, {0}})),
+            {ok,_,{normalized,Founded}}=submit_lobby(User,execute,{physical_fixture_found,{0}}),
+            m3a_committed(Founded),
             ok = wait_ready(Ns, 300),
             {ontology_ref, Ns, Anchor} = lobby_user_reference(User),
             Scoped = fun(G) -> {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, G}} end,
@@ -151,8 +151,10 @@ default_lobby_physics_startup_test_() ->
                 {ok,_,{normalized,{read,_,{answers,_,[Scene]}}}} = submit_lobby(User,read,View),
                 {ok,[{<<"V0">>,{world_view,_,Marks,_}}]} = quod_client_result:decode_binding(Scene),
                 ?assert(lists:any(fun({mark,_,_,_,{body_pose,_,_},_,_,_}) -> true; (_) -> false end,Marks)),
-                [?assert(lists:keymember(Id,2,Marks)) || Id <-
-                    [<<"floor/model">>,<<"roof/model">>,<<"console/model">>,<<"sky/sky">>]],
+                [?assert(lists:keymember(quod_ct:scene_mark_id(Marks,
+                    {entity_ref,Ns,Anchor,Entity},Part),2,Marks)) || {Entity,Part} <-
+                    [{floor,<<"model">>},{personal_roof,<<"model">>},
+                     {console,<<"model">>},{personal_sky,<<"sky">>}]],
                 ?assertEqual([], [Id || {mark,Id,_,_,_,_,{label,Text,_},_} <- Marks,
                     Text =:= <<"No matching eidolon">> orelse Text =:= <<"Choose an eidolon">>]),
                 Runtime = quod_reg:via({quod_runtime,Ns}),
@@ -538,8 +540,10 @@ m1a_seven_foundations_test_() ->
             %% the complete authored state, not their advancing ledger heights.
             ?assertEqual(SharedSources,[{N,m1a_complete_source(N)} || {N,_}<-SharedSources]),
             m1a_revocation(First,Second),
-            m2_spaces(First, Second),
+            S1=m2_spaces(First, Second),
+            RecoverTravel=m3a_travel(First,Second,S1),
             m1a_restart_accounts(Users,Vault,Dir,Unlock),
+            RecoverTravel(),
             m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, Components, Unrelated)
         after stop_process(Auth), cleanup(F), stop_process(Vault) end
     end}.
@@ -617,7 +621,177 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     ?assert(lists:member(m2_after_foreign_ack,FailureReasons)),
     ?assertEqual(Baseline,m2_state([Ns,Foreign])),
     ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,m2_local_staging)),
-    io:format("M2 production placement/recovery qualified: ~p ~p~n",[S1,ForeignSpace]).
+    io:format("M2 production placement/recovery qualified: ~p ~p~n",[S1,ForeignSpace]), S1.
+
+m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
+    C=m1a_actor_context(User), Actor=maps:get(agent,C),
+    {account,_,Actor,S0,_,_,_}=maps:get(setup_result,User),
+    [Enter]=[O||O<-m1a_read(User,{gui_operations,S1,{0}}),element(2,O)=:=enter],
+    {EnterResult,EnterBytes}=m2_create(C,Ns,Enter,[]),
+    m3a_committed(EnterResult),
+    ?assertEqual([{result,agent,Actor},{result,location,{placed,S1,{transform,0,0,0,0,0,0}}},
+                  {result,revision,3}],m1a_output(EnterResult)),
+    ?assertEqual(S1,m1a_read(User,{account_navigation,{0},[playing,edition]})),
+    %% An old offer names the original slot, rather than rebasing itself.
+    Before=m2_state([Ns]), {{failed,_},_}=m2_create(C,Ns,Enter,[]),
+    ?assertEqual(Before,m2_state([Ns])),
+    Class=setelement(1,setelement(4,S1,space),class_ref),
+    [Create|_]=m1a_read(User,{gui_operations,Class,{0}}),
+    {Created,_}=m2_create(C,Ns,Create,element(7,Create)),
+    [{result,space,S2},{result,location,{placed,S1,_}},{result,owner,_}]=m1a_output(Created),
+    m3a_enter(User,C,S2,5), m3a_enter(User,C,S1,7), m3a_enter(User,C,S0,9),
+    %% A foreign owner's destination remains independently denied.
+    {account,_,_,ForeignS0,_,_,_}=maps:get(setup_result,Other),
+    Unchanged=m2_state([Ns,element(2,ForeignS0)]),
+    m1a_failed_personal(C,{space_travel,personal,9,S0,
+        {placed,ForeignS0,{transform,0,0,0,0,0,0}},{0}}),
+    ?assertEqual(Unchanged,m2_state([Ns,element(2,ForeignS0)])),
+    [Leave]=[O||O<-m1a_read(User,{gui_operations,S0,{0}}),element(2,O)=:=leave],
+    {Left,_}=m2_create(C,Ns,Leave,[]),m3a_committed(Left),
+    ?assertEqual([{result,agent,Actor},{result,location,unplaced},{result,revision,10}],m1a_output(Left)),
+    ?assertEqual(unplaced,m1a_read(User,{space_location,personal,{0}})),
+    m3a_enter(User,C,S0,11),
+    m3a_entry_conflict(User,C,S0,S1),
+    Fresh=C#{session=>quod_personal_agent_tests:session(maps:get(human_pair,C),maps:get(network,C))},
+    Resolve=fun() ->
+        {ok,_,{operation_outcome,_,Recovered}}=quod_personal_agent_tests:lookup(Fresh,EnterBytes),
+        ?assertEqual(m1a_output(EnterResult),proplists:get_value(<<"V0">>,maps:get(bindings,Recovered)))
+    end,
+    Resolve(), quod_outcome_result_tests:assert_unchanged_reads([Ns],Resolve,3),
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})),
+    m3a_recursive(User,C,S0,S1,S2),
+    FinalState=m2_state([Ns]),
+    io:format("M3a signed same-agent route: ~p -> ~p -> ~p -> ~p -> ~p~n",[S0,S1,S2,S1,S0]),
+    fun() ->
+    %% The same vault keys and the original signed request resolve after the
+    %% runtime and outcome owners restart, without another travel submission.
+    ?assertEqual(FinalState,m2_state([Ns])),
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})),
+    {agent_instance_ref,_,_,Personal}=Actor,
+    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment,Personal,11,S0})),
+    Resolve(),
+    ok=quod_ct:write_evidence_json("QUOD_M3A_EVIDENCE","same-agent-route",
+        #{schema => <<"m3a-same-agent-v1">>,
+          agent => quod_client_goal_parser:value_text(Actor),
+          route => [quod_client_goal_parser:value_text(S)||S<-[S0,S1,S2,S1,S0,unplaced,S0]],
+          original_enter_request_sha256 => binary:encode_hex(crypto:hash(sha256,EnterBytes)),
+          original_enter_result => quod_client_goal_parser:value_text(m1a_output(EnterResult)),
+          final_assignment_revision => 11,
+          original_outcome_after_owner_restart => true,
+          exact_state_after_owner_restart => true})
+    end.
+
+m3a_entry_conflict(User,C,S0,S1) ->
+    Ns=element(2,S0),Actor=maps:get(agent,C),
+    {ok,ActorBlob}=quod_wire_term:encode_canonical(Actor),Principal={agent,ActorBlob},
+    Permission={class_permission,agent,space_leave,{check,account_agent_leave}},
+    [Enter]=[O||O<-m1a_read(User,{gui_operations,S1,{0}}),element(2,O)=:=enter],
+    {Numbered,_,_}=erlog_int:term_instance(m2_create_goal(C,Ns,Enter,[]),0),
+    {ok,TravelGoal}=quod_wire_term:encode_canonical(Numbered),
+    Engine=quod_reg:where({quod_prolog,Ns}),Parent=self(),Token=make_ref(),
+    %% Pause only the proof worker at the existing sealed-plan checkpoint.
+    %% The ontology owner stays responsive and commits the competing grant edit.
+    Observe=fun(armed,{in,{'$gen_cast',{public_proof,_,_,execute,Goal,Request}}},_)
+                  when is_tuple(Request),tuple_size(Request)=:=7,
+                       element(1,Request)=:=proof_request,element(3,Request)=:=Principal ->
+                   case quod_wire_term:encode_canonical(Goal) of
+                       {ok,TravelGoal}->checkpoint;
+                       _->armed
+                   end;
+               (checkpoint,{in,{'$gen_call',{Worker,_},
+                      {checkpoint_and_release_proof_snapshot,_,_}}},_) ->
+                   true=erlang:suspend_process(Worker),
+                   Parent ! {entry_checkpoint,Token,Worker},done;
+               (State,_,_)->State end,
+    ok=sys:install(Engine,{Observe,armed}),
+    {Caller,Monitor}=spawn_monitor(fun()->Parent ! {entry_conflict,Token,m2_create(C,Ns,Enter,[])} end),
+    try
+        Proof=receive {entry_checkpoint,Token,P}->P;
+                      {entry_conflict,Token,{Early,_}}->error({entry_not_checkpointed,Early})
+        after 5000 -> error(entry_proof_not_prepared) end,
+        try
+            Before=m2_state([Ns]),m2_edit(User,{retract,Permission}),
+            _=sys:replace_state(Engine,fun(State)->true=erlang:resume_process(Proof),State end),
+            {Outcome,_}=receive {entry_conflict,Token,R}->R
+            after 10000 -> error(entry_conflict_not_resolved) end,
+            case Outcome of
+                {failed,Blob} ->
+                    {ok,Reasons}=quod_wire_term:decode_failure_reasons(Blob),
+                    ?assert(lists:member(conflict_retry,Reasons));
+                {error,conflict_retry} -> ok;
+                Other -> error({entry_conflict_accepted,Other})
+            end,
+            ?assertEqual(Before,m2_state([Ns])),
+            ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}}))
+        after catch sys:replace_state(Engine,
+            fun(State)->catch erlang:resume_process(Proof),State end) end
+    after
+        exit(Caller,kill),
+        receive {'DOWN',Monitor,process,Caller,_}->ok after 1000 -> error(entry_caller_alive) end,
+        ok=sys:remove(Engine,Observe),
+        m2_edit(User,{transaction,m1a_conj([
+            {findall,{'_'},{retract,Permission},{'_'}},{assertz,Permission}])})
+    end.
+
+m3a_recursive(User,C,S0,S1,S2) ->
+    Ns=element(2,S0), I0=element(4,S0), I1=element(4,S1), I2=element(4,S2),
+    T1={transform,1300,-700,2900,17,43,89}, T2={transform,-1900,1100,2300,31,67,113},
+    Old1=m1a_read(User,{attribute,I1,transform,{0}}),
+    Old2=m1a_read(User,{attribute,I2,transform,{0}}),
+    m2_edit(User,{transaction,m1a_conj([
+        {space_represent,I1,solid,Old1,contents,T1},
+        {space_represent,I2,solid,Old2,contents,T2}])}),
+    Class=setelement(1,setelement(4,S0,space),class_ref),
+    [Create|_]=m1a_read(User,{gui_operations,Class,{0}}),
+    Fields=m1a_field(element(7,Create),space_placement,{at,S2,{transform,0,0,0,0,0,0}}),
+    {LeafResult,_}=m2_create(C,Ns,Create,Fields),
+    m3a_committed(LeafResult),
+    [{result,space,Leaf}|_]=m1a_output(LeafResult),
+    m2_edit(User,{transaction,{',',{retract,{attribute,element(4,Leaf),transform,{'_'}}},
+        {assertz,{attribute,element(4,Leaf),transform,{transform,300,500,-900,23,47,71}}}}}),
+    Read=fun() -> m1a_read(User,{space_projection,I0,playing,{0}}) end,
+    {scene,Marks,Exposure}=Read(),
+    [E1]=[E||E={exposure,_,_,S,_,_,_,_,contents}<-Exposure,S=:=S1],
+    [E2]=[E||E={exposure,_,_,S,_,_,_,_,contents}<-Exposure,S=:=S2],
+    [EL]=[E||E={exposure,_,_,S,_,_,_,_,model}<-Exposure,S=:=Leaf],
+    ?assertEqual(T1,element(8,E1)), ?assertEqual(T2,element(8,E2)),
+    ?assertEqual(4,length(element(3,EL))),
+    ?assert(lists:any(fun({mark,_,_,_,{relative,P,T},_,_,_})->P=:=element(2,E1) andalso T=:=T2;(_)->false end,Marks)),
+    %% A second branch keeps its own anchored occurrence path. A colocated
+    %% display/placement reference continues to produce only one occurrence.
+    m2_edit(User,{transaction,m1a_conj([{assertz,{space_member,I0,S1}},{assertz,{space_member,I0,S2}}])}),
+    {scene,_,Independent}=Read(),
+    Leaves=[E||E={exposure,_,_,S,_,_,_,_,model}<-Independent,S=:=Leaf],
+    ?assertEqual(2,length(Leaves)), ?assertEqual(2,length(lists:usort([element(2,E)||E<-Leaves]))),
+    ?assertEqual(1,length([E||E={exposure,_,_,S,_,_,_,_,contents}<-Independent,S=:=S1])),
+    %% A cycle is reported at its exact occurrence, without suppressing the
+    %% valid independent branch or recursively expanding the ancestor again.
+    m2_edit(User,{assertz,{space_member,I2,S1}}),
+    {scene,_,Cycles}=Read(), ?assertEqual(2,length([E||E={exposure,_,_,_,_,_,_,_,cycle}<-Cycles])),
+    m2_edit(User,{retract,{space_member,I2,S1}}),
+    [ContentsRecipe]=[R||R={space_exterior_recipe,contents,space_contents}<-
+        quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
+    m2_edit(User,{retract,ContentsRecipe}),
+    ?assertEqual({world_view,S0,[],unavailable},
+        m1a_read(User,{client_world_view,I0,playing,[],{0}})),
+    m2_edit(User,{assertz,ContentsRecipe}),
+    {scene,_,Independent}=Read(),
+    %% Ordinary scene reads need no ledger evidence read. The helper's last
+    %% argument is the expected read count across its three repetitions.
+    quod_outcome_result_tests:assert_unchanged_reads([Ns],Read,0),
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})).
+
+m3a_enter(User,C,Space,Revision) ->
+    [Enter]=[O||O<-m1a_read(User,{gui_operations,Space,{0}}),element(2,O)=:=enter],
+    {Result,_}=m2_create(C,element(2,Space),Enter,[]),
+    m3a_committed(Result),
+    ?assertEqual([{result,agent,maps:get(agent,C)},
+        {result,location,{placed,Space,{transform,0,0,0,0,0,0}}},{result,revision,Revision}],m1a_output(Result)).
+m3a_committed({committed,_,_}) -> ok;
+m3a_committed({failed,Blob}) ->
+    {ok,Reasons}=quod_wire_term:decode_failure_reasons(Blob),
+    io:format("Signed operation refusal: ~tp~n",[Reasons]),error({m3a_failed,Reasons});
+m3a_committed(Other) -> error({m3a_not_committed,element(1,Other)}).
 
 m2_edit(User,Goal) ->
     {Numbered,_,_}=erlog_int:term_instance(Goal,0),
@@ -629,10 +803,12 @@ m2_state(Namespaces) ->
         m2_rows(N,{admission,{'S'},{'I'},{'R'}},{space_placement,{'S'},{'I'},{'R'}})} || N<-Namespaces].
 m2_rows(Ns,Template,Goal) ->
     {ok,[#{'Rows':=Rows}],_}=quod_prolog:prove_ro(Ns,{findall,Template,Goal,{'Rows'}}),lists:sort(Rows).
-m2_create(C,Ns,{operation_view,Name,Subject,Revision,_,_,_,Control,_,_},Fields) ->
+m2_create(C,Ns,Offer,Fields) ->
+    m1a_personal(C,m2_create_goal(C,Ns,Offer,Fields)).
+m2_create_goal(C,Ns,{operation_view,Name,Subject,Revision,_,_,_,Control,_,_},Fields) ->
     Goal={gui_operation,Subject,Name,Revision,Control,Fields,{0}},
     Anchor=element(3,Subject),Exact={',',{current_ontology_identity,Ns,Anchor},Goal},
-    m1a_personal(C,case maps:get(namespace,C) of Ns->Exact; _->{'::',Ns,Exact} end).
+    case maps:get(namespace,C) of Ns->Exact; _->{'::',Ns,Exact} end.
 m2_failed_creation(C,_User,Ns,Offer,Fields,Owners) ->
     Before=m2_state(Owners),{{failed,_},_}=m2_create(C,Ns,Offer,Fields),?assertEqual(Before,m2_state(Owners)).
 m2_assert_scene(User,Space,Subject,Kind) ->
@@ -847,7 +1023,7 @@ m1a_setup_failures(User = #{reference := {agent_instance_ref, Ns, Anchor, me}}) 
         {ok,_,{normalized,{failed,AckReasons}}}=submit_lobby(User,execute,
             {setup_account,Storage,Node,Custody,{0}}),
         {ok,DecodedAck}=quod_wire_term:decode_failure_reasons(AckReasons),
-        ?assert(lists:member(injected_signup_ack_failure,DecodedAck)),
+        ?assertMatch({true,_},{lists:member(injected_signup_ack_failure,DecodedAck),DecodedAck}),
         NoChanges(),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Signup,{enrollment_receipt,SignupKey,Token,Owner}))
     after
@@ -862,7 +1038,7 @@ m1a_setup_failures(User = #{reference := {agent_instance_ref, Ns, Anchor, me}}) 
         NoChanges(),
         {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute, {assertz, Policy})
     end, [{class_permission, space, create, {check, account_space_create}},
-          {class_permission, agent, space_enter, {check, account_initial_entry}},
+          {class_permission, agent, space_enter, {check, account_agent_entry}},
           {class_permission, space, space_admit, {check, account_space_admit}}]),
     %% The shared-template pin is evidence, never a remote class alias.
     {ok, [#{'Pin' := Pin}], _} = quod_prolog:prove_ro(Ns, {space_vocabulary, <<"quod:space">>, {'Pin'}}),
@@ -1123,7 +1299,7 @@ m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, Components, PublicReader)
         false -> ok;
         Path ->
             Sources = [#{file => list_to_binary(F), sha256 => binary:encode_hex(crypto:hash(sha256, m1a_source(F)))}
-                || F <- lists:usort(GuiFiles ++ Components ++ ["common_predicates.pl", "quod_node.pl", "node_instance.pl", "quod_agent.pl", "quod_controllers.pl", "quod_user.pl", "quod_root.pl"])],
+                || F <- lists:usort(GuiFiles ++ Components ++ ["common_predicates.pl", "construction.pl", "material_policy.pl", "gui_forms.pl", "geometry_schema.pl", "quod_node.pl", "node_instance.pl", "quod_agent.pl", "quod_controllers.pl", "quod_user.pl", "quod_root.pl"])],
             Rows = [#{namespace => N, anchor => binary:encode_hex(A)} || {ontology_ref, N, A} <- Catalogue],
             Accounts = [quod_client_goal_parser:value_text(m1a_read(U, {account_setup_state, {0}})) || U <- Users],
             Profiles = [begin
@@ -1138,7 +1314,9 @@ m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, Components, PublicReader)
             Orders = #{root => [<<"quod_root.pl">>], node => [<<"quod_node.pl">>], agent => [<<"quod_agent.pl">>],
                 gui => [list_to_binary(F) || F <- GuiFiles], controllers => [<<"quod_controllers.pl">>],
                 space => [<<"quod_space.pl">>], user => [<<"quod_user.pl">>],
-                private_account => [list_to_binary(F) || F <- Components]},
+                private_account => [list_to_binary(F) || F <- Components],
+                startup_base => [<<"common_predicates.pl">>,<<"construction.pl">>,
+                    <<"material_policy.pl">>,<<"gui_forms.pl">>,<<"geometry_schema.pl">>]},
             ok = file:write_file(Path, json:encode(#{network => binary:encode_hex(Network),
                 node => quod_client_goal_parser:value_text(Node), catalogue => Rows, sources => Sources, accounts => Accounts,
                 source_order => Orders, predicate_profiles => Profiles, signed_operations=>Operations,
@@ -1774,8 +1952,8 @@ personal_lobbies_use_shared_creation_and_recovery(
                  {can_host_ontology, Owner, Node, Name, {'Anchor'}, discoverable}}),
              Goal = {physical_fixture_found, {0}},
              {Bytes, Signature} = lobby_user_request(User, execute, Goal),
-             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
-                          quod_client_goal_ingress:submit(Bytes, Signature)),
+             {ok,_,{normalized,Founded}}=quod_client_goal_ingress:submit(Bytes,Signature),
+             m3a_committed(Founded),
              ok = wait_ready(Name, 300),
              Ref = {ontology_ref, Name, quod_simplex:genesis_hash(Name)},
              ?assertEqual(Ref, lobby_user_reference(User)),

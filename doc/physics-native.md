@@ -124,14 +124,99 @@ without reading source geometry again.
 
 Explicit reusable hinged-object recipes produce owned geometry. They are deliberately
 materialized recipes, not the default semantics of admitted live instances.
-In this adapter, a live definition belongs to a different ontology with an
-explicit subscription; geometry authored in the world's own scope uses owned
-body definitions. Repositioning a live body revalidates its source geometry,
+Live definitions may use the world's own source scope or a different ontology
+with an explicit subscription. Repositioning a live body revalidates its source geometry,
 so the editor needs the corresponding source entry grants. An entity admitted
 only to an unsimulated space has no installation delegation; its definition
 can be edited without a simulated receiver consequence.
 
+## Shared-domain contents frames
+
+An ordinary space can participate in a continuous physical component without
+enabling another simulation. The root world authors
+`physics_frame_admission(World, ParentFrameRef, SpaceRef)` for each frame edge
+and `physics_component_admission(World, ParentFrameRef, EntityRef, Kind, LocalPose)`
+for bodies admitted inside a child. Direct root bodies retain
+`physics_admission/4`. The shared component's local pose comes from the source's
+unique authored transform and must satisfy that admission policy, including a
+transform staged by travel. Source entry and destination admission remain separate
+from these physical policies. Display membership supplies none of them.
+`physics_frame_allowance(World,Limit)` governs admitted frame count separately
+from the existing body/geometry budgets. Missing, ambiguous or exhausted frame
+policy refuses allocation with the named frame resource; no depth cap is built
+into the adapter.
+
+The contents source exports `frame(Transform, SelectedRecipe)` through its
+existing `physics_definition_projection/5` and exact source delegation. A frame
+revision is the digest of that authored transform and selected recipe. Shared
+frames require the same contents recipe in playing and edition views.
+An incompatible selection becomes unavailable. The root
+retains `physics_frame_member(World,SpaceRef,Assignment,Revision,Path)`; every
+path edge names the exact source, assignment and frame revision. This binding
+does not change the source's ordinary assignment, storage or owner. A solid or
+wireframe space admitted as an inert frame creates no collider or child world.
+
+One root authority, run and native world own the bodies of the component. Each
+exact entity/assignment has one body, even with independent decorative
+appearances. A child body's authored pose is `framed(Path,LocalPose)`. Local
+space transforms use integer degrees; the existing `pose/2` format uses integer
+milliradians. The runtime resolves each source edge over its retained verified
+reader and checks the root binding at every prefix. The engine adapter composes
+parent-before-child rotations and translations, then converts once to the
+existing native XYZ radians representation, with deterministic gimbal handling.
+It never adds Euler components or introduces scale. Positions retain an exact
+integer millimetre anchor plus fractional residual through native rebasing.
+Terrain's axis-aligned lattice is not a supported framed body and refuses with
+`unsupported_framed_terrain(Body)`.
+
+Unconfigured child frames explicitly inherit the root domain's gravity vector,
+timestep and units. Rotating a child frame does not rotate that domain gravity.
+Configured child simulations, including disabled profiles, are outside this
+shared-component subset and refuse delegation. Independently enabled worlds,
+body inventories, prior runs, pending activation or control selections refuse
+frame delegation. Selecting contents grants no active-simulation migration.
+Existing activation, hinge, control, rest and custody protections still fence
+frame edits and branch removal. A source representation change and dependent
+body/structure revisions commit atomically; body IDs remain stable on updates.
+
+Geometry, frame and delegation dependencies share the same resource selector
+and retained foreign readers. The selector can inspect owner-bound immutable
+identity metadata but cannot perform live queries, scope calls or writes.
+Revocation or missing verified input parks only consuming simulations. Unrelated
+changes retain native resources and controls. Required geometry, delegation and
+frame-membership/export failures are explicit results for the consuming world;
+they preserve the selector's failure reason and missing-read dependencies while
+the owner continues reconciling other worlds. A real committed repair wakes the
+affected selection through its retained dependencies. Unexpected evaluator faults
+still fail at the existing owner boundary. The signed view separately proves
+source disclosure for every visible edge and includes
+`view_frame(ViewedSpaceRef,TransformChain,BodyFrames)` alongside the selected root domain.
+Native samples, contacts and authenticated inputs use that one domain frame.
+
+A decorative occurrence in the selected domain uses `body_frame_pose(Id,Revision)`.
+`BodyFrames` contains one `body_frame(Id,Revision,PathId,TransformChain)` per
+referenced body. The occurrence applies the inverse composed source frame to
+the streamed world pose before its own parent frame. Actual placement retains
+absolute `body_pose/2`. Independent appearances share that one body stream and
+do not allocate mass, contact or control. Product rendering of this portable
+descriptor requires the corresponding client implementation.
+`TransformChain` on the viewed interior applies to absolute body poses in that
+interior. A reframed occurrence instead uses its body's source chain on the
+original domain sample, then its occurrence parent; do not apply both inverse
+chains to the same sample. Root-level source bodies use an empty source chain.
+
 ## Geometry and resource policy
+
+The pure authored-body data schema is shared framework source in
+[`geometry_schema.pl`](../priv/ontologies/geometry_schema.pl), loaded by the
+existing committed projection base. Body authoring, terrain, hinge and native
+installation callers use this one implementation. It validates supplied
+geometry and coordinate allowances without choosing a world, allocation,
+policy or admission. Mutable definitions, delegation, run/control state and
+atomic consequences remain in their existing composing ontology. These are
+ordinary interpreted base clauses, included in complete source inspection
+and governed local edits; reconstruction requires the exact base package.
+Native feasibility still checks representation, hull volume and triangle area.
 
 `Pose` is `pose(vector(X,Y,Z), rotation(Rx,Ry,Rz))`, with millimetres and
 milliradians. Rotation applies X, then Y, then Z. `vector(X,Y,Z)` authors an

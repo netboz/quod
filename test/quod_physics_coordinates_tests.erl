@@ -1,6 +1,34 @@
 -module(quod_physics_coordinates_tests).
 -include_lib("eunit/include/eunit.hrl").
 
+composed_frames_match_independent_matrix_reference_test() ->
+    Frames=[{transform,1300,-700,2900,17,43,89},{transform,-1900,1100,2300,31,67,113}],
+    Local={pose,{vector,300,500,-900},{rotation,230,470,710}},
+    {world_mm,Position,Angles}=quod_physics_frames:pose(Frames,Local),
+    {ok,Metres}=quod_physics_coordinates:local(Position,{0,0,0},100000),
+    near({1.4169198585141537,-1.3171043603401615,6.026684858429907},Metres),
+    Q=quod_physics_frames:rotation(Angles),
+    near({-0.09674393196105624,-0.9950443637077163,0.022963577295810056},
+         quod_physics_frames:rotate(Q,{1,0,0})),
+    near({0.15009013411519545,0.00822310889795426,0.9886381199009752},
+         quod_physics_frames:rotate(Q,{0,1,0})),
+    near({-0.9839276209508488,0.09909134540189937,0.1485508061117285},
+         quod_physics_frames:rotate(Q,{0,0,1})),
+    Huge=1 bsl 100,
+    Shifted=[{transform,Huge+1300,-700,2900,17,43,89}|tl(Frames)],
+    {world_mm,Large,_}=quod_physics_frames:pose(Shifted,Local),
+    ?assertEqual({ok,Metres},quod_physics_coordinates:local(Large,{Huge,0,0},100000)),
+    [begin
+        {world_mm,_,Gimbal}=quod_physics_frames:pose([{transform,0,0,0,37,Pitch,113}],{vector,0,0,0}),
+        Expected=quod_physics_frames:rotation({37*math:pi()/180,Pitch*math:pi()/180,113*math:pi()/180}),
+        Actual=quod_physics_frames:rotation(Gimbal),
+        [near(quod_physics_frames:rotate(Expected,Basis),quod_physics_frames:rotate(Actual,Basis))
+         || Basis<-[{1,0,0},{0,1,0},{0,0,1}]]
+    end || Pitch<-[90,270]].
+
+near(A,B) ->
+    ?assert(lists:all(fun({X,Y})->abs(X-Y)<1.0e-10 end,lists:zip(tuple_to_list(A),tuple_to_list(B)))).
+
 large_signed_origins_preserve_exact_world_positions_test() ->
     lists:foreach(fun(Sign) ->
         Huge = Sign*((1 bsl 100)+12345),

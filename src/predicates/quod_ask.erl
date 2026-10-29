@@ -171,12 +171,17 @@ bind_answer(GoalTerm, Sol, Bs, Vn) ->
           end
       end).
 
--ifdef(TEST).
-test_bind_answer(Goal, Answer) ->
-    case bind_answer(Goal, Answer, erlog_int:new_bindings(), 0) of
+bind_answer(Goal, Answer) ->
+    Vn = lists:foldl(fun({Name, _}, Next) when is_integer(Name) -> max(Next, Name + 1);
+                       (_, Next) -> Next
+                    end, 0, erlog:vars_in(Goal)),
+    case bind_answer(Goal, Answer, erlog_int:new_bindings(), Vn) of
         {ok, Bs, _Vn} -> {ok, Bs};
         {error, _} = Error -> Error
     end.
+
+-ifdef(TEST).
+test_bind_answer(Goal, Answer) -> bind_answer(Goal, Answer).
 -endif.
 
 %% Rename every variable (a 1-tuple in erlog) in a target solution term to a fresh local
@@ -284,7 +289,11 @@ native_scope_once(Scope,Goal,Chain) ->
         {ok,Invocation} ->
             try
                 case advance_scope_invocation(Invocation) of
-                    {ok,{solution,1,Answer,false,false}} -> {ok,Answer};
+                    {ok,{solution,1,Answer,false,false}} ->
+                        case bind_answer(Goal,Answer) of
+                            {ok,Bindings} -> {ok,erlog_int:dderef(Goal,Bindings)};
+                            {error,_} = Error -> Error
+                        end;
                     {ok,{complete,1,Reasons,false}} -> {fail,Reasons};
                     {ok,{error,Reason,_}} -> {error,Reason};
                     {ok,{error,Reason}} -> {error,Reason};

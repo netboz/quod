@@ -138,8 +138,14 @@ assumption. Repeated local checkpoints/restores therefore make no controller
 round trips; real foreign changes retain the existing materialize/restore path.
 An allocation reply cannot reinstate a token invalidated during its wait.
 Participant and dependency vectors preserve every exact identity; canonical
-ordering, uniqueness and complete message bounds still apply. Invocation
-transcripts record every call before execution and share the complete sealed
+ordering, uniqueness and complete message bounds still apply. Computed answers retain callable structure and new variable bindings. Known
+ground arguments are represented by distinct fresh variables and recovered by
+unification with the caller's retained invocation; replies do not echo input
+payloads. Output variables retain their resolved values and aliases, including
+unbound aliases. The existing wire alphabet, answer byte bound, sequence and
+backtracking semantics are unchanged. The synchronous native adapter uses the
+same unifier to return its fully resolved retained call. Invocation
+transcripts record every exact call before execution and share the complete sealed
 plan's encoding bound, rather than an independent component allowance.
 
 Foreign-history verification no longer borrows a proof worker's heap allowance.

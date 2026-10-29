@@ -1,0 +1,28 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/home/yan/src/quod_worktrees/pearl-stone",
+    "-w",
+    "/home/yan/src/quod_worktrees/pearl-stone",
+    "--entrypoint",
+    "/usr/bin/env",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "python3",
+    "doc/evidence/godot-m3a-20261028/retain-target.py",
+    "gates02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T18:07:41Z",
+  "elapsed_seconds": 20.7122483253479,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3a-8d55a3f3/private/logs/retention05-gates02.log",
+  "raw_sha256": "2c1eeab049d60713c04c7807e087ab97023453ed07eef9d93078c297c456ff71",
+  "sanitized_sha256": "2c1eeab049d60713c04c7807e087ab97023453ed07eef9d93078c297c456ff71",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

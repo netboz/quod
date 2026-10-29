@@ -836,9 +836,7 @@ t_cut_follow_dedup_does_not_cross_invocations(
                             empty_selection()),
         assert_scope_reply(Handle, FirstOpen, {opened, First}),
         {ok, FirstNext} = quod_scope_session:invoke_next(Handle, First, 1),
-        ?assertEqual(
-           {solution, 1, Follow, false, false},
-           receive_scope_reply(Handle, FirstNext)),
+        assert_scope_solution(Handle, FirstNext, 1, Follow, #{}),
 
         {ok, SecondOpen} = quod_scope_session:invoke_open(
                              Handle, Second, Follow, Chain,
@@ -846,9 +844,7 @@ t_cut_follow_dedup_does_not_cross_invocations(
         assert_scope_reply(Handle, SecondOpen, {opened, Second}),
         {ok, SecondNext} = quod_scope_session:invoke_next(
                              Handle, Second, 1),
-        ?assertEqual(
-           {solution, 1, Follow, false, false},
-           receive_scope_reply(Handle, SecondNext))
+        assert_scope_solution(Handle, SecondNext, 1, Follow, #{})
     after
         ok = quod_scope_session:invoke_cancel(Handle, First),
         ok = quod_scope_session:invoke_cancel(Handle, Second),
@@ -1152,8 +1148,7 @@ t_scope_session_binding(#{animals := A}) ->
                      receive_scope_reply(Handle, WrongSeqRef)),
         {ok, NextRef} = quod_scope_session:invoke_next(
                           Handle, InvocationId, 1),
-        ?assertMatch({solution, 1, {diet, cat, fish}, false, false},
-                     receive_scope_reply(Handle, NextRef)),
+        assert_scope_solution(Handle, NextRef, 1, Goal, #{'D' => fish}),
         ok = quod_scope_session:invoke_cancel(Handle, InvocationId),
         ?assertEqual(Height,quod_prolog:applied(A)),
         ?assertMatch({ok,[_],_},prove(A,{assertz,{scope_height_advanced,true}})),
@@ -1286,6 +1281,13 @@ assert_scope_reply(
   Handle,
   RequestRef, Expected) ->
     ?assertEqual(Expected, receive_scope_reply(Handle, RequestRef)).
+
+assert_scope_solution(Handle, Ref, Sequence, Goal, Expected) ->
+    {solution, Sequence, Answer, false, false} = receive_scope_reply(Handle, Ref),
+    {ok, Bindings} = quod_ask:test_bind_answer(Goal, Answer),
+    maps:foreach(fun(Name, Value) ->
+        ?assertEqual(Value, erlog_int:dderef({Name}, Bindings))
+    end, Expected).
 
 assert_no_scope_reply(Pid, ProofId, SessionRef) ->
     receive
@@ -1475,16 +1477,14 @@ t_frozen_scope_view(#{animals := A, pets := P}) ->
         assert_scope_reply(Handle, OpenRef, {opened, InvocationId}),
         {ok, FirstRef} = quod_scope_session:invoke_next(
                            Handle, InvocationId, 1),
-        ?assertMatch(
-           {solution, 1, {diet, dog, kibble}, false, false},
-           receive_scope_reply(Handle, FirstRef)),
+        assert_scope_solution(Handle, FirstRef, 1,
+                              {diet, dog, {'D'}}, #{'D' => kibble}),
         ?assertMatch({ok, [_], _},
                      prove(A, {assertz, {diet, dog, tofu}})),
         {ok, SecondRef} = quod_scope_session:invoke_next(
                             Handle, InvocationId, 2),
-        ?assertMatch(
-           {solution, 2, {diet, dog, meat}, false, false},
-           receive_scope_reply(Handle, SecondRef)),
+        assert_scope_solution(Handle, SecondRef, 2,
+                              {diet, dog, {'D'}}, #{'D' => meat}),
         {ok, CompleteRef} = quod_scope_session:invoke_next(
                               Handle, InvocationId, 3),
         ?assertMatch(

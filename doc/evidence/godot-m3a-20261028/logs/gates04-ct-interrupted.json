@@ -1,0 +1,8 @@
+{
+  "explicitly_cancelled": true,
+  "child_exit": null,
+  "exit_observation": "The outer interrupt killed run.py before it observed the Docker child. The separately stopped disposable container is not a qualified CT result.",
+  "raw_sha256": "93de921d0e55fa987c4ebd226818f699089f6f1dd44a6b9a4b50e5f4b42ada09",
+  "sanitized_sha256": "93de921d0e55fa987c4ebd226818f699089f6f1dd44a6b9a4b50e5f4b42ada09",
+  "private_raw_log": "/tmp/quod-m3a-8d55a3f3/private/logs/gates04-ct.log"
+}

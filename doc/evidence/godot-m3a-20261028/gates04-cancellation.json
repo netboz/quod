@@ -1,0 +1,8 @@
+{
+  "campaign_pid": 61804,
+  "signal": "SIGINT",
+  "stopped_owned_containers": [
+    "quod-m3a-gates04-ct"
+  ],
+  "reason": "Explicit stop after diagnosed GUI failures. Erlang SIGTERM exited0 despite incomplete failed EUnit; zero is the actual child status, not a semantic pass. Preserve any partial later gate attempt separately."
+}

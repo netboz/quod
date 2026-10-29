@@ -371,14 +371,15 @@ with_personal(Fun, Additional) ->
         [{instance_of, human_user, me}, {agent_key, me, HumanKey, active}]).
 
 personal_fixture_sources(Sources, Additional) ->
-    case lists:any(fun({class_permission,space,create,_}) -> true; (_) -> false end,Additional) of
-        false -> Sources;
-        true -> [Clause || Clause <- Sources, not lists:member(Clause,
-            [{class_permission,space,create,{check,account_space_create}},
-             {class_permission,space,space_admit,{check,account_space_admit}},
-             {class_permission,space,space_enter,{check,account_new_space_entry}},
-             {class_permission,agent,space_enter,{check,account_initial_entry}}])]
-    end.
+    %% A fixture's explicit class/operation policy replaces that same key in
+    %% the reusable account source. Predicate names inside grants may evolve.
+    Overrides = [{Class, Operation} || {class_permission, Class, Operation, _} <- Additional],
+    [Clause || Clause <- Sources,
+        case Clause of
+            {class_permission, Class, Operation, _} ->
+                not lists:member({Class, Operation}, Overrides);
+            _ -> true
+        end].
 
 exercise(Ctx = #{namespace := Ns, human := Human, agent := Agent}) ->
     %% A source-side target action admits only A, never a U request routed

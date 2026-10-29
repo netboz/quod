@@ -1,0 +1,15 @@
+#{operations => 888,invalid_heads => [],invalid_wire_heads => [],
+  invalid_nested_heads => [],diff_bytes => 456188,
+  file_bytes =>
+      [{"quod_space.pl",80249},
+       {"agent_instance.pl",26571},
+       {"quod_physics.pl",156985},
+       {"lobby_instance.pl",23655},
+       {"voxel_world.pl",31900},
+       {"voxel_world_view.pl",5681},
+       {"gui_instance.pl",77218},
+       {"voxel_world_gui.pl",27001},
+       {"lobby_worlds.pl",26968}],
+  unique_operations => 888,unique_bytes => 456188,
+  payload_size => {ok,456357},
+  transaction_encoding => {ok,456321}}

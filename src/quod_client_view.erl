@@ -468,13 +468,14 @@ view_receiver(gui_hud, S = #{source := Ns,namespace := Ns,source_anchor := Ancho
 view_receiver(gui_hud,_) -> {error,invalid_receiver_identity};
 view_receiver(_,S) -> {ok,#{},S}.
 
-open_selection({simulation_view,World = {world_ref,Ns,Anchor,Instance},Authority,
-                Epoch,Generation,Token,Structure,Control},Marks,Digest,Height,Expiry,S)
+open_selection({simulation_view,World = {world_ref,_,_,_},Authority,
+                Epoch,Generation,Token,Structure,Control,
+                ViewFrame = {view_frame,{entity_ref,Ns,Anchor,Instance},Frames,BodyFrames}},Marks,Digest,Height,Expiry,S)
   when Ns =:= map_get(namespace,S), Anchor =:= map_get(anchor,S),
-       Instance =:= map_get(instance,S) ->
+       Instance =:= map_get(instance,S), is_list(Frames), is_list(BodyFrames) ->
             Expected = #{fence => {World, Authority, Epoch, Generation},
                          structure => Structure, incarnation => Token,control => Control,
-                         terrain => terrain_bindings(Marks)},
+                         terrain => terrain_bindings(Marks),view_frame => ViewFrame},
             case quod_reg:where({physics_world, World}) of
                 Pid when is_pid(Pid) ->
                     attach(Pid, Expected, Marks, Digest, Height, Expiry, S);
@@ -515,6 +516,7 @@ attach_current(Pid,Expected,Marks,Digest,Height,Expiry,S) ->
                             reply(#{type => projection,selection => active,view => View, height => decimal(Height),expires_ms => decimal(Expiry),
                                     marks => quod_client_goal_parser:value_text(Marks),
                                     control => quod_client_goal_parser:value_text(maps:get(control,Expected)),
+                                    view_frame => quod_client_goal_parser:value_text(maps:get(view_frame,Expected)),
                                     frame => frame_json(Frame, Bodies, maps:get(control,Expected))}, Next);
                         false -> reply(#{type => unavailable,reason => expired},release(Watched))
                     end;
@@ -577,6 +579,7 @@ terrain_bindings(Marks) ->
 
 mark_body({relative, _, Pose}, Depicts) -> mark_body(Pose, Depicts);
 mark_body({body_pose, Id, R}, {depicts, _, <<_:256>>, _}) -> {Id, R};
+mark_body({body_frame_pose, Id, R}, {depicts, _, <<_:256>>, _}) -> {Id, R};
 mark_body({transform, _, _, _, _, _, _}, _) -> none.
 
 websocket_info({quod_gui_request, From,

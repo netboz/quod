@@ -296,6 +296,9 @@ signed_result(C,Goal) ->
     quod_personal_agent_tests:instruct(C,submit,Instruction).
 signed(C,Goal) ->
     Result = signed_result(C,Goal),
+    case Result of {ok,_,{normalized,{failed,Reasons}}}->
+        {ok,Decoded}=quod_wire_term:decode_failure_reasons(Reasons),
+        io:format("Creation fixture refusal: ~tp~n",[Decoded]); _->ok end,
     ?assertMatch({ok,_,{normalized,{committed,_,_}}},Result),
     {ok,Evidence,_} = Result,
     Op = quod_client_goal:operation_ref(Evidence),

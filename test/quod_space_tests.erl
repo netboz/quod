@@ -2,6 +2,49 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([await_runtime/1]).
 
+ordinary_travel_atomic_test_() ->
+    {timeout,90,fun() -> with_spaces(fun(C) ->
+        #{namespace:=Owner,a:=A,b:=B,subject:=Subject}=C,
+        ARef=ref(A,catalogue), BRef=ref(B,catalogue),
+        Pose={transform,137,-211,359,17,43,89},
+        committed(Owner,{space_place,artifact,0,ARef}),
+        [Receiver={':-',Head,Body}]=[R||R={':-',{space_accept_placement,_,_,_},_}<-
+            quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
+        Broken={':-',Head,{',',Body,{fail_with_reason,after_foreign_travel_ack}}},
+        RemoveReceiver={retract,{':-',{space_accept_placement,{'_'},{'_'},{'_'}},{'_'}}},
+        edit(B,{',',RemoveReceiver,{assertz,Broken}}),
+        denied(Owner,{space_travel,artifact,1,ARef,{placed,BRef,Pose},3}),
+        holds(Owner,{space_assignment,artifact,1,ARef}),
+        holds(A,{space_placement,catalogue,Subject,1}),
+        fails(B,{space_placement,catalogue,Subject,{'_'}}),
+        holds(Owner,{attribute,artifact,transform,{transform,0,0,0,0,0,0}}),
+        edit(B,{',',RemoveReceiver,{assertz,Receiver}}),
+        %% A failed final receiver consequence restores every owner and pose.
+        denied(Owner,{transaction,{',',
+            {space_travel,artifact,1,ARef,{placed,BRef,Pose},3},
+            {fail_with_reason,after_travel_ack}}},after_travel_ack),
+        holds(Owner,{space_assignment,artifact,1,ARef}),
+        holds(A,{space_placement,catalogue,Subject,1}),
+        fails(B,{space_placement,catalogue,Subject,{'_'}}),
+        holds(Owner,{attribute,artifact,transform,{transform,0,0,0,0,0,0}}),
+        denied(Owner,{space_travel,artifact,0,ARef,{placed,BRef,Pose},3},
+               {space_revision_conflict,artifact,1}),
+        denied(Owner,{space_travel,artifact,1,BRef,{placed,ARef,Pose},3},
+               {space_destination_conflict,artifact}),
+        {Bytes,Sig,_}=committed(Owner,{space_travel,artifact,1,ARef,{placed,BRef,Pose},3}),
+        holds(Owner,{space_location,artifact,{placed,BRef,Pose}}),
+        fails(A,{space_placement,catalogue,Subject,{'_'}}),
+        holds(B,{space_placement,catalogue,Subject,3}),
+        committed(Owner,{space_travel,artifact,3,BRef,unplaced,4}),
+        holds(Owner,{space_location,artifact,unplaced}),
+        fails(B,{space_placement,catalogue,Subject,{'_'}}),
+        restart(C,Owner), restart(C,A), restart(C,B),
+        holds(Owner,{space_assignment,artifact,4,none}),
+        ?assertMatch({ok,_,{operation_outcome,_,#{status:=committed}}},
+                     quod_client_goal_ingress:resolve_operation(Bytes,Sig)),
+        no_simulation([Owner,A,B])
+    end,[{attribute,artifact,transform,{transform,0,0,0,0,0,0}}]) end}.
+
 space_semantics_and_recovery_test_() ->
     {timeout, 90, fun() -> with_spaces(fun(C) ->
         #{namespace := Owner, a := A, b := B, subject := Subject} = C,
@@ -14,6 +57,8 @@ space_semantics_and_recovery_test_() ->
         fails(A, {instance_of, space, gallery}),
         holds(A, {space_instance, gallery, space}),
         holds(A, {space_instance, catalogue, space}),
+        ?assertMatch({ok,[#{'Spaces':=[catalogue,closed,gallery]}],_},quod_prolog:prove_ro(A,
+            {findall,{'S'},{space_instance,{'S'},space},{'Spaces'}})),
         fails(A, {space_instance, catalogue, physical_space}),
         no_simulation([Owner, A, B]),
         edit(Owner, {assertz, {space_assignment_state, artifact, 7, none}}),
@@ -537,12 +582,15 @@ ordinary_placement_and_shared_display_projection_test_() ->
 assert_manuscript_projection(Socket, {entity_ref, Ns, Anchor, Entity}, Title) ->
     Projection = quod_physics_tests:simulation_reply(Socket, <<"projection">>),
     ?assertEqual(<<"nonphysical">>, maps:get(<<"selection">>, Projection)),
+    [Root,Child]=projection_marks(Projection), Id=element(2,Root),
+    ?assertEqual(64,byte_size(Id)),
+    ChildId = <<Id/binary,"/title">>,
     ?assertMatch([
-        {mark, <<"manuscript">>, <<"group">>, [], {transform,100,200,300,0,45,0},
+        {mark, Id, <<"group">>, [], {transform,100,200,300,0,45,0},
          no_surface, unlabelled, {depicts, Ns, Anchor, Entity}},
-        {mark, <<"manuscript/title">>, <<"group">>, [],
-         {relative, <<"manuscript">>, {transform,0,0,0,0,0,0}},
-         no_surface, {label, Title, <<"above">>}, depicts_nothing}], projection_marks(Projection)).
+        {mark, ChildId, <<"group">>, [],
+         {relative, Id, {transform,0,0,0,0,0,0}},
+         no_surface, {label, Title, <<"above">>}, depicts_nothing}], [Root,Child]).
 
 projection_marks(Projection) ->
     {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(
@@ -551,15 +599,14 @@ projection_marks(Projection) ->
 
 physical_placement_requires_its_body_pose_test_() ->
     {timeout, 60, fun() -> with_spaces(fun(#{namespace := Owner, a := A, subject := Subject}) ->
-        Layout = {transform, 100, 200, 300, 0, 0, 0},
         committed(Owner, {space_place, artifact, 0, ref(A, gallery)}),
-        Pose = {space_entity_pose, gallery, Subject, Layout, {'_'}},
+        Pose = {space_subject_binding, gallery, Subject, {'_'}},
         fails(A, Pose),
         Binding = {physics_body_definition, gallery, 42, 3, fixed, {vector,0,0,0},
                    {live, Subject, 1, 1, <<0:256>>}},
         edit(A, {assertz, Binding}),
-        holds(A, {space_entity_pose, gallery, Subject, Layout, {body_pose,42,3}}),
-        fails(A, {space_entity_pose, gallery, Subject, Layout, Layout}),
+        holds(A, {space_subject_binding, gallery, Subject, {body_pose,42,3}}),
+        fails(A, {space_subject_binding, gallery, Subject, {transform,100,200,300,0,0,0}}),
         Duplicate = setelement(3, Binding, 43), edit(A, {assertz, Duplicate}),
         fails(A, Pose),
         edit(A, {retract, Duplicate}), edit(A, {retract, Binding}),

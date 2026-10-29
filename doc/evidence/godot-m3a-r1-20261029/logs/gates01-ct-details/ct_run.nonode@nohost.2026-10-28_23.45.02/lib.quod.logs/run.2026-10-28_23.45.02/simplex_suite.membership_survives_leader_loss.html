@@ -1,0 +1,730 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test simplex_SUITE:membership_survives_leader_loss result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery-migrate.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="simplex_suite.src.html#membership_survives_leader_loss-1">simplex_SUITE:membership_survives_leader_loss/1</a> (click for source code)
+
+=== Config value:
+
+    [{nodes,
+         [{&lt;0.10032.0&gt;,
+           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+          {&lt;0.10033.0&gt;,
+           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+          {&lt;0.10034.0&gt;,
+           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+          {&lt;0.10035.0&gt;,
+           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;}]},
+     {identities,
+         #{&lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;}}},
+     {watchdog,&lt;0.10031.0&gt;},
+     {tc_logfile,
+         "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_23.45.02/lib.quod.logs/run.2026-10-28_23.45.02/simplex_suite.membership_survives_leader_loss.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/work/_build/test/lib/quod/test/simplex_SUITE_data/"},
+     {priv_dir,
+         "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_23.45.02/lib.quod.logs/run.2026-10-28_23.45.02/log_private/"}]
+
+=== Current directory is "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_23.45.02"
+
+=== Started at 2026-10-28 23:53:03
+
+<br />
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:04.450234 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:04.450369 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 28-Oct-2026::23:53:04.450540 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:05.562468 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:05.562601 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 28-Oct-2026::23:53:05.562804 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:06.672253 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:06.672385 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 28-Oct-2026::23:53:06.672575 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:07.800537 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::23:53:07.800676 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 28-Oct-2026::23:53:07.800859 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+
+</pre>
+<div class="default"><pre><b>*** User 2026-10-28 23:53:16.129 ***</b><a id=e-52 class="link-to-entry" href="#e-52">&#x1f517;</a>
+membership leader-loss result {ok,[#{}],2}, survivor progress [{<<REDACTED_32_BYTE_BINARY>>,
+                                                                #{ingress_forwarded =>
+                                                                      1,
+                                                                  batched_txs =>
+                                                                      0,
+                                                                  r_redirect =>
+                                                                      0,
+                                                                  head_complaint_votes =>
+                                                                      0,
+                                                                  requested_slot =>
+                                                                      0,
+                                                                  ahead_gap =>
+                                                                      0,
+                                                                  owner_current =>
+                                                                      #{dtx_control =>
+                                                                            #{blocked =>
+                                                                                  0,
+                                                                              ready =>
+                                                                                  0,
+                                                                              retained =>
+                                                                                  0,
+                                                                              waiters =>
+                                                                                  0},
+                                                                        dtx_endpoint =>
+                                                                            #{inbound =>
+                                                                                  0,
+                                                                              outbound =>
+                                                                                  0}},
+                                                                  r_bad => 0,
+                                                                  proposals =>
+                                                                      0,
+                                                                  custody_bytes =>
+                                                                      0,
+                                                                  head_commit_votes =>
+                                                                      0,
+                                                                  custody_depth =>
+                                                                      0,
+                                                                  missing_certified_blocks =>
+                                                                      0,
+                                                                  head_complaint_signed =>
+                                                                      0,
+                                                                  protocol_view =>
+                                                                      1,
+                                                                  pipeline_gap =>
+                                                                      0,
+                                                                  prolog_ready =>
+                                                                      true,
+                                                                  dtx_admission_dormant =>
+                                                                      0,
+                                                                  r_stale => 0,
+                                                                  ingress_overflow =>
+                                                                      0,
+                                                                  owner_bytes_peak =>
+                                                                      #{dtx_control =>
+                                                                            0},
+                                                                  custody_ready =>
+                                                                      0,
+                                                                  ingress_queued =>
+                                                                      0,
+                                                                  submitted =>
+                                                                      1,
+                                                                  ingress_expired =>
+                                                                      0,
+                                                                  ingress_retargets =>
+                                                                      1,
+                                                                  progress_timeouts =>
+                                                                      2,
+                                                                  syncing => 0,
+                                                                  r_busy => 0,
+                                                                  membership_rejects =>
+                                                                      0,
+                                                                  progress_slot =>
+                                                                      0,
+                                                                  last_applied =>
+                                                                      2,
+                                                                  commits => 1,
+                                                                  relay_accepted =>
+                                                                      1,
+                                                                  dtx_admission_waiting =>
+                                                                      0,
+                                                                  batch_window_ms =>
+                                                                      25,
+                                                                  slot => 2,
+                                                                  redrives =>
+                                                                      0,
+                                                                  owner_bytes_current =>
+                                                                      #{dtx_control =>
+                                                                            0},
+                                                                  owner_peak =>
+                                                                      #{dtx_control =>
+                                                                            #{blocked =>
+                                                                                  0,
+                                                                              ready =>
+                                                                                  0,
+                                                                              retained =>
+                                                                                  0,
+                                                                              waiters =>
+                                                                                  0},
+                                                                        dtx_endpoint =>
+                                                                            #{inbound =>
+                                                                                  0,
+                                                                              outbound =>
+                                                                                  0}},
+                                                                  head_support_votes =>
+                                                                      0,
+                                                                  appends => 0,
+                                                                  progress_phase_code =>
+                                                                      0,
+                                                                  committee_size =>
+                                                                      3,
+                                                                  is_validator =>
+                                                                      1,
+                                                                  pending => 0,
+                                                                  committed =>
+                                                                      2,
+                                                                  relay_duplicates =>
+                                                                      0}},
+                                                               {<<REDACTED_32_BYTE_BINARY>>,
+                                                                #{ingress_forwarded =>
+                                                                      0,
+                                                                  batched_txs =>
+                                                                      0,
+                                                                  r_redirect =>
+                                                                      0,
+                                                                  head_complaint_votes =>
+                                                                      0,
+                                                                  requested_slot =>
+                                                                      0,
+                                                                  ahead_gap =>
+                                                                      0,
+                                                                  owner_current =>
+                                                                      #{dtx_control =>
+                                                                            #{blocked =>
+                                                                                  0,
+                                                                              ready =>
+                                                                                  0,
+                                                                              retained =>
+                                                                                  0,
+                                                                              waiters =>
+                                                                                  0},
+                                                                        dtx_endpoint =>
+                                                                            #{inbound =>
+                                                                                  0,
+                                                                              outbound =>
+                                                                                  0}},
+                                                                  r_bad => 0,
+                                                                  proposals =>
+                                                                      0,
+                                                                  custody_bytes =>
+                                                                      0,
+                                                                  head_commit_votes =>
+                                                                      0,
+                                                                  custody_depth =>
+                                                                      0,
+                                                                  missing_certified_blocks =>
+                                                                      0,
+                                                                  head_complaint_signed =>
+                                                                      0,
+                                                                  protocol_view =>
+                                                                      1,
+                                                                  pipeline_gap =>
+                                                                      0,
+                                                                  prolog_ready =>
+                                                                      true,
+                                                                  dtx_admission_dormant =>
+                                                                      0,
+                                                                  r_stale => 0,
+                                                                  ingress_overflow =>
+                                                                      0,
+                                                                  owner_bytes_peak =>
+                                                                      #{dtx_control =>
+                                                                            0},
+                                                                  custody_ready =>
+                                                                      0,
+                                                                  ingress_queued =>
+                                                                      0,
+                                                                  submitted =>
+                                                                      0,
+                                                                  ingress_expired =>
+                                                                      0,
+                                                                  ingress_retargets =>
+                                                                      0,
+                                                                  progress_timeouts =>
+                                                                      1,
+                                                                  syncing => 0,
+                                                                  r_busy => 0,
+                                                                  membership_rejects =>
+                                                                      0,
+                                                                  progress_slot =>
+                                                                      0,
+                                                                  last_applied =>
+                                                                      2,
+                                                                  commits => 1,
+                                                                  relay_accepted =>
+                                                                      0,
+                                                                  dtx_admission_waiting =>
+                                                                      0,
+                                                                  batch_window_ms =>
+                                                                      25,
+                                                                  slot => 2,
+                                                                  redrives =>
+                                                                      0,
+                                                                  owner_bytes_current =>
+                                                                      #{dtx_control =>
+                                                                            0},
+                                                                  owner_peak =>
+                                                                      #{dtx_control =>
+                                                                            #{blocked =>
+                                                                                  0,
+                                                                              ready =>
+                                                                                  0,
+                                                                              retained =>
+                                                                                  0,
+                                                                              waiters =>
+                                                                                  0},
+                                                                        dtx_endpoint =>
+                                                                            #{inbound =>
+                                                                                  0,
+                                                                              outbound =>
+                                                                                  0}},
+                                                                  head_support_votes =>
+                                                                      0,
+                                                                  appends => 0,
+                                                                  progress_phase_code =>
+                                                                      0,
+                                                                  committee_size =>
+                                                                      3,
+                                                                  is_validator =>
+                                                                      1,
+                                                                  pending => 0,
+                                                                  committed =>
+                                                                      2,
+                                                                  relay_duplicates =>
+                                                                      0}},
+                                                               {<<REDACTED_32_BYTE_BINARY>>,
+                                                                #{ingress_forwarded =>
+                                                                      0,
+                                                                  batched_txs =>
+                                                                      1,
+                                                                  r_redirect =>
+                                                                      0,
+                                                                  head_complaint_votes =>
+                                                                      0,
+                                                                  requested_slot =>
+                                                                      0,
+                                                                  ahead_gap =>
+                                                                      0,
+                                                                  owner_current =>
+                                                                      #{dtx_control =>
+                                                                            #{blocked =>
+                                                                                  0,
+                                                                              ready =>
+                                                                                  0,
+                                                                              retained =>
+                                                                                  0,
+                                                                              waiters =>
+                                                                                  0},
+                                                                        dtx_endpoint =>
+                                                                            #{inbound =>
+                                                                                  0,
+                                                                              outbound =>
+                                                                                  0}},
+                                                                  r_bad => 0,
+                                                                  proposals =>
+                                                                      1,
+                                                                  custody_bytes =>
+                                                                      0,
+                                                                  head_commit_votes =>
+                                                                      0,
+                                                                  custody_depth =>
+                                                                      0,
+                                                                  missing_certified_blocks =>
+                                                                      0,
+                                                                  head_complaint_signed =>
+                                                                      0,
+                                                                  protocol_view =>
+                                                                      1,
+                                                                  pipeline_gap =>
+                                                                      0,
+                                                                  prolog_ready =>
+                                                                      true,
+                                                                  dtx_admission_dormant =>
+                                                                      0,
+                                                                  r_stale => 0,
+                                                                  ingress_overflow =>
+                                                                      0,
+                                                                  owner_bytes_peak =>
+                                                                      #{dtx_control =>
+                                                                            0},
+                                                                  custody_ready =>
+                                                                      0,
+                                                                  ingress_queued =>
+                                                                      0,
+                                                                  submitted =>
+                                                                      0,
+                                                                  ingress_expired =>
+                                                                      0,
+                                                                  ingress_retargets =>
+                                                                      0,
+                                                                  progress_timeouts =>
+                                                                      1,
+                                                                  syncing => 0,
+                                                                  r_busy => 0,
+                                                                  membership_rejects =>
+                                                                      0,
+                                                                  progress_slot =>
+                                                                      0,
+                                                                  last_applied =>
+                                                                      2,
+                                                                  commits => 1,
+                                                                  relay_accepted =>
+                                                                      0,
+                                                                  dtx_admission_waiting =>
+                                                                      0,
+                                                                  batch_window_ms =>
+                                                                      25,
+                                                                  slot => 2,
+                                                                  redrives =>
+                                                                      0,
+                                                                  owner_bytes_current =>
+                                                                      #{dtx_control =>
+                                                                            0},
+                                                                  owner_peak =>
+                                                                      #{dtx_control =>
+                                                                            #{blocked =>
+                                                                                  0,
+                                                                              ready =>
+                                                                                  0,
+                                                                              retained =>
+                                                                                  0,
+                                                                              waiters =>
+                                                                                  0},
+                                                                        dtx_endpoint =>
+                                                                            #{inbound =>
+                                                                                  0,
+                                                                              outbound =>
+                                                                                  0}},
+                                                                  head_support_votes =>
+                                                                      0,
+                                                                  appends => 1,
+                                                                  progress_phase_code =>
+                                                                      0,
+                                                                  committee_size =>
+                                                                      3,
+                                                                  is_validator =>
+                                                                      1,
+                                                                  pending => 0,
+                                                                  committed =>
+                                                                      2,
+                                                                  relay_duplicates =>
+                                                                      0}}]
+</pre></div>
+<pre>
+<a name="end"></a>
+
+
+=== Ended at 2026-10-28 23:53:16
+=== successfully completed test case
+=== === Returned value: [ok,ok,ok]
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Oct 28 2026 23:53:03<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

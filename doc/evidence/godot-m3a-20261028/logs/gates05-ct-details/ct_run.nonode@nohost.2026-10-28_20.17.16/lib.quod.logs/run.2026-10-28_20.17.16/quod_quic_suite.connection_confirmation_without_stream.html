@@ -1,0 +1,419 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_quic_SUITE:connection_confirmation_without_stream result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery-migrate.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_quic_suite.src.html#connection_confirmation_without_stream-1">quod_quic_SUITE:connection_confirmation_without_stream/1</a> (click for source code)
+
+=== Config value:
+
+    [{cert_der,&lt;&lt;48,129,216,48,129,139,160,3,2,1,2,2,1,1,48,5,6,3,43,101,112,
+                 48,22,49,20,48,18,6,3,85,4,3,12,11,107,112,95,56,56,102,97,
+                 97,101,97,56,48,30,23,13,50,54,48,49,48,49,48,48,48,48,48,48,
+                 90,23,13,51,54,48,49,48,49,48,48,48,48,48,48,90,48,22,49,20,
+                 48,18,6,3,85,4,3,12,11,107,112,95,56,56,102,97,97,101,97,56,
+                 48,42,48,5,6,3,43,101,112,3,33,0,136,250,174,168,211,52,203,
+                 21,18,24,47,165,78,83,180,114,199,134,217,92,221,242,227,73,
+                 234,212,248,154,45,41,188,202,48,5,6,3,43,101,112,3,65,0,35,
+                 194,45,164,169,156,1,202,104,10,162,41,52,37,178,120,72,203,
+                 250,116,120,75,129,186,179,79,251,17,222,148,186,165,254,199,
+                 102,123,251,110,69,2,155,44,125,228,52,187,239,184,99,38,243,
+                 180,58,106,166,12,95,211,14,238,46,134,248,8&gt;&gt;},
+     {key_term,{'ECPrivateKey',1,
+                               &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                               {namedCurve,{1,3,101,112}},
+                               &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                               asn1_NOVALUE}},
+     {self_pubkey,&lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;},
+     {watchdog,&lt;0.9331.0&gt;},
+     {tc_logfile,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/quod_quic_suite.connection_confirmation_without_stream.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/work/_build/test/lib/quod/test/quod_quic_SUITE_data/"},
+     {priv_dir,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/"}]
+
+=== Current directory is "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16"
+
+=== Started at 2026-10-28 20:24:27
+
+<br />
+
+</pre>
+<div class="sasl"><pre><b>*** System report during quod_quic_SUITE:connection_confirmation_without_stream/1 2026-10-28 20:24:27.441 ***</b><a id=e-31 class="link-to-entry" href="#e-31">&#x1f517;</a>
+=WARNING REPORT==== 28-Oct-2026::20:24:27.441035 ===
+quod: dropping outbound connection to &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt; — peer identity pubkey_mismatch
+
+</pre></div>
+<pre>
+
+</pre>
+<div class="sasl"><pre><b>*** System report during quod_quic_SUITE:connection_confirmation_without_stream/1 2026-10-28 20:24:27.449 ***</b><a id=e-32 class="link-to-entry" href="#e-32">&#x1f517;</a>
+=ERROR REPORT==== 28-Oct-2026::20:24:27.442163 ===
+** State machine &lt;0.9583.0&gt; terminating
+** When server state  = {connected,
+                         {state,
+                          &lt;&lt;136,58,156,211,16,79,174,13&gt;&gt;,
+                          &lt;&lt;52,75,183,81,171,93,1,206&gt;&gt;,
+                          &lt;&lt;168,137,0,228,178,165,23,104&gt;&gt;,
+                          &lt;&lt;&gt;&gt;,false,false,0,0,[],
+                          &lt;&lt;6,0,64,192,1,0,0,188,3,3,22,9,177,97,117,205,174,
+                            29,77,130,162,253,208,152,209,47,148,183,244,63,18,
+                            191,78,163,125,173,221,188,157,231,74,125,0,0,2,19,
+                            1,1,0,0,145,0,43,0,3,2,3,4,0,10,0,4,0,2,0,29,0,13,
+                            0,10,0,8,4,3,8,4,4,1,8,7,0,51,0,38,0,36,0,29,0,32,
+                            157,59,42,4,77,85,118,205,83,101,22,47,209,124,97,
+                            164,106,40,204,251,41,53,78,50,244,192,232,158,159,
+                            8,162,122,0,16,0,7,0,5,4,113,117,111,100,0,57,0,53,
+                            3,2,69,220,14,1,2,4,4,128,12,0,0,5,4,128,8,0,0,6,4,
+                            128,8,0,0,7,4,128,8,0,0,8,2,64,100,9,2,64,100,15,8,
+                            136,58,156,211,16,79,174,13,1,2,71,208,0,45,0,2,1,1&gt;&gt;,
+                          0,undefined,undefined,client,1,#Port&lt;0.130&gt;,
+                          undefined,
+                          {socket_state,#Port&lt;0.130&gt;,gen_udp,undefined,
+                           undefined,undefined,false,false,1200,false,true,[],
+                           0,undefined,64,15,18},
+                          gen_udp,undefined,
+                          {{127,0,0,1},14599},
+                          {{0,0,0,0},53915},
+                          &lt;0.9582.0&gt;,undefined,
+                          #Ref&lt;0.3648040332.1909719042.101554&gt;,undefined,
+                          false,undefined,
+                          {{crypto_keys,
+                            &lt;&lt;74,210,227,90,63,143,178,43,230,195,71,27,3,127,
+                              1,179&gt;&gt;,
+                            &lt;&lt;105,203,145,103,64,137,182,249,208,35,28,102&gt;&gt;,
+                            &lt;&lt;218,203,39,206,70,120,29,114,102,146,80,65,63,
+                              111,74,171&gt;&gt;,
+                            aes_128_gcm},
+                           {crypto_keys,
+                            &lt;&lt;74,240,46,185,46,250,24,18,219,121,117,199,165,
+                              47,135,155&gt;&gt;,
+                            &lt;&lt;121,29,204,192,45,30,16,119,44,17,60,250&gt;&gt;,
+                            &lt;&lt;152,160,253,208,60,136,80,101,245,119,234,1,192,
+                              206,110,0&gt;&gt;,
+                            aes_128_gcm}},
+                          {{crypto_keys,
+                            &lt;&lt;54,95,188,115,108,43,137,100,253,201,163,120,132,
+                              201,119,77&gt;&gt;,
+                            &lt;&lt;144,73,87,210,10,66,132,212,201,129,207,31&gt;&gt;,
+                            &lt;&lt;84,104,23,185,137,12,94,196,221,91,84,134,88,7,
+                              64,144&gt;&gt;,
+                            aes_128_gcm},
+                           {crypto_keys,
+                            &lt;&lt;95,34,119,60,96,73,35,21,195,1,162,179,236,189,
+                              16,26&gt;&gt;,
+                            &lt;&lt;29,151,32,132,56,44,166,10,227,62,157,92&gt;&gt;,
+                            &lt;&lt;183,34,194,88,94,156,7,152,218,121,247,207,200,
+                              181,121,211&gt;&gt;,
+                            aes_128_gcm}},
+                          {{crypto_keys,
+                            &lt;&lt;32,78,175,6,43,238,182,187,199,158,50,174,68,46,
+                              130,174&gt;&gt;,
+                            &lt;&lt;71,40,186,166,43,133,139,110,101,69,219,91&gt;&gt;,
+                            &lt;&lt;29,254,89,133,232,81,133,169,163,60,226,194,61,
+                              125,117,100&gt;&gt;,
+                            aes_128_gcm},
+                           {crypto_keys,
+                            &lt;&lt;196,20,54,0,183,73,195,0,77,250,208,221,197,128,
+                              133,55&gt;&gt;,
+                            &lt;&lt;164,54,112,129,234,94,190,12,188,193,103,88&gt;&gt;,
+                            &lt;&lt;22,215,185,19,37,246,131,34,207,252,208,48,34,5,
+                              186,0&gt;&gt;,
+                            aes_128_gcm}},
+                          {key_update_state,0,
+                           {{crypto_keys,
+                             &lt;&lt;32,78,175,6,43,238,182,187,199,158,50,174,68,46,
+                               130,174&gt;&gt;,
+                             &lt;&lt;71,40,186,166,43,133,139,110,101,69,219,91&gt;&gt;,
+                             &lt;&lt;29,254,89,133,232,81,133,169,163,60,226,194,61,
+                               125,117,100&gt;&gt;,
+                             aes_128_gcm},
+                            {crypto_keys,
+                             &lt;&lt;196,20,54,0,183,73,195,0,77,250,208,221,197,128,
+                               133,55&gt;&gt;,
+                             &lt;&lt;164,54,112,129,234,94,190,12,188,193,103,88&gt;&gt;,
+                             &lt;&lt;22,215,185,19,37,246,131,34,207,252,208,48,34,5,
+                               186,0&gt;&gt;,
+                             aes_128_gcm}},
+                           undefined,
+                           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                           idle,13},
+                          handshake_complete,
+                          &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                          &lt;&lt;1,0,0,188,3,3,22,9,177,97,117,205,174,29,77,130,
+                            162,253,208,152,209,47,148,183,244,63,18,191,78,
+                            163,125,173,221,188,157,231,74,125,0,0,2,19,1,1,0,
+                            0,145,0,43,0,3,2,3,4,0,10,0,4,0,2,0,29,0,13,0,10,0,
+                            8,4,3,8,4,4,1,8,7,0,51,0,38,0,36,0,29,0,32,157,59,
+                            42,4,77,85,118,205,83,101,22,47,209,124,97,164,106,
+                            40,204,251,41,53,78,50,244,192,232,158,159,8,162,
+                            122,0,16,0,7,0,5,4,113,117,111,100,0,57,0,53,3,2,
+                            69,220,14,1,2,4,4,128,12,0,0,5,4,128,8,0,0,6,4,128,
+                            8,0,0,7,4,128,8,0,0,8,2,64,100,9,2,64,100,15,8,136,
+                            58,156,211,16,79,174,13,1,2,71,208,0,45,0,2,1,1,2,
+                            0,0,86,3,3,121,18,101,104,31,4,89,49,3,239,253,203,
+                            224,136,149,228,64,1,205,103,245,230,10,132,211,19,
+                            89,124,37,8,192,60,0,19,1,0,0,46,0,43,0,2,3,4,0,51,
+                            0,36,0,29,0,32,72,208,122,75,88,73,18,57,234,192,
+                            140,114,98,4,167,192,144,179,103,140,198,3,179,23,
+                            162,73,109,35,149,211,194,29,8,0,0,80,0,78,0,16,0,
+                            7,0,5,4,113,117,111,100,0,57,0,63,0,8,168,137,0,
+                            228,178,165,23,104,3,2,69,220,14,1,2,4,4,128,12,0,
+                            0,5,4,128,8,0,0,6,4,128,8,0,0,7,4,128,8,0,0,8,2,64,
+                            100,9,2,64,100,15,8,52,75,183,81,171,93,1,206,1,2,
+                            71,208,13,0,0,17,0,0,14,0,13,0,10,0,8,4,3,8,4,4,1,
+                            8,7,11,0,0,228,0,0,0,224,0,0,219,48,129,216,48,129,
+                            139,160,3,2,1,2,2,1,1,48,5,6,3,43,101,112,48,22,49,
+                            20,48,18,6,3,85,4,3,12,11,107,112,95,56,56,102,97,
+                            97,101,97,56,48,30,23,13,50,54,48,49,48,49,48,48,
+                            48,48,48,48,90,23,13,51,54,48,49,48,49,48,48,48,48,
+                            48,48,90,48,22,49,20,48,18,6,3,85,4,3,12,11,107,
+                            112,95,56,56,102,97,97,101,97,56,48,42,48,5,6,3,43,
+                            101,112,3,33,0,136,250,174,168,211,52,203,21,18,24,
+                            47,165,78,83,180,114,199,134,217,92,221,242,227,73,
+                            234,212,248,154,45,41,188,202,48,5,6,3,43,101,112,
+                            3,65,0,35,194,45,164,169,156,1,202,104,10,162,41,
+                            52,37,178,120,72,203,250,116,120,75,129,186,179,79,
+                            251,17,222,148,186,165,254,199,102,123,251,110,69,
+                            2,155,44,125,228,52,187,239,184,99,38,243,180,58,
+                            106,166,12,95,211,14,238,46,134,248,8,0,0,15,0,0,
+                            68,8,7,0,64,25,176,8,50,158,240,249,70,81,65,39,
+                            183,59,142,60,196,24,131,166,115,194,242,155,213,
+                            90,207,254,72,138,83,202,16,132,114,86,206,49,9,74,
+                            105,142,247,216,129,204,112,13,192,196,147,208,114,
+                            180,168,78,14,33,35,139,148,198,230,126,15,20,0,0,
+                            32,5,127,67,179,47,187,30,101,67,221,110,105,207,
+                            118,112,214,118,140,238,207,29,229,227,63,159,176,
+                            84,27,33,214,171,248,11,0,0,228,0,0,0,224,0,0,219,
+                            48,129,216,48,129,139,160,3,2,1,2,2,1,1,48,5,6,3,
+                            43,101,112,48,22,49,20,48,18,6,3,85,4,3,12,11,107,
+                            112,95,56,56,102,97,97,101,97,56,48,30,23,13,50,54,
+                            48,49,48,49,48,48,48,48,48,48,90,23,13,51,54,48,49,
+                            48,49,48,48,48,48,48,48,90,48,22,49,20,48,18,6,3,
+                            85,4,3,12,11,107,112,95,56,56,102,97,97,101,97,56,
+                            48,42,48,5,6,3,43,101,112,3,33,0,136,250,174,168,
+                            211,52,203,21,18,24,47,165,78,83,180,114,199,134,
+                            217,92,221,242,227,73,234,212,248,154,45,41,188,
+                            202,48,5,6,3,43,101,112,3,65,0,35,194,45,164,169,
+                            156,1,202,104,10,162,41,52,37,178,120,72,203,250,
+                            116,120,75,129,186,179,79,251,17,222,148,186,165,
+                            254,199,102,123,251,110,69,2,155,44,125,228,52,187,
+                            239,184,99,38,243,180,58,106,166,12,95,211,14,238,
+                            46,134,248,8,0,0,15,0,0,68,8,7,0,64,136,11,15,89,
+                            250,80,67,70,25,39,247,0,10,95,114,247,108,79,166,
+                            11,142,189,180,77,70,68,8,102,28,190,121,243,150,
+                            243,241,9,26,82,228,24,243,137,168,98,226,157,249,
+                            176,126,178,212,95,57,155,16,156,216,247,194,150,
+                            224,220,69,1,20,0,0,32,166,44,1,174,83,72,136,201,
+                            222,252,105,24,110,82,155,62,226,23,72,46,165,33,
+                            181,232,22,223,167,180,176,142,186,1&gt;&gt;,
+                          &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                          &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                          &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                          &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                          [x25519],
+                          undefined,
+                          [1027,2052,1025,2055],
+                          undefined,x25519,false,undefined,192,
+                          &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                          #{server_name =&gt; undefined,
+                            groups =&gt; [x25519],
+                            alpn =&gt; [&lt;&lt;"quod"&gt;&gt;],
+                            session_ticket =&gt; undefined,
+                            transport_params =&gt;
+                             #{max_udp_payload_size =&gt; 1500,
+                               active_connection_id_limit =&gt; 2,
+                               initial_max_data =&gt; 786432,
+                               initial_max_stream_data_bidi_local =&gt; 524288,
+                               initial_max_stream_data_bidi_remote =&gt; 524288,
+                               initial_max_stream_data_uni =&gt; 524288,
+                               initial_max_streams_bidi =&gt; 100,
+                               initial_max_streams_uni =&gt; 100,
+                               initial_scid =&gt; &lt;&lt;136,58,156,211,16,79,174,13&gt;&gt;,
+                               max_idle_timeout =&gt; 2000}},
+                          x25519,ed25519,
+                          #{initial =&gt; #{},handshake =&gt; #{},app =&gt; #{}},
+                          #{initial =&gt; 90,handshake =&gt; 445,app =&gt; 65},
+                          #{initial =&gt; &lt;&lt;&gt;&gt;,handshake =&gt; &lt;&lt;&gt;&gt;,app =&gt; &lt;&lt;&gt;&gt;},
+                          &lt;&lt;"quod"&gt;&gt;,
+                          [&lt;&lt;"quod"&gt;&gt;],
+                          {pn_space,3,undefined,1,-576460293457,
+                           [{0,1}],
+                           0,undefined,#{}},
+                          {pn_space,2,undefined,1,-576460293453,
+                           [{0,1}],
+                           0,undefined,#{}},
+                          {pn_space,13,undefined,13,-576460293421,
+                           [{0,13}],
+                           0,undefined,#{}},
+                          786432,786432,91,4,524288,524288,524288,
+                          -576460293450,undefined,8388608,786432,1048576,
+                          #{0 =&gt;
+                             {stream_state,0,reset,91,1048667,false,[],true,
+                              4,1048580,false,#{},false,undefined,6,true,
+                              undefined,undefined,both,255,undefined,
+                              undefined,undefined,undefined}},
+                          4,2,100,100,100,100,#{},#{},#{},[],0,0,infinity,
+                          {[],[]},
+                          0,0,0,0,0,0,13,true,undefined,false,
+                          #{original_dcid =&gt; &lt;&lt;168,137,0,228,178,165,23,104&gt;&gt;,
+                            max_udp_payload_size =&gt; 1500,
+                            active_connection_id_limit =&gt; 2,
+                            initial_max_data =&gt; 786432,
+                            initial_max_stream_data_bidi_local =&gt; 524288,
+                            initial_max_stream_data_bidi_remote =&gt; 524288,
+                            initial_max_stream_data_uni =&gt; 524288,
+                            initial_max_streams_bidi =&gt; 100,
+                            initial_max_streams_uni =&gt; 100,
+                            initial_scid =&gt; &lt;&lt;52,75,183,81,171,93,1,206&gt;&gt;,
+                            max_idle_timeout =&gt; 2000,
+                            peer_max_stream_data_uni =&gt; 524288,
+                            peer_max_stream_data_bidi_local =&gt; 524288,
+                            peer_max_stream_data_bidi_remote =&gt; 524288},
+                          2000,-576460293421,false,undefined,
+                          {cc_wrapper,quic_cc_newreno,
+                           {cc_state,45761,infinity,31,undefined,false,
+                            -576460293457,0,2980,1490,100,1200,19067,14400,
+                            17880,-576460293463525,true,false,0,5,0,3,
+                            infinity,0}},
+                          {loss_state,
+                           {[{sent_packet,12,-576460293421,false,true,31,
+                              [{ack,[{11,11}],0,undefined}]}],
+                            [{sent_packet,11,-576460293444,true,true,31,
+                              [{reset_stream,0,0,91}]}]},
+                           28,3,7,0,true,undefined,-576460293421,0,31,25},
+                          #Ref&lt;0.3648040332.1909719043.86851&gt;,-576460293365,
+                          #Ref&lt;0.3648040332.1909719042.101555&gt;,500,
+                          #Ref&lt;0.3648040332.1909719042.101574&gt;,undefined,true,
+                          {{[],[]},
+                           {[],[]},
+                           {[],[]},
+                           {[],[]},
+                           {[],[]},
+                           {[],[]},
+                           {[],[]},
+                           {[],[]}},
+                          [],0,0,0,#{},0,undefined,undefined,[],undefined,
+                          idle,undefined,undefined,undefined,undefined,false,
+                          undefined,true,[],1,[],2,2,
+                          &lt;&lt;48,129,216,48,129,139,160,3,2,1,2,2,1,1,48,5,6,3,
+                            43,101,112,48,22,49,20,48,18,6,3,85,4,3,12,11,107,
+                            112,95,56,56,102,97,97,101,97,56,48,30,23,13,50,54,
+                            48,49,48,49,48,48,48,48,48,48,90,23,13,51,54,48,49,
+                            48,49,48,48,48,48,48,48,90,48,22,49,20,48,18,6,3,
+                            85,4,3,12,11,107,112,95,56,56,102,97,97,101,97,56,
+                            48,42,48,5,6,3,43,101,112,3,33,0,136,250,174,168,
+                            211,52,203,21,18,24,47,165,78,83,180,114,199,134,
+                            217,92,221,242,227,73,234,212,248,154,45,41,188,
+                            202,48,5,6,3,43,101,112,3,65,0,35,194,45,164,169,
+                            156,1,202,104,10,162,41,52,37,178,120,72,203,250,
+                            116,120,75,129,186,179,79,251,17,222,148,186,165,
+                            254,199,102,123,251,110,69,2,155,44,125,228,52,187,
+                            239,184,99,38,243,180,58,106,166,12,95,211,14,238,
+                            46,134,248,8&gt;&gt;,
+                          [],undefined,undefined,[],undefined,undefined,
+                          undefined,
+                          &lt;&lt;48,129,216,48,129,139,160,3,2,1,2,2,1,1,48,5,6,3,
+                            43,101,112,48,22,49,20,48,18,6,3,85,4,3,12,11,107,
+                            112,95,56,56,102,97,97,101,97,56,48,30,23,13,50,54,
+                            48,49,48,49,48,48,48,48,48,48,90,23,13,51,54,48,49,
+                            48,49,48,48,48,48,48,48,90,48,22,49,20,48,18,6,3,
+                            85,4,3,12,11,107,112,95,56,56,102,97,97,101,97,56,
+                            48,42,48,5,6,3,43,101,112,3,33,0,136,250,174,168,
+                            211,52,203,21,18,24,47,165,78,83,180,114,199,134,
+                            217,92,221,242,227,73,234,212,248,154,45,41,188,
+                            202,48,5,6,3,43,101,112,3,65,0,35,194,45,164,169,
+                            156,1,202,104,10,162,41,52,37,178,120,72,203,250,
+                            116,120,75,129,186,179,79,251,17,222,148,186,165,
+                            254,199,102,123,251,110,69,2,155,44,125,228,52,187,
+                            239,184,99,38,243,180,58,106,166,12,95,211,14,238,
+                            46,134,248,8&gt;&gt;,
+                          [],
+                          {'ECPrivateKey',1,
+                           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                           {namedCurve,{1,3,101,112}},
+                           &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                           asn1_NOVALUE},
+                          true,
+                          &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                          0,
+                          #{&lt;&lt;&gt;&gt; =&gt;
+                             {session_ticket,&lt;&lt;&gt;&gt;,
+                              &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                              86400,1463458035,
+                              &lt;&lt;141,51,62,50,203,158,156,32&gt;&gt;,
+                              &lt;&lt;REDACTED_32_BYTE_BINARY&gt;&gt;,
+                              4294967295,1793219067,aes_128_gcm,&lt;&lt;"quod"&gt;&gt;}},
+                          undefined,undefined,undefined,undefined,0,false,#{},
+                          undefined,2,18,18,8,0,100,
+                          {pmtu_state,search_complete,1200,1490,1500,1490,
+                           [1500,undefined,undefined],
+                           false,0,undefined,0,undefined,undefined,0,6},
+                          undefined,#Ref&lt;0.3648040332.1909719043.86849&gt;,false,
+                          1,#Ref&lt;0.3648040332.1909719043.86853&gt;,sequential,
+                          undefined}}
+** Reason for termination = exit:killed
+** Callback modules = [quic_connection]
+** Callback mode = [state_functions,state_enter]
+** Stacktrace =
+**  [{gen_statem,loop_msg,4,[{file,"gen_statem.erl"},{line,3637}]},
+     {proc_lib,init_p_do_apply,3,[{file,"proc_lib.erl"},{line,333}]}]
+
+
+</pre></div>
+<pre>
+
+</pre>
+<div class="sasl"><pre><b>*** System report during quod_quic_SUITE:connection_confirmation_without_stream/1 2026-10-28 20:24:27.450 ***</b><a id=e-33 class="link-to-entry" href="#e-33">&#x1f517;</a>
+=CRASH REPORT==== 28-Oct-2026::20:24:27.449817 ===
+  crasher:
+    initial call: quic_connection:init/1
+    pid: &lt;0.9583.0&gt;
+    registered_name: []
+    exception exit: killed
+      in function  gen_statem:loop_msg/4 (gen_statem.erl:3637)
+    ancestors: [&lt;0.9582.0&gt;]
+    message_queue_len: 0
+    messages: []
+    links: []
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 6772
+    stack_size: 29
+    reductions: 98563
+  neighbours:
+
+
+</pre></div>
+<pre>
+<a name="end"></a>
+
+
+=== Ended at 2026-10-28 20:24:27
+=== successfully completed test case
+=== === Returned value: true
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Oct 28 2026 20:24:27<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

@@ -1,0 +1,11 @@
+[{oversized,91134,
+     {',',
+         {current_ontology_identity,{binary_bytes,8},{binary_bytes,32}},
+         {prolog_edit_goal,
+             {depth_limit,depth_limit,depth_limit},
+             all,
+             {binary_bytes,45120},
+             {binary_bytes,45122},
+             {depth_limit,depth_limit,depth_limit}}},
+     [{45122,[3,5]},{45120,[3,4]}]},
+ {public_error,{too_large,answer}}]

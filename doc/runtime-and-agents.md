@@ -49,8 +49,22 @@ by backpressure.
 
 Governed external predicates are classified as query, staging or reaction
 operations. Their execution context distinguishes normal proofs, validator
-policy checks and read-only reaction matching; an invalid context fails
+policy checks, local installed-resource selection and read-only reaction matching; an invalid context fails
 closed. A live observation cannot silently become a replayable proof input.
+
+The resource selector remains local and read-only. When resolving a retained
+source it may use `resource_selection` context with that owner's exact namespace,
+anchor and snapshot height. Only proof-bound metadata queries are permitted;
+live queries, scope calls, staging and reaction commands are forbidden. This
+lets a source recipe identify its own anchored frame without network I/O or an
+authenticated principal. Committed `policy_verdict` checks retain their stricter
+bridge prohibition.
+
+Common Prolog mechanics provide `in_ontology(Namespace,Anchor,Goal)` for the
+ordinary anchored scope conjunction, `unique_solution/1` for an exact singleton
+query with fresh outputs, and `term_hex_digest/2` for portable digest spelling.
+They retain the existing invocation, dependency and backtracking owners. Domain
+callers still select their own permissions, policies and consequences.
 
 Direct external effects have a public descriptor in the controlling ledger.
 The node-wide `quod_effect_journal` holds the private preparation and releases

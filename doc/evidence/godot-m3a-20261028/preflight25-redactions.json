@@ -1,0 +1,7 @@
+{
+  "public_file": "doc/evidence/godot-m3a-20261028/preflight25-recursive-projection.json",
+  "private_original": "/tmp/quod-m3a-8d55a3f3/private/receipts/preflight25-recursive-projection.json",
+  "raw_sha256": "905dcdd070e5198d306ec431ebbbd16fccadb3bda77e7f55ca93df79c3990cc2",
+  "sanitized_sha256": "a261b6b6fee6e95e6eaf3508655bb1bed661f8c577d4908270a5bb57fcd36fc2",
+  "reason": "Preserve the exact original outside snapshots; omit disposable viewer registrations from portable public evidence."
+}

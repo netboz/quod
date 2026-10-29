@@ -1,212 +1,13 @@
-%% Descriptor and binding helpers interpret data locally. A colon in an
-%% input value is never a request to follow that value into another ontology.
-no_follow(gui_schema/3).
-no_follow(gui_definition/5).
-no_follow(gui_definition/6).
-no_follow(gui_compile/6).
-no_follow(gui_submission/4).
-no_follow(gui_results/3).
-no_follow(gui_bind_values/5).
-no_follow(gui_component_tree/5).
-no_follow(gui_class_basis/2).
-no_follow(gui_component_children/5).
-no_follow(gui_tree_component/5).
-no_follow(gui_field_declarations/4).
-no_follow(gui_variables_bound/2).
-no_follow(gui_values/3).
-no_follow(gui_initial_values/4).
-no_follow(gui_project_values/5).
-no_follow(gui_initial_queries/4).
-no_follow(gui_fixed_values/4).
-no_follow(gui_bind/5).
-no_follow(gui_bind_fields/4).
-no_follow(gui_match_fixed/2).
-no_follow(gui_tree_active/2).
-no_follow(gui_local_id/1).
+%% Application-owned GUI question lifecycle and offered API declarations.
+%% Generic descriptor compilation and operation binding live in gui_forms.pl,
+%% loaded once by the existing committed projection base. Application facts,
+%% authorization, signing, HUD changes and continuations remain in this owner.
+
 no_follow(gui_validate_submission/6).
 no_follow(gui_continue/1).
 no_follow(gui_application_active/1).
 no_follow(gui_submission_entry/2).
 no_follow(gui_form_projection/4).
-
-%% Reusable form behavior, composed at founding or by an authorized source
-%% edit, just like agent_instance.pl. The application supplies gui_vocabulary/2,
-%% component instances, attributes, gui_children/2 and gui_form/3. This file
-%% grants narrow submission/continuation entries under gui_question_policy/3;
-%% it owns no separate execution mechanism.
-
-gui_schema(Form, Revision, Tree) :-
-    gui_definition(Form, Revision, Tree, _, _).
-
-gui_definition(Form, Revision, Tree, Fields, Submit) :-
-    gui_definition(Form, Revision, Tree, Fields, Submit, question).
-
-gui_definition(Form, Revision, Tree, Fields, Submit, Contract) :-
-    once('$quod_state_check'(gui_compile(Form, Current, Compiled, Bindings,
-                                       Submission, Authored))),
-    Revision = Current, Tree = Compiled, Fields = Bindings,
-    Submit = Submission, Contract = Authored.
-
-gui_compile(Form, Revision, Tree, Fields, Submit, Contract) :-
-    gui_local_id(Form),
-    findall(ontology_ref(N, A), gui_vocabulary(N, A), [ontology_ref(Ns, Anchor)]),
-    findall(binding(F, S), gui_form(Form, F, S), [binding(Fields, Declaration)]),
-    gui_submission(Declaration, Submit, Contract, Results),
-    gui_component_tree(Form, Ns, [], _, RawTree),
-    Ns::(current_ontology_identity(Ns, Anchor), gui_tree_schema(RawTree, Tree, Inputs)),
-    Tree = component(Form, form, _, _),
-    %% These capabilities belong to the existing proof/source controllers,
-    %% which own their edits and catalogues. A submitted form has no such owner.
-    \+ (gui_tree_component(Tree, _, Kind, _, _),
-        member(Kind, [editor, bindings, catalogue_selection])),
-    Submit = submit(Control, Continuation),
-    gui_local_id(Control),
-    gui_tree_component(Tree, Control, button, _, _),
-    gui_field_declarations(Fields, Inputs, [], FieldIds),
-    sort(Inputs, Expected), sort(FieldIds, Expected),
-    %% Inputs and named outputs are separate. Questions declare no outputs.
-    gui_results(Results, [], _),
-    term_variables(Fields, InputsUsed), term_variables(Results, Outputs),
-    \+ (member(Output, Outputs), member_eq(Output, InputsUsed)),
-    term_variables(Continuation, Used),
-    term_variables(Fields-Results, Variables), gui_variables_bound(Used, Variables),
-    gui_variables_bound(Outputs, Used),
-    (Contract = operation(Permission, _) ->
-        '$quod_callable'(Permission), term_variables(Permission, Parameters),
-        gui_variables_bound(Parameters, InputsUsed)
-    ; true),
-    '$quod_callable'(Continuation),
-    gui_fixed_values(Fields, Form, Tree, Fixed),
-    findall(C, gui_validation_context(Form, C), Contexts),
-    term_variables(Contexts, []), sort(Contexts, Context),
-    variant_digest(schema(1, ontology_ref(Ns, Anchor), Tree,
-                          binding(Fields, Declaration), Fixed, Context), Revision).
-
-gui_submission(submit(Control, Goal), submit(Control, Goal), question, []).
-gui_submission(submit(Control, Goal, operation(Permission, Results)),
-               submit(Control, Goal), operation(Permission, Results), Results).
-
-gui_results(Results, Seen, Names) :-
-    nonvar(Results),
-    (Results = [] -> Names = []
-    ; Results = [Result | Rest], nonvar(Result), Result = result(Name, _),
-      atom(Name), \+ member_eq(Name, Seen), Names = [Name | Tail],
-      gui_results(Rest, [Name | Seen], Tail)).
-
-gui_component_tree(Id, Ns, Seen, All, component(Id, Classes, Attributes, Children)) :-
-    gui_local_id(Id), \+ member_eq(Id, Seen),
-    findall(attribute(Key, Value), attribute(Id, Key, Value), Attributes),
-    findall(C, instance_of(C, Id), DirectClasses),
-    term_variables(DirectClasses, []),
-    findall(Local, (member(Class, DirectClasses),
-                    gui_class_basis(Class, Parent),
-                    '$quod_owner_name'(Parent, Owner, Local),
-                    ontology_name(Owner, Ns)), Raw),
-    sort(Raw, Classes),
-    findall(C, gui_children(Id, C), ChildDeclarations),
-    (ChildDeclarations = [] -> ChildIds = []
-    ; ChildDeclarations = [ChildIds]),
-    term_variables(ChildIds, []),
-    gui_component_children(ChildIds, Ns, [Id | Seen], All, Children).
-
-%% The vocabulary resolves its own class closure in one selected call. Only
-%% application-local subclasses need a traversal before that call; expanding
-%% every foreign ancestor here would repeatedly ask for the same hierarchy.
-gui_class_basis(Class, Class) :- nonvar(Class), Class = _:_, !.
-gui_class_basis(Class, Parent) :- isa(Class, Parent).
-
-gui_component_children([], _, Seen, Seen, []).
-gui_component_children([Id | Rest], Vocabulary, Seen, All, [Child | Children]) :-
-    gui_component_tree(Id, Vocabulary, Seen, Next, Child),
-    gui_component_children(Rest, Vocabulary, Next, All, Children).
-
-gui_tree_component(component(Id, Kind, Properties, Children), Id, Kind, Properties, Children).
-gui_tree_component(component(_, _, _, Children), Id, Kind, Properties, Descendants) :-
-    member(Child, Children), gui_tree_component(Child, Id, Kind, Properties, Descendants).
-
-gui_field_declarations(Fields, Inputs, Seen, Ids) :-
-    nonvar(Fields),
-    (Fields = [] -> Ids = Seen
-    ; Fields = [Field | Rest], nonvar(Field), Field = field(Id, _),
-      gui_local_id(Id), \+ member_eq(Id, Seen),
-      member_eq(Id, Inputs),
-      gui_field_declarations(Rest, Inputs, [Id | Seen], Ids)).
-
-gui_variables_bound([], _).
-gui_variables_bound([Variable | Rest], Variables) :-
-    member_eq(Variable, Variables), gui_variables_bound(Rest, Variables).
-
-%% Initial values are a separate projection. Reading them never instantiates
-%% the form's submitted variables and never changes its semantic revision.
-gui_values(Form, ValuesToken, Values) :-
-    gui_definition(Form, _, Tree, Fields, _),
-    gui_initial_values(Fields, Form, Tree, Values),
-    term_digest(Values, ValuesToken).
-
-gui_initial_values(Fields, Form, Tree, Values) :-
-    gui_project_values(editing, Fields, Form, Tree, Values).
-
-gui_project_values(_, [], _, _, []) :- !.
-gui_project_values(Mode, Fields, Form, Tree, Values) :-
-    gui_initial_queries(Fields, Form, Tree, Queries),
-    gui_vocabulary(Ns, Anchor),
-    Ns::(current_ontology_identity(Ns, Anchor), gui_initial_projection(Mode, Queries, Values)).
-
-gui_initial_queries([], _, _, []).
-gui_initial_queries([field(Id, _) | Rest], Form, Tree,
-                    [initial(Id, Kind, Properties, Declared) | Queries]) :-
-    once(gui_tree_component(Tree, Id, Kind, Properties, [])),
-    findall(V, gui_initial(Form, Id, V), Declared),
-    term_variables(Declared, []),
-    gui_initial_queries(Rest, Form, Tree, Queries).
-
-%% Values frozen by readonly/disabled controls are validation inputs, so they
-%% participate in the revision. Ordinary editable defaults remain separate.
-gui_fixed_values(Fields, Form, Tree, Fixed) :-
-    findall(field(Id, frozen),
-        (member(field(Id, _), Fields), once(gui_tree_component(Tree, Id, _, Properties, [])),
-         (member(property(readonly, true), Properties) -> true; \+ gui_tree_active(Tree, Id))),
-        Frozen),
-    gui_project_values(frozen, Frozen, Form, Tree, Fixed).
-
-%% Construct only the authored continuation. This pure helper is called by
-%% question submission/completion; it does not execute a client-supplied goal.
-gui_bind(Form, Revision, Control, Values, Continuation) :-
-    term_variables(Form-Revision-Control-Values, []),
-    gui_local_id(Form), gui_local_id(Control),
-    gui_definition(Form, Revision, Tree, Fields, submit(Control, Continuation)),
-    gui_bind_values(Form, Tree, Fields, Control, Values),
-    term_variables(Continuation, []).
-
-gui_bind_values(Form, Tree, Fields, Control, Values) :-
-    gui_tree_active(Tree, Control),
-    gui_bind_fields(Fields, Values, Tree, Checks),
-    gui_fixed_values(Fields, Form, Tree, Fixed),
-    gui_match_fixed(Fixed, Values),
-    gui_vocabulary(Ns, Anchor),
-    Ns::(current_ontology_identity(Ns, Anchor), gui_valid_values(Checks)).
-
-gui_bind_fields([], [], _, []).
-gui_bind_fields([field(Id, Value) | Rest], Values, Tree,
-                [value(Kind, Properties, Value) | Checks]) :-
-    %% The compiled tree and field declarations have unique identities. Once
-    %% an exact submitted field is selected, later validation must not explore
-    %% alternative list decompositions across the rest of a large form.
-    once((delete(Values, field(Id, Value), Remaining),
-          gui_tree_component(Tree, Id, Kind, Properties, []))),
-    gui_bind_fields(Rest, Remaining, Tree, Checks).
-
-gui_match_fixed([], _).
-gui_match_fixed([Field | Rest], Values) :-
-    member_eq(Field, Values), gui_match_fixed(Rest, Values).
-
-gui_tree_active(component(Node, _, Properties, Children), Id) :-
-    member(property(enabled, true), Properties),
-    (Node == Id -> true; member(Child, Children), gui_tree_active(Child, Id)).
-
-%% The source ontology owns form/control identities. Parameterized local
-%% identities are allowed; foreign forms are entered through anchored ::.
-gui_local_id(Id) :- term_variables(Id, []), \+ (Id = _:_) .
 
 %% One application policy relates forms to humans and responsible actors.
 %% Authors supply no event handlers or client-provided executable goals.
@@ -240,7 +41,7 @@ gui_continue(question_ref(Ns, Anchor, Q)) :-
     transaction((
         current_principal(Actor),
         current_ontology_identity(SourceNs, SourceAnchor),
-        Ns::(current_ontology_identity(Ns, Anchor),
+        in_ontology(Ns,Anchor,
              gui_answer(Q, form_ref(SourceNs, SourceAnchor, Form), Human, Revision, Control, Fields)),
         gui_question_policy(Form, Human, Actor),
         gui_bind(Form, Revision, Control, Fields, Continuation),
@@ -248,7 +49,7 @@ gui_continue(question_ref(Ns, Anchor, Q)) :-
         \+ gui_application_active(Reference),
         assertz(gui_application_active(Reference)),
         call(Continuation),
-        Ns::(current_ontology_identity(Ns, Anchor), gui_consume(Q)),
+        in_ontology(Ns,Anchor, gui_consume(Q)),
         retract(gui_application_active(Reference)))).
 
 %% One occurrence, one original atomic request. The shared responder transition
@@ -270,16 +71,16 @@ gui_open(Form, Reference) :-
         current_ontology_identity(SourceNs, SourceAnchor),
         Source = form_ref(SourceNs, SourceAnchor, Form),
         Actor = agent_instance_ref(ActorNs, ActorAnchor, Instance),
-        ActorNs::(current_ontology_identity(ActorNs, ActorAnchor),
+        in_ontology(ActorNs,ActorAnchor,
                   gui_responder_for(Instance, Source, Human, Hosting)),
         Human = agent_instance_ref(HumanNs, HumanAnchor, HumanInstance),
-        HumanNs::(current_ontology_identity(HumanNs, HumanAnchor),
+        in_ontology(HumanNs,HumanAnchor,
                   gui_receiver_accept(HumanInstance, Receiver, Capacity)),
         gui_vocabulary(GuiNs, GuiAnchor),
         Opening = gui_opening(ontology_ref(GuiNs, GuiAnchor), Reference, Source, Human, Actor,
                               View, Receiver, Hosting, Capacity),
-        GuiNs::(current_ontology_identity(GuiNs, GuiAnchor), gui_prepare_question(Opening)),
-        ActorNs::(current_ontology_identity(ActorNs, ActorAnchor), gui_accept_question(Opening)))).
+        in_ontology(GuiNs,GuiAnchor, gui_prepare_question(Opening)),
+        in_ontology(ActorNs,ActorAnchor, gui_accept_question(Opening)))).
 
 gui_open_definition(Form, Human, Actor, question_ref(ActorNs, ActorAnchor, question(Id)),
                     form_view(Revision, Tree, ValuesToken, Values, Control)) :-
@@ -298,99 +99,6 @@ ontology_interface(gui_operations/2, <<"explicit class or instance operations">>
 ontology_interface(gui_operation_bind/7, <<"bind typed inputs to an authored goal and named results">>).
 ontology_interface(gui_operation/6, <<"call the bound operation and return only its named results">>).
 ontology_interface(gui_operation_classes/1, <<"classes offering creation in this storage ontology">>).
-
-gui_operation_classes(Classes) :-
-    '$quod_state_check'((
-        current_ontology_identity(Ns, Anchor),
-        findall(Class, (isa(Class, Class),
-            class_eidolons([Class], operation(class), _, Choices),
-            member(eidolon(_,Name,_),Choices),
-            gui_operation_form(class_ref(Ns,Anchor,Class), Name, _, _, _)), Raw),
-        sort(Raw, Classes))).
-
-no_follow(gui_operations/2).
-no_follow(gui_operation/6).
-no_follow(gui_operation_view/3).
-no_follow(gui_operation_definition/8).
-no_follow(gui_operation_form/5).
-no_follow(gui_operation_subject/4).
-no_follow(gui_operation_bind/7).
-no_follow(gui_operation_binding/7).
-no_follow(gui_operation_guard/7).
-no_follow(gui_operation_availability/3).
-
-gui_operations(Subject, Operations) :-
-    term_variables(Subject, []),
-    '$quod_state_check'((
-        gui_operation_subject(Subject, _, Classes, Mode),
-        class_eidolons(Classes, operation(Mode), _, Recipes),
-        findall(Name, member(eidolon(_, Name, _), Recipes), Raw), sort(Raw, Names),
-        findall(View, (member(Name, Names), gui_operation_view(Subject, Name, View)), Operations))).
-
-gui_operation_view(Subject, Name,
-        operation_view(Name, Subject, Revision, Tree, Token, Values, Control, Names, Availability)) :-
-    gui_operation_definition(Subject, Name, Revision, Form, Tree, Fields,
-                             submit(Control, _), operation(Local, Permission, Results)),
-    gui_initial_values(Fields, Form, Tree, Values), term_digest(Values, Token),
-    gui_results(Results, [], Names),
-    gui_operation_availability(Local, Permission, Availability).
-
-%% A recipe selects a local form for this exact subject. The form, its fixed
-%% values, output sharing and permission parameters all enter the revision.
-%% Existing recipe selection retains most-specific/ambiguous-class semantics.
-gui_operation_definition(Subject, Name, Revision, Form, Tree, Fields, Submit,
-                         operation(Local, Permission, Results)) :-
-    gui_operation_form(Subject, Name, Local, Recipe, Form),
-    gui_definition(Form, Schema, Tree, Fields, Submit, operation(Permission, Results)),
-    variant_digest(offered_operation(Subject, Name, Recipe, Form, Schema), Revision).
-
-gui_operation_form(Subject, Name, Local, recipe(Ns,Anchor,Recipe), Form) :-
-    gui_operation_subject(Subject, Local, Classes, Mode),
-    class_eidolons(Classes, operation(Mode), Name,
-                   [eidolon(operation(Mode), Name, recipe(Ns, Anchor, Recipe))]),
-    current_ontology_identity(Here, History), Target = ontology_ref(Here, History),
-    findall(F, Ns::(current_ontology_identity(Ns, Anchor),
-                    eidolon(Recipe, subject(Target, Local), operation(F))), [Form]).
-
-gui_operation_subject(class_ref(Ns, Anchor, Class), class(Class), [Class], class) :-
-    current_ontology_identity(Ns, Anchor), isa(Class, Class).
-gui_operation_subject(entity_ref(Ns, Anchor, Entity), instance(Entity), Classes, instance) :-
-    current_ontology_identity(Ns, Anchor),
-    findall(Class, instance_of(Class, Entity), Raw), sort(Raw, Classes), Classes \== [].
-
-%% These are output arguments, never an accepted executable continuation.
-%% Result variables remain shared with the authored goal, outside input fields.
-gui_operation_bind(Subject, Name, Revision, Control, Values, Goal, Results) :-
-    var(Goal), var(Results),
-    gui_operation_binding(Subject, Name, Revision, Control, Values, Authored, Results),
-    Goal = (gui_operation_guard(Subject, Name, Revision, Control, Values, Authored, Results), Authored).
-
-%% Ordinary Prolog composition keeps the executable binding local. The same
-%% binder and guard remain authoritative for callers transporting a bound goal.
-gui_operation(Subject, Name, Revision, Control, Values, Results) :-
-    gui_operation_bind(Subject, Name, Revision, Control, Values, Goal, Results), call(Goal).
-
-gui_operation_binding(Subject, Name, Revision, Control, Values, Goal, Results) :-
-    term_variables([Subject, Name, Revision, Control, Values], []),
-    '$quod_state_check'((
-        gui_operation_definition(Subject, Name, Revision, Form, Tree, Fields,
-                                 submit(Control, Goal), operation(Local, Permission, Results)),
-        gui_bind_values(Form, Tree, Fields, Control, Values),
-        operation_authorized(Local, Permission))).
-
-%% The returned ordinary goal checks the current declaration and permission
-%% again at execution. Compare variants without unifying: prebinding or adding
-%% output aliases must not change creation into existing-instance classification.
-gui_operation_guard(Subject, Name, Revision, Control, Values, Goal, Results) :-
-    gui_operation_binding(Subject, Name, Revision, Control, Values, Authored, Outputs),
-    variant_digest(binding(Authored, Outputs), Digest),
-    variant_digest(binding(Goal, Results), Digest).
-
-gui_operation_availability(Subject, Permission, Availability) :-
-    (term_variables(Permission, []) ->
-        (operation_authorized(Subject, Permission) -> Availability = available
-        ; Availability = unavailable)
-    ; Availability = requires_input).
 
 %% Current question state, composed into the responsible actor's ontology.
 %% Opening verifies the GUI scope's staged presentation and atomically creates
@@ -480,7 +188,7 @@ gui_question_form(Q, question_form(Source, Responsible, Revision, State, View)) 
     gui_visible_state(Stored, State),
     gui_question_actor(Actor, Responsible),
     Source = form_ref(Ns, Anchor, Form),
-    Ns::(current_ontology_identity(Ns, Anchor),
+    in_ontology(Ns,Anchor,
          gui_form_projection(Form, Human, Responsible, View)).
 
 %% The submitted operation is authenticated context, never a client sequence.
@@ -492,7 +200,7 @@ gui_submit(Q, Revision, Control, Fields) :-
         gui_question(Q, Source, Human, Actor, Revision, awaiting),
         Source = form_ref(Ns, Anchor, Form),
         gui_question_actor(Actor, Responsible),
-        Ns::(current_ontology_identity(Ns, Anchor),
+        in_ontology(Ns,Anchor,
              gui_validate_submission(Form, Human, Responsible, Revision, Control, Fields)),
         gui_completion_request(Q, Submission, Actor, Bytes),
         retract(gui_question(Q, Source, Human, Actor, Revision, awaiting)),
@@ -513,7 +221,7 @@ gui_complete(Q) :-
         current_signed_request(Bytes),
         gui_question_actor(Actor, Responsible), current_principal(Responsible),
         gui_question_reference(Q, Reference),
-        Ns::(current_ontology_identity(Ns, Anchor), gui_continue(Reference)))).
+        in_ontology(Ns,Anchor, gui_continue(Reference)))).
 
 gui_consume(Q) :-
     term_variables(Q, []),
@@ -524,7 +232,7 @@ gui_consume(Q) :-
         gui_question_actor(Actor, Responsible), current_principal(Responsible),
         gui_question_reference(Q, Reference),
         Source = form_ref(SourceNs, SourceAnchor, _),
-        SourceNs::(current_ontology_identity(SourceNs, SourceAnchor),
+        in_ontology(SourceNs,SourceAnchor,
                    gui_application_active(Reference)),
         assertz(gui_retiring(Q, Human)),
         gui_remove_hud(Human, Reference),
@@ -544,7 +252,7 @@ gui_cancel(Q) :-
         retract(gui_retiring(Q, Human)))).
 
 gui_remove_hud(agent_instance_ref(Ns, Anchor, Instance), Reference) :-
-    Ns::(current_ontology_identity(Ns, Anchor), gui_unlink(Instance, Reference)).
+    in_ontology(Ns,Anchor, gui_unlink(Instance, Reference)).
 
 gui_retirement(Q, Human) :-
     gui_retiring(Q, Human),
@@ -656,11 +364,11 @@ gui_accept_question(Opening) :-
     current_ontology_identity(Ns, Anchor),
     transaction((
         gui_responder_for(Actor, Source, Human, Hosting),
-        GuiNs::(current_ontology_identity(GuiNs, GuiAnchor), gui_prepared(Opening)),
+        in_ontology(GuiNs,GuiAnchor, gui_prepared(Opening)),
         \+ gui_question(Q, _, _, _, _, _),
         assertz(gui_question(Q, Source, Human, Actor, Revision, awaiting)),
         Human = agent_instance_ref(HumanNs, HumanAnchor, _),
-        HumanNs::(current_ontology_identity(HumanNs, HumanAnchor), gui_link_question(Opening)))).
+        in_ontology(HumanNs,HumanAnchor, gui_link_question(Opening)))).
 
 gui_accepting(Opening) :-
     term_variables(Opening, []),
@@ -668,4 +376,4 @@ gui_accepting(Opening) :-
         Human, agent_instance_ref(Ns, Anchor, Actor), form_view(Revision, _, _, _, _), _, _, _),
     current_ontology_identity(Ns, Anchor),
     gui_question(Q, Source, Human, Actor, Revision, awaiting),
-    GuiNs::(current_ontology_identity(GuiNs, GuiAnchor), gui_prepared(Opening)).
+    in_ontology(GuiNs,GuiAnchor, gui_prepared(Opening)).

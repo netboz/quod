@@ -1,0 +1,14 @@
+{
+  "source": "/tmp/quod-m3a-r1-8d55a3f3/m3a-r1-gates01/source/native/quod_physics/target",
+  "archive": "/tmp/quod-m3a-r1-8d55a3f3/retained-native/gates01-native-target.tar.gz",
+  "archive_sha256": "1677c176f7bbd3ee72219c1095d9829e41afc88d03b28bce6ec85e0be3b1f852",
+  "manifest": "/tmp/quod-m3a-r1-8d55a3f3/retained-native/gates01-native-target-manifest.json",
+  "manifest_sha256": "22a8315730fad1282739b218cccbd60371986ba86cc4f1e98f374d538551e74e",
+  "entries": 1910,
+  "actual_content_verified": true,
+  "exact_path_set": true,
+  "unpacked_released": false,
+  "campaign_closed": true,
+  "stage_authored_inputs_verified": true,
+  "historical_root_source_unchanged": true
+}

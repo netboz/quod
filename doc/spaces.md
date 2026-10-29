@@ -95,7 +95,8 @@ Create operations. M0 specifies the exact lifecycle and permissions. Related
 instance facts and admission changes forming one transition commit together;
 ontology founding retains its existing lifecycle. A lost reply or restart must
 recover the original U/A/S0 references, not provision replacements. Initial A
-placement reuses existing placement; later same-agent travel remains entry work.
+placement reuses existing placement; later travel uses the committed operation
+described below.
 
 See the [space architecture plan](../nimbalyst-local/plans/space-conceptual-architecture-review.md)
 for the existing Stage 1/Stage 2 boundaries, and [QUO-60](nimbalyst://QUO-60)
@@ -270,6 +271,29 @@ already exists; release lacks the next empty assignment. Failed candidates use
 ordinary transaction savepoints. No handoff process, transfer ledger or second
 executor is introduced.
 
+## Same-agent travel
+
+`space_travel(Entity, ExpectedRevision, Before, After, Revision)` moves the
+existing entity through the same withdrawal and admission actions. `Before` is
+the exact destination reference or `none`; `After` is `placed(Destination,Pose)`
+or `unplaced`. A placed-to-placed move consumes a withdrawal and an admission
+revision. The new source pose is staged before destination admission so its
+physical consequence sees the same transform as the committed assignment.
+Source leave/entry permission, both destination consequences and pose changes
+form one existing atomic transaction. A refusal or conflict restores all owners.
+
+The offered Enter and Leave forms bind the existing personal agent and its
+exact assignment revision. Their ordinary U-to-A instruction executes this
+operation; navigation reads the resulting assignment. Leave may explicitly make
+the agent unplaced. Storage and display references do not supply an inferred
+parent or destination. Completed-account travel grants are separate from the
+constructor's initial-placement grant.
+
+`space_represent(Space, BeforeStyle, BeforePose, Style, Pose)` checks the exact
+source values and committed `space_represent` instance policy. A changed
+representation invokes the admitting destination's physical consequence in the
+same transaction. An unchanged representation performs no state mutation.
+
 ## Invocation policy
 
 The bundle installs no `can_invoke/4` clauses. Entry ACLs and domain grants are
@@ -338,10 +362,10 @@ positive reduced integer/rational millimetre dimensions, as specified in the
 [M0 exterior contract](godot-foundation-contract.md#space-exterior-and-recursive-exposure).
 Prolog converts the stored quantities; the engine converts only when rendering.
 Twelve edges create no collision surfaces or physical bodies. The stored
-`exterior` selects the actual recipe. Infinite forms offer the solid cube and
-explain wireframe unavailability; a direct infinite/wireframe request refuses.
-A selected contents recipe emits an explicit unavailable status, never a
-substitute mesh; recursive exposure and continuous physics remain M3 work.
+`exterior` selects the actual recipe. Infinite forms offer solid and contents
+and explain wireframe unavailability; a direct infinite/wireframe request
+refuses. The contents recipe returns a source-owned exposure, never a
+substitute mesh.
 
 [When S0 contains S1 containing S2, and both S1 and S2 select contents exteriors,
 their contents are displayed recursively in S0, subject to physics, as if all
@@ -358,14 +382,11 @@ agreement. Visual composition does not merge identities, storage or grants.
 The cube described under Empty creation is the installed solid recipe, not a
 restriction on authored exterior forms.
 
-The [current physics profile](physics-native.md#installation-and-policy) uses
-separate actors for independently enabled spaces and does not establish shared
-physics for recursive contents composition. M0 must specify the required frame,
-binding and physical-interaction contract against the existing owners, naming
-any demonstrated adapter gap. M3 acceptance must exercise the recursive S0/S1/S2
-scene and applicable physical behavior, not only meshes or successive entry.
-Empty ordinary spaces still allocate no physics solely because they are spaces;
-the target does not waive existing admission, custody or transfer guarantees.
+The [physics profile](physics-native.md#shared-domain-contents-frames) explicitly
+admits a continuous component into one existing simulation domain. Independently
+enabled runs cannot join through contents selection. Empty ordinary spaces
+allocate no physics solely because they are spaces; admission, custody and
+transfer guarantees still apply.
 
 The existing `quod_space.pl` projects the union of placement and display
 references, deduplicating each exact subject within that view. It asks the source
@@ -374,8 +395,26 @@ owner for `entity_scene/3` and uses the existing Eidolon, `place_model/5`, local
 scene's local transform. Display references use that same presentation path;
 no domain facts, ownership or storage move to the viewing space.
 
-Physical placement still requires one matching live body definition and uses
-its `body_pose/2`. Missing or ambiguous physical bindings do not fall back to a
+`space_projection(Space,Mode,scene(Marks,Exposures))` supplies the same marks as
+`world_view/3`, with portable exposure receipts. Each occurrence hashes the full
+anchored edge path from the viewed interior. Direct placement/display duplicates
+share one occurrence; independent paths keep distinct identities and exact
+depicted source subjects. Receipts retain the selected recipe/revision, source
+frame, permitted subjects and local-to-parent pose. Parents precede children.
+An ancestry cycle with the same exact subject and representation purpose emits
+the cycle occurrence without expansion. Independent branches remain valid.
+The pinned scene allowance governs traversal; exhaustion refuses explicitly.
+
+Changes in C must reach A's retained view when A exposes B and B exposes C.
+The proof retains every source, recipe, containment and authorization dependency
+along that path through the existing view owners. A relevant delta refreshes
+the affected consumers; access revocation withdraws their source content.
+Containment does not copy C's knowledge base into A or grant disclosure. A denied
+or missing dependency makes the contents view unavailable, including a denied
+empty source; it cannot become an empty successful scene.
+
+Physical placement requires one matching live body definition and uses its
+`body_pose/2`. Missing or ambiguous physical bindings do not fall back to a
 decorative transform. Retained client views keep their existing dependencies,
 renewal and installed-change notification lifecycle. Unchanged projections
 allocate no physics resources and require no history replay or projection rebuild.
@@ -383,10 +422,11 @@ A committed source update refreshes each subscribed display through those owners
 
 ## Optional physical integration and recovery
 
-`space_physical_change(Space, EntityRef, admitted|withdrawn)` is required for
-a physical destination inside the same transaction, with no default success.
-An ordinary destination skips the physical hook and allocates no physics
-resources. Withdrawal still releases an existing live physical binding after
+`space_physical_change(Space, EntityRef, admitted|withdrawn|represented)` is
+required for a physical destination or an explicitly admitted shared-domain
+frame inside the same transaction, with no default success. An ordinary
+unsimulated destination skips the hook and allocates no physics resources.
+Withdrawal still releases an existing live physical binding after
 the destination is reclassified or loses its space membership. That binding
 remains the physical owner's cleanup obligation; missing or refused composition
 rolls back both owners. An unsimulated physical space explicitly supplies a
@@ -423,8 +463,8 @@ fences, compatible checkpoints and custody described in [world.md](world.md).
 Creation destination selection uses the constructor and source-owned transform
 described under [Empty creation](#empty-creation). During construction, placement
 checks committed class policy through the shared construction scope; existing
-instances use committed instance policy. Same-agent entry and recursive views
-remain separate work.
+instances use committed instance policy. Installed desktop entry and recursive
+rendering qualification are distinct from these server transitions and receipts.
 General transfer between independent simulations is outside this slice: atomic
 membership delete/add is insufficient and provides no authority-transfer claim.
 

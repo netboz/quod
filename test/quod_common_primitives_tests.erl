@@ -194,6 +194,27 @@ filtered_source_uses_the_same_chunker_and_records_absence_test() ->
                 {terms, [{route_status, live, unavailable}]}, 4096, {'Chunk'}}, St))
     end).
 
+shared_framework_source_keeps_local_edit_semantics_test() ->
+    with_authored([], fun(St) ->
+        %% Framework availability does not install an application API or state.
+        ?assertMatch([_], authored({gui_compile, 6}, St)),
+        [BodySchema] = authored({physics_valid_body, 6}, St),
+        ?assertMatch({fail,_},erlog_int:prove_goal({physics_world_position,
+            {':',foreign_geometry,{vector,1,2,3}}},St)),
+        [?assertEqual([], authored(F, St)) || F <-
+            [{ontology_interface, 2}, {gui_question, 6}, {can_invoke, 4},
+             {physics_space, 3}, {physics_body_definition, 6}]],
+        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St))),
+        %% Source edits use the same local overlay as every common predicate;
+        %% they cannot mutate a different owner or the retained base snapshot.
+        {succeed, Edited} = erlog_int:prove_goal({'$quod_retract_exact', BodySchema}, St),
+        ?assertEqual([], authored({physics_valid_body, 6}, Edited)),
+        ?assertEqual([BodySchema], authored({physics_valid_body, 6}, St)),
+        with_authored([], fun(Other) ->
+            ?assertEqual([BodySchema], authored({physics_valid_body, 6}, Other))
+        end)
+    end).
+
 authored_clauses_hide_followers_and_preserve_scope_test() ->
     with_authored([{choice, first}, {choice, second}], fun(St) ->
         ?assertEqual([{':-', {choice, first}, true},

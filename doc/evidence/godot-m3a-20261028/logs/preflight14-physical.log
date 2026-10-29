@@ -1,0 +1,27 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.11s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} src/quod_runtime.erl:
+      \x{2502}
+ 2881 \x{2502}  physics_source_selection({Ns,_},Est,World,{Source,_}=Identity,Goal,Deadline) ->
+      \x{2502}                                             \x{2570}\x{2500}\x{2500} Warning: variable 'Source' is unused
+
+
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_physics_tests:-m3a_shared_component_test_/0-fun-24-/0
+[0;31m     Failure/Error: ?assert(lists : any ( fun ( { A , _ , B , _ } ) -> lists : sort ( [ A , B ] ) =:= [ 1 , 4 ] end , maps : get ( contacts , Contact ) ))
+       expected: true
+            got: false[0m
+[0;36m     %% /work/test/quod_physics_tests.erl:2910:in `quod_physics_tests:with_world/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_24F8C638FEF73EF7
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_24F8C638FEF73EF7
+[0m
+
+Finished in 3.227 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

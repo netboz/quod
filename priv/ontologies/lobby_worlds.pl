@@ -12,7 +12,7 @@ gui_completion_allowance(world_responder,30000).
 
 world_library_workspace(View) :-
     current_principal(Human),lobby_owner(Human),gui_vocabulary(Ns,A),
-    Ns::(current_ontology_identity(Ns,A),gui_view(space_library,View)).
+    in_ontology(Ns,A,gui_view(space_library,View)).
 world_library_status(Status) :-
     current_principal(Human),lobby_owner(Human),
     (agent_hosted(world_responder,_,_,_) -> Status = configured ; Status = setup_required).
@@ -111,7 +111,7 @@ world_creation_name(Entered,Occurrence,Name) :-
     binary_codes(Entered,Codes),
     (Codes = [] ->
         findall(ontology_ref(N,A),names_vocabulary(N,A),[ontology_ref(Ns,Anchor)]),
-        Ns::(current_ontology_identity(Ns,Anchor),
+        in_ontology(Ns,Anchor,
              draw(<<"landscape">>,<<"world">>,<<"neutral">>,Occurrence,Name))
     ; Name = Entered).
 
@@ -133,7 +133,7 @@ world_highest_solid([D|Ds],N,I,Before,Highest) :-
     J is I+1,world_highest_solid(Ds,N,J,Next,Highest).
 
 world_palette(Palette) :-
-    lobby_vocabulary(Ns,A),Ns::(current_ontology_identity(Ns,A),world_palette(Palette)).
+    lobby_vocabulary(Ns,A),in_ontology(Ns,A,world_palette(Palette)).
 space_member(W,entity_ref(Ns,A,world_sky(W))) :-
     lobby_terrain_world(W),current_ontology_identity(Ns,A).
 
@@ -147,7 +147,7 @@ world_render_resources(resources(Transfer,Geometry,Vertices,Triangles,Chunks)) :
     world_render_limit(<<"mesh_nodes">>,Chunks).
 world_render_limit(Resource,Limit) :-
     findall(ontology_ref(N,A),rendering_vocabulary(N,A),[ontology_ref(Ns,Anchor)]),
-    Ns::(current_ontology_identity(Ns,Anchor),limit(Resource,Limit)).
+    in_ontology(Ns,Anchor,limit(Resource,Limit)).
 
 %% Viewing policy scales with ground detail: the initial window spans the same
 %% number of chunks, including its prefetch and retained border.

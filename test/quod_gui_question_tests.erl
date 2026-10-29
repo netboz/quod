@@ -19,6 +19,8 @@ native_scope_is_read_only_and_keeps_original_request_test_() ->
             Read = fun(Target,Goal) -> quod_ask:native_read(Node,Target,Goal,Auth,quod_time:mono_ms()+10000) end,
             ?assertEqual({ok,{current_request_operation,Operation}},
                          Read(Identity,{current_request_operation,Operation})),
+            ?assertEqual({ok,{current_request_operation,Operation}},
+                         Read(Identity,{current_request_operation,{0}})),
             %% The original signed execute bytes authenticate this native read;
             %% they do not cause its embedded assertz goal to execute.
             ?assertMatch({fail,_},read(Ctx,Ns,{saved,ok})),

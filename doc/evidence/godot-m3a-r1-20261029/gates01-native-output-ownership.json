@@ -1,0 +1,20 @@
+[
+  {
+    "path": "/tmp/quod-m3a-r1-8d55a3f3/retained-native/gates01-native-target.tar.gz",
+    "sha256": "1677c176f7bbd3ee72219c1095d9829e41afc88d03b28bce6ec85e0be3b1f852",
+    "bytes": 295346323,
+    "original_uid": 65534,
+    "current_uid": 1000,
+    "logical_path_preserved": true,
+    "content_bytes_unchanged": true
+  },
+  {
+    "path": "/tmp/quod-m3a-r1-8d55a3f3/retained-native/gates01-native-target-manifest.json",
+    "sha256": "22a8315730fad1282739b218cccbd60371986ba86cc4f1e98f374d538551e74e",
+    "bytes": 414705,
+    "original_uid": 65534,
+    "current_uid": 1000,
+    "logical_path_preserved": true,
+    "content_bytes_unchanged": true
+  }
+]

@@ -1093,7 +1093,8 @@ canonical_pose({vector,X,Y,Z}) when is_integer(X),is_integer(Y),is_integer(Z) ->
     {world_mm,{X,Y,Z},{0.0,0.0,0.0}};
 canonical_pose({pose,{vector,X,Y,Z},Rotation}) when is_integer(X),is_integer(Y),is_integer(Z) ->
     {rotation,A,B,C} = Rotation,
-    {world_mm,{X,Y,Z},physical_vector({vector,A,B,C})}.
+    {world_mm,{X,Y,Z},physical_vector({vector,A,B,C})};
+canonical_pose({framed,Frames,Local}) -> quod_physics_frames:pose(Frames,Local).
 
 local_pose(Pose,Origin,Limit) ->
     {world_mm,P,R} = canonical_pose(Pose),{local_position(P,Origin,Limit),R}.

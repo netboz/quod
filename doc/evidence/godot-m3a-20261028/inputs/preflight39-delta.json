@@ -1,0 +1,12 @@
+{
+  "base_archive": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3a-20261028/inputs/preflight32-authored.tar.gz",
+  "base_archive_sha256": "c96994c87aef8dbd2b583c333008c37b4bfb7ef72787a2b36091ff5b64f8ec96",
+  "replacement_files": {
+    "priv/ontologies/common_predicates.pl": "inputs/preflight39-files/priv/ontologies/common_predicates.pl",
+    "priv/ontologies/quod_physics.pl": "inputs/preflight39-files/priv/ontologies/quod_physics.pl",
+    "priv/ontologies/quod_space.pl": "inputs/preflight39-files/priv/ontologies/quod_space.pl",
+    "test/quod_lifecycle_single_path_tests.erl": "inputs/preflight39-files/test/quod_lifecycle_single_path_tests.erl",
+    "test/quod_physics_tests.erl": "inputs/preflight39-files/test/quod_physics_tests.erl"
+  },
+  "exact_path_set_manifest": "preflight39-source.json"
+}

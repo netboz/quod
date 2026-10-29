@@ -32,7 +32,7 @@ selected_exterior_uses_exact_shared_scene_test_() ->
             holds(Ns,{space_location,element(4,UnplacedRef),unplaced})
         end),
         {operation_view,create_infinite,_,_,Tree,_,_,_,_,_}=Infinite,
-        ?assertEqual([{option,solid,<<"Small solid cube">>}],
+        ?assertEqual([{option,solid,<<"Small solid cube">>},{option,contents,<<"Permitted contents">>}],
             tree_property(Tree,{space_exterior,infinite},options)),
         Before=instances(Ns),
         Goal={with_build_plan,[{attribute,dimensions,infinite},{attribute,exterior,wireframe},

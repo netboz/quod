@@ -110,7 +110,7 @@ lobby_space(Space, Modes) :-
 
 lobby_modes(Modes) :-
     lobby_vocabulary(Namespace, Anchor),
-    Namespace::(current_ontology_identity(Namespace, Anchor), lobby_modes(Modes)).
+    in_ontology(Namespace,Anchor, lobby_modes(Modes)).
 
 %% Every visual parameter is durable lobby state. Exact-one reads make an
 %% incomplete or ambiguous edit fail closed instead of inventing a default.
@@ -140,11 +140,11 @@ entity_scene(Entity,Mode,appearance(Id,Style,Context,Layout,Eidolons)) :-
 
 class_eidolon(Class,Mode,Style,Recipe) :-
     lobby_vocabulary(Ns,A), vocabulary_class(Class,Ns,Local),
-    Ns::(current_ontology_identity(Ns,A),class_eidolons([Local],Mode,Style,Choices)),
+    in_ontology(Ns,A,class_eidolons([Local],Mode,Style,Choices)),
     member(eidolon(Mode,Style,Recipe),Choices).
 class_eidolon(sky_sphere,Mode,Style,Recipe) :-
     environment_eidolons(Ns,A),
-    Ns::(current_ontology_identity(Ns,A),class_eidolon(sky_sphere,Mode,Style,Recipe)).
+    in_ontology(Ns,A,class_eidolon(sky_sphere,Mode,Style,Recipe)).
 
 no_follow(vocabulary_class/3).
 vocabulary_class(Reference, Namespace, Class) :-
@@ -160,4 +160,4 @@ eidolon(Kind, subject(Target, Entity), workspace(Kind,Target,Entity,Target,View)
     current_ontology_identity(Ns,A),
     entity_eidolons(Entity,workspace,Kind,[eidolon(workspace,Kind,recipe(Ns,A,Kind))]),
     current_principal(Owner), lobby_owner(Owner), gui_vocabulary(Gui,Anchor),
-    Gui::(current_ontology_identity(Gui,Anchor), gui_view(Kind,View)).
+    in_ontology(Gui,Anchor, gui_view(Kind,View)).

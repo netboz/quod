@@ -1,0 +1,99 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.10s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1406 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 2034 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 2034 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_common_primitives_tests'
+  quod_common_primitives_tests: voxel_primitive_is_pure_and_preserves_unification_test...[0.035 s] ok
+  quod_common_primitives_tests: agent_request_bytes_are_inert_exact_intent_test...[0.018 s] ok
+  quod_common_primitives_tests: signed_request_verification_is_data_not_authority_test...[0.008 s] ok
+  quod_common_primitives_tests: binary_type_test...[0.006 s] ok
+  quod_common_primitives_tests: ontology_name_uses_selector_grammar_test...[0.007 s] ok
+  quod_common_primitives_tests: term_digest_test...[0.006 s] ok
+  quod_common_primitives_tests: variant_digest_preserves_variable_sharing_without_binding_test...[0.006 s] ok
+  quod_common_primitives_tests: binary_codes_test...[0.006 s] ok
+  quod_common_primitives_tests: source_chunk_empty_source_test...ok
+  quod_common_primitives_tests: source_chunk_full_source_test...[0.021 s] ok
+  quod_common_primitives_tests: source_chunk_argument_errors_test...[0.006 s] ok
+  quod_common_primitives_tests: filtered_source_uses_the_same_chunker_and_records_absence_test...[0.007 s] ok
+  quod_common_primitives_tests: shared_framework_source_keeps_local_edit_semantics_test...[0.013 s] ok
+  quod_common_primitives_tests: authored_clauses_hide_followers_and_preserve_scope_test...[0.006 s] ok
+  quod_common_primitives_tests: authored_clauses_fresh_variables_and_control_bodies_test...[0.006 s] ok
+  quod_common_primitives_tests: exact_retract_does_not_remove_general_clause_test...[0.006 s] ok
+  quod_common_primitives_tests: exact_retract_preserves_variable_sharing_test...[0.006 s] ok
+  quod_common_primitives_tests: exact_retract_compiler_control_forms_test...[0.024 s] ok
+  quod_common_primitives_tests: exact_retract_accepts_existing_opaque_symbols_test...[0.006 s] ok
+  quod_common_primitives_tests: authored_cold_predicate_has_empty_baseline_without_atom_allocation_test...[0.006 s] ok
+  quod_common_primitives_tests: admitted_cold_absence_guard_records_read_test...[0.006 s] ok
+  quod_common_primitives_tests: predicate_source_compares_bound_text_without_parsing_or_unifying_code_test...[0.007 s] ok
+  quod_common_primitives_tests: authored_introspection_and_exact_retract_include_staged_clauses_test...[0.008 s] ok
+  quod_common_primitives_tests: exact_retract_transaction_rollback_retains_reads_test...[0.011 s] ok
+  quod_common_primitives_tests: exact_retract_refuses_read_only_session_test...[0.010 s] ok
+  quod_common_primitives_tests: program_source_preserves_independent_clause_variables_test...[0.012 s] ok
+  quod_common_primitives_tests: program_source_does_not_allocate_callable_or_data_atoms_test...[0.016 s] ok
+  quod_common_primitives_tests: program_source_large_draft_still_allocates_no_atoms_test...[0.032 s] ok
+  quod_common_primitives_tests: program_source_reports_syntax_errors_test...[0.028 s] ok
+  quod_common_primitives_tests: origin_draw_test...[0.105 s] ok
+  quod_common_primitives_tests: scope_draw_matches_origin_test...[0.036 s] ok
+  quod_common_primitives_tests: refuses_outside_a_proof_test...[0.107 s] ok
+  quod_common_primitives_tests: invalid_inputs_are_errors_test...[0.039 s] ok
+  quod_common_primitives_tests: symbol_vocabulary_is_independent_of_loaded_modules_test...ok
+  [done in 0.719 s]
+module 'quod_space_tests'
+  quod_space_tests: -ordinary_travel_atomic_test_/0-fun-3-...[3.561 s] ok
+  quod_space_tests: -space_semantics_and_recovery_test_/0-fun-6-...[5.672 s] ok
+  quod_space_tests: -competing_exclusive_admissions_test_/0-fun-12- (gallery)...[0.902 s] ok
+  quod_space_tests: -competing_exclusive_admissions_test_/0-fun-12- (catalogue)...[1.073 s] ok
+  quod_space_tests: -distinct_owner_authorization_test_/0-fun-3- (gallery)...=WARNING REPORT==== 28-Oct-2026::18:19:08.752339 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 9
+[1.936 s] ok
+  quod_space_tests: -distinct_owner_authorization_test_/0-fun-3- (catalogue)...=WARNING REPORT==== 28-Oct-2026::18:19:10.716892 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 9
+[2.042 s] ok
+  quod_space_tests: -ordinary_placement_rollback_and_recovery_test_/0-fun-4-...[2.288 s] ok
+  quod_space_tests: -ordinary_placement_committed_permissions_test_/0-fun-2-...[3.797 s] ok
+  quod_space_tests: -ordinary_placement_policy_conflicts_test_/0-fun-4- (source)...[1.080 s] ok
+  quod_space_tests: -ordinary_placement_policy_conflicts_test_/0-fun-4- (destination)...[1.216 s] ok
+  quod_space_tests: -same_ontology_ordinary_placement_test_/0-fun-1-...[1.785 s] ok
+  quod_space_tests: -ordinary_placement_and_shared_display_projection_test_/0-fun-13-...[6.206 s] ok
+  quod_space_tests: -physical_placement_requires_its_body_pose_test_/0-fun-1-...[1.098 s] ok
+  [done in 32.698 s]
+module 'quod_physics_coordinates_tests'
+  quod_physics_coordinates_tests: composed_frames_match_independent_matrix_reference_test...[0.011 s] ok
+  quod_physics_coordinates_tests: large_signed_origins_preserve_exact_world_positions_test...ok
+  quod_physics_coordinates_tests: native_shift_refusal_preserves_live_resource_test...[0.010 s] ok
+  [done in 0.030 s]
+module 'quod_agent_predicates_tests'
+  quod_agent_predicates_tests: reaction_me_is_selected_identity_without_signed_authority_test...[0.002 s] ok
+  quod_agent_predicates_tests: ordinary_me_reuses_authenticated_principal_test...[0.002 s] ok
+  quod_agent_predicates_tests: exact_scope_identity_can_bind_a_durable_fact_test...[0.001 s] ok
+  quod_agent_predicates_tests: missing_or_mismatched_scope_fails_closed_test...[0.001 s] ok
+  quod_agent_predicates_tests: resource_selection_identity_has_no_live_or_scope_authority_test...[0.001 s] ok
+  quod_agent_predicates_tests: signed_expiry_is_proof_bound_not_a_live_clock_test...[0.003 s] ok
+  quod_agent_predicates_tests: reaction_request_metadata_is_not_an_ordinary_goal_authority_test...[0.001 s] ok
+  quod_agent_predicates_tests: resource_commands_cannot_run_in_reaction_eligibility_test...[0.001 s] ok
+  quod_agent_predicates_tests: reaction_metadata_backtracks_and_performs_no_preparation_test...[0.001 s] ok
+  quod_agent_predicates_tests: dependency_declaration_preserves_live_failure_reads_test...[0.001 s] ok
+  [done in 0.045 s]
+=======================================================
+  All 60 tests passed.

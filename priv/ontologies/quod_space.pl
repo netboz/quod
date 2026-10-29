@@ -30,17 +30,17 @@ have_part(space, initial_occupants).
 
 %% The pin certifies the composed source, not a remote constructor or class alias.
 space_recipe :-
-    findall(recipe(N,A,D), (space_vocabulary(N,A),space_source_digest(D)), [recipe(Ns,Anchor,Digest)]),
-    Ns::(current_ontology_identity(Ns,Anchor),space_template_hash(Digest)).
+    unique_solution((space_vocabulary(Ns,Anchor),space_source_digest(Digest))),
+    in_ontology(Ns,Anchor,space_template_hash(Digest)).
 
 space_dimensions(infinite).
 space_dimensions(box(Width, Height, Depth)) :-
-    findall(measure(N, A), measure_vocabulary(N, A), [measure(Ns, Anchor)]),
+    unique_solution(measure_vocabulary(Ns,Anchor)),
     space_length(Ns, Anchor, Width), space_length(Ns, Anchor, Height),
     space_length(Ns, Anchor, Depth).
 space_length(Ns, Anchor, q(Value, Unit)) :-
     binary(Unit),
-    Ns::(current_ontology_identity(Ns, Anchor), convert(Value, Unit, <<"m">>, Metres)),
+    in_ontology(Ns,Anchor, convert(Value, Unit, <<"m">>, Metres)),
     (integer(Metres) -> Metres > 0
     ; Metres = N / D, integer(N), integer(D), N > 0, D > 0).
 
@@ -48,7 +48,7 @@ space_owner(agent_instance_ref(Ns, Anchor, Entity)) :-
     binary(Ns), binary(Anchor), term_variables(Entity, []).
 space_creator_owner(_, Owner) :-
     current_principal(agent_instance_ref(Ns, Anchor, _)),
-    Ns::(current_ontology_identity(Ns, Anchor), personal_agent_owner(Owner)).
+    in_ontology(Ns,Anchor, personal_agent_owner(Owner)).
 
 space_initial_placement(near_agent).
 space_initial_placement(unplaced).
@@ -65,7 +65,7 @@ constructor(space, Space, Inputs) :-
     (Requested = at(Destination, Pose) -> Placement = placed(Destination, Pose)
     ; Requested = unplaced -> Placement = unplaced
     ; Requested = near_agent, current_principal(agent_instance_ref(Ns, Anchor, Agent)),
-      Ns::(current_ontology_identity(Ns, Anchor), space_location(Agent, Location)),
+      in_ontology(Ns,Anchor, space_location(Agent, Location)),
       space_near_location(Location, Placement)),
     (Placement = unplaced -> Pose = transform(0,0,0,0,0,0)
     ; Placement = placed(Destination, Pose), space_place(Space, 0, Destination)),
@@ -92,9 +92,9 @@ space_initial_local([entity_ref(Ns, Anchor, _) | Rest], Ns, Anchor) :-
 space_place_initial([], _).
 space_place_initial([entity_ref(Ns, Anchor, Entity) | Rest], Destination) :-
     binary(Ns), binary(Anchor),
-    Ns::(current_ontology_identity(Ns, Anchor),
+    in_ontology(Ns,Anchor,(
          space_assignment(Entity, Revision, none),
-         space_place(Entity, Revision, Destination)),
+         space_place(Entity, Revision, Destination))),
     space_place_initial(Rest, Destination).
 
 %% A successful owner read explicitly distinguishes absence from failure.
@@ -102,7 +102,7 @@ space_place_initial([entity_ref(Ns, Anchor, Entity) | Rest], Destination) :-
 space_location(Entity, Location) :-
     instance_of(_, Entity), space_assignment(Entity, _, Destination),
     (Destination == none -> Location = unplaced
-    ; findall(Pose, attribute(Entity, transform, Pose), [Transform]),
+    ; unique_solution(attribute(Entity,transform,Transform)),
       space_transform(Transform), Location = placed(Destination, Transform)).
 space_near_location(unplaced, unplaced).
 space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)),
@@ -110,7 +110,12 @@ space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)),
     NearX is X + 1000.
 
 space_instance(Space, Class) :-
-    once((instance_of(Direct, Space), isa(Direct, Class))).
+    %% Bind the more selective side of this join first. Open catalogues start
+    %% at the requested ancestry; exact subjects need only their own classes.
+    findall(instance(Space,Class),
+        (nonvar(Space) -> instance_of(Direct,Space),isa(Direct,Class)
+        ; isa(Direct,Class),instance_of(Direct,Space)),Raw),
+    sort(Raw,Distinct),member(instance(Space,Class),Distinct).
 
 space_subject(Entity, Subject) :-
     (instance_of(_, Entity) -> Subject = instance(Entity)
@@ -137,7 +142,7 @@ space_contain(Space, Subject) :-
         Destination = entity_ref(Here, History, Space),
         Subject \== Destination,
         space_authorized(Space, space_admit, Subject, display),
-        Ns::(current_ontology_identity(Ns, Anchor),
+        in_ontology(Ns,Anchor,
              space_consent(Entity, Principal, Destination, display)),
         \+ space_member(Space, Subject),
         assertz(space_member(Space, Subject)))).
@@ -159,7 +164,7 @@ space_removal_allowed(Space, Subject, Mode) :-
     (space_authorized(Space, space_remove, Subject, Mode) -> true
     ; Subject = entity_ref(Ns, Anchor, Entity),
       current_ontology_identity(Here, History),
-      Ns::(current_ontology_identity(Ns, Anchor),
+      in_ontology(Ns,Anchor,
            space_withdrawal_consent(Entity, Principal,
                                     entity_ref(Here, History, Space), Mode))).
 
@@ -190,7 +195,7 @@ space_place(Entity, ExpectedRevision, Destination) :-
         ; retract(space_assignment_state(Entity, ExpectedRevision, none))),
         Revision is ExpectedRevision + 1,
         assertz(space_assignment_state(Entity, Revision, Destination)),
-        Ns::(current_ontology_identity(Ns, Anchor),
+        in_ontology(Ns,Anchor,
              space_accept_placement(Space, entity_ref(Here, History, Entity), Revision)))).
 
 %% This participant entry requires the assignment staged by space_place/3.
@@ -203,7 +208,7 @@ space_accept_placement(Space, Subject, Revision) :-
         ; fail_with_reason(not_space(Space))),
         current_ontology_identity(Here, History),
         space_authorized(Space, space_admit, Subject, placement),
-        Ns::(current_ontology_identity(Ns, Anchor),
+        in_ontology(Ns,Anchor,
              space_assignment(Entity, Revision, entity_ref(Here, History, Space))),
         (\+ space_placement(Space, Subject, _) -> true
         ; fail_with_reason(space_placement_exists(Space, Subject))),
@@ -221,7 +226,7 @@ space_withdraw(Entity, ExpectedRevision, Destination) :-
         Revision is ExpectedRevision + 1,
         assertz(space_assignment_state(Entity, Revision, none)),
         current_ontology_identity(Here, History),
-        Ns::(current_ontology_identity(Ns, Anchor),
+        in_ontology(Ns,Anchor,
              space_release_placement(Space, entity_ref(Here, History, Entity),
                                      ExpectedRevision, Revision)))).
 
@@ -230,7 +235,7 @@ space_release_placement(Space, Subject, Before, Revision) :-
     Subject = entity_ref(Ns, Anchor, Entity), Revision is Before + 1,
     transaction((
         space_removal_allowed(Space, Subject, placement),
-        Ns::(current_ontology_identity(Ns, Anchor),
+        in_ontology(Ns,Anchor,
              space_assignment(Entity, Revision, none)),
         space_change_physics(Space, Subject, withdrawn),
         retract(space_placement(Space, Subject, Before)))).
@@ -243,9 +248,30 @@ space_expected_assignment(Entity, Expected, Destination) :-
     (Destination = Actual -> true
     ; fail_with_reason(space_destination_conflict(Entity))).
 
+%% Travel composes the existing withdrawal/admission in one savepoint. The
+%% source slot and both destinations participate in the same atomic write.
+%% The requested return is exact; storage and display do not imply a parent.
+space_travel(Entity, Expected, Before, After, Revision) :-
+    term_variables([Entity,Expected,Before,After], []),
+    (After = unplaced -> Destination = none
+    ; After = placed(Destination,Pose), space_transform(Pose)),
+    (Before \== Destination -> true
+    ; fail_with_reason(space_destination_unchanged(Entity))),
+    transaction((
+        space_expected_assignment(Entity,Expected,Before),
+        (Before == none -> Empty = Expected
+        ; space_authorized(Entity,space_leave,Before,placement),
+          space_withdraw(Entity,Expected,Before), Empty is Expected + 1),
+        (Destination == none -> Revision = Empty
+        ; unique_solution(attribute(Entity,transform,PreviousPose)),
+          retract(attribute(Entity,transform,PreviousPose)),
+          assertz(attribute(Entity,transform,Pose)),
+          space_place(Entity,Empty,Destination), Revision is Empty + 1))).
+
 space_change_physics(Space, Subject, Change) :-
     %% Retained live bindings still require cleanup after destination type edits.
     ((space_instance(Space, physical_space)
+      ; space_simulation_domain(Space,_,_,_)
       ; Change == withdrawn,
         physics_body_definition(Space,_,_,_,_,live(Subject,_,_,_))) ->
         (space_physical_change(Space, Subject, Change) -> true
@@ -255,22 +281,43 @@ space_change_physics(Space, Subject, Change) :-
 %% Composition supplies policy and the physical lifecycle consequence. No
 %% missing hook silently skips constraint/checkpoint or pending-work cleanup.
 space_physical_change(_, _, _) :- fail.
+space_simulation_domain(_,_,_,_) :- fail.
+
+%% Representation edits compare their exact source values. A destination's
+%% installed physical component changes in this same transaction, if present.
+space_represent(Space,BeforeStyle,BeforePose,Style,Pose) :-
+    term_variables([Space,BeforeStyle,BeforePose,Style,Pose],[]),
+    transaction((space_instance(Space,space),space_transform(Pose),space_exterior(Style),
+        space_authorized_representation(Space,BeforeStyle,BeforePose,Style,Pose),
+        unique_solution((attribute(Space,exterior,PriorStyle),attribute(Space,transform,PriorPose))),
+        PriorStyle = BeforeStyle, PriorPose = BeforePose,
+        attribute(Space,dimensions,Dimensions),space_exterior_available(Style,Dimensions),
+        (BeforeStyle == Style, BeforePose == Pose -> true
+        ; retract(attribute(Space,exterior,BeforeStyle)),assertz(attribute(Space,exterior,Style)),
+        retract(attribute(Space,transform,BeforePose)),assertz(attribute(Space,transform,Pose)),
+        space_assignment(Space,_,Destination),
+        (Destination == none -> true
+        ; Destination = entity_ref(Ns,A,Parent),current_ontology_identity(Here,History),
+          in_ontology(Ns,A,
+               space_representation_changed(Parent,entity_ref(Here,History,Space))))))).
+space_authorized_representation(Space,BeforeStyle,BeforePose,Style,Pose) :-
+    operation_authorized(instance(Space),space_represent(BeforeStyle,BeforePose,Style,Pose)).
+space_representation_changed(Space,Subject) :-
+    space_placement(Space,Subject,Assignment),current_ontology_identity(Ns,A),
+    Subject = entity_ref(Source,Anchor,Entity),
+    in_ontology(Source,Anchor,
+              space_assignment(Entity,Assignment,entity_ref(Ns,A,Space))),
+    space_change_physics(Space,Subject,represented).
 
 %% Authored Create forms. The shared GUI binder invokes the normal assertion;
 %% the space constructor and committed class policy own every consequence.
-class_eidolon(space, operation(class), create, recipe(Ns, A, space_create)) :-
-    current_ontology_identity(Ns, A).
-class_eidolon(space, operation(class), create_exact, recipe(Ns, A, space_create_exact)) :-
-    current_ontology_identity(Ns, A).
-class_eidolon(space, operation(class), create_infinite, recipe(Ns, A, space_create_infinite)) :-
-    current_ontology_identity(Ns, A).
-eidolon(space_create, subject(ontology_ref(Ns, A), class(space)), operation(space_create(finite))) :-
-    current_ontology_identity(Ns, A).
-eidolon(space_create_infinite, subject(ontology_ref(Ns, A), class(space)), operation(space_create(infinite))) :-
-    current_ontology_identity(Ns, A).
-
-eidolon(space_create_exact, subject(ontology_ref(Ns, A), class(space)), operation(space_create(exact))) :-
-    current_ontology_identity(Ns, A).
+class_eidolon(space,operation(class),Name,recipe(Ns,A,Recipe)) :-
+    space_creation_recipe(Name,Recipe,_), current_ontology_identity(Ns,A).
+eidolon(Recipe,subject(ontology_ref(Ns,A),class(space)),operation(space_create(Extent))) :-
+    space_creation_recipe(_,Recipe,Extent), current_ontology_identity(Ns,A).
+space_creation_recipe(create,space_create,finite).
+space_creation_recipe(create_exact,space_create_exact,exact).
+space_creation_recipe(create_infinite,space_create_infinite,infinite).
 
 instance_of(quod:gui:form, space_create(Extent)) :- member(Extent, [finite, exact, infinite]).
 instance_of(quod:gui:text_box, space_name).
@@ -296,10 +343,12 @@ attribute(space_placement, options, Options) :-
 instance_of(quod:gui:selection, space_exterior(Extent)) :- member(Extent,[finite,exact,infinite]).
 attribute(space_exterior(_), label, <<"Exterior representation">>).
 attribute(space_exterior(Extent), options,
-    [option(solid,<<"Small solid cube">>),option(wireframe,<<"Full-size finite wireframe">>)]) :- member(Extent,[finite,exact]).
-attribute(space_exterior(infinite), options, [option(solid,<<"Small solid cube">>) ]).
-attribute(space_exterior(Extent), help, <<"Wireframe shows the exact interior dimensions without collision. Contents exteriors are not supported by this client checkpoint.">>) :- member(Extent,[finite,exact]).
-attribute(space_exterior(infinite), help, <<"Infinite extent has no finite wireframe. The solid cube is available; contents exteriors are not supported by this client checkpoint.">>).
+    [option(solid,<<"Small solid cube">>),option(wireframe,<<"Full-size finite wireframe">>),
+     option(contents,<<"Permitted contents">>)]) :- member(Extent,[finite,exact]).
+attribute(space_exterior(infinite), options,
+    [option(solid,<<"Small solid cube">>),option(contents,<<"Permitted contents">>) ]).
+attribute(space_exterior(Extent), help, <<"Wireframe shows the exact interior dimensions without collision. Contents exposes permitted sources in their authored frames.">>) :- member(Extent,[finite,exact]).
+attribute(space_exterior(infinite), help, <<"Infinite extent has no finite wireframe. Solid and permitted contents representations are available.">>).
 attribute(space_length(width), label, <<"Width (X)">>).
 attribute(space_length(height), label, <<"Height (Y)">>).
 attribute(space_length(depth), label, <<"Depth (Z)">>).
@@ -346,18 +395,56 @@ space_form_lengths(exact,
     box(q(W/WD,Unit),q(H/HD,Unit),q(D/DD,Unit))).
 space_form_lengths(infinite,[],infinite).
 
+%% Entry is another exact-subject offered operation. Its frozen source slot
+%% enters the ordinary form revision; a stale offer cannot move a newer slot.
+class_eidolon(space,operation(instance),enter,recipe(Ns,A,space_enter)) :-
+    current_ontology_identity(Ns,A).
+class_eidolon(space,operation(instance),leave,recipe(Ns,A,space_leave)) :-
+    current_ontology_identity(Ns,A).
+eidolon(space_enter,subject(ontology_ref(Ns,A),instance(Space)),operation(Form)) :-
+    current_ontology_identity(Ns,A),
+    space_travel_context(Agent,Revision,Before),
+    Destination = entity_ref(Ns,A,Space), Before \== Destination,
+    Form = space_travel_form(Agent,Revision,Before,
+                            placed(Destination,transform(0,0,0,0,0,0))).
+eidolon(space_leave,subject(ontology_ref(Ns,A),instance(Space)),operation(Form)) :-
+    current_ontology_identity(Ns,A),
+    space_travel_context(Agent,Revision,entity_ref(Ns,A,Space)),
+    Form = space_travel_form(Agent,Revision,entity_ref(Ns,A,Space),unplaced).
+space_travel_context(Agent,Revision,Before) :-
+    current_principal(agent_instance_ref(Ns,A,_)),
+    in_ontology(Ns,A,space_travel_agent(Agent)),
+    Agent = agent_instance_ref(Source,Anchor,Entity),
+    in_ontology(Source,Anchor,space_assignment(Entity,Revision,Before)).
+instance_of(quod:gui:form,space_travel_form(_,_,_,_)).
+instance_of(quod:gui:button,space_travel_submit).
+attribute(space_travel_form(_,_,_,placed(_,_)),label,<<"Enter space">>).
+attribute(space_travel_form(_,_,_,unplaced),label,<<"Leave space">>).
+attribute(space_travel_form(_,_,_,_),help,
+    <<"Move the same personal agent. Navigation follows the committed location. Leaving without a destination makes the agent unplaced.">>).
+attribute(space_travel_submit,label,<<"Move">>).
+gui_children(space_travel_form(_,_,_,_),[space_travel_submit]).
+gui_form(space_travel_form(Agent,Expected,Before,After),[],
+    submit(space_travel_submit,
+        in_ontology(Source,Anchor,
+                 space_travel(Entity,Expected,Before,After,Revision)),
+        operation(space_visit(Agent,Destination),
+            [result(agent,Agent),result(location,After),result(revision,Revision)]))) :-
+    Agent = agent_instance_ref(Source,Anchor,Entity),
+    (After = unplaced -> Destination = none; After = placed(Destination,_)).
+
 %% Pure space depiction, composed with the space vocabulary and ordinary
 %% entity Eidolons. Membership and physical bindings stay with their owners.
 entity_scene(Space, Mode, appearance(Space, Style, Space, Transform, Eidolons)) :-
     space_instance(Space, space), attribute(Space, transform, Transform),
     attribute(Space, exterior, Style),
     member(Mode, [playing, edition]), entity_eidolons(Space, Mode, Style, Eidolons).
-class_eidolon(space, Mode, solid, recipe(Ns, Anchor, space)) :-
-    member(Mode, [playing, edition]), current_ontology_identity(Ns, Anchor).
-class_eidolon(space, Mode, wireframe, recipe(Ns, Anchor, space_wireframe)) :-
-    member(Mode, [playing, edition]), current_ontology_identity(Ns, Anchor).
-class_eidolon(space, Mode, contents, recipe(Ns, Anchor, space_contents)) :-
-    member(Mode, [playing, edition]), current_ontology_identity(Ns, Anchor).
+class_eidolon(space,Mode,Style,recipe(Ns,Anchor,Recipe)) :-
+    member(Mode,[playing,edition]), space_exterior_recipe(Style,Recipe),
+    current_ontology_identity(Ns,Anchor).
+space_exterior_recipe(solid,space).
+space_exterior_recipe(wireframe,space_wireframe).
+space_exterior_recipe(contents,space_contents).
 space_exterior(solid).
 space_exterior(wireframe).
 space_exterior(contents).
@@ -373,42 +460,122 @@ eidolon(space_wireframe, Space,
     [part(<<"extent">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
           surface(<<"#6A90D9">>,0,700,1000,[]),unlabelled,depicts_nothing)]) :-
     attribute(Space,dimensions,box(X,Y,Z)),
-    findall(measure(N,A),measure_vocabulary(N,A),[measure(Ns,Anchor)]),
+    unique_solution(measure_vocabulary(Ns,Anchor)),
     space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D).
 space_millimetres(Ns,Anchor,q(Value,Unit),Length) :-
-    Ns::(current_ontology_identity(Ns,Anchor),convert(Value,Unit,<<"mm">>,Length)).
-%% A selected contents recipe is explicit until M3 supplies recursive exposure.
-%% It must never become a successful cube or wireframe substitute.
-eidolon(space_contents, _, Parts) :- space_eidolon_status(<<"Contents unavailable">>,Parts).
+    in_ontology(Ns,Anchor,convert(Value,Unit,<<"mm">>,Length)).
+%% Contents is a recipe result, not a substitute mesh. The source owns the
+%% complete permitted subject set and physical bindings in its own frame.
+eidolon(space_contents, Space, contents(Exposure)) :-
+    space_contents_projection(Space,Exposure).
+
+space_contents_projection(Space,exposure(Frame,Revision,Subjects)) :-
+    space_instance(Space,space), current_ontology_identity(Ns,A),
+    Frame = entity_ref(Ns,A,Space),
+    findall(Subject,space_contains(Space,Subject),Raw), sort(Raw,Unique),
+    space_exposed_subjects(Unique,Space,Subjects),
+    variant_digest(contents(Frame,Subjects),Revision).
+space_exposed_subjects([],_,[]).
+space_exposed_subjects([Subject|Rest],Space,[exposed(Subject,Relation,Binding)|Subjects]) :-
+    Subject = entity_ref(_,_,_), term_variables(Subject,[]),
+    findall(R,space_placement(Space,Subject,R),Assignments),
+    (Assignments = [] -> Relation = display
+    ; Assignments = [Assignment], Relation = placement(Assignment)),
+    space_subject_binding(Space,Subject,Selected),
+    (Selected = body_pose(_,_), space_simulation_domain(Space,World,_,_) ->
+        Binding = in_frame(World,Selected)
+    ; Binding = Selected),
+    space_exposed_subjects(Rest,Space,Subjects).
 
 world_view(Space, Mode, Marks) :-
-    space_instance(Space,space),
-    findall(Subject,space_contains(Space,Subject),Raw), sort(Raw,Subjects),
-    space_scene_parts(Subjects,Space,Mode,Parts),
-    modelling_vocabulary(Ns,A),
-    Ns::(current_ontology_identity(Ns,A),model(Parts,Marks)).
+    space_projection(Space,Mode,Marks,_).
 
-space_scene_parts([],_,_,[]).
-space_scene_parts([entity_ref(Ns,A,Entity)|Rest],Space,Mode,Parts) :-
-    Ns::(current_ontology_identity(Ns,A),entity_scene(Entity,Mode,Scene)),
-    (Scene = hidden -> Placed = []
+%% The ordinary view and portable exposure receipt use one projection. Budget
+%% comes from the pinned scene policy; there is no recursion/depth constant.
+space_projection(Space,Mode,scene(Marks,Exposures)) :-
+    space_projection(Space,Mode,Marks,Exposures).
+space_projection(Space,Mode,Marks,Exposures) :-
+    member(Mode,[playing,edition]),
+    space_contents_projection(Space,exposure(Frame,_,Subjects)),
+    unique_solution(modelling_vocabulary(Ns,A)),
+    in_ontology(Ns,A,limit(<<"scene">>,Allowance)),
+    integer(Allowance), Allowance >= 0,
+    (space_simulation_domain(Space,World,_,_) -> true; World = none),
+    space_scene_parts(Subjects,Mode,[interior(Frame)],
+        [representation(Frame,contents(Mode))],none,role(physical,World),Allowance,_,Parts,Exposures),
+    in_ontology(Ns,A,model(Parts,Marks)).
+
+space_scene_parts([],_,_,_,_,_,Remaining,Remaining,[],[]).
+space_scene_parts([exposed(Subject,Relation,Binding)|Rest],Mode,Path,Seen,Parent,Role,
+                  Available,Remaining,Parts,Exposures) :-
+    (Available > 0 -> Next is Available - 1
+    ; fail_with_reason(space_exposure_allowance)),
+    Subject = entity_ref(Ns,A,Entity),
+    in_ontology(Ns,A,entity_scene(Entity,Mode,Scene)),
+    (Scene = hidden -> Placed = [], Current = [], After = Next
     ; Scene = appearance(Id,Style,Context,Layout,Eidolons),
+      append(Path,[edge(Subject,Id)],OccurrencePath),
+      term_hex_digest(OccurrencePath,Occurrence),
       findall(Recipe,member(eidolon(Mode,Style,Recipe),Eidolons),Recipes),
-      space_entity_model(Recipes,Context,Model),
-      space_entity_pose(Space,entity_ref(Ns,A,Entity),Layout,Pose),
+      (Style == contents ->
+          (Recipes = [Selected],
+           space_entity_model([Selected],Context,contents(exposure(Subject,ContentRevision,Subjects))) ->
+              Model = contents(exposure(Subject,ContentRevision,Subjects))
+          ; fail_with_reason(space_contents_unavailable(Subject)))
+      ; space_entity_model(Recipes,Context,Model)),
+      variant_digest(selected(Recipes,Context,Model),Revision),
+      Role = role(ParentUse,World),
+      (ParentUse == physical, Relation = placement(_) -> Use = physical; Use = display),
+      space_scene_pose(Use,World,Subject,Binding,Layout,Pose), NextRole = role(Use,World),
+      space_parent_pose(Parent,Pose,At),
+      space_occurrence_model(Model,Mode,OccurrencePath,Seen,Occurrence,NextRole,Next,After,
+                             Local,Children,Descendants,Frame,Allowed,Status),
       modelling_vocabulary(MNs,MA),
-      MNs::(current_ontology_identity(MNs,MA),
-            place_model(Id,Pose,depicts(Ns,A,Entity),Model,Placed))),
-    space_scene_parts(Rest,Space,Mode,Tail), append(Placed,Tail,Parts).
+      in_ontology(MNs,MA,
+            place_model(Occurrence,At,depicts(Ns,A,Entity),Local,Here)),
+      append(Here,Children,Placed),
+      Current = [exposure(Occurrence,OccurrencePath,Subject,selected(Recipes,Revision,Use),
+                          Frame,Allowed,Pose,Status)|Descendants]),
+    space_scene_parts(Rest,Mode,Path,Seen,Parent,Role,After,Remaining,Tail,Others),
+    append(Placed,Tail,Parts), append(Current,Others,Exposures).
 
-space_entity_pose(Space,Subject,Layout,Pose) :-
-    (space_placement(Space,Subject,Assignment), space_instance(Space,physical_space) ->
+space_scene_pose(Use,World,_,in_frame(Selected,body_pose(B,R)),_,Pose) :-
+    (Selected == World -> true; fail_with_reason(incompatible_physics_view(Selected,World))),
+    (Use == physical -> Pose = body_pose(B,R)
+    ; Use == display, Pose = body_frame_pose(B,R)).
+space_scene_pose(physical,_,_,body_pose(B,R),_,body_pose(B,R)).
+space_scene_pose(physical,_,_,source_layout,Layout,Layout).
+space_scene_pose(display,World,Subject,source_layout,Layout,Pose) :-
+    (World = world_ref(Ns,A,W) ->
+        in_ontology(Ns,A,physics_appearance_binding(W,Subject,Binding)),
+        (Binding = none -> Pose = Layout; Binding = body_pose(B,R),Pose = body_frame_pose(B,R))
+    ; Pose = Layout).
+
+space_occurrence_model(contents(exposure(Frame,_,Subjects)),Mode,Path,Seen,Occurrence,Role,
+                       Available,Remaining,Local,Children,Exposures,Frame,Subjects,Status) :-
+    Key = representation(Frame,contents(Mode)),
+    (member_eq(Key,Seen) ->
+        Status = cycle, Remaining = Available, Children = [], Exposures = [],
+        space_eidolon_status(<<"Contents cycle">>,Local)
+    ; Status = contents, Local = [],
+      space_scene_parts(Subjects,Mode,Path,[Key|Seen],Occurrence,Role,Available,Remaining,Children,Exposures)).
+space_occurrence_model(Model,_,_,_,_,_,Available,Available,Model,[],[],none,[],model) :-
+    Model \= contents(_).
+
+space_parent_pose(none,Pose,Pose).
+space_parent_pose(Parent,Pose,relative(Parent,Pose)) :- Parent \== none.
+
+space_subject_binding(Space,Subject,Binding) :-
+    (space_placement(Space,Subject,Assignment), space_simulation_domain(Space,World,_,Path) ->
+        World = world_ref(Ns,A,W),
+        in_ontology(Ns,A,physics_scene_binding(W,Path,Subject,Assignment,Binding))
+    ; space_placement(Space,Subject,Assignment), space_instance(Space,physical_space) ->
         findall(binding(B,R),physics_body_definition(Space,B,R,_,_,live(Subject,Assignment,_,_)),
-                [binding(Body,Revision)]), Pose = body_pose(Body,Revision)
-    ; Layout = transform(_,_,_,_,_,_), Pose = Layout).
+                [binding(Body,Revision)]), Binding = body_pose(Body,Revision)
+    ; Binding = source_layout).
 
 space_entity_model([recipe(Ns,A,Recipe)],Context,Model) :-
-    Ns::(current_ontology_identity(Ns,A),eidolon(Recipe,Context,Model)).
+    in_ontology(Ns,A,eidolon(Recipe,Context,Model)).
 space_entity_model([],_,Parts) :- space_eidolon_status(<<"No matching eidolon">>,Parts).
 space_entity_model([_,_|_],_,Parts) :- space_eidolon_status(<<"Choose an eidolon">>,Parts).
 space_eidolon_status(Text,

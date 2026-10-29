@@ -1,0 +1,75 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_agent_failover_SUITE:suspended_host_retires_stale_process result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery-migrate.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_agent_failover_suite.src.html#suspended_host_retires_stale_process-1">quod_agent_failover_SUITE:suspended_host_retires_stale_process/1</a> (click for source code)
+
+=== Config value:
+
+    [{watchdog,&lt;0.8513.0&gt;},
+     {tc_logfile,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_23.45.02/lib.quod.logs/run.2026-10-28_23.45.02/quod_agent_failover_suite.suspended_host_retires_stale_process.html"},
+     {tc_group_properties,[{suite,quod_agent_failover_SUITE}]},
+     {tc_group_path,[]},
+     {data_dir,"/work/_build/test/lib/quod/test/quod_agent_failover_SUITE_data/"},
+     {priv_dir,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_23.45.02/lib.quod.logs/run.2026-10-28_23.45.02/log_private/"}]
+
+=== Current directory is "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_23.45.02"
+
+=== Started at 2026-10-28 23:47:06
+
+<br />
+=WARNING REPORT==== 28-Oct-2026::23:47:12.360890 ===
+quod[agent:failover]: no download contact — Brahms sample empty and no non-self seed (isolated node? seeds=[] node_addr={"127.0.0.1",
+                                                                                                                         52355})
+
+
+</pre>
+<div class="default"><pre><b>*** User 2026-10-28 23:47:17.350 ***</b><a id=e-8 class="link-to-entry" href="#e-8">&#x1f517;</a>
+Host fault accepted at -576460588252
+</pre></div>
+<pre>
+
+</pre>
+<div class="default"><pre><b>*** User 2026-10-28 23:47:25.056 ***</b><a id=e-9 class="link-to-entry" href="#e-9">&#x1f517;</a>
+Committed epoch 2 at height 5, time -576460580546
+</pre></div>
+<pre>
+
+</pre>
+<div class="default"><pre><b>*** User 2026-10-28 23:47:41.308 ***</b><a id=e-10 class="link-to-entry" href="#e-10">&#x1f517;</a>
+Replacement work committed before host return at -576460564294
+</pre></div>
+<pre>
+=WARNING REPORT==== 28-Oct-2026::23:47:41.390838 ===
+quod_prolog[agent:failover]: can_invoke refused a top-level goal at pinned height 9
+
+<a name="end"></a>
+
+
+=== Ended at 2026-10-28 23:47:41
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Oct 28 2026 23:47:06<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

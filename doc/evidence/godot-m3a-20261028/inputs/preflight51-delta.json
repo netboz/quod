@@ -1,0 +1,25 @@
+{
+  "base_archive": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3a-20261028/inputs/preflight32-authored.tar.gz",
+  "base_archive_sha256": "c96994c87aef8dbd2b583c333008c37b4bfb7ef72787a2b36091ff5b64f8ec96",
+  "replacement_files": {
+    "priv/ontologies/common_predicates.pl": "inputs/preflight51-files/priv/ontologies/common_predicates.pl",
+    "priv/ontologies/geometry_schema.pl": "inputs/preflight51-files/priv/ontologies/geometry_schema.pl",
+    "priv/ontologies/gui_forms.pl": "inputs/preflight51-files/priv/ontologies/gui_forms.pl",
+    "priv/ontologies/gui_instance.pl": "inputs/preflight51-files/priv/ontologies/gui_instance.pl",
+    "priv/ontologies/quod_physics.pl": "inputs/preflight51-files/priv/ontologies/quod_physics.pl",
+    "priv/ontologies/quod_space.pl": "inputs/preflight51-files/priv/ontologies/quod_space.pl",
+    "src/quod_committed_projection.erl": "inputs/preflight51-files/src/quod_committed_projection.erl",
+    "test/quod_common_primitives_tests.erl": "inputs/preflight51-files/test/quod_common_primitives_tests.erl",
+    "test/quod_ct.erl": "inputs/preflight51-files/test/quod_ct.erl",
+    "test/quod_gui_examples_tests.erl": "inputs/preflight51-files/test/quod_gui_examples_tests.erl",
+    "test/quod_gui_operations_tests.erl": "inputs/preflight51-files/test/quod_gui_operations_tests.erl",
+    "test/quod_gui_stage1_tests.erl": "inputs/preflight51-files/test/quod_gui_stage1_tests.erl",
+    "test/quod_lifecycle_single_path_tests.erl": "inputs/preflight51-files/test/quod_lifecycle_single_path_tests.erl",
+    "test/quod_lobby_tests.erl": "inputs/preflight51-files/test/quod_lobby_tests.erl",
+    "test/quod_personal_agent_tests.erl": "inputs/preflight51-files/test/quod_personal_agent_tests.erl",
+    "test/quod_physics_tests.erl": "inputs/preflight51-files/test/quod_physics_tests.erl",
+    "test/quod_space_creation_tests.erl": "inputs/preflight51-files/test/quod_space_creation_tests.erl",
+    "test/quod_space_tests.erl": "inputs/preflight51-files/test/quod_space_tests.erl"
+  },
+  "exact_path_set_manifest": "preflight51-source.json"
+}

@@ -37,10 +37,22 @@ histories remain ordinary instances outside this shared count.
 The required compositions are authoritative. Optional filenames describe
 their later owner consolidation. The retirement map records the original
 inputs; M1a evidence records the bytes actually installed. A composed file does not create another ontology. The generic startup
-base remains exactly `common_predicates.pl`, `construction.pl`,
-`material_policy.pl` plus the existing governed predicate modules. Package
+base is `common_predicates.pl`, `construction.pl`, `material_policy.pl`,
+`gui_forms.pl` and `geometry_schema.pl` plus the existing governed predicate modules. The GUI file
+interprets local form declarations and binds offered operations; it installs
+no application state, entry permission or lifecycle handler. The geometry file
+validates supplied authored body data and coordinate allowances; it selects
+no world, physical presence, budget or admission policy. Package
 hashes for that base and runtime are part of every qualification, since they
 are read by committed projections and are not fixed by a genesis anchor alone.
+These are ordinary interpreted base clauses in each owner's versioned table:
+complete source reads include them, and authorized local edits retain the
+existing exact-baseline, transaction and recovery semantics. Moving a clause
+does not pin it by a new ontology anchor or make it globally immutable. Changed
+base text requires the exact runtime/package hashes during reconstruction;
+old founded histories containing the former inline definitions are not a
+compatible starting state. Qualification uses fresh foundations. This contract
+does not authorize upgrading or refounding an existing network.
 
 The qualified server build uses Rust/Cargo **1.90.0**, rebar3 **3.26.0** and
 OTP **28.5.0.2**/ERTS **16.4.0.2**, with the exact local builder image identity and
@@ -316,10 +328,10 @@ delegations, live body revisions, `quod_runtime` retained source readers,
 `quod_physics` native owner, run/structure fences and authenticated control/
 observation remain authoritative. Unsimulated ordinary spaces allocate nothing.
 
-The current profile selects one physics actor and native world per independently
+The M0/M2 baseline profile selects one physics actor and native world per independently
 enabled space, binds a live body to its direct destination and assignment,
 requires foreign-source subscriptions, and opens one visible-world viewer.
-It cannot currently compose independent S1/S2 worlds into S0 and provide
+That baseline cannot compose independent S1/S2 worlds into S0 and provide
 cross-boundary contacts. A visually flattened tree with independent colliders
 does not satisfy the requested single-space behavior. This is a demonstrated
 adapter gap, not a new domain/consensus problem.
@@ -448,3 +460,11 @@ Do not archive a consensus, GUI, physics or lifecycle owner just because an old
 namespace disappears. Later proven superseded Erlang sources require exact
 callers/tests and the destination/exclusions above in the same replacement
 scope. Archived sources are retained history, never an active alternative.
+
+The former `quod_space.pl:space_entity_pose/4` helper is retained verbatim at
+`outdated/ontologies/prolog/m3a-space-entity-pose.pl`. Recursive projection now
+uses `space_subject_binding/3` and `space_scene_pose/6` for both direct and
+independent appearances. Its only remaining caller was the body-binding test;
+that test now queries the shared binding owner and retains missing, duplicate,
+stale-assignment and authored-pose refusal checks. The fragment is outside
+`src` and `priv`, absent from founding/loaders and release/Docker inputs.

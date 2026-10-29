@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": "plan_1793104481306_y8rhic",
+      "issueKey": "QUO-60",
+      "status": "in-development",
+      "progress": 50,
+      "read_receipt": "inputs/final-tracker-QUO-60.json"
+    },
+    {
+      "id": "tsk_01M5YNM08XYDABJXFR89HJV6YK",
+      "issueKey": "QUO-64",
+      "status": "in-review",
+      "progress": 13,
+      "read_receipt": "inputs/final-tracker-QUO-64.json"
+    },
+    {
+      "id": "tsk_01M5PY8TEXKG858WBZJ1RHC6EW",
+      "issueKey": null,
+      "status": "in-review",
+      "progress": 25,
+      "read_receipt": "inputs/final-tracker-tsk_01M5PY8TEXKG858WBZJ1RHC6EW.json"
+    }
+  ],
+  "item_metadata_mutated": false,
+  "body_write_attempted": false,
+  "shared_body_publication_confirmed": false,
+  "publication_limit": "Prior automatic approval review rejection is preserved; no retry or workaround. Local gets and linkedCount0 are not shared visible-publication/attribution proof."
+}

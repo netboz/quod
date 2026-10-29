@@ -1,0 +1,8 @@
+{
+  "head": "69196a36caeeb06e6ee07982f1ab1988d7c16b43",
+  "parent": "d027f9f65bbce2f484f906c92bf07ebaa4669c38",
+  "original_branch_base": "f6c29fe925e666dd68ee7fa68c0e03f5d03391a2",
+  "patch_sha256": "513703fe7d4eada393778499bf4d2c297e1e2d9530ac5fe986d2fe6e416137db",
+  "bytes": 177448,
+  "includes_preexisting_coordination_prompt": true
+}

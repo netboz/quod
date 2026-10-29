@@ -130,8 +130,12 @@ semantics, with coverage for both spellings through class and Eidolon lookup.
 The shared argument-following and class paths now resolve both structured
 spellings; GUI components use that same resolution.
 
-The first executable layer is composed from `gui_instance.pl`, using the same
-founding/source-edit mechanism as existing reusable ontology behavior:
+The form compiler and offered-operation binder are shared framework mechanics
+in [`gui_forms.pl`](../priv/ontologies/gui_forms.pl), loaded by the existing
+committed projection base. Applications compose `gui_instance.pl` for their
+question lifecycle and advertised API, using the existing founding/source-edit
+mechanism. Applications retain all form declarations, entry permissions,
+question state, signing, hosting, HUD consequences and continuations:
 
 - `gui_schema(Form, Revision, Tree)` compiles the component tree and binding
   declaration. It neither opens a question nor authorizes a submission.
@@ -143,7 +147,12 @@ founding/source-edit mechanism as existing reusable ontology behavior:
   reaction/agent path. It is not a direct submission endpoint.
 
 `gui_vocabulary(Namespace, Anchor)` pins the vocabulary used by these predicates.
-The containing ontology still supplies its own entry ACL. A variant digest uses
+The containing ontology still supplies its own entry ACL. The shared compiler
+remains interpreted source in that owner's versioned base. Complete source
+inspection includes it; local edits use the existing exact-baseline and commit
+checks. Recovery requires the exact qualified base package and history. Fresh
+founding composes only the lifecycle file, avoiding duplicate compiler clauses
+from its former inline source. A variant digest uses
 the existing canonical term codec's variable tags, so renaming declaration
 variables preserves the revision while changing variable sharing does not.
 
@@ -173,10 +182,10 @@ validated unique component identities.
 
 ### Offered class and instance operations
 
-Compose `gui_operation.pl` alongside `gui_instance.pl` in the target ontology.
-The former adds description and binding only; existing signed goals, domain
-guards, transactions and result recovery remain the execution path. Composing
-these rules grants no entry ACL and publishes no `action/3` automatically.
+`gui_instance.pl` advertises offered operations; `gui_forms.pl` provides their
+single shared discovery and binding implementation. Existing signed goals,
+domain guards, transactions and result recovery remain the execution path.
+These mechanics grant no entry ACL and publish no `action/3` automatically.
 
 An author explicitly offers a recipe with
 `class_eidolon(Class, operation(class), Name, recipe(Ns, Anchor, Recipe))`

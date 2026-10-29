@@ -1,0 +1,22 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+=WARNING REPORT==== 28-Oct-2026::14:19:07.272249 ===
+quod_prolog[quod:user]: can_invoke refused a top-level goal at pinned height 1
+M1a setup_refusals
+[0;31mF[0m
+Failures:
+
+  1) quod_lifecycle_single_path_tests:-m1a_seven_foundations_test_/0-fun-13-/0
+[0;31m     Failure/Error: ?assert(lists : member ( injected_signup_ack_failure , DecodedAck ))
+       expected: true
+            got: false[0m
+[0;36m     %% /work/test/quod_lifecycle_single_path_tests.erl:527:in `quod_lifecycle_single_path_tests:-m1a_seven_foundations_test_/0-fun-13-/0`[0m
+
+
+
+Finished in 6.232 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

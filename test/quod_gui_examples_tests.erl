@@ -275,8 +275,10 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                     ?assertMatch({ok,[_],_},read(Ctx,Ns,{voxel_terrain_binding,land,0,2})),
                     ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,{gui_pending_questions,{0}})),
                     {ok,[#{<<"V0">> := Scene}],_} = read(Ctx,Ns,{world_view,land,playing,{0}}),
-                    ?assertMatch([{mark,<<"land">>,<<"group">>,_,_,_,_,_},
-                        {mark,<<"land/ground">>,<<"terrain">>,_,{relative,<<"land">>,{body_pose,0,2}},
+                    Land = quod_ct:scene_mark_id(Scene,{entity_ref,Ns,quod_simplex:genesis_hash(Ns),{terrain,land}}),
+                    Ground = <<Land/binary,"/ground">>,
+                    ?assertMatch([{mark,Land,<<"group">>,_,_,_,_,_},
+                        {mark,Ground,<<"terrain">>,_,{relative,Land,{body_pose,0,2}},
                          terrain_surfaces,unlabelled,{depicts,Ns,_,{terrain,land}}}],Scene),
                     SubmitForm = fun(F,Control,Values) ->
                         {ok,[#{<<"V0">> := R}],_} = read(Ctx,Ns,{gui_schema,F,{0},{1}}),

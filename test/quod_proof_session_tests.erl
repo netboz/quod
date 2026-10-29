@@ -27,6 +27,53 @@ resumable_invocation_preserves_solution_order_test() ->
         quod_proof_session:stop(Session)
     end.
 
+computed_answers_do_not_echo_ground_inputs_test() ->
+    Input = binary:copy(<<"x">>, 45000),
+    Goal = {choice, Input, Input, {'X'}, {'X'}},
+    Session = quod_proof_session:start(committed([
+        {choice, Input, Input, first, first},
+        {choice, Input, Input, second, second}]), #{read_set => true}),
+    Invocation = invocation_id(1),
+    try
+        ok = quod_proof_session:open(Session, Invocation, Goal, allowed,
+                                    context(), empty_selection()),
+        lists:foreach(fun(Expected) ->
+            {solution, Answer} = quod_proof_session:next(Session, Invocation),
+            ?assert(erlang:external_size(Answer) < ?QUOD_MAX_PROOF_ANSWER_BYTES),
+            {ok, Bindings} = quod_ask:test_bind_answer(Goal, Answer),
+            ?assertEqual(Expected, erlog_int:dderef({'X'}, Bindings)),
+            ?assertEqual({ok, #{'X' => Expected}},
+                         quod_proof_session:bindings(Session, Invocation))
+        end, [first, second]),
+        ?assertMatch({complete, _}, quod_proof_session:next(Session, Invocation))
+    after quod_proof_session:stop(Session)
+    end.
+
+computed_answer_preserves_unbound_aliases_and_real_output_limit_test() ->
+    Large = binary:copy(<<"x">>, ?QUOD_MAX_PROOF_ANSWER_BYTES),
+    Session = quod_proof_session:start(committed([
+        {alias, {'A'}, {'A'}}, {output, Large}]), #{read_set => true}),
+    try
+        AliasGoal = {alias, {'X'}, {'Y'}},
+        Alias = invocation_id(1),
+        ok = quod_proof_session:open(Session, Alias, AliasGoal, allowed,
+                                    context(), empty_selection()),
+        {solution, Answer} = quod_proof_session:next(Session, Alias),
+        {ok, Bindings} = quod_ask:test_bind_answer(AliasGoal, Answer),
+        X = erlog_int:dderef({'X'}, Bindings),
+        ?assertMatch({_}, X),
+        ?assertEqual(X, erlog_int:dderef({'Y'}, Bindings)),
+        Output = invocation_id(2),
+        ok = quod_proof_session:open(Session, Output, {output, {'Value'}},
+                                    allowed, context(), empty_selection()),
+        {solution, LargeAnswer} = quod_proof_session:next(Session, Output),
+        ?assertEqual({error, {too_large, answer}},
+                     quod_scope_session:test_answer_disposition(LargeAnswer)),
+        ?assertEqual({ok, #{'Value' => Large}},
+                     quod_proof_session:bindings(Session, Output))
+    after quod_proof_session:stop(Session)
+    end.
+
 independent_intent_belongs_to_an_invocation_not_the_shared_revision_test() ->
     Session = quod_proof_session:start(
       quod_transaction_predicates:load(committed([])),
@@ -157,8 +204,8 @@ failed_branch_write_is_visible_to_its_next_alternative_test() ->
     try
         ok = quod_proof_session:open(
                Session, Invocation, Goal, allowed, context(), empty_selection()),
-        ?assertEqual(
-           {solution, Goal}, quod_proof_session:next(Session, Invocation)),
+        {solution, Answer} = quod_proof_session:next(Session, Invocation),
+        ?assertMatch({ok, _}, quod_ask:test_bind_answer(Goal, Answer)),
         ?assert(has_assert(
                   {retained, value},
                   quod_proof_session:local_changes(Session)))

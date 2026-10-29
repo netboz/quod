@@ -2775,8 +2775,8 @@ resolve_resource_sources(Ns,H,Est,{physics_worlds,Rows},Deadline) ->
         %% rechecks every current body and can demand additional coverage.
         {Ranges,Focus} = case Demand of {_,Token,_,Required,Priority} -> {Required,Priority}; _ -> {initial,#{}} end,
         Resolved = [resolve_physics_body({Ns,H},Est,World,Authority,B,Deadline) || B <- Bodies],
-        case lists:all(fun({ok,_}) -> true; (_) -> false end,Resolved) of
-            true -> case materialize_physics_bodies({Ns,H},Est,W,[B || {ok,B} <- Resolved],
+        case lists:keyfind(error,1,Resolved) of
+            false -> case materialize_physics_bodies({Ns,H},Est,W,[B || {ok,B} <- Resolved],
                                                    maps:get(World,Retained,#{}),Ranges,Focus,Deadline) of
                 {ok,Native,Current} ->
                     Admission = case map_size(Current) of
@@ -2789,7 +2789,7 @@ resolve_resource_sources(Ns,H,Est,{physics_worlds,Rows},Deadline) ->
                     end;
                 {error,Reason} -> {Accepted,[{unavailable,World,Reason}|Failed],Artifacts}
             end;
-            false -> {Accepted,[World|Failed],Artifacts}
+            {error,Reason} -> {Accepted,[{unavailable,World,Reason}|Failed],Artifacts}
         end
     end,{[],[],#{}},Rows),
     {physics_worlds,lists:reverse(Ready),Unavailable,Resources};
@@ -2801,6 +2801,10 @@ resolve_resource_sources(_,_,_,Selected,_) -> Selected.
 materialize_physics_bodies(Identity,Est,W,Bodies,Previous,Ranges,Focus,Deadline) ->
     try
         {Rows,Current} = lists:mapfoldl(fun
+            ({body,B,_,_,{framed,_,_},{voxel_field_v1,_,_,_},_},_) ->
+                throw({voxel_materialization,{unsupported_framed_terrain,B}});
+            ({body,B,_,_,{framed,_,_},{voxel_resident_v1,_,_},_},_) ->
+                throw({voxel_materialization,{unsupported_framed_terrain,B}});
             ({body,B,R,fixed,Pose,{voxel_field_v1,W0,Revision,Digest},Density},Acc) when W0 =:= W ->
                 {Ns,H} = Identity,
                 Demand = case Ranges of
@@ -2841,18 +2845,43 @@ materialize_physics_bodies(Identity,Est,W,Bodies,Previous,Ranges,Focus,Deadline)
         error:nif_not_loaded -> {error,native_unavailable}
     end.
 
-resolve_physics_body(_,_,_,_,{body,B,R,Kind,Pose,{owned,Shape,Density}},_) ->
-    {ok,{body,B,R,Kind,Pose,Shape,Density}};
-resolve_physics_body({Ns,H},Est,{world_ref,Ns,Anchor,_} = World,Authority,
-        {body,B,R,Kind,Pose,{live,{entity_ref,Ns,Anchor,Entity},Assignment,Revision,Digest}},_) ->
-    %% The definition and its delegation are in this same retained snapshot.
-    %% Capture their ordinary predicate dependencies; no foreign subscription
-    %% or second projection is needed for an exactly local entity.
-    Goal = physics_definition_goal(World,Authority,Entity,Assignment,Revision,Digest),
-    physics_resolved_body(select_resource(Ns,H,Est,Goal),B,R,Kind,Pose);
-resolve_physics_body({Ns,_},Est,World,Authority,
-        {body,B,R,Kind,Pose,{live,{entity_ref,Source,Anchor,Entity},Assignment,Revision,Digest}},Deadline) ->
-    Identity = {Source,Anchor},
+resolve_physics_body(Identity,Est,World,Authority,{body,B,R,Kind,Pose,Definition},Deadline) ->
+    Geometry = case Definition of
+        {owned,Shape,Density} -> {ok,#{'Shape' => Shape,'Density' => Density}};
+        {live,{entity_ref,Source,Anchor,Entity},Assignment,Revision,Digest} ->
+            Goal=physics_definition_goal(World,Authority,Entity,Assignment,Revision,Digest),
+            physics_source_selection(Identity,Est,World,{Source,Anchor},Goal,Deadline);
+        _ -> {error,invalid_body_definition}
+    end,
+    Resolved=resolve_physics_pose(Identity,Est,World,Authority,Pose,Deadline),
+    physics_resolved_body(Geometry,B,R,Kind,Resolved);
+resolve_physics_body(_,_,_,_,_,_) -> {error,invalid_body_definition}.
+
+resolve_physics_pose(Identity={Ns,H},Est,World={world_ref,_,_,W},Authority,{framed,Edges,Local},Deadline) ->
+    {Selections,_}=lists:mapfoldl(fun(Edge={frame,{entity_ref,Source,Anchor,Entity},Assignment,Revision},Prefix) ->
+        Path=Prefix++[Edge],
+        Member={physics_frame_member,W,{entity_ref,Source,Anchor,Entity},Assignment,Revision,Path},
+        Goal={',',{physics_definition_projection,World,Authority,Entity,Revision,{frame,{'Transform'},{'Recipe'}}},
+                  {physics_definition_delegate,Entity,World,Authority,Assignment}},
+        Selection=case select_resource_result(Est,Member,required,quod_predicates:policy_verdict_context(Ns,H)) of
+            {ok,_} -> physics_source_selection(Identity,Est,World,{Source,Anchor},Goal,Deadline);
+            {error,_}=Error -> Error
+        end,
+        {Selection,Path}
+    end,[],Edges),
+    case lists:keyfind(error,1,Selections) of
+        false ->
+            Frames=lists:map(fun({ok,#{'Transform' := Transform}}) -> Transform end,Selections),
+            {ok,{framed,Frames,Local}};
+        {error,_}=Error -> Error
+    end;
+resolve_physics_pose(_,_,_,_,Pose,_) -> {ok,Pose}.
+
+%% Geometry and every anchored frame share the existing retained reader and
+%% installed-source fences. There is no request-time projection reconstruction.
+physics_source_selection({Ns,H},Est,{world_ref,Ns,Anchor,_},{Ns,Anchor},Goal,_) ->
+    select_resource_result(Est,Goal,required,quod_predicates:resource_context({Ns,Anchor},H));
+physics_source_selection({Ns,_},Est,World,Identity,Goal,Deadline) ->
     %% Missing/denied selections retain their source dependency as well.
     quod_observation:note({source,World,Identity,lifecycle},Est),
     case gen_server:call(quod_reg:via({quod_runtime,Ns}),
@@ -2865,19 +2894,21 @@ resolve_physics_body({Ns,_},Est,World,Authority,
                     {Follow,H,Projection,{Pid,Generation}} ->
                         quod_observation:note({source_fence,Identity,
                             {snapshot,Follow,H,Projection,Pid,Generation,Deadline}},Est),
-                        Goal = physics_definition_goal(World,Authority,Entity,Assignment,Revision,Digest),
-                        {Result,Basis} = quod_resource_basis:capture(SourceEst,
-                            fun(Observed) -> select_resource(Source,H,Observed,Goal) end),
+                        {Captured,Basis} = quod_resource_basis:capture(SourceEst,
+                            fun(Observed) -> {selection,select_resource_result(Observed,Goal,required,
+                                quod_predicates:resource_context(Identity,H))} end),
                         maps:foreach(fun(Key,_) -> quod_observation:note({source,World,Identity,Key},Est) end,Basis),
-                        physics_resolved_body(Result,B,R,Kind,Pose);
+                        case Captured of
+                            {selection,Result} -> Result;
+                            {error,{Class,Reason,Stack}} -> erlang:raise(Class,Reason,Stack)
+                        end;
                     _ -> {error,source_selection_superseded}
                 end
             end);
         {source,Fence,{error,_} = Error} ->
             quod_observation:note({source_fence,Identity,Fence},Est), Error;
         {error,_} = Error -> Error
-    end;
-resolve_physics_body(_,_,_,_,_,_) -> {error,invalid_body_definition}.
+    end.
 
 physics_definition_goal(World,Authority,Entity,Assignment,Revision,Digest) ->
     {',',{physics_definition_projection,World,Authority,Entity,Revision,
@@ -2885,9 +2916,10 @@ physics_definition_goal(World,Authority,Entity,Assignment,Revision,Digest) ->
      {',',{physics_definition_delegate,Entity,World,Authority,Assignment},
           {term_digest,{geometry,{'Shape'},{'Density'}},Digest}}}.
 
-physics_resolved_body(#{'Shape' := Shape,'Density' := Density},B,R,Kind,Pose) ->
+physics_resolved_body({ok,#{'Shape' := Shape,'Density' := Density}},B,R,Kind,{ok,Pose}) ->
     {ok,{body,B,R,Kind,Pose,Shape,Density}};
-physics_resolved_body(_,_,_,_,_) -> {error,source_definition_unavailable}.
+physics_resolved_body({error,_}=Error,_,_,_,_) -> Error;
+physics_resolved_body(_,_,_,_,{error,_}=Error) -> Error.
 
 valid_resource_scope(agent_custody,
                      {{agent_instance_ref, Ns, Anchor, _}, Epoch, Observer},
@@ -3048,14 +3080,26 @@ select_resource(Ns, H, Est, Goal) ->
     select_resource(Ns,H,Est,Goal,optional).
 select_resource(Ns, H, Est, Goal, Requirement) ->
     Context = quod_predicates:policy_verdict_context(Ns, H),
+    select_resource_context(Est,Goal,Requirement,Context).
+select_resource_context(Est, Goal, Requirement, Context) ->
+    case select_resource_result(Est,Goal,Requirement,Context) of
+        {ok,Bindings} -> Bindings;
+        fail -> fail;
+        {error,Reason} -> throw({resource_selection_failed,Reason})
+    end.
+
+%% Expected policy failures are values. A consuming world can remain unavailable
+%% while its owner reconciles other worlds; unexpected evaluator faults still
+%% propagate to the owner's existing capture boundary.
+select_resource_result(Est, Goal, Requirement, Context) ->
     case quod_proof_session:run_first(Goal, quod_predicates:set_context(Est, Context),
                                       #{read_set => true, read_only => true}) of
-        {ok, Bindings, [], _ReadSet} -> Bindings;
+        {ok, Bindings, [], _ReadSet} -> {ok,Bindings};
         {fail, Reasons} -> case Requirement of
             optional -> fail;
-            required -> throw({resource_selection_failed,{no_solution,functor_key(Goal),Reasons}})
+            required -> {error,{no_solution,functor_key(Goal),Reasons}}
         end;
-        {error, Reason} -> throw({resource_selection_failed, Reason})
+        {error,_}=Error -> Error
     end.
 
 required_selection(Ns, H, Est, Goal) ->

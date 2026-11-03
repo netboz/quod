@@ -1,0 +1,14 @@
+{
+  "production_edits_executed": false,
+  "rejections": [
+    {
+      "action": "Remove QUOD_MAX_NESTED_GOAL_BYTES consistently in scope invocation, proof transcript, scope wire, DTX transcript decoding and authorization replay; run fresh signed software fixture.",
+      "reason": "This removes a shared 128 KiB nested-goal validation boundary across scope, proof, wire, transaction, and authorization owners and broadens payload admission, which is a significant security/resource-boundary weakening not specifically authorized by the presentation-cap request."
+    },
+    {
+      "action": "Remove duplicate 512 KiB result and view limits plus client-goal envelope quota through existing wire/result/view/endpoint owners; run focused owner check. No nested-goal mutation in this second attempt.",
+      "reason": "The action removes the 512 KiB result and goal-envelope bounds across shared wire, result, view, and endpoint owners, including a transport-adjacent admission guard; this is a broad persistent resource/security-boundary weakening beyond the authorized scene-presentation cap removal."
+    }
+  ],
+  "disposition": "Do not retry or bypass. Parent requested unapplied reviewable proposals and will request explicit approval after independent work is frozen."
+}

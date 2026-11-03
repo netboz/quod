@@ -1,0 +1,66 @@
+--- a/src/erlog_int.erl
++++ b/src/erlog_int.erl
+@@ -555,22 +555,22 @@
+ 
+ %% Now look up the database.
+ prove_goal(G0, Next, #est{bs=Bs,db=Db}=St) ->
+-    G = dderef(G0, Bs),
++    G = deref(G0, Bs),
+     %%io:fwrite("PG: ~p\n    ~p\n    ~p\n", [dderef(G, Bs),Next,Cps]),
+     try get_procedure(functor(G), Db) of
+ 	built_in ->
+             observe({native, erlog_bips, prove_goal, functor(G)}, St),
+-            erlog_bips:prove_goal(G, Next, predicate_failure_boundary(G, St));
++            erlog_bips:prove_goal(dderef(G, Bs), Next, predicate_failure_boundary(G, St));
+ 	{code,{Mod,Func}} ->
+             observe({native, Mod, Func, functor(G)}, St),
+-            Mod:Func(G, Next, predicate_failure_boundary(G, St));
++            Mod:Func(dderef(G, Bs), Next, predicate_failure_boundary(G, St));
+ 	{clauses,Cs} -> prove_goal_clauses(G, Cs, Next, predicate_failure_boundary(G, St));
+ 	undefined ->
+ 	    case get_prolog_flag(unknown, St) of
+ 		error ->			%Throw error
+ 		    existence_error(procedure, pred_ind(functor(G)), St);
+ 		_ ->				%Fail or warning
+-		    ?FAIL(add_predicate_failure_reason(G, St))
++		    ?FAIL(add_predicate_failure_reason(dderef(G, Bs), St))
+ 	    end
+     catch
+ 	throw:{erlog_error,E} ->
+@@ -580,8 +580,9 @@
+ %% A predicate's own alternatives sit above this boundary. Only when all of
+ %% them (and every continuation they can satisfy) are exhausted does failure
+ %% reach the boundary and add the call to the diagnostic stack. Store the
+-%% already-dereferenced call by reference and freeze it only if the boundary is
+-%% reached; successful calls therefore do not deep-copy their arguments.
++%% original call and its immutable bindings, as ordinary choicepoints do. Resolve
++%% that snapshot only if the boundary is reached; later bindings must not change
++%% the diagnostic, and successful interpreted calls need no deep traversal.
+ %%
+ %% Boundary creation has a proof-wide cap. This bounds the extra choicepoint
+ %% retention even for long deterministic recursion; reaching the cap marks the
+@@ -593,11 +594,11 @@
+ predicate_failure_boundary({get_fail_reasons,_Reasons}, St) ->
+     St;
+ predicate_failure_boundary(Goal,
+-			   #est{cps=Cps,fail_boundaries=Count}=St) ->
++			   #est{cps=Cps,bs=Bs,fail_boundaries=Count}=St) ->
+     case internal_predicate(Goal) of
+ 	true -> St;
+ 	false when Count < ?ERLOG_MAX_FAILURE_BOUNDARIES ->
+-	    St#est{cps=[#cp{type=predicate_failure,data=Goal}|Cps],
++	    St#est{cps=[#cp{type=predicate_failure,data=Goal,bs=Bs}|Cps],
+ 		   fail_boundaries=Count+1};
+ 	false ->
+ 	    mark_failure_reasons_truncated(St)
+@@ -679,8 +680,8 @@
+ fail_choicepoint(#cp{type=compiled,data=F}=Cp, Cps, St) ->
+     observe(native_continuation, St),
+     F(Cp, Cps, St);
+-fail_choicepoint(#cp{type=predicate_failure,data=Goal}, Cps, St) ->
+-    fail(Cps, add_predicate_failure_reason(Goal, St)).
++fail_choicepoint(#cp{type=predicate_failure,data=Goal,bs=Bs}, Cps, St) ->
++    fail(Cps, add_predicate_failure_reason(dderef(Goal, Bs), St)).
+ 
+ cut(Label, Last, Next, #est{cps=Cps}=St) ->
+     cut(Label, Last, Next, Cps, St).

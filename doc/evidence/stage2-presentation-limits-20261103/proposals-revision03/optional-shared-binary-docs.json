@@ -1,0 +1,16 @@
+{
+  "revision": 3,
+  "applied": false,
+  "compiled_or_executed": false,
+  "files": [
+    {
+      "path": "doc/multiwrite-architecture.md",
+      "before_sha256": "5c0c5cff94bdf6acf76cfc0f57eb1363553c34592959373a0c7904da6b6e324f",
+      "proposed_sha256": "7e5690714f2d0e9b2a5ebf1a426b35180d736122df275d4a6fc16858fb8c1adb",
+      "added": 8,
+      "removed": 1
+    }
+  ],
+  "added": 8,
+  "removed": 1
+}

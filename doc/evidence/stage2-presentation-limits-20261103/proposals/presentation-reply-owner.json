@@ -1,0 +1,43 @@
+{
+  "applied": false,
+  "compiled_or_executed": false,
+  "files": [
+    {
+      "path": "src/quod_wire_term.erl",
+      "before_sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "proposed_sha256": "9b08181a111ecdfad0c650c5570f1f1aba30f35e33aa202af3bb8e35279dc14e",
+      "added": 3,
+      "removed": 3
+    },
+    {
+      "path": "src/quod_client_result.erl",
+      "before_sha256": "7196780a64d1d28efaee6e249094b38ed3628f75f3f1fc796d8c93b9bd94d74e",
+      "proposed_sha256": "ad0e90927b59041bafc4e735d6a4b0710c8f48dc903d25dc38d94af0d039b711",
+      "added": 21,
+      "removed": 30
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "before_sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+      "proposed_sha256": "a4354165f9b89511469333a0b5e1a8a069f9460ac6823749ed0fd1a9b034489e",
+      "added": 9,
+      "removed": 17
+    },
+    {
+      "path": "src/quod_client_goal_endpoint.erl",
+      "before_sha256": "4e8ceb6ff917d265ec27643da7963c92ee64abb1b0ea2ce61f5b1f9bf4360e2a",
+      "proposed_sha256": "c5cb2d7c36ed261cb8bfb900f93050903a4e91e5f436de55d9680085cee6325d",
+      "added": 5,
+      "removed": 11
+    },
+    {
+      "path": "include/quod_client_goal_limits.hrl",
+      "before_sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "proposed_sha256": "066b5861f51c91774235367e69e225578a6fc39cdd42fe06756a9c3d26c1fd01",
+      "added": 2,
+      "removed": 6
+    }
+  ],
+  "added": 40,
+  "removed": 67
+}

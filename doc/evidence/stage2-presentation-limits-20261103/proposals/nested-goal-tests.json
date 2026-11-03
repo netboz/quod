@@ -1,0 +1,22 @@
+{
+  "applied": false,
+  "compiled_or_executed": false,
+  "files": [
+    {
+      "path": "test/quod_scope_wire_tests.erl",
+      "before_sha256": "c72ee60cd82efe9e3e9f8d580236e04d228140c75e79ebced79960f8582b31ef",
+      "proposed_sha256": "e75883ca3d99870f1975632d0cd97eecf4d4123675eda8af5ead909c44cdc721",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "test/quod_dtx_tests.erl",
+      "before_sha256": "5f0204c736dfe8895d0252739106c7a0e24d594eaea95f246402469e6e6fb771",
+      "proposed_sha256": "9b9b2caf58078f6bb7db0dda4752120d8f991be884e8ba719579ac58c07c0ba1",
+      "added": 7,
+      "removed": 11
+    }
+  ],
+  "added": 8,
+  "removed": 12
+}

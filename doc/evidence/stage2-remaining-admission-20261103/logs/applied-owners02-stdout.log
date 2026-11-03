@@ -1,0 +1,35 @@
+OWNER_BEAMS [{erlog_int,"/checks/lib/erlog/ebin/erlog_int.beam"},
+             {quod_prolog,"/checks/lib/quod/ebin/quod_prolog.beam"},
+             {quod_erlog_db_local_prove,
+                 "/checks/lib/quod/ebin/quod_erlog_db_local_prove.beam"},
+             {quod_agent_hosting_tests,
+                 "/checks/lib/quod/test/quod_agent_hosting_tests.beam"}]
+======================== EUnit ========================
+quod_simplex_tests: ready_lower_sequence_keeps_priority_without_byte_quota_test...[0.091 s] ok
+quod_simplex_tests: committee_certificate_uses_actual_population_test...*failed*
+in function quod_simplex:share_bytes/4 (/checks/source/src/quod_simplex.erl, line 347)
+  called as share_bytes(<<"wrong-domain">>,support,{<<0,0,0,0,0,0,0,0,0,0,0,0,0,...>>,1},<<184,45,7,171,92,45,224,83,61,79,103,105,97,105,...>>)
+in call from quod_simplex:sanitize_cert_bounded/8 (/checks/source/src/quod_simplex.erl, line 735)
+in call from quod_simplex:verify_cert/3 (/checks/source/src/quod_simplex.erl, line 438)
+in call from quod_simplex_tests:committee_certificate_uses_actual_population_test/0 (/checks/source/test/quod_simplex_tests.erl, line 8985)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:function_clause
+  output:<<"">>
+
+quod_predicate_failure_tests: committee_refusal_reasons_test...[0.033 s] ok
+module 'quod_committee_predicates_tests'
+  quod_committee_predicates_tests: admit_stages_peer_admitted_test...[0.013 s] ok
+  quod_committee_predicates_tests: admit_unready_fails_test...[0.001 s] ok
+  quod_committee_predicates_tests: admit_has_no_validator_population_quota_test...[0.002 s] ok
+  quod_committee_predicates_tests: admit_without_context_fails_test...[0.001 s] ok
+  quod_committee_predicates_tests: remove_retracts_real_address_test...[0.001 s] ok
+  quod_committee_predicates_tests: remove_refuses_last_test...[0.001 s] ok
+  quod_committee_predicates_tests: remove_nonmember_fails_test...[0.001 s] ok
+  quod_committee_predicates_tests: staging_refused_in_verdict_test...[0.001 s] ok
+  quod_committee_predicates_tests: policy_verdict_refuses_live_query_bridge_test...[0.001 s] ok
+  [done in 0.049 s]
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 11.

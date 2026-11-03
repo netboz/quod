@@ -1,0 +1,16 @@
+{
+  "revision": 3,
+  "applied": false,
+  "compiled_or_executed": false,
+  "files": [
+    {
+      "path": "src/quod_proof_session.erl",
+      "before_sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+      "proposed_sha256": "711481cea833dcf9b5fb5d5211ab3c4b5d12f40c20277725317cc13255fe23ca",
+      "added": 9,
+      "removed": 2
+    }
+  ],
+  "added": 9,
+  "removed": 2
+}

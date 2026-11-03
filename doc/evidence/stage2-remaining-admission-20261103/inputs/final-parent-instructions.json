@@ -1,0 +1,22 @@
+[
+  {
+    "id": "meta-1793722858425-s20v90b",
+    "status": "pending",
+    "createdAt": 1793722858426,
+    "claimedAt": null,
+    "completedAt": null,
+    "errorMessage": null,
+    "promptPreview": "RESULTS newly identifies default max_proof_workers/max_scope_workers64. Parent source confirms these are direct busy/ontology_busy refusals on the same proof/scope path (quod_prolog defaults/record/init, admission and release/wait paths), not merely batching granularity. Include this last identified...",
+    "prompt": "RESULTS newly identifies default max_proof_workers/max_scope_workers64. Parent source confirms these are direct busy/ontology_busy refusals on the same proof/scope path (quod_prolog defaults/record/init, admission and release/wait paths), not merely batching granularity. Include this last identified live resource default in the consolidated unapplied correction rather than defer another known cap: remove built-in numeric default through existing configurable owner/schema, preserve explicitly configured finite allowances, worker custody/reuse/cancellation/deadlines and capacity release semantics. Trace all callers and prepare real-owner finite/unlimited tests, no new process/pool/queue/policy engine. If removing the default has a concrete unresolved correctness dependency, report it specifically. Keep earlier artifacts/compiles labelled; no application/runtime/commit. Then finish final packet; no further broad audit or unrelated scope."
+  },
+  {
+    "id": "meta-1793723232302-pvfjvnr",
+    "status": "pending",
+    "createdAt": 1793723232302,
+    "claimedAt": null,
+    "completedAt": null,
+    "errorMessage": null,
+    "promptPreview": "Parent final source review/receipts: proposal-production04 true0/2EOF; proposal-compile13 true0/2EOF; production-unchanged-final02 confirms0/0 and no preimage mismatch. Patch SHAs reviewed: remaining20df667750c420a6a3f95600531cca6c025b964ac39fe5197a75d07b69807ea3; namespacec901aa315e1a06d312021c6764...",
+    "prompt": "Parent final source review/receipts: proposal-production04 true0/2EOF; proposal-compile13 true0/2EOF; production-unchanged-final02 confirms0/0 and no preimage mismatch. Patch SHAs reviewed: remaining20df667750c420a6a3f95600531cca6c025b964ac39fe5197a75d07b69807ea3; namespacec901aa315e1a06d312021c6764412bfa2bbb026d0a49e8ec6c254a4386d3b235; Erlog365222a87f7bce76d6c51e3de92656be805b60bb937f2bb76dc28b7dd33e1eb3. No further blocking source finding from parent; runtime acceptance is pending. RESULTS currently still has pre-worker numbers and says defaults64 notchanged; awaiting your final doc/freeze refresh before presenting one consolidated approval. Include parent-review01.md and parent-include-resolution01 receipts/header supplement in final freeze. No new scope/review/test requested."
+  }
+]

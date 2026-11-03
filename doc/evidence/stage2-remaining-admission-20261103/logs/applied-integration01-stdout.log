@@ -1,0 +1,378 @@
+OWNER_BEAMS [{erlog_int,"/checks/lib/erlog/ebin/erlog_int.beam"},
+             {quod_prolog,"/checks/lib/quod/ebin/quod_prolog.beam"},
+             {quod_erlog_db_local_prove,
+                 "/checks/lib/quod/ebin/quod_erlog_db_local_prove.beam"},
+             {quod_agent_hosting_tests,
+                 "/checks/lib/quod/test/quod_agent_hosting_tests.beam"}]
+======================== EUnit ========================
+module 'quod_dtx_current_view_tests'
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (applied/not_ready)...[0.063 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (applied/invalid_evidence)...ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (applied/wrong_correlation)...ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (applied/transport_failure)...ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (read_attest/not_ready)...[0.002 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (read_attest/invalid_evidence)...[0.001 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (read_attest/wrong_correlation)...[0.001 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (read_attest/transport_failure)...[0.001 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (outcome/not_ready)...[0.003 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (outcome/invalid_evidence)...ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (outcome/wrong_correlation)...ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (outcome/transport_failure)...ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (operation_applied/not_ready)...[0.087 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (operation_applied/invalid_evidence)...[0.034 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (operation_applied/wrong_correlation)...[0.033 s] ok
+  quod_dtx_current_view_tests: -peer_address_selection_is_not_committee_evidence_test_/0-fun-14- (operation_applied/transport_failure)...[0.033 s] ok
+  quod_dtx_current_view_tests: -local_observations_use_the_same_correlation_gate_test_/0-fun-6- (applied)...ok
+  quod_dtx_current_view_tests: -local_observations_use_the_same_correlation_gate_test_/0-fun-6- (read_attest)...ok
+  quod_dtx_current_view_tests: -local_observations_use_the_same_correlation_gate_test_/0-fun-6- (outcome)...ok
+  quod_dtx_current_view_tests: -local_observations_use_the_same_correlation_gate_test_/0-fun-6- (operation_applied)...[0.032 s] ok
+  quod_dtx_current_view_tests: -quorum_collection_has_one_parent_and_preserves_result_test_/0-fun-14- (committed)...[0.011 s] ok
+  quod_dtx_current_view_tests: -quorum_collection_has_one_parent_and_preserves_result_test_/0-fun-14- (retry)...ok
+  quod_dtx_current_view_tests: -exact_evidence_and_certificate_boundaries_preserve_validation_test_/0-fun-9- (valid)...[0.034 s] ok
+  quod_dtx_current_view_tests: -exact_evidence_and_certificate_boundaries_preserve_validation_test_/0-fun-9- (invalid)...[0.033 s] ok
+  quod_dtx_current_view_tests: local_current_view_uses_the_captured_projection_and_apply_sent_frontier_test...[0.001 s] ok
+  quod_dtx_current_view_tests: newer_read_anchor_borrows_once_from_the_original_committed_owner_test...ok
+  quod_dtx_current_view_tests: later_quorum_anchor_capture_spends_the_original_certification_deadline_test...[0.301 s] ok
+  quod_dtx_current_view_tests: newer_untrusted_read_anchor_cannot_trigger_owner_recapture_test...[0.002 s] ok
+  quod_dtx_current_view_tests: endpoint_failure_never_immediately_resubmits_uncertain_work_test...ok
+  quod_dtx_current_view_tests: application_delivery_preserves_evidence_through_the_candidate_walk_test...[0.032 s] ok
+  quod_dtx_current_view_tests: exact_f_plus_one_resolve_committee_certificate_succeeds_test...[0.001 s] ok
+  quod_dtx_current_view_tests: applied_certificate_accepts_an_equivalent_resolve_quorum_subset_test...[0.001 s] ok
+  quod_dtx_current_view_tests: insufficient_duplicate_nonmember_and_bad_signatures_fail_test...[0.001 s] ok
+  quod_dtx_current_view_tests: every_signed_statement_field_is_bound_test...[0.001 s] ok
+  quod_dtx_current_view_tests: certification_uses_exact_resolve_committee_without_current_view_lookup_test...[0.001 s] ok
+  quod_dtx_current_view_tests: cohosted_certification_uses_the_local_member_without_a_route_test...ok
+  quod_dtx_current_view_tests: one_below_f_plus_one_is_retry_test...[0.001 s] ok
+  quod_dtx_current_view_tests: read_certificate_reaches_f_plus_one_without_a_consensus_block_test...[0.002 s] ok
+  quod_dtx_current_view_tests: read_certificate_one_below_f_plus_one_retries_test...[0.002 s] ok
+  quod_dtx_current_view_tests: read_certificate_ignores_vote_from_another_committee_view_test...[0.002 s] ok
+  quod_dtx_current_view_tests: read_certificate_f_plus_one_stale_refusals_remain_typed_test...ok
+  quod_dtx_current_view_tests: read_conflict_stops_the_shared_endpoint_walk_test...ok
+  quod_dtx_current_view_tests: read_certificate_one_stale_refusal_does_not_override_quorum_test...[0.001 s] ok
+  quod_dtx_current_view_tests: read_certificate_combines_equivalent_finality_subsets_test...[0.002 s] ok
+  quod_dtx_current_view_tests: read_certificate_selects_verified_proof_from_equivalent_votes_test...[0.001 s] ok
+  quod_dtx_current_view_tests: read_certificate_refuses_when_no_equivalent_proof_verifies_test...[0.001 s] ok
+  quod_dtx_current_view_tests: read_certificate_does_not_combine_different_record_digests_test...[0.002 s] ok
+  quod_dtx_current_view_tests: read_certification_never_allocates_foreign_plan_symbols_test...[0.001 s] ok
+  quod_dtx_current_view_tests: retired_resolve_member_uses_shared_resolver_after_endpoint_move_test...ok
+  quod_dtx_current_view_tests: live_route_for_a_nonmember_is_never_probed_or_counted_test...ok
+  quod_dtx_current_view_tests: malformed_resolve_evidence_and_reply_are_retryable_test...ok
+  quod_dtx_current_view_tests: wrong_signer_or_bad_signature_reply_never_counts_test...ok
+  quod_dtx_current_view_tests: programmer_fault_in_probe_terminates_monitored_certifier_test...=ERROR REPORT==== 3-Nov-2026::16:53:56.539654 ===
+Error in process <0.363.0> with exit value:
+{endpoint_dependency_fault,
+    [{quod_dtx_current_view_tests,
+         '-programmer_fault_in_probe_terminates_monitored_certifier_test/0-fun-1-',
+         6,
+         [{file,"/checks/source/test/quod_dtx_current_view_tests.erl"},
+          {line,988}]},
+     {quod_dtx_current_view,call_endpoint,7,
+         [{file,"/checks/source/src/quod_dtx_current_view.erl"},{line,1471}]},
+     {quod_peer_route,walk,5,
+         [{file,"/checks/source/src/quod_peer_route.erl"},{line,23}]},
+     {quod_dtx_current_view,'-collect_applied/6-fun-0-',6,
+         [{file,"/checks/source/src/quod_dtx_current_view.erl"},{line,1195}]},
+     {quod_trace,'-with_span/6-fun-0-',3,
+         [{file,"/checks/source/src/quod_trace.erl"},{line,81}]},
+     {quod_trace,with_context,2,
+         [{file,"/checks/source/src/quod_trace.erl"},{line,59}]},
+     {quod_dtx_current_view,'-collect_quorum/6-fun-1-',7,
+         [{file,"/checks/source/src/quod_dtx_current_view.erl"},
+          {line,1239}]}]}
+
+ok
+  quod_dtx_current_view_tests: successful_early_certificate_reaps_other_probe_processes_test...[0.001 s] ok
+  quod_dtx_current_view_tests: many_certification_preserves_aligned_successes_and_retries_test...[0.001 s] ok
+  quod_dtx_current_view_tests: many_certification_expired_deadline_starts_no_observation_test...ok
+  quod_dtx_current_view_tests: many_certification_refuses_non_deadline_input_test...ok
+  quod_dtx_current_view_tests: many_certification_validates_each_input_once_before_workers_test...[0.008 s] ok
+  quod_dtx_current_view_tests: malformed_late_batch_row_starts_no_worker_test...ok
+  quod_dtx_current_view_tests: many_certification_children_follow_caller_death_test...ok
+  quod_dtx_current_view_tests: outcome_needs_f_plus_one_identical_current_validator_replies_test...ok
+  quod_dtx_current_view_tests: one_byzantine_outcome_reply_never_decides_test...ok
+  quod_dtx_current_view_tests: ordinary_outcome_quorum_must_agree_on_selected_bindings_test...ok
+  quod_dtx_current_view_tests: operation_outcome_requires_f_plus_one_current_validators_test...ok
+  quod_dtx_current_view_tests: view_mismatch_lag_and_split_valid_statuses_are_retryable_test...ok
+  quod_dtx_current_view_tests: ordinary_quorum_absence_stays_unknown_without_a_barrier_test...ok
+  quod_dtx_current_view_tests: pending_vote_is_not_a_validator_quorum_status_test...ok
+  [done in 0.935 s]
+module 'quod_dtx_coordinator_tests'
+  quod_dtx_coordinator_tests: receipt_recovery_workers_keep_the_request_trace_test...[0.047 s] ok
+  quod_dtx_coordinator_tests: operation_projection_cannot_add_a_target_to_the_certified_claim_test...[0.033 s] ok
+  quod_dtx_coordinator_tests: -fresh_operation_result_decode_and_send_are_traced_test_/0-fun-1- (committed)...[0.039 s] ok
+  quod_dtx_coordinator_tests: -fresh_operation_result_decode_and_send_are_traced_test_/0-fun-1- (rejected)...[0.037 s] ok
+  quod_dtx_coordinator_tests: -fresh_operation_result_decode_and_send_are_traced_test_/0-fun-1- (malformed)...[0.035 s] ok
+  quod_dtx_coordinator_tests: -fresh_operation_result_decode_and_send_are_traced_test_/0-fun-1- (wrong_target)...[0.045 s] ok
+  quod_dtx_coordinator_tests: held_target_cannot_delay_another_targets_application_and_certificate_test...[0.060 s] ok
+  quod_dtx_coordinator_tests: -target_continuation_admission_boundaries_test_/0-fun-4- (admitted)...[0.052 s] ok
+  quod_dtx_coordinator_tests: -target_continuation_admission_boundaries_test_/0-fun-4- (no_progress)...[0.052 s] ok
+  quod_dtx_coordinator_tests: -target_continuation_admission_boundaries_test_/0-fun-4- (paused)...[0.052 s] ok
+  quod_dtx_coordinator_tests: -target_continuation_admission_boundaries_test_/0-fun-4- (expired)...[0.052 s] ok
+  quod_dtx_coordinator_tests: -target_continuation_admission_boundaries_test_/0-fun-4- (already_running)...[0.053 s] ok
+  quod_dtx_coordinator_tests: -target_continuation_admission_boundaries_test_/0-fun-4- (fatal)...[0.052 s] ok
+  quod_dtx_coordinator_tests: -independent_retry_does_not_join_a_held_sibling_test_/0-fun-1- (progress_before_result)...[0.063 s] ok
+  quod_dtx_coordinator_tests: -independent_retry_does_not_join_a_held_sibling_test_/0-fun-1- (progress_after_result)...[0.059 s] ok
+  quod_dtx_coordinator_tests: -independent_retry_does_not_join_a_held_sibling_test_/0-fun-1- (paused_then_ready)...[0.061 s] ok
+  quod_dtx_coordinator_tests: -independent_retry_does_not_join_a_held_sibling_test_/0-fun-1- (foreign_progress)...[0.061 s] ok
+  quod_dtx_coordinator_tests: -independent_retry_does_not_join_a_held_sibling_test_/0-fun-1- (retained_application)...[0.062 s] ok
+  quod_dtx_coordinator_tests: parked_targets_resume_only_on_their_own_progress_test...[0.054 s] ok
+  quod_dtx_coordinator_tests: all_returned_targets_park_with_the_original_deadline_test...[0.053 s] ok
+  quod_dtx_coordinator_tests: one_progress_edge_cannot_be_reused_after_the_target_wave_test...[0.057 s] ok
+  quod_dtx_coordinator_tests: options_are_strict_and_share_the_endpoint_deadline_test...ok
+  quod_dtx_coordinator_tests: remote_operation_temporary_reply_parks_on_progress_test...[0.010 s] ok
+  quod_dtx_coordinator_tests: application_result_carries_only_its_bound_acceleration_test...[0.055 s] ok
+  quod_dtx_coordinator_tests: terminal_operation_recovers_committed_result_without_resubmission_test...[0.034 s] ok
+  quod_dtx_coordinator_tests: terminal_operation_recovers_rejected_result_without_resubmission_test...[0.035 s] ok
+  quod_dtx_coordinator_tests: unknown_operation_waits_for_its_source_projection_edge_test...[0.034 s] ok
+  quod_dtx_coordinator_tests: terminal_operation_rejects_mismatched_source_reference_test...[0.033 s] ok
+  quod_dtx_coordinator_tests: operation_source_index_corruption_is_reported_not_parked_test...[0.033 s] ok
+  quod_dtx_coordinator_tests: operation_source_worker_fault_is_reported_not_parked_test...[0.032 s] ok
+  quod_dtx_coordinator_tests: -included_application_uses_remote_committee_when_local_cannot_vote_test_/0-fun-4- (observer)...[0.037 s] ok
+  quod_dtx_coordinator_tests: -included_application_uses_remote_committee_when_local_cannot_vote_test_/0-fun-4- (no_local_identity)...[0.043 s] ok
+  quod_dtx_coordinator_tests: included_application_keeps_one_follow_and_ignores_nonprogress_notices_test...[0.040 s] ok
+  quod_dtx_coordinator_tests: included_application_refuses_wrong_result_and_follows_owner_replacement_test...[0.035 s] ok
+  quod_dtx_coordinator_tests: operation_worker_exits_during_held_source_read_test...[0.031 s] ok
+  quod_dtx_coordinator_tests: cohosted_submit_falls_through_only_on_retryable_local_results_test...[0.026 s] ok
+  quod_dtx_coordinator_tests: remote_endpoint_fallback_preserves_uncertainty_and_correlation_test...[0.026 s] ok
+  quod_dtx_coordinator_tests: submit_fanout_starts_every_source_and_cleans_losers_test...[0.029 s] ok
+  quod_dtx_coordinator_tests: prepared_endpoint_waits_for_readiness_without_renewing_deadline_test...[0.025 s] ok
+  quod_dtx_coordinator_tests: operation_source_wave_parks_continuation_with_original_deadline_test...[0.033 s] ok
+  quod_dtx_coordinator_tests: dispatched_endpoint_worker_death_preserves_uncertainty_test...[0.025 s] ok
+  quod_dtx_coordinator_tests: historical_routes_may_be_a_valid_committee_subset_test...ok
+  quod_dtx_coordinator_tests: phase_evidence_structure_fails_loudly_test...[0.026 s] ok
+  quod_dtx_coordinator_tests: phase_evidence_accepts_an_equivalent_quorum_subset_test...[0.026 s] ok
+  quod_dtx_coordinator_tests: applied_wave_retains_verified_siblings_when_one_target_retries_test...[0.025 s] ok
+  quod_dtx_coordinator_tests: applied_wave_rechecks_deadline_at_owner_consumption_test...[0.025 s] ok
+  quod_dtx_coordinator_tests: worker_is_owned_by_an_exact_monitor_not_a_link_test...[0.025 s] ok
+  quod_dtx_coordinator_tests: coordinator_close_cancels_wave_timer_and_workers_test...ok
+  quod_dtx_coordinator_tests: owned_workers_follow_their_immediate_owner_transitively_test...ok
+  quod_dtx_coordinator_tests: only_submit_death_is_uncertain_and_only_timeout_is_retryable_test...ok
+  quod_dtx_coordinator_tests: source_progress_uses_owner_commit_edge_not_foreign_history_test...ok
+  quod_dtx_coordinator_tests: source_progress_accepts_only_its_existing_commit_stream_test...ok
+  quod_dtx_coordinator_tests: invalid_own_role_allocates_no_worker_test...ok
+  quod_dtx_coordinator_tests: dormant_cancel_retires_custody_only_on_explicit_terminal_reply_test...ok
+  quod_dtx_coordinator_tests: dormant_cancel_signals_one_exact_directory_demand_test...[0.013 s] ok
+  quod_dtx_coordinator_tests: dormant_cancel_retries_exact_submission_only_on_target_route_edge_test...[0.003 s] ok
+  quod_dtx_coordinator_tests: dormant_custody_release_preserves_actual_caller_pid_test...[0.002 s] ok
+  [done in 2.011 s]
+module 'quod_feed_tests'
+  quod_feed_tests: era_feed_receipts_coalesce_without_authorizing_or_replaying_history_test...[0.075 s] ok
+  quod_feed_tests: roundtrip_test...[0.008 s] ok
+  quod_feed_tests: decode_wrong_ns_test...[0.008 s] ok
+  quod_feed_tests: decode_garbage_test...ok
+  quod_feed_tests: progress_signal_checks_only_the_safe_namespace_envelope_test...ok
+  quod_feed_tests: recipient_control_codec_is_bounded_and_namespace_exact_test...ok
+  quod_feed_tests: recipient_late_commits_coalesce_behind_one_ordered_wake_test...[0.002 s] ok
+  quod_feed_tests: recipient_registration_replaces_one_peer_row_and_tracks_link_death_test...ok
+  quod_feed_tests: certified_catchup_head_wakes_recipients_without_a_block_replay_test...ok
+  quod_feed_tests: feed_start_resets_a_registration_lost_before_subscription_test...ok
+  quod_feed_tests: feed_restart_resets_the_surviving_registered_link_test...ok
+  quod_feed_tests:407: -ready_test_/0-fun-11-...ok
+  quod_feed_tests:408: -ready_test_/0-fun-9-...ok
+  quod_feed_tests:409: -ready_test_/0-fun-7-...ok
+  quod_feed_tests:410: -ready_test_/0-fun-5-...ok
+  quod_feed_tests:411: -ready_test_/0-fun-3-...ok
+  quod_feed_tests:412: -ready_test_/0-fun-1-...ok
+  quod_feed_tests: peer_ready_table_test...ok
+  quod_feed_tests: peer_ready_no_table_test...ok
+  quod_feed_tests:439: -readiness_config_test_/0-fun-7-...ok
+  quod_feed_tests:440: -readiness_config_test_/0-fun-5-...ok
+  quod_feed_tests:441: -readiness_config_test_/0-fun-3-...ok
+  quod_feed_tests:442: -readiness_config_test_/0-fun-1-...ok
+  quod_feed_tests: fold_snapshot_test...[0.009 s] ok
+  [done in 0.174 s]
+module 'quod_link_tests'
+  quod_link_tests: peer_key_normalizes_transport_identity_test...ok
+  quod_link_tests: header_roundtrip_test...ok
+  quod_link_tests: header_keeps_remainder_test...ok
+  quod_link_tests: header_split_buffers_test...ok
+  quod_link_tests: header_bad_nodeid_rejected_test...ok
+  quod_link_tests: header_bad_learn_policy_rejected_test...ok
+  quod_link_tests: compressed_header_identity_rejected_before_expansion_test...ok
+  quod_link_tests: frame_layout_test...ok
+  quod_link_tests: frame_roundtrip_test...ok
+  quod_link_tests: coalesced_frames_test...ok
+  quod_link_tests: split_frame_reassembles_test...ok
+  quod_link_tests: partial_header_buffers_test...ok
+  quod_link_tests: whole_then_partial_test...ok
+  quod_link_tests: large_frame_waits_for_complete_declared_payload_test...[0.021 s] ok
+  quod_link_tests: unrepresentable_iodata_refuses_before_allocation_or_enqueue_test...[0.009 s] ok
+  quod_link_tests: catchup_bootstrap_and_opaque_page_test...[0.055 s] ok
+  quod_link_tests: -catchup_bootstrap_uses_one_absolute_deadline_test_/0-fun-1-...[5.001 s] ok
+  quod_link_tests: catchup_bootstrap_atomic_ordered_send_test...[0.021 s] ok
+  quod_link_tests: catchup_server_send_acceptance_precedes_next_admission_test...[0.021 s] ok
+  quod_link_tests: catchup_batch_violation_stops_publication_test...[0.021 s] ok
+  quod_link_tests: catchup_missing_owner_returns_credit_test...ok
+  quod_link_tests: catchup_source_owner_death_resets_exact_link_test...ok
+  quod_link_tests: catchup_changed_binding_retires_link_test...ok
+  quod_link_tests: catchup_producer_death_retires_link_test...ok
+  quod_link_tests: catchup_failed_terminal_send_never_returns_credit_test...ok
+  [done in 5.224 s]
+module 'quod_agent_identity_tests'
+  quod_agent_identity_tests: quorum_certificate_verifies_distinct_current_members_test...[0.002 s] ok
+  quod_agent_identity_tests: duplicate_outsider_and_subquorum_signatures_do_not_authorize_test...[0.001 s] ok
+  quod_agent_identity_tests: certificate_is_bound_to_proof_request_committee_and_expiry_test...ok
+  quod_agent_identity_tests: fully_replaced_committee_cannot_authorize_fresh_request_test...[0.002 s] ok
+  quod_agent_identity_tests: request_and_response_wire_are_closed_and_correlated_test...ok
+  [done in 0.020 s]
+module 'quod_transaction_tests'
+  quod_transaction_tests: sign_and_verify_test...ok
+  quod_transaction_tests: exact_envelope_equality_is_symbol_representation_independent_test...ok
+  quod_transaction_tests: sign_submission_matches_separate_operations_test...ok
+  quod_transaction_tests: deterministic_read_check_order_test...ok
+  quod_transaction_tests: semantic_id_rejects_unstable_map_keys_before_signing_test...ok
+  quod_transaction_tests: foreign_reads_are_signed_but_do_not_change_semantic_id_test...ok
+  quod_transaction_tests: from_plan_carries_canonical_foreign_reads_test...[0.018 s] ok
+  quod_transaction_tests: remote_claim_carries_foreign_reads_into_application_test...[0.010 s] ok
+  quod_transaction_tests: foreign_read_carrier_round_trips_canonically_test...ok
+  quod_transaction_tests: noncanonical_foreign_reads_are_rejected_test...ok
+  quod_transaction_tests: malformed_current_foreign_reads_fail_during_full_decode_test...ok
+  quod_transaction_tests: current_semantic_id_domain_differs_from_v4_test...ok
+  quod_transaction_tests: namespace_binding_test...ok
+  quod_transaction_tests: every_committed_field_is_bound_test...ok
+  quod_transaction_tests: malformed_and_wrong_author_test...ok
+  quod_transaction_tests: history_genesis_exemption_test...ok
+  quod_transaction_tests: signed_user_request_is_bound_and_revalidated_at_admission_test...[0.018 s] ok
+  quod_transaction_tests: signed_user_request_and_authorization_transcript_are_not_interchangeable_test...[0.018 s] ok
+  quod_transaction_tests: signed_request_replay_uses_the_certified_block_time_test...[0.020 s] ok
+  quod_transaction_tests: same_agent_request_has_one_semantic_transaction_across_validator_authors_test...[0.019 s] ok
+  quod_transaction_tests: remote_operation_ids_are_acyclic_and_evidence_independent_test...[0.010 s] ok
+  quod_transaction_tests: remote_operation_role_and_evidence_roundtrip_test...[0.010 s] ok
+  quod_transaction_tests: operation_submission_is_one_verified_custody_artifact_test...[0.003 s] ok
+  quod_transaction_tests: operation_submission_rejects_before_inner_decode_test...[0.014 s] ok
+  quod_transaction_tests: network_identity_requirement_is_total_and_fail_closed_test...[0.018 s] ok
+  quod_transaction_tests: relay_submission_roundtrip_test...ok
+  quod_transaction_tests: superseded_v12_transaction_is_explicitly_rejected_test...ok
+  quod_transaction_tests: different_canonical_submissions_have_different_ids_test...ok
+  quod_transaction_tests: relay_attempt_identity_test...ok
+  quod_transaction_tests: relay_attempt_identity_golden_vector_test...ok
+  quod_transaction_tests: relay_attempt_identity_rejects_malformed_test...ok
+  quod_transaction_tests: relay_verifies_before_decode_test...ok
+  quod_transaction_tests: authenticated_relay_replays_admitted_vocabulary_on_a_cold_vm_test...[0.005 s] ok
+  quod_transaction_tests: bounded_material_failure_is_total_test...*failed*
+in function quod_transaction_tests:bounded_material_failure_is_total_test/0 (/checks/source/test/quod_transaction_tests.erl, line 765)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_transaction_tests},
+              {line,765},
+              {expression,"quod_transaction : bytes ( ? BINDING , Transaction )"},
+              {expected,{error,bad_term}},
+              {value,{ok,<<131,104,21,119,16,113,117,111,...>>}}]}
+  output:<<"">>
+
+  quod_transaction_tests: foreign_ledger_decode_keeps_unknown_vocabulary_opaque_test...ok
+  [done in 0.268 s]
+module 'quod_client_result_tests'
+  quod_client_result_tests: signed_read_dependencies_survive_answers_failure_and_errors_test...[0.004 s] ok
+  quod_client_result_tests: read_dependency_heights_are_lossless_json_test...[0.002 s] ok
+  quod_client_result_tests: many_dependencies_and_answers_keep_their_exact_values_test...[0.011 s] ok
+  quod_client_result_tests: material_budget_errors_report_the_actual_resource_test...[0.001 s] ok
+  quod_client_result_tests: invalid_material_policy_survives_the_client_boundary_test...ok
+  quod_client_result_tests: independent_refusals_remain_typed_through_the_client_boundary_test...ok
+  quod_client_result_tests: all_normalized_results_roundtrip_test...ok
+  quod_client_result_tests: bare_engine_states_and_tagged_cursor_states_have_distinct_names_test...ok
+  quod_client_result_tests: independent_complete_vectors_keep_every_target_in_success_shaped_replies_test...ok
+  quod_client_result_tests: local_http_uses_the_normalized_binary_name_result_test...ok
+  quod_client_result_tests: signed_binding_preserves_binary_identity_and_numeric_values_test...ok
+  quod_client_result_tests: complete_results_and_dependencies_have_no_second_allocation_test...*failed*
+in function quod_client_result_tests:complete_results_and_dependencies_have_no_second_allocation_test/0 (/checks/source/test/quod_client_result_tests.erl, line 213)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_client_result_tests},
+              {line,213},
+              {expression,"quod_client_result : normalize ( Evidence , { read , [ { Value , << 1 : 256 >> , 7 } ] , fail } )"},
+              {expected,{read,[],{error,proof_unavailable}}},
+              {value,{read,[{<<"xxxxxxxxxxxxxxxxxxxxxxxx"...>>,
+                             <<0,0,0,0,0,...>>,
+                             7}],
+                           fail}}]}
+  output:<<"">>
+
+  quod_client_result_tests: transient_bindings_use_the_complete_reply_contract_test...[0.003 s] ok
+  quod_client_result_tests: large_cursor_answers_preserve_invalid_result_refusal_test...[0.005 s] ok
+  quod_client_result_tests: client_binding_validation_retains_canonical_name_rules_test...ok
+  quod_client_result_tests: prepared_budget_error_survives_signed_normalization_and_http_test...ok
+  quod_client_result_tests: conflict_retry_is_a_specific_public_conflict_test...ok
+  quod_client_result_tests: malformed_and_noncanonical_results_are_rejected_test...ok
+  quod_client_result_tests: result_delivery_failure_preserves_recovery_http_contract_test...ok
+  [done in 0.091 s]
+module 'quod_client_http_tests'
+  quod_client_http_tests: outcome_unknown_is_pending_test...[0.001 s] ok
+  quod_client_http_tests: group_commit_and_unknown_are_json_safe_test...ok
+  quod_client_http_tests: invalid_action_is_a_bad_request_test...ok
+  quod_client_http_tests: unsubmitted_instruction_is_explicit_test...ok
+  quod_client_http_tests: foreign_commit_is_json_safe_test...ok
+  quod_client_http_tests: failure_reasons_are_rendered_test...ok
+  quod_client_http_tests: signed_goal_result_keeps_parser_variable_names_test...ok
+  quod_client_http_tests: signed_operation_resolution_has_one_pending_and_terminal_shape_test...ok
+  quod_client_http_tests: refused_group_resolution_does_not_invent_an_operation_claim_test...ok
+  quod_client_http_tests: recovered_group_result_preserves_exact_named_bindings_test...ok
+  quod_client_http_tests: signed_goal_busy_is_not_misreported_as_cursor_contention_test...ok
+  quod_client_http_tests: signed_dispatch_parent_and_cleanup_test...[0.003 s] ok
+  quod_client_http_tests: signed_dispatch_exception_preserves_reply_semantics_test...ok
+  quod_client_http_tests: -client_http_test_/0-fun-7- (health replies and keeps the connection)...[0.102 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-6- (an API reply does not crash its request process)...[0.047 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-5- (every route honours the handler contract)...[0.148 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-4- (large malformed bodies retain shape refusals)...[0.050 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-3- (a non-POST is refused)...[0.042 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-2- (security headers are present)...*failed*
+in function quod_client_http_tests:security_headers_present/1 (/checks/source/test/quod_client_http_tests.erl, line 367)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{badmatch,{404,
+           #{<<"accept-ranges">> => <<"bytes">>,
+             <<"allow">> => <<"HEAD, GET, OPTIONS">>,
+             <<"content-length">> => <<"0">>,
+             <<"content-security-policy">> =>
+                 <<"default-src 'none'; script-src 'self'; style-src 'self';"...>>,
+             <<"date">> => <<"Tue, 03 Nov 2026 16:54:04 GMT">>,
+             <<"permissions-policy">> =>
+                 <<"geolocation=(), microphone=(), camera=(), payment=()">>,
+             <<"referrer-policy">> => <<"no-referrer">>,
+             <<"server">> => <<"Cowboy">>,
+             <<"x-content-type-options">> => <<"nosniff">>},
+           <<>>}}
+  output:<<"">>
+
+  quod_client_http_tests: -client_http_test_/0-fun-1- (group selectors are bounded and retain signed session admission)...[0.046 s] ok
+  quod_client_http_tests: -client_http_test_/0-fun-0- (sampled HTTP parent reaches the signed request span)...[0.043 s] ok
+  [done in 0.724 s]
+module 'quod_foreign_projection_tests'
+  quod_foreign_projection_tests: materializer_pins_owner_session_across_append_without_path_scan_test...*failed*
+in function quod_foreign_projection_tests:materializer_session_case/1 (/checks/source/test/quod_foreign_projection_tests.erl, line 52)
+in call from quod_foreign_projection_tests:materializer_pins_owner_session_across_append_without_path_scan_test/0 (/checks/source/test/quod_foreign_projection_tests.erl, line 10)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertEqual,[{module,quod_foreign_projection_tests},
+              {line,52},
+              {expression,"length ( [ ok || { open_ro_snapshot , _ } <- Calls1 ] )"},
+              {expected,2},
+              {value,1}]}
+  output:<<"">>
+
+  quod_foreign_projection_tests: full_open_trace_detects_default_wrappers_and_explicit_modes_test...[0.008 s] ok
+  quod_foreign_projection_tests: -snapshot_readers_test_/0-fun-1- (complete)...[0.046 s] ok
+  quod_foreign_projection_tests: -snapshot_readers_test_/0-fun-1- (exception)...[0.043 s] ok
+  quod_foreign_projection_tests: -snapshot_readers_test_/0-fun-1- (death)...[0.043 s] ok
+  [done in 0.711 s]
+=======================================================
+  Failed: 4.  Skipped: 0.  Passed: 254.

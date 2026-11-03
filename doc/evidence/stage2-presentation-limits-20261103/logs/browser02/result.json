@@ -1,0 +1,14 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "--test-isolation=none",
+    "client/test/marks.test.js",
+    "client/test/glb-profile.test.js",
+    "client/test/voxel-profile.test.js",
+    "client/test/gui-values.test.js"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.15422187600051984
+}

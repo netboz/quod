@@ -1,0 +1,101 @@
+======================== EUnit ========================
+module 'remaining_baseline_checks'
+  remaining_baseline_checks: callable_population_is_not_syntax_test...*failed*
+in function remaining_baseline_checks:callable_population_is_not_syntax_test/0 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 9)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertMatch,[{module,remaining_baseline_checks},
+              {line,9},
+              {expression,"quod_wire_term : materialize_goal_symbols ( Goal )"},
+              {pattern,"{ ok , _ }"},
+              {value,{error,too_many_new_atoms}}]}
+  output:<<"">>
+
+  remaining_baseline_checks: transfer_page_count_is_not_shape_test...*failed*
+in function remaining_baseline_checks:transfer_page_count_is_not_shape_test/0 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 13)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assert,[{module,remaining_baseline_checks},
+         {line,13},
+         {expression,"quod_catchup : valid_transfer_parts ( Parts , 0 , 0 )"},
+         {expected,true},
+         {value,false}]}
+  output:<<"">>
+
+  remaining_baseline_checks: transfer_opaque_payload_is_not_page_quota_test...*failed*
+in function remaining_baseline_checks:transfer_opaque_payload_is_not_page_quota_test/0 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 18)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assert,[{module,remaining_baseline_checks},
+         {line,18},
+         {expression,"quod_catchup : valid_transfer_parts ( [ { entry , binary : copy ( << 0 >> , 901 * 1024 ) } ] , 0 , 0 )"},
+         {expected,true},
+         {value,false}]}
+  output:<<"">>
+
+  remaining_baseline_checks: same_author_queue_is_not_population_policy_test...*failed*
+in function remaining_baseline_checks:'-same_author_queue_is_not_population_policy_test/0-fun-0-'/3 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 25)
+in call from lists:foldl_1/3 (lists.erl, line 2471)
+in call from remaining_baseline_checks:same_author_queue_is_not_population_policy_test/0 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 24)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:{badmatch,full}
+  output:<<"">>
+
+  remaining_baseline_checks: valid_single_effect_is_not_byte_quota_test...*failed*
+in function remaining_baseline_checks:valid_single_effect_is_not_byte_quota_test/0 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 30)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,invalid_direct_effect}}
+  output:<<"">>
+
+  remaining_baseline_checks: failure_stack_is_not_population_quota_test...*failed*
+in function remaining_baseline_checks:failure_stack_is_not_population_quota_test/0 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 38)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,too_large}}
+  output:<<"">>
+
+  remaining_baseline_checks: namespace_storage_supports_current_admitted_name_test...*failed*
+in function quod_ledger_store:open/3 (/checks/quod_ledger_store.erl, line 169)
+in call from remaining_baseline_checks:namespace_storage_supports_current_admitted_name_test/0 (/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_baseline_checks.erl, line 45)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{badmatch,{error,enametoolong}}
+  output:<<"">>
+
+  [done in 0.116 s]
+=======================================================
+  Failed: 7.  Skipped: 0.  Passed: 0.

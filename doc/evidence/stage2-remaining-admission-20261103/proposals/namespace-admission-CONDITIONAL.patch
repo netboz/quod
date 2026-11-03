@@ -1,0 +1,944 @@
+--- a/client/godot-tests/AdmissionCodecChecks.cs
++++ b/client/godot-tests/AdmissionCodecChecks.cs
+@@ -21,6 +21,16 @@
+         Check(Encoding.UTF8.GetString(bytes,at,length)==instance,"large exact actor text survives uint32 length encoding");at+=length+10;
+         length=checked((int)BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(at)));at+=4;
+         Check(Encoding.UTF8.GetString(bytes,at,length)==goal&&at+length==bytes.Length,"large exact goal occupies complete signed request");
++        foreach(int size in new[]{256,1024,ushort.MaxValue}) {
++            var exact=actor with { Namespace=new string('n',size) };
++            byte[] request=Wire.Encode(new byte[32],key.PublicKey,new byte[32],exact,0,1800000000000,"true.");
++            int offset=Encoding.UTF8.GetByteCount("quod.agent.goal.v1\0")+96;
++            Check(BinaryPrimitives.ReadUInt16BigEndian(request.AsSpan(offset))==size &&
++                Encoding.UTF8.GetString(request,offset+2,size)==exact.Namespace &&
++                Identity.Verify(key.PublicKey,request,key.Sign(request)),"long namespace keeps exact signed UTF8 bytes");
++        }
++        try {Wire.Encode(new byte[32],key.PublicKey,new byte[32],actor with { Namespace=new string('n',ushort.MaxValue+1) },0,1800000000000,"true.");throw new Exception("Accepted unrepresentable namespace");}
++        catch(OverflowException) {Console.WriteLine("PASS uint16 representation overflow refuses");}
+         try {Term.Parse(text+" trailing");throw new Exception("Accepted trailing source");}
+         catch(FormatException) {Console.WriteLine("PASS trailing projection still refuses");}
+     }
+--- a/client/godot/Core/Identity.cs
++++ b/client/godot/Core/Identity.cs
+@@ -103,9 +103,9 @@
+     {
+         byte[] anchor = Identity.Decode(actor.Anchor), ns = Encoding.UTF8.GetBytes(actor.Namespace),
+             instance = Encoding.UTF8.GetBytes(actor.InstanceText), text = Encoding.UTF8.GetBytes(goal);
+-        // Exact identity widths and retained directory policy; length writes below are checked.
++        // Exact identity widths; the signed length writes below are checked.
+         if (network.Length != 32 || key.Length != 32 || operation.Length != 32 || anchor.Length != 32 ||
+-            ns.Length is < 1 or > 255 || instance.Length < 1 || text.Length < 1 || mode > 3 || deadline == 0)
++            ns.Length < 1 || instance.Length < 1 || text.Length < 1 || mode > 3 || deadline == 0)
+             throw new FormatException("Invalid signed request.");
+         using var s = new MemoryStream(); s.Write(Encoding.UTF8.GetBytes("quod.agent.goal.v1\0"));
+         s.Write(network); s.Write(key); s.Write(operation);
+--- a/client/src/protocol-limits.js
++++ b/client/src/protocol-limits.js
+@@ -1,10 +1,8 @@
+ // Browser mirror of include/quod_client_goal_limits.hrl. Keep the protocol
+ // values in one module so saved agent references, request encoding, and the
+ // unresolved-operation journal accept exactly the same shapes.
+-const MAX_NAMESPACE_BYTES = 255
+-// The directory's remaining namespace policy is mirrored here; 255 is not the
+-// signed format's capacity. Request text uses the actual unsigned length fields.
+-export const SIGNED_GOAL_LIMITS = Object.freeze({ namespaceBytes: MAX_NAMESPACE_BYTES })
++// The signed request namespace field is an unsigned16-bit byte length.
++export const SIGNED_GOAL_LIMITS = Object.freeze({ namespaceBytes: 2 ** 16 - 1 })
+ 
+ const encoder = new TextEncoder()
+ 
+--- a/client/test/agent-references.test.js
++++ b/client/test/agent-references.test.js
+@@ -95,10 +95,10 @@
+   })
+ })
+ 
+-test('agent-reference namespaces use the shared 255-byte protocol limit', () => {
++test('agent-reference namespaces preserve UTF-8 through the signed length field', () => {
+   withStorage(() => {
+-    const namespace255 = `${'é'.repeat(127)}a`
+-    assert.equal(new TextEncoder().encode(namespace255).length, 255)
++    const namespace255 = `${'é'.repeat(32767)}a`
++    assert.equal(new TextEncoder().encode(namespace255).length, 65535)
+     assert.equal(saveAgentReference({
+       network: 'n'.repeat(43),
+       namespace: namespace255,
+--- a/doc/multiwrite-architecture.md
++++ b/doc/multiwrite-architecture.md
+@@ -250,3 +250,25 @@
+ and retained completion waiters. Capacity release, exact operation deduplication,
+ worker monitors and original deadlines are unchanged. This is not an aggregate
+ memory reservation or a new proof-resource policy.
++
++
++## Namespace storage representation
++
++Namespace/genesis pairs remain exact authenticated identities. Shared store
++paths and the existing feed/genesis ETS names use the deterministic namespace
++key `ns.` followed by SHA256 hex. That key is a representation, never authority.
++The dot keeps the layout disjoint from the prior raw-base64url component.
++
++Store lifecycle entry and stopped-outcome reads refuse an existing prior-layout
++path explicitly. Simplex preflights both configured ledger and signing roots
++before creating either store. Foreign-cache startup inspects all manifests
++before projection cleanup or writer launch, so a retained legacy cache cannot
++be silently skipped. Preflight performs exact path metadata reads; ordinary
++retained readers continue using their existing handles.
++
++This is a storage format break. A deployment requires a separately approved
++preservation/cutover procedure covering both roots, signing journals, ledger
++archives, outcome indexes, phase indexes and foreign cache manifests. There is
++no runtime fallback, automatic migration, deletion or replacement founding.
++The raw signed namespace and encoded link channel retain their distinct uint16
++length representations; neither may wrap or truncate a namespace.
+--- a/include/quod_directory_limits.hrl
++++ b/include/quod_directory_limits.hrl
+@@ -2,7 +2,6 @@
+ -define(QUOD_DIRECTORY_LIMITS_HRL, true).
+ 
+ %% Wire-shape and liveness bounds only; there are no directory population caps.
+--define(DIRECTORY_MAX_NAMESPACE_BYTES, 255).
+ -define(DIRECTORY_ROUTE_TTL_MS, 30000).
+ 
+ -endif.
+--- a/src/quod_agent_ref.erl
++++ b/src/quod_agent_ref.erl
+@@ -34,7 +34,6 @@
+           {ok, decoded()} | {error, error_reason()}.
+ from_text(Namespace, <<_:256>> = Anchor, InstanceText, ParserVersion)
+   when is_binary(Namespace), byte_size(Namespace) > 0,
+-       byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+        is_binary(InstanceText) ->
+     case quod_client_goal_parser:parse(InstanceText, ParserVersion) of
+         {ok, #{goal := Instance, variables := []}} ->
+@@ -50,8 +49,7 @@
+ decode(Blob) when is_binary(Blob) ->
+     case quod_wire_term:decode_canonical(Blob, unlimited) of
+         {ok, {agent_instance_ref, Namespace, <<_:256>> = Anchor, Instance} = Ref}
+-          when is_binary(Namespace), byte_size(Namespace) > 0,
+-               byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
++          when is_binary(Namespace), byte_size(Namespace) > 0 ->
+             case valid_instance(Instance) of
+                 true ->
+                     {ok, #{blob => Blob,
+--- a/src/quod_client_goal.erl
++++ b/src/quod_client_goal.erl
+@@ -440,7 +440,7 @@
+           valid_instance_text(InstanceText), valid_utf8(GoalText)} of
+         {false, _, _, _, _} when is_binary(Namespace),
+                              byte_size(Namespace) >
+-                                 ?DIRECTORY_MAX_NAMESPACE_BYTES ->
++                                 ((1 bsl 16) - 1) ->
+             {error, {too_large, namespace}};
+         {false, _, _, _, _} ->
+             {error, invalid_request};
+@@ -471,7 +471,7 @@
+ 
+ valid_namespace(Namespace) ->
+     is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
+-        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES andalso
++        byte_size(Namespace) =< ((1 bsl 16) - 1) andalso
+         valid_utf8_bytes(Namespace).
+ 
+ valid_utf8(GoalText) ->
+--- a/src/quod_client_http.erl
++++ b/src/quod_client_http.erl
+@@ -249,8 +249,7 @@
+                           <<"coordinator">> := Coordinator,
+                           <<"coordinator_admission">> := Admission,
+                           <<"group_id">> := Id} = Ref)
+-  when map_size(Ref) =:= 5, is_binary(Ns), byte_size(Ns) > 0,
+-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
++  when map_size(Ref) =:= 5, is_binary(Ns), byte_size(Ns) > 0 ->
+     case [decode_digest_hex(B) || B <- [Anchor, Coordinator, Admission, Id]] of
+         [{ok, A}, {ok, C}, {ok, D}, {ok, G}] -> {ok, {group, Ns, A, C, D, G}};
+         _ -> error
+--- a/src/quod_client_result.erl
++++ b/src/quod_client_result.erl
+@@ -313,7 +313,6 @@
+ valid_dependencies([], _) -> true;
+ valid_dependencies([{Ns, <<_:256>>, Height} | Rest], Previous)
+   when is_binary(Ns), byte_size(Ns) > 0,
+-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+        (Previous =:= none orelse Previous < Ns) ->
+     valid_uint64(Height) andalso valid_dependencies(Rest, Ns);
+ valid_dependencies(_, _) -> false.
+--- a/src/quod_directory_shape.erl
++++ b/src/quod_directory_shape.erl
+@@ -20,8 +20,7 @@
+ validate_hosted(_, _, _) -> error.
+ 
+ valid_namespace(Namespace) ->
+-    is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
+-        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES.
++    is_binary(Namespace) andalso byte_size(Namespace) > 0.
+ 
+ valid_hosted({Namespace, <<_:256>>, Role, Source})
+   when (Role =:= validator orelse Role =:= observer),
+--- a/src/quod_dtx_phase_index.erl
++++ b/src/quod_dtx_phase_index.erl
+@@ -77,6 +77,7 @@
+ -spec open(file:filename_all(), binary()) ->
+           {ok, index()} | {error, index_error()}.
+ open(LedgerDir, Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
++    ok = quod_ledger_store:check_namespace_layout(LedgerDir, Ns),
+     Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
+     case filelib:ensure_path(Dir) of
+         ok -> open_unique(Dir, ?OPEN_ATTEMPTS);
+@@ -391,6 +392,7 @@
+ -spec cleanup(file:filename_all(), binary(), [index()]) ->
+           ok | {error, index_error()}.
+ cleanup(LedgerDir, Ns, Retained) when is_binary(Ns), byte_size(Ns) > 0 ->
++    ok = quod_ledger_store:check_namespace_layout(LedgerDir, Ns),
+     Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
+     case retained_cleanup_paths(Dir, Retained) of
+         {ok, Keep} ->
+--- a/src/quod_feed.erl
++++ b/src/quod_feed.erl
+@@ -764,7 +764,7 @@
+ %% (peer_ready/3) resolves the SAME name via binary_to_existing_atom, so it can never mint a fresh atom.
+ digest_table(Ns) -> binary_to_atom(digest_table_name(Ns), utf8).
+ 
+-digest_table_name(Ns) -> <<"quod_feed_digests_", Ns/binary>>.
++digest_table_name(Ns) -> <<"quod_feed_digests_", (quod_ledger_store:namespace_key(Ns))/binary>>.
+ 
+ %% Record an authenticated digest sender's height. Only real (pubkey) ids are tracked — a no-identity/
+ %% test id is an address tuple, which can never be a `peer_ready` admission candidate.
+--- a/src/quod_foreign_log.erl
++++ b/src/quod_foreign_log.erl
+@@ -1055,6 +1055,7 @@
+             %% worker shutdown removes its generation directory; clearing the
+             %% dedicated parent here also reclaims anything left by an
+             %% untrappable kill before this owner restarted.
++            Histories = retained_histories(Root),
+             cleanup_projection_dirs(Root),
+             true = quod_reg:subscribe({runtime, quod_ontology:root_ns()}),
+             TransportMonitor = quod_reg:monitor_name({transport, node}, follow),
+@@ -1064,7 +1065,7 @@
+             %% Catalogue manifests only. Each retained identity is initialized
+             %% by its existing exclusive writer, before queued request work.
+             %% The node owner remains responsive while those writers do I/O.
+-            {ok, initialize_retained_histories(S0)};
++            {ok, initialize_retained_histories(Histories, S0)};
+         false ->
+             {stop, bad_foreign_log_config}
+     end.
+@@ -2370,7 +2371,6 @@
+    <<_:256>>, <<_:256>>, Proof} = Ref,
+   Phase, TimeoutMs)
+   when is_binary(Ns), byte_size(Ns) > 0,
+-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+        is_integer(Slot), Slot > 0,
+        is_binary(Proof), byte_size(Proof) > 0,
+        is_integer(TimeoutMs), TimeoutMs > 0,
+@@ -2392,7 +2392,6 @@
+   when is_pid(Owner), is_integer(Height), Height >= 0,
+        is_integer(Applied), Applied >= 0, Applied =< Height,
+        is_binary(Ns), byte_size(Ns) > 0,
+-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+        is_integer(Slot), Slot > 0,
+        is_binary(Proof), byte_size(Proof) > 0 ->
+     case valid_local_timeout(TimeoutMs) andalso valid_phase(Phase)
+@@ -2437,8 +2436,7 @@
+     false.
+ 
+ valid_identity({Ns, <<_:256>>})
+-  when is_binary(Ns), byte_size(Ns) > 0,
+-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
++  when is_binary(Ns), byte_size(Ns) > 0 ->
+     true;
+ valid_identity(_) ->
+     false.
+@@ -2448,7 +2446,6 @@
+         {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
+          <<_:256>>, <<_:256>>, Proof}
+           when is_binary(Ns), byte_size(Ns) > 0,
+-               byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+                is_integer(Slot), Slot > 0,
+                is_binary(Proof), byte_size(Proof) > 0 ->
+             case quod_dtx:validate_certified_ref(Ref) of
+@@ -6631,6 +6628,7 @@
+     end.
+ 
+ ensure_manifest(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs) ->
++    ok = quod_ledger_store:check_namespace_layout(Root, CacheNs),
+     Path = manifest_path(Root, CacheNs),
+     Expected = {quod_foreign_log_cache, ?CACHE_VERSION,
+                 Ns, Anchor, CacheNs},
+@@ -6724,20 +6722,26 @@
+ %% reconstruction runs under the existing per-identity writer custody, not
+ %% inside this mailbox and not on the first proof request. F6 will replace
+ %% this counted startup replay with bound-save restoration plus a suffix.
+-initialize_retained_histories(S0 = #s{root = Root}) ->
++%% Inspect every retained manifest before any projection cleanup or reader
++%% start. A later legacy directory must not be discovered after earlier writes.
++retained_histories(Root) ->
+     case file:list_dir(Root) of
+         {ok, Names} ->
+-            lists:foldl(fun(Name, S) ->
++            lists:flatmap(fun(Name) ->
+                 case load_history_dir(Root, filename:join(Root, Name)) of
+-                    {ok, H = #history{identity = Identity, bytes = Bytes}} ->
+-                        S1 = put_history(Identity, H, S#s{total_bytes = S#s.total_bytes + Bytes}),
+-                        start_history_initialization(Identity, startup, S1);
+-                    error -> S
++                    {ok, H} -> [H];
++                    error -> []
+                 end
+-            end, S0, Names);
+-        {error, enoent} -> S0;
++            end, Names);
++        {error, enoent} -> [];
+         {error, Reason} -> error({foreign_history_catalogue, Reason})
+     end.
++
++initialize_retained_histories(Histories, S0) ->
++    lists:foldl(fun(H = #history{identity = Identity, bytes = Bytes}, S) ->
++        S1 = put_history(Identity, H, S#s{total_bytes = S#s.total_bytes + Bytes}),
++        start_history_initialization(Identity, startup, S1)
++    end, S0, Histories).
+ 
+ start_history_initialization(Identity, Cause, S0) ->
+     {ok, S1} = start_distinct_worker(none, Identity, infinity,
+@@ -6795,9 +6799,9 @@
+     case read_cache_term(filename:join(Dir, ?MANIFEST)) of
+         {ok, {quod_foreign_log_cache, ?CACHE_VERSION,
+               Ns, <<_:256>> = Anchor, <<_:256>> = CacheNs}}
+-          when is_binary(Ns), byte_size(Ns) > 0,
+-               byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
++          when is_binary(Ns), byte_size(Ns) > 0 ->
+             Identity = {Ns, Anchor},
++            ok = quod_ledger_store:check_namespace_layout(Root, CacheNs),
+             Bytes = cache_persisted_bytes(Root, CacheNs),
+             case CacheNs =:= cache_namespace(Identity) andalso
+                 cache_dir(Root, CacheNs) =:= Dir of
+--- a/src/quod_ledger_store.erl
++++ b/src/quod_ledger_store.erl
+@@ -37,7 +37,7 @@
+          staging_path/1, with_proof_stage/2, stage_proof/2, staged_proof_source/1, reset_proof_stage/1,
+          read_at/2, read_at/3, read_range/4, fold/5, fold_groups/3, last/1,
+          committed_boundary/2]).
+--export([default_data_dir/0, data_dir/1, ns_dir/2]).
++-export([default_data_dir/0, data_dir/1, ns_dir/2, namespace_key/1, check_namespace_layout/2, preflight_namespace/2]).
+ 
+ -export_type([handle/0, session/0, append_batch/0, proof_source/0, proof_cursor/0, transfer_cursor/0,
+               proof_stage/0]).
+@@ -163,6 +163,7 @@
+           {ok, handle()}.
+ open(Ns, DataDir, SymbolMode)
+   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
++    ok = require_namespace_layout(DataDir, Ns),
+     Dir = ns_dir(DataDir, Ns),
+     ok = filelib:ensure_path(Dir),
+     LogPath = filename:join(Dir, "log.0001"),
+@@ -195,6 +196,7 @@
+           {ok, handle()} | {error, no_log | term()}.
+ open_ro(Ns, DataDir, SymbolMode)
+   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
++    ok = require_namespace_layout(DataDir, Ns),
+     Dir = ns_dir(DataDir, Ns),
+     case traced_file_open(
+            filename:join(Dir, "log.0001"), [read, raw, binary], read_only,
+@@ -683,7 +685,40 @@
+ 
+ -doc "The shared on-disk directory for one namespace's ledger and consensus metadata.".
+ -spec ns_dir(file:filename_all(), binary()) -> file:filename_all().
+-ns_dir(DataDir, Ns) -> filename:join(DataDir, base64url(Ns)).
++ns_dir(DataDir, Ns) -> filename:join(DataDir, binary_to_list(namespace_key(Ns))).
++
++require_namespace_layout(Root, Ns) ->
++    case check_namespace_layout(Root, Ns) of
++        ok -> ok;
++        {error, Reason} -> error(Reason)
++    end.
++
++-spec namespace_key(binary()) -> binary().
++namespace_key(Ns) when is_binary(Ns) ->
++    <<"ns.", (binary:encode_hex(crypto:hash(sha256, Ns)))/binary>>.
++
++%% Read-only preflight before opening any store or reporting a stopped outcome
++%% absent. Never operate two layouts or silently replace retained signing duties.
++-spec check_namespace_layout(file:filename_all(), binary()) -> ok | {error, term()}.
++check_namespace_layout(Root, Ns) ->
++    Legacy = filename:join(Root, base64url(Ns)),
++    case file:read_link_info(Legacy) of
++        {ok, _} -> {error, {unsupported_namespace_layout, Legacy}};
++        {error, enoent} -> ok;
++        %% This filesystem cannot represent the old raw-name component. No
++        %% arbitrary byte allowance or directory-wide scan is substituted.
++        {error, enametoolong} -> ok;
++        {error, Reason} -> {error, {namespace_layout_io, Root, Reason}}
++    end.
++
++%% Both roots must pass before ledger creation, even when the only retained
++%% old-format material is the signing journal on the separate durable volume.
++-spec preflight_namespace(binary(), map()) -> ok | {error, term()}.
++preflight_namespace(Ns, Config) ->
++    lists:foldl(fun(Root, ok) -> check_namespace_layout(Root, Ns);
++                  (_, Error) -> Error end,
++                ok, lists:usort([ledger_dir(Config), data_dir(Config)])).
++
+ 
+ base64url(Bin) ->
+     binary_to_list(base64:encode(Bin, #{mode => urlsafe, padding => false})).
+--- a/src/quod_ontology.erl
++++ b/src/quod_ontology.erl
+@@ -43,7 +43,6 @@
+ -export_type([structural_descriptor/0, prepared_descriptor/0]).
+ 
+ -define(ROOT_NS, <<"quod:root">>).
+--define(MAX_NAMESPACE_BYTES, 128).
+ 
+ -type creation() ::
+         {ok, created | resumed, binary(), binary()} |
+@@ -763,8 +762,6 @@
+ 
+ validate_name(<<>>) ->
+     {error, invalid_name};
+-validate_name(Ns) when byte_size(Ns) > ?MAX_NAMESPACE_BYTES ->
+-    {error, invalid_name};
+ validate_name(Ns) ->
+     try unicode:characters_to_binary(Ns, utf8, utf8) of
+         Ns -> {ok, Ns};
+--- a/src/quod_outcome.erl
++++ b/src/quod_outcome.erl
+@@ -255,6 +255,7 @@
+     {error, outcome_index_bad_anchor}.
+ 
+ open_disk(Ns, Anchor, DataDir) ->
++    ok = quod_ledger_store:check_namespace_layout(DataDir, Ns),
+     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
+     ok = filelib:ensure_path(Dir),
+     Path = filename:join(Dir, "outcomes.dets"),
+@@ -1020,15 +1021,19 @@
+ 
+ -doc "Read one indexed transaction while its ontology is running or stopped.".
+ -spec lookup_live(binary(), file:filename_all(), binary()) ->
+-          {ok, map()} | {error, not_found | ontology_unreachable |
+-                                outcome_index_corrupt}.
++          {ok, map()} | {error, not_found | ontology_unreachable | outcome_index_corrupt |
++                                {unsupported_namespace_layout, file:filename_all()} |
++                                {namespace_layout_io, file:filename_all(), term()}}.
+ lookup_live(Ns, LedgerDir, <<_:256>> = TxId)
+   when is_binary(Ns), byte_size(Ns) > 0 ->
+-    Path = filename:join(quod_ledger_store:ns_dir(LedgerDir, Ns),
+-                         "outcomes.dets"),
+-    case dets:info(Path) of
+-        undefined -> lookup_closed(Path, Ns, TxId);
+-        _ -> lookup_table(Path, Ns, TxId)
++    case quod_ledger_store:check_namespace_layout(LedgerDir, Ns) of
++        ok ->
++            Path = filename:join(quod_ledger_store:ns_dir(LedgerDir, Ns), "outcomes.dets"),
++            case dets:info(Path) of
++                undefined -> lookup_closed(Path, Ns, TxId);
++                _ -> lookup_table(Path, Ns, TxId)
++            end;
++        {error, _} = Error -> Error
+     end;
+ lookup_live(_Ns, _LedgerDir, _TxId) ->
+     {error, not_found}.
+--- a/src/quod_scope_wire.erl
++++ b/src/quod_scope_wire.erl
+@@ -857,8 +857,7 @@
+ valid_identity(_) -> false.
+ 
+ valid_namespace(Namespace) ->
+-    is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
+-        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES.
++    is_binary(Namespace) andalso byte_size(Namespace) > 0.
+ 
+ valid_key(Binary) ->
+     is_binary(Binary) andalso
+--- a/src/quod_signing_journal.erl
++++ b/src/quod_signing_journal.erl
+@@ -92,6 +92,7 @@
+ -spec initialize(binary(), <<_:256>>, file:filename_all()) -> {ok, handle()}.
+ initialize(Ns, Domain, DataDir)
+   when is_binary(Ns), is_binary(Domain), byte_size(Domain) =:= 32 ->
++    ok = quod_ledger_store:check_namespace_layout(DataDir, Ns),
+     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
+     Path = journal_path(Dir),
+     ok = quod_file:ensure_parent(Path),
+@@ -119,6 +120,7 @@
+ -spec recover(binary(), <<_:256>>, file:filename_all()) -> {ok, handle()}.
+ recover(Ns, Domain, DataDir)
+   when is_binary(Ns), is_binary(Domain), byte_size(Domain) =:= 32 ->
++    ok = quod_ledger_store:check_namespace_layout(DataDir, Ns),
+     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
+     Path = journal_path(Dir),
+     case file:open(Path, [read, write, raw, binary]) of
+--- a/src/quod_simplex.erl
++++ b/src/quod_simplex.erl
+@@ -1437,6 +1437,7 @@
+ test_state_projection(S) ->
+     state_projection(S).
+ test_restore_storage(Ns, Cfg, Self) ->
++    ok = quod_ledger_store:preflight_namespace(Ns, Cfg),
+     {ok, Store} = quod_ledger_store:open(Ns, quod_ledger_store:ledger_dir(Cfg)),
+     try restore_storage(#s{ns = Ns, self = Self, store = Store}, Cfg) of
+         {S, Anchor, Journal} ->
+@@ -3186,7 +3187,7 @@
+ %% table name, which fails closed while the namespace is down or being initialized.
+ genesis_table(Ns) -> binary_to_atom(genesis_table_name(Ns), utf8).
+ 
+-genesis_table_name(Ns) -> <<"quod_simplex_genesis_", Ns/binary>>.
++genesis_table_name(Ns) -> <<"quod_simplex_genesis_", (quod_ledger_store:namespace_key(Ns))/binary>>.
+ 
+ %%%===================================================================
+ %%% init
+@@ -3204,6 +3205,7 @@
+     end.
+ 
+ init_store(Ns, Cfg, Id) ->
++    ok = quod_ledger_store:preflight_namespace(Ns, Cfg),
+     {ok, Store} = quod_ledger_store:open(Ns, quod_ledger_store:ledger_dir(Cfg)),
+     Chan = term_to_binary({log, Ns}, [deterministic]),   %% the committee's consensus channel
+     RelayChan = term_to_binary({ingress, Ns}, [deterministic]),
+--- a/test/quod_agent_attestation_readiness_tests.erl
++++ b/test/quod_agent_attestation_readiness_tests.erl
+@@ -436,7 +436,7 @@
+ namespace() -> <<"quod:attestation-wait:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
+ 
+ gate_table(Ns, Anchor, Pub, Generation, Fences) ->
+-    Tab = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Tab = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+     Tab = ets:new(Tab, [named_table, protected, set]),
+     true = ets:insert(Tab, [{anchor, Anchor},
+         {proof_gate, true, Generation, Fences, Pub, [Pub], <<52:256>>, #{}}]),
+--- a/test/quod_agent_vault_tests.erl
++++ b/test/quod_agent_vault_tests.erl
+@@ -564,7 +564,7 @@
+     end).
+ 
+ start_engine(Ns, Anchor, Identity = #{pubkey := PublicKey}, Modules, Diff, Facts) ->
+-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+     Table = ets:new(Table, [named_table, set]),
+     true = ets:insert(Table, {anchor, Anchor}),
+     true = ets:insert(Table, {proof_gate, true, 1, [], PublicKey, [PublicKey], <<9:256>>, #{}}),
+--- a/test/quod_atomic_delivery_tests.erl
++++ b/test/quod_atomic_delivery_tests.erl
+@@ -113,7 +113,7 @@
+     F = fixture(), Test = self(),
+     Targets = [begin
+         Pid = spawn(fun() ->
+-            Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++            Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+                             [named_table, protected, set]),
+             true = ets:insert(Table, {anchor, Anchor}),
+             true = quod_reg:reg({quod_simplex, Ns}),
+--- a/test/quod_atomic_projection_tests.erl
++++ b/test/quod_atomic_projection_tests.erl
+@@ -1783,7 +1783,7 @@
+         %% Only the genesis directory entry is a fixture; effect resolution
+         %% itself uses both real production owner lookups. Absence must not
+         %% release/cancel a privately prepared effect.
+-        TableName = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++        TableName = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+         Table = ets:new(TableName, [named_table, public, set]),
+         try
+             true = ets:insert(Table, {anchor, <<0:256>>}),
+--- a/test/quod_catchup_tests.erl
++++ b/test/quod_catchup_tests.erl
+@@ -1111,7 +1111,7 @@
+     Dir = filename:join("/tmp", "quod-observer-worker-" ++
+         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
+     Parent = self(),
+-    Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+                     [named_table, protected, set]),
+     true = ets:insert(Table, {anchor, Anchor}),
+     true = quod_reg:reg({quod_prolog, Ns}),
+--- a/test/quod_client_goal_ingress_tests.erl
++++ b/test/quod_client_goal_ingress_tests.erl
+@@ -125,7 +125,7 @@
+     Parent = self(),
+     {Pid, Monitor} = spawn_monitor(fun() ->
+         true = quod_reg:reg({quod_simplex, Ns}),
+-        Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++        Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+         Table = ets:new(Table, [named_table, protected, set]),
+         ets:insert(Table, {anchor, Anchor}),
+         {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+@@ -656,7 +656,7 @@
+         brahms => #{}}),
+     Ns = <<"signed-read:",
+            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+     %% Public only inside this fixture: the anchor-race test must mutate the
+     %% fake Simplex identity from its EUnit worker process.
+     Table = ets:new(Table, [named_table, public, set]),
+--- a/test/quod_client_goal_target_tests.erl
++++ b/test/quod_client_goal_target_tests.erl
+@@ -122,7 +122,7 @@
+                          #{genesis_hash => ?NETWORK}}, brahms => #{}}),
+     Ns = <<"signed-target:",
+            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+     Table = ets:new(Table, [named_table, public, set]),
+     true = ets:insert(Table, {anchor, ?ANCHOR}),
+     {ok, Engine} = quod_prolog:start_link(
+--- a/test/quod_client_goal_tests.erl
++++ b/test/quod_client_goal_tests.erl
+@@ -261,7 +261,7 @@
+           [lists:duplicate(140 * 1024 - 5, " "),
+            "true."]),
+     ExactNamespace =
+-        binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
++        binary:copy(<<"n">>, ((1 bsl 16) - 1)),
+     Exact = Base#{agent_namespace => ExactNamespace,
+                   goal_text => ExactGoal},
+     {ok, ExactBytes} = quod_client_goal:encode(Exact),
+@@ -277,7 +277,7 @@
+        quod_client_goal:encode(
+          Base#{agent_namespace =>
+                    binary:copy(<<"n">>,
+-                               ?DIRECTORY_MAX_NAMESPACE_BYTES + 1)})),
++                               ((1 bsl 16) - 1) + 1)})),
+     ?assertEqual(
+        {error, invalid_request},
+        quod_client_goal:encode(Base#{goal_text => <<16#ff>>})).
+--- a/test/quod_client_result_tests.erl
++++ b/test/quod_client_result_tests.erl
+@@ -18,10 +18,10 @@
+         ?assertEqual([#{ns => N,genesis_anchor => b64url(A),height => integer_to_binary(H)}
+                       || {N,A,H} <- Deps],maps:get(dependencies,Json))
+     end,[{ok,[#{0 => bob}],7},fail,{fail,[denied]},{error,read_only}]),
++    ?assertMatch({ok, _}, quod_client_result:encode({read, [{binary:copy(<<"n">>,1025),<<1:256>>,0}], fail})),
+     BadDeps = [lists:reverse(Deps),Deps++Deps,[{<<"a">>,<<1:256>>,-1}],
+                [{<<"a">>,<<1:256>>,1 bsl 64}],[{<<"a">>,<<1>>,1}],
+                [{<<>>,<<1:256>>,0}],
+-               [{binary:copy(<<"n">>,?DIRECTORY_MAX_NAMESPACE_BYTES+1),<<1:256>>,0}],
+                [{<<"a">>,<<1:256>>,0},{<<"a">>,<<2:256>>,0}]],
+     [?assertEqual({error,invalid_result},quod_client_result:encode({read,D,fail})) || D <- BadDeps],
+     [?assertEqual({error,invalid_result},quod_client_result:encode({read,Deps,R})) || R <-
+--- a/test/quod_directory_control_tests.erl
++++ b/test/quod_directory_control_tests.erl
+@@ -292,7 +292,7 @@
+     try quod_ct:with_network_identity(key(254), fun() ->
+         with_directory_and_control(fun() ->
+             %% The proof gate is owned by the same named table as a real root.
+-            RootTable = ets:new('quod_simplex_genesis_quod:root', [named_table, set]),
++            RootTable = ets:new(binary_to_atom(quod_simplex:genesis_table_name(<<"quod:root">>), utf8), [named_table, set]),
+             Signer = maps:get(signer, F), Pub = maps:get(pubkey, Signer),
+             true = ets:insert(RootTable,
+                 [{anchor, key(254)}, {proof_gate, true, 1, [], Pub, [Pub], key(2), #{}}]),
+--- a/test/quod_dtx_coordinator_evidence_tests.erl
++++ b/test/quod_dtx_coordinator_evidence_tests.erl
+@@ -592,7 +592,7 @@
+             %% Reuse the signed history's existing owner-view constructor;
+             %% it replays once during fixture setup, before tracing starts.
+             View = quod_foreign_log_tests:local_fixture_view(Store, F, Index),
+-            Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++            Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+                             [named_table, protected, set]),
+             true = ets:insert(Table, {anchor, maps:get(anchor, F)}),
+             Parent ! {local_owner_ready, self()},
+--- a/test/quod_dtx_coordinator_tests.erl
++++ b/test/quod_dtx_coordinator_tests.erl
+@@ -1645,7 +1645,7 @@
+     {TargetNs, Anchor} = maps:get(target, F),
+     Saved = application:get_env(quod, node_pubkey),
+     application:set_env(quod, node_pubkey, maps:get(pubkey, maps:get(target_identity, F))),
+-    Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", TargetNs/binary>>, utf8),
++    Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(TargetNs), utf8),
+                     [named_table, public, set]),
+     ets:insert(Table, {anchor, Anchor}),
+     Stub = start_operation_stub(dormant, {quod_simplex, TargetNs}),
+@@ -1703,7 +1703,7 @@
+ with_operation_fixture(N, Result, Fun) ->
+     quod_operation_fixture:with(N, [], Result, fun(F0 = #{source_ns := Ns, targets := Targets}) ->
+         Tables = [begin
+-            Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", TargetNs/binary>>, utf8),
++            Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(TargetNs), utf8),
+                             [named_table, protected, set]),
+             true = ets:insert(Table, {anchor, Anchor}), Table
+         end || {TargetNs, Anchor} <- Targets],
+--- a/test/quod_dtx_group_trace_tests.erl
++++ b/test/quod_dtx_group_trace_tests.erl
+@@ -368,7 +368,7 @@
+             true = quod_reg:reg({quod_simplex, Ns}),
+             Domain = quod_simplex:consensus_domain(Ns, Anchor),
+             {ok, OwnerJournal} = quod_signing_journal:recover(Ns, Domain, Dir),
+-            Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++            Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+             _ = ets:new(Table, [named_table, protected, set]),
+             true = ets:insert(Table, {anchor, Anchor}),
+             Parent ! {owner_ready, self()},
+--- a/test/quod_dtx_tests.erl
++++ b/test/quod_dtx_tests.erl
+@@ -948,7 +948,7 @@
+         <<(binary:copy(
+              <<" ">>, 140 * 1024 - byte_size(Goal)))/binary,
+           Goal/binary>>,
+-    Ns = binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
++    Ns = binary:copy(<<"n">>, 1024),
+     Target = {Ns, key(221)},
+     Fixture = quod_ct:signed_atomic_fixture(
+                 #{target => Target, goal_text => GoalText}),
+@@ -1600,7 +1600,7 @@
+ 
+ with_proof_gate(Fun) ->
+     Namespace = <<"quod:dtx-guard-test">>,
+-    Table = 'quod_simplex_genesis_quod:dtx-guard-test',
++    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:dtx-guard-test">>), utf8),
+     Tab = ets:new(Table, [named_table, protected, set]),
+     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
+     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},
+--- a/test/quod_effect_journal_tests.erl
++++ b/test/quod_effect_journal_tests.erl
+@@ -1021,7 +1021,7 @@
+     <<(First bxor 1), Rest/binary>>.
+ 
+ install_genesis_anchor(Ns, Anchor) ->
+-    Name = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Name = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+     Table = ets:new(Name, [named_table, public, set]),
+     true = ets:insert(Table, {anchor, Anchor}),
+     Table.
+--- a/test/quod_feed_tests.erl
++++ b/test/quod_feed_tests.erl
+@@ -507,7 +507,7 @@
+     end.
+ 
+ with_feed_anchor(Ns, Anchor, Fun) ->
+-    Name = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Name = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+     Table = ets:new(Name, [named_table, protected, set]),
+     true = ets:insert(Table, {anchor, Anchor}),
+     try Fun()
+--- a/test/quod_foreign_log_tests.erl
++++ b/test/quod_foreign_log_tests.erl
+@@ -5315,7 +5315,7 @@
+     Owner = start_owner(CacheDir, fun(_, _, _, _, _, _) -> error(network_used) end),
+     %% The existing borrowed-source fixture owns a real archive and verifier
+     %% view. These two registrations model its installed local identity/KB.
+-    Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
++    Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns)),
+                     [named_table, protected]),
+     true = ets:insert(Table, {anchor, Anchor}),
+     true = quod_reg:reg({quod_prolog, Ns}),
+--- /dev/null
++++ b/test/quod_namespace_layout_tests.erl
+@@ -0,0 +1,78 @@
++-module(quod_namespace_layout_tests).
++-include_lib("eunit/include/eunit.hrl").
++
++long_namespace_has_one_exact_representable_key_test() ->
++    Ns = binary:copy(<<"n">>, 1024),
++    Key = quod_ledger_store:namespace_key(Ns),
++    ?assertEqual(<<"ns.", (binary:encode_hex(crypto:hash(sha256, Ns)))/binary>>, Key),
++    ?assertNotEqual(Key, quod_ledger_store:namespace_key(<<Ns/binary, "x">>)),
++    ?assertEqual(Key, quod_ledger_store:namespace_key(Ns)),
++    ?assert(byte_size(quod_simplex:genesis_table_name(Ns)) < 255),
++    ?assert(byte_size(quod_feed:digest_table_name(Ns)) < 255).
++
++old_journal_in_other_root_refuses_before_ledger_creation_test() ->
++    temporary(fun(Root) ->
++        Ns = <<"preserved:namespace">>,
++        Ledger = filename:join(Root, "ledger"), Data = filename:join(Root, "data"),
++        Old = legacy(Data, Ns), Marker = filename:join(Old, "signing.journal"),
++        ok = filelib:ensure_dir(Marker), ok = file:write_file(Marker, <<"preserved">>),
++        Config = #{ledger_dir => Ledger, data_dir => Data},
++        Error = {error, {unsupported_namespace_layout, Old}},
++        ?assertEqual(Error, quod_ledger_store:preflight_namespace(Ns, Config)),
++        ?assertError({badmatch, Error}, quod_simplex:test_restore_storage(Ns, Config, <<1:256>>)),
++        ?assertNot(filelib:is_dir(Ledger)),
++        ?assertEqual({ok, <<"preserved">>}, file:read_file(Marker)),
++        ?assertEqual(Error, quod_outcome:lookup_live(Ns, Data, <<1:256>>)),
++        ?assertError({badmatch, Error}, quod_signing_journal:initialize(Ns, <<2:256>>, Data)),
++        ?assertError({badmatch, Error}, quod_signing_journal:recover(Ns, <<2:256>>, Data)),
++        ?assertError({badmatch, Error}, quod_dtx_phase_index:open(Data, Ns)),
++        ?assertError({badmatch, Error}, quod_outcome:open(Ns, <<2:256>>, #{data_dir => Data})),
++        ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Data, Ns)))
++    end).
++
++old_archive_refuses_even_when_new_layout_exists_test() ->
++    temporary(fun(Root) ->
++        Ns = <<"preserved:archive">>, Old = legacy(Root, Ns),
++        ok = filelib:ensure_dir(filename:join(Old, "log.0001")),
++        New = quod_ledger_store:ns_dir(Root, Ns),
++        ok = filelib:ensure_path(New),
++        ?assertError({unsupported_namespace_layout, Old}, quod_ledger_store:open_ro(Ns, Root)),
++        ?assertError({unsupported_namespace_layout, Old}, quod_ledger_store:open(Ns, Root)),
++        ?assertEqual({ok, []}, file:list_dir(New))
++    end).
++
++long_namespace_reopens_same_store_without_alias_test() ->
++    temporary(fun(Root) ->
++        Ns = binary:copy(<<"x">>, 1024),
++        {ok, Store} = quod_ledger_store:open(Ns, Root),
++        ?assertEqual(Ns, quod_ledger_store:namespace(Store)),
++        ok = quod_ledger_store:close(Store),
++        {ok, Reader} = quod_ledger_store:open_ro(Ns, Root),
++        ?assertEqual(Ns, quod_ledger_store:namespace(Reader)),
++        ok = quod_ledger_store:close(Reader),
++        ?assertEqual({error, no_log}, quod_ledger_store:open_ro(<<Ns/binary, "x">>, Root))
++    end).
++
++legacy(Root, Ns) -> filename:join(Root, binary_to_list(base64:encode(Ns, #{mode => urlsafe, padding => false}))).
++temporary(Fun) ->
++    Root = filename:join("/tmp", "quod_namespace_layout_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(16)))) ,
++    try Fun(Root) after file:del_dir_r(Root) end.
++
++old_foreign_manifest_refuses_before_projection_cleanup_test() ->
++    temporary(fun(Root) ->
++        Ns = <<"foreign:preserved">>, Anchor = <<7:256>>, Identity = {Ns, Anchor},
++        CacheNs = quod_foreign_log:cache_namespace(Identity),
++        Old = legacy(Root, CacheNs),
++        %% The original valid manifest version is taken from the production owner.
++        Manifest = {quod_foreign_log_cache, 7, Ns, Anchor, CacheNs},
++        Path = filename:join(Old, "identity.term"),
++        ok = filelib:ensure_dir(Path),
++        Blob = term_to_binary(Manifest, [deterministic]), ok = file:write_file(Path, Blob),
++        ProjectionMarker = filename:join([Root, "projections", "retained", "marker"]),
++        ok = filelib:ensure_dir(ProjectionMarker), ok = file:write_file(ProjectionMarker, <<"preserved">>),
++        ?assertError({badmatch, {error, {unsupported_namespace_layout, Old}}},
++                     quod_foreign_log:init(#{cache_dir => Root})),
++        ?assertEqual({ok, Blob}, file:read_file(Path)),
++        ?assertEqual({ok, <<"preserved">>}, file:read_file(ProjectionMarker)),
++        ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Root, CacheNs)))
++    end).
+--- a/test/quod_namespace_manager_tests.erl
++++ b/test/quod_namespace_manager_tests.erl
+@@ -267,7 +267,7 @@
+             fun() ->
+                 true = quod_reg:reg({quod_ns, Ns}),
+                 Table = binary_to_atom(
+-                          <<"quod_simplex_genesis_", Ns/binary>>, utf8),
++                          quod_simplex:genesis_table_name(Ns), utf8),
+                 _ = ets:new(Table, [named_table, protected, set]),
+                 true = ets:insert(Table, {anchor, Anchor}),
+                 Parent ! {fake_child_ready, self()},
+--- a/test/quod_outcome_endpoint_tests.erl
++++ b/test/quod_outcome_endpoint_tests.erl
+@@ -471,7 +471,7 @@
+       store := Store, node_identity := Signer, claim := Claim,
+       certified_claim_ref := ClaimRef}) ->
+         stop_process(quod_reg:where({quod_prolog, Ns})),
+-        Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
++        Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns)),
+                         [named_table, protected]),
+         true = ets:insert(Table, {anchor, Anchor}),
+         Dir = filename:join("/tmp", binary_to_list(Ns)),
+@@ -522,7 +522,7 @@
+       store := Store, entry := Entry, node_identity := Signer,
+       claim := Claim, certified_claim_ref := ClaimRef, target_ref := TargetRef}) ->
+         stop_process(quod_reg:where({quod_prolog, Ns})),
+-        Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
++        Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns)),
+                         [named_table, protected]),
+         true = ets:insert(Table, {anchor, Anchor}),
+         {ok, Prolog} = quod_prolog:start_link(Ns, #{node_id => maps:get(pubkey, Signer),
+--- a/test/quod_overlay_tests.erl
++++ b/test/quod_overlay_tests.erl
+@@ -426,7 +426,7 @@
+ 
+ with_proof_gate(Fun) ->
+     Namespace = <<"quod:overlay-guard-test">>,
+-    Table = 'quod_simplex_genesis_quod:overlay-guard-test',
++    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:overlay-guard-test">>), utf8),
+     Tab = ets:new(Table, [named_table, protected, set]),
+     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
+     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},
+--- a/test/quod_prolog_tests.erl
++++ b/test/quod_prolog_tests.erl
+@@ -336,7 +336,7 @@
+       signing_key := SigningKey, agent_instance := Instance} = Fixture,
+     KeyFact = {agent_key, Instance, SigningKey, active},
+     GenesisTable = binary_to_atom(
+-                     <<"quod_simplex_genesis_", Ns/binary>>, utf8),
++                     quod_simplex:genesis_table_name(Ns), utf8),
+     GenesisTable = ets:new(GenesisTable, [named_table, protected, set]),
+     true = ets:insert(
+              GenesisTable,
+@@ -449,7 +449,7 @@
+     {Pubkey, Seed} = quod_identity:generate(),
+     Anchor = <<51:256>>,
+     GenesisTable = binary_to_atom(
+-                     <<"quod_simplex_genesis_", Ns/binary>>, utf8),
++                     quod_simplex:genesis_table_name(Ns), utf8),
+     GenesisTable = ets:new(GenesisTable, [named_table, protected]),
+     true = ets:insert(GenesisTable, {anchor, Anchor}),
+     Identity = #{pubkey => Pubkey,
+@@ -673,7 +673,7 @@
+             KeyedNs = <<Ns/binary, ":keyed">>,
+             KeyedAnchor = <<52:256>>,
+             GenesisTable = binary_to_atom(
+-                             <<"quod_simplex_genesis_", KeyedNs/binary>>,
++                             quod_simplex:genesis_table_name(KeyedNs),
+                              utf8),
+             GenesisTable = ets:new(
+                              GenesisTable, [named_table, protected]),
+--- a/test/quod_proof_session_tests.erl
++++ b/test/quod_proof_session_tests.erl
+@@ -604,7 +604,7 @@
+ close_proof_gate_2(Goal, Next, #est{bs = Bs} = St) ->
+     {close_proof_gate, <<_:256>> = GroupId} = erlog_int:dderef(Goal, Bs),
+     true = ets:insert(
+-             'quod_simplex_genesis_quod:session-guard-test',
++             binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
+              quod_ct:proof_gate_row(
+                true, 7, [{GroupId, 1, 7}])),
+     erlog_int:prove_body(Next, St).
+@@ -612,7 +612,7 @@
+ close_policy_gate_4(_Goal, Next, St) ->
+     GroupId = <<103:256>>,
+     true = ets:insert(
+-             'quod_simplex_genesis_quod:session-guard-test',
++             binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
+              quod_ct:proof_gate_row(
+                true, 7, [{GroupId, 1, 7}])),
+     erlog_int:prove_body(Next, St).
+@@ -672,7 +672,7 @@
+ 
+ with_proof_gate(Fun) ->
+     Namespace = <<"quod:session-guard-test">>,
+-    Table = 'quod_simplex_genesis_quod:session-guard-test',
++    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
+     Tab = ets:new(Table, [named_table, protected, set]),
+     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
+     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},
+--- a/test/quod_scope_session_tests.erl
++++ b/test/quod_scope_session_tests.erl
+@@ -290,7 +290,7 @@
+ 
+ worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
+     Ns = <<"quod:scope-guard-reply">>,
+-    Table = 'quod_simplex_genesis_quod:scope-guard-reply',
++    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:scope-guard-reply">>), utf8),
+     Tab = ets:new(Table, [named_table, protected, set]),
+     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
+     ScopeId = id(96),
+--- a/test/quod_scope_wire_tests.erl
++++ b/test/quod_scope_wire_tests.erl
+@@ -374,7 +374,7 @@
+ 
+ scope_namespace_uses_directory_bound_test() ->
+     MaxNamespace =
+-        binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
++        binary:copy(<<"n">>, 1024),
+     AtLimit = command_with_binding(
+                 {scope_open, node, []}, binding_with_origin(MaxNamespace)),
+     ?assertMatch({ok, _}, quod_scope_wire:encode_command(AtLimit)),
+@@ -553,7 +553,7 @@
+ outer_safe_etf_and_version_are_fail_closed_test() ->
+     Command = {scope_command,
+                binding_with_origin(
+-                 binary:copy(<<"x">>, ?DIRECTORY_MAX_NAMESPACE_BYTES)),
++                 binary:copy(<<"x">>, 1024)),
+                1, id(1), 30000, {scope_open, node, []}},
+     {ok, Encoded} = quod_scope_wire:encode_command(Command),
+     ?assertEqual(
+--- a/test/quod_simplex_tests.erl
++++ b/test/quod_simplex_tests.erl
+@@ -10108,7 +10108,7 @@
+       (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
+ 
+ with_simplex_gate(Ns, Row, Fun) ->
+-    Name = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
++    Name = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+     Tab = ets:new(Name, [named_table, protected, set]),
+     true = ets:insert(Tab, [{anchor, <<0:256>>}, Row]),
+     try Fun(Tab)

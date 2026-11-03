@@ -1,0 +1,11 @@
+OWNER_BEAMS [{erlog_int,"/checks/lib/erlog/ebin/erlog_int.beam"},
+             {quod_prolog,"/checks/lib/quod/ebin/quod_prolog.beam"},
+             {quod_erlog_db_local_prove,
+                 "/checks/lib/quod/ebin/quod_erlog_db_local_prove.beam"},
+             {quod_agent_hosting_tests,
+                 "/checks/lib/quod/test/quod_agent_hosting_tests.beam"}]
+======================== EUnit ========================
+quod_client_auth_tests: default_auth_tables_retain_more_than_256_entries_test...[0.065 s] ok
+quod_scope_wire_tests: scope_namespace_preserves_exact_identity_without_subquota_test...[0.007 s] ok
+=======================================================
+  2 tests passed.

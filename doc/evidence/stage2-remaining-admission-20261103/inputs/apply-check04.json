@@ -1,0 +1,53 @@
+[
+  {
+    "patch": "remaining-owners.patch",
+    "command": [
+      "git",
+      "apply",
+      "--check",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-remaining-admission-20261103/proposals/remaining-owners.patch"
+    ],
+    "workdir": "/home/yan/src/quod_worktrees/pearl-stone",
+    "sha256": "20df667750c420a6a3f95600531cca6c025b964ac39fe5197a75d07b69807ea3",
+    "true_exit": 0,
+    "stdout_eof": true,
+    "stderr_eof": true,
+    "stdout": "",
+    "stderr": "",
+    "applied": false
+  },
+  {
+    "patch": "erlog-diagnostics.patch",
+    "command": [
+      "git",
+      "apply",
+      "--check",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-remaining-admission-20261103/proposals/erlog-diagnostics.patch"
+    ],
+    "workdir": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlog",
+    "sha256": "365222a87f7bce76d6c51e3de92656be805b60bb937f2bb76dc28b7dd33e1eb3",
+    "true_exit": 0,
+    "stdout_eof": true,
+    "stderr_eof": true,
+    "stdout": "",
+    "stderr": "",
+    "applied": false
+  },
+  {
+    "patch": "namespace-admission-CONDITIONAL.patch",
+    "command": [
+      "git",
+      "apply",
+      "--check",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-remaining-admission-20261103/proposals/namespace-admission-CONDITIONAL.patch"
+    ],
+    "workdir": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-remaining-admission/proposal-applicability02",
+    "sha256": "c901aa315e1a06d312021c6764412bfa2bbb026d0a49e8ec6c254a4386d3b235",
+    "true_exit": 0,
+    "stdout_eof": true,
+    "stderr_eof": true,
+    "stdout": "",
+    "stderr": "",
+    "applied": false
+  }
+]

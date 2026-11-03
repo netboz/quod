@@ -1,0 +1,18 @@
+diff --git a/ebin/erlog.app b/ebin/erlog.app
+index fb3df5b..669aaac 100644
+--- a/ebin/erlog.app
++++ b/ebin/erlog.app
+@@ -2,10 +2,9 @@
+              [{description,"Erlog - an implementation of Prolog on Erlang"},
+               {vsn,"0.7"},
+               {modules,['Elixir.Erlog',erlog,erlog_bips,erlog_boot,
+-                        erlog_db_dict,erlog_db_ets,erlog_ets,
+-                        erlog_file,erlog_init,erlog_int,erlog_io,
+-                        erlog_lib_dcg,erlog_lib_lists,erlog_parse,erlog_scan,
+-                        erlog_server,erlog_shell]},
++                        erlog_db_dict,erlog_db_ets,erlog_ets,erlog_file,
++                        erlog_int,erlog_io,erlog_lib_dcg,erlog_lib_lists,
++                        erlog_parse,erlog_scan,erlog_server,erlog_shell]},
+               {registered,[]},
+               {applications,[kernel,stdlib]},
+               {env,[]},

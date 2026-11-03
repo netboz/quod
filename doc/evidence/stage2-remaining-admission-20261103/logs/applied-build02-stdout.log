@@ -1,0 +1,3 @@
+[{"src/quod_applied_certificate.erl",{ok,quod_applied_certificate}},
+ {"test/quod_remaining_admission_tests.erl",
+  {ok,quod_remaining_admission_tests}}]

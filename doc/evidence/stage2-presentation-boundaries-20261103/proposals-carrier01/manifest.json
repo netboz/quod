@@ -1,0 +1,40 @@
+{
+  "applied": false,
+  "compiled": false,
+  "executed": false,
+  "source_label": "applied-admission-partial01",
+  "paths": [
+    {
+      "path": "src/predicates/quod_ask.erl",
+      "before_sha256": "7ee405022eeedf3a69e106496b7afabbafedf983eb7ffcffd980da1c1a9aa48e",
+      "proposed_sha256": "a6f5704ae8003d4e66bf7ed23d50a9fe677702425cdf1e1eff89ab997c790581",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "src/quod_dtx_phase_index.erl",
+      "before_sha256": "15ab5594245f081348512cb5ca60d1851397bb835a9b1f30d8740bc3bdb6a8a2",
+      "proposed_sha256": "759c2bf48d5cd3298164a4849a1207aaf076eecbb43dc9821a18d319cfd76cfb",
+      "added": 5,
+      "removed": 19
+    },
+    {
+      "path": "src/quod_scope_wire.erl",
+      "before_sha256": "731d11b8d6509819d9b256adecefda9637a097f5c401f6cfca6fd188a1ebd690",
+      "proposed_sha256": "657989940184d5164b8532cdf599df14f74be78673b0488d1db9a0f709b7b6ec",
+      "added": 12,
+      "removed": 22
+    },
+    {
+      "path": "src/quod_signing_journal.erl",
+      "before_sha256": "c3029a8bca2339e05118b9d6c344820e4e92966eb4d125569465be3fb9063415",
+      "proposed_sha256": "3aed22cd59530a1c8f447897b503feea976662f78f51da5d48821aff1f66a0d4",
+      "added": 9,
+      "removed": 16
+    }
+  ],
+  "delta": {
+    "added": 27,
+    "removed": 58
+  }
+}

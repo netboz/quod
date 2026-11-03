@@ -1,0 +1,13 @@
+{
+  "command": [
+    "erl",
+    "+S",
+    "2:2",
+    "-noshell",
+    "-eval",
+    "lists:foreach(fun(F) -> {ok,_}=file:consult(F), io:format(\"~s syntax ok~n\",[F]) end,[\"rebar.config\",\"rebar.lock\"]), halt(0)."
+  ],
+  "true_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true
+}

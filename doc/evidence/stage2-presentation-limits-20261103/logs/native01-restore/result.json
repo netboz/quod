@@ -1,0 +1,13 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "Quod.csproj",
+    "--locked-mode",
+    "--source",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/native01/feed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.0248877220001305
+}

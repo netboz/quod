@@ -1,0 +1,3965 @@
+--- a/doc/consensus-signatures.md
++++ b/doc/consensus-signatures.md
+@@ -29,8 +29,9 @@
+ ## Ownership and recovery
+ 
+ `quod_simplex` is the sole local ledger writer. It installs a verified history
+-delta before publishing the corresponding state. `quod_catchup` serves bounded
+-pages from an immutable captured view; the receiver verifies ancestry,
++delta before publishing the corresponding state. `quod_catchup` serves pages
++which fit their complete encoded frames from one immutable captured view,
++retaining its cursor and continuation credits; the receiver verifies ancestry,
+ historical committee and transaction signatures before its owner installs
+ new material. `quod_feed` disseminates live entries and wakes the same
+ catch-up path for gaps. Replay restores state and does not create a live event.
+--- a/doc/multiwrite-architecture.md
++++ b/doc/multiwrite-architecture.md
+@@ -101,13 +101,16 @@
+ and read entries. Counts do not depend on which atoms a VM already knows.
+ Admission is enforced by the sealing proposer under the existing trusted
+ validator execution boundary. Validators enforce the sealed policy reads and
+-encoding bounds; material decoding retains VM headroom checks. This is not a
+-new resource sandbox for arbitrary traffic from admitted committee members.
+-The full enclosing transaction, block and transport still have encoding
+-capacity checks. Their shared material capacity fits both the existing scope
+-carrier and the history page with a full-committee compact witness; accepted
+-canonical bytes are unchanged. Decoding accepted history does not reapply current admission
+-policy. It still validates the wire alphabet and real VM atom-table headroom.
++encoding constraints. This is not a resource sandbox for arbitrary traffic
++from admitted committee members. Materialization checks actual VM atom-table
++capacity before allocating new names; this precheck does not reserve capacity
++against unrelated concurrent VM allocation. Explicit finite client vocabulary
++allowances remain enforced by the authentication owner.
++The complete transport envelope and store record retain their actual encoded
++length constraints. History readers retain one captured cursor and stream
++complete frames with exact continuation tokens; partial finality groups are
++never installed. Decoding accepted history does not reapply current admission
++policy. It still validates the wire alphabet and canonical identity bindings.
+ Retained vote selections distinguish read and write reservation changes.
+ Shared policy readers do not invalidate each other's unchanged selections;
+ an overlapping writer still invalidates readers and writers through the
+--- a/include/quod_client_goal_limits.hrl
++++ b/include/quod_client_goal_limits.hrl
+@@ -4,17 +4,12 @@
+ -include("quod_directory_limits.hrl").
+ -include("quod_proof_limits.hrl").
+ 
+-%% Ordinary client traffic is governed by the existing bounded ingress and
+-%% worker pools, not a product-level per-agent request quota. An operator may
+-%% opt into a temporary rate policy through `client_rate_limits`; the client
+-%% boundary ships with no rate policy by default. The cumulative atom ceiling
+-%% remains a VM-safety bound: atoms disappear when the VM restarts, so
+-%% persisting this counter would make it stricter without protecting more.
+--define(QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS, 16384).
++%% Client rates and finite vocabulary overrides remain explicit owner options;
++%% there is no built-in cumulative vocabulary quota.
+ 
+ %% Node-wide signed-goal routing owns only volatile, exactly monitored
+-%% correlations/workers. Population is not an admission policy; byte, term,
+-%% deadline and VM-safety bounds remain at the untrusted boundary.
++%% correlations/workers. Existing deadlines, authenticated encoding and explicit
++%% finite owner allowances govern the corresponding boundaries.
+ -define(QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS, 60000).
+ -define(QUOD_CLIENT_GOAL_REQUEST_ID_BITS, 128).
+ 
+--- a/include/quod_ingress_limits.hrl
++++ b/include/quod_ingress_limits.hrl
+@@ -3,36 +3,7 @@
+ 
+ -include("quod_transport_limits.hrl").
+ 
+-%% Retained admission policies, not encoding capacity. These derived quotas
+-%% still constrain ingress/history despite authored material allowances.
+--define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (128 * 1024)).
+--define(QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES, 1024).
+--define(MAX_VALIDATORS, 64).
+-%% ETF signature rows cost 108 bytes; 1024 covers entry, empty-carrier and page
+-%% metadata. The maximal full-committee transfer test checks this envelope.
+--define(QUOD_COMPACT_HISTORY_OVERHEAD_BYTES, (?MAX_VALIDATORS * 108 + 1024)).
+--define(MAX_BLOCK_BYTES,
+-        min((?QUOD_LINK_PAYLOAD_CAPACITY - ?QUOD_MAX_TOPLEVEL_GOAL_BYTES -
+-             ?QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES - 128) div 2,
+-            (?QUOD_MAX_FOREIGN_PAGE_BYTES - ?QUOD_COMPACT_HISTORY_OVERHEAD_BYTES) div 2)).
+-%% New volatile admissions share the ingress population bound. It never
+-%% limits recovery of obligations already accepted into durable custody.
+--define(MAX_INGRESS_TXS, 512).
+-%% V2 adds three 32-byte ETF binaries (block era,
+-%% parent era and parent hash) plus a tuple header to the prior envelope's
+-%% slot/parent/time/tag allowance. This is encoding overhead, not payload space.
+--define(QUOD_MAX_CANONICAL_BLOCK_BYTES,
+-        (?MAX_BLOCK_BYTES + 128 + 3 * (5 + 32) + 2)).
+-%% One canonical signed transaction is the common opaque payload accepted by
+-%% transaction verification and relay admission.  An operation-custody
+-%% submission is the deterministic `{submit, Author, Signature, Canonical}`
+-%% wrapper; ETF adds 122 bytes, with six bytes of representation allowance.
+--define(QUOD_MAX_CANONICAL_TRANSACTION_BYTES,
+-        (?MAX_BLOCK_BYTES - 128 - ?BATCH_ENVELOPE_BYTES)).
+--define(QUOD_MAX_OPERATION_SUBMISSION_BYTES,
+-        (?QUOD_MAX_CANONICAL_TRANSACTION_BYTES + 128)).
+ %% ETF overhead for `{batch, [First]}` beyond First's standalone encoding.
+-%% Further elements reuse the list encoding and therefore cannot increase this
+-%% fixed allowance; the collector remains an O(1) incremental byte counter.
++%% This accounts bytes; it is not an admission quota.
+ -define(BATCH_ENVELOPE_BYTES, 15).
+ -endif.
+--- a/include/quod_proof_limits.hrl
++++ b/include/quod_proof_limits.hrl
+@@ -18,19 +18,12 @@
+ %% The representation remains a bounded list so a later reviewed effect class
+ %% can raise the shared bound without another shape change.
+ -define(QUOD_MAX_DIRECT_EFFECTS, 1).
+--define(QUOD_MAX_DIRECT_EFFECT_BYTES, 2048).
+ %% One node-wide foreign-history owner (doc/outdated/distributed-proof-plan.md §8). Dormant
+ %% histories stay as verified disk caches and are opened only when a proof or
+-%% follow needs them. Exact monitors, deadlines and byte bounds own live work;
++%% follow needs them. Exact monitors and deadlines own live work;
+ %% there is no fixed population refusal.
+--define(QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
+ 
+-%% Process-free DTX recovery endpoint.  It may carry one optional page-format
+-%% acceleration sidecar beside the semantic request/response, so it shares the
+-%% existing foreign-page byte owner.  The transport frame remains the outer
+-%% bound and the sidecar is never authority.
+--define(QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
+-        ?QUOD_MAX_FOREIGN_PAGE_BYTES).
++%% The process-free DTX endpoint uses the complete transport envelope capacity.
+ -define(QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, 30000).
+ -define(QUOD_DTX_ENDPOINT_REQUEST_ID_BITS, 128).
+ 
+--- a/include/quod_transport_limits.hrl
++++ b/include/quod_transport_limits.hrl
+@@ -5,7 +5,5 @@
+ %% representable frame capacity, not an allocation or ingress quota.
+ -define(QUOD_LINK_PAYLOAD_BITS, 32).
+ -define(QUOD_LINK_PAYLOAD_CAPACITY, ((1 bsl ?QUOD_LINK_PAYLOAD_BITS) - 1)).
+-%% Retained history-page admission policy; not the actual transport capacity.
+--define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
+ 
+ -endif.
+--- a/include/quod_vm_limits.hrl
++++ /dev/null
+@@ -1,13 +0,0 @@
+--ifndef(QUOD_VM_LIMITS_HRL).
+--define(QUOD_VM_LIMITS_HRL, true).
+-
+-%% Keep enough atom-table capacity for the VM and loaded code after a caller
+-%% vocabulary source has been refused. This is a safety reserve, not a quota.
+--define(QUOD_ATOM_SAFETY_MARGIN, 100000).
+-
+-%% Existing untrusted client goal/reference syntax allowance. Durable material
+-%% uses the owning ontology's material_policy.pl admission instead; accepted
+-%% history must remain materializable when current policy is tightened.
+--define(QUOD_MAX_NEW_MATERIAL_ATOMS, 512).
+-
+--endif.
+--- a/src/predicates/quod_committee_predicates.erl
++++ b/src/predicates/quod_committee_predicates.erl
+@@ -76,10 +76,9 @@
+ admit_3(Goal, Next, #est{bs = Bs} = St) ->
+     case erlog_int:dderef(Goal, Bs) of
+         {admit, Pub, Host, Port} when is_binary(Pub) ->
+-            case {self_ns(St), committee_size(St) < ?MAX_VALIDATORS} of
+-                {undefined, _} -> erlog_int:fail(St);
+-                {_Ns, false} -> quod_predicates:fail_reason(committee_full,St);
+-                {Ns, true} ->
++            case self_ns(St) of
++                undefined -> erlog_int:fail(St);
++                Ns ->
+                     Fact = {peer_admitted, Pub, Host, Port, Pub},
+                     erlog_int:prove_body(
+                       [{can_join, Ns, [Host, Port], Pub}, {assertz, Fact} | Next], St)
+--- a/src/quod_agent_identity.erl
++++ b/src/quod_agent_identity.erl
+@@ -98,7 +98,7 @@
+ validate_certificate(
+   {agent_identity_certificate_v1, Statement, Signatures, RouteHints}) ->
+     valid_statement(Statement) andalso
+-        quod_quorum:valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
++        quod_quorum:valid_signature_list(Signatures, unlimited) andalso
+         quod_foreign_log:valid_route_candidates(RouteHints);
+ validate_certificate(_Certificate) -> false.
+ 
+--- a/src/quod_agent_ref.erl
++++ b/src/quod_agent_ref.erl
+@@ -15,7 +15,6 @@
+ 
+ -include("quod_client_goal_limits.hrl").
+ -include("quod_proof_limits.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ -export([from_text/4, decode/1, materialize/1, materialize_principal/1,
+          identity/1, principal/1, valid_principal/1]).
+--- a/src/quod_atomic_admission.erl
++++ b/src/quod_atomic_admission.erl
+@@ -20,11 +20,10 @@
+ """.
+ 
+ -include("quod_dtx_owner.hrl").
+--include("quod_ingress_limits.hrl").
+ -export([new/0, reserve/5, activate/3, cancel/3, admit/4, recheck/2,
+          selection_key/3, engine_lost/2, parent_applied/3,
+          next/3, verdict/4, take/2, take_all/1, detach_waiter/2, contains/2,
+-         trace_context/2, counts/1, has_capacity/2]).
++         trace_context/2, counts/1]).
+ -export_type([state/0]).
+ -ifdef(TEST).
+ -export([advance_selection/3]).
+@@ -42,7 +41,7 @@
+ 
+ -doc "Reserve sealed source material before private effects bind; do not activate it.".
+ -spec reserve(pid(), reference(), quod_atomic:admission_material(), map(), state()) ->
+-          {ok, state()} | {error, invalid_dtx_intent | busy}.
++          {ok, state()} | {error, invalid_dtx_intent}.
+ reserve(Engine, Token, Material, Trace, Rows = {ById, _}) ->
+     Id = group(Material),
+     case contains(Id, Rows) orelse lists:any(fun
+@@ -50,7 +49,6 @@
+         (_) -> false
+     end, maps:values(ById)) of
+         true -> {error, invalid_dtx_intent};
+-        false when map_size(ById) >= ?MAX_INGRESS_TXS -> {error, busy};
+         false -> {ok, insert(#intent{material = Material,
+                     proof = {Engine, Token}, trace = Trace}, Rows)}
+     end.
+@@ -240,9 +238,6 @@
+ -spec contains(binary(), state()) -> boolean().
+ contains(Id, {ById, _}) -> maps:is_key(Id, ById).
+ 
+--doc "Bound new volatile groups, not duplicate callers or journal-restored responsibilities.".
+--spec has_capacity(binary(), state()) -> boolean().
+-has_capacity(Id, {ById, _}) -> maps:is_key(Id, ById) orelse map_size(ById) < ?MAX_INGRESS_TXS.
+ 
+ -doc "Read the original caller context from an existing admission row; never borrow ambient ancestry.".
+ -spec trace_context(binary(), state()) -> map().
+--- a/src/quod_catchup.erl
++++ b/src/quod_catchup.erl
+@@ -37,7 +37,7 @@
+ -export([start_link/2, contact/1, contacts/2, pull/5, read_blocks/3, stats/1,
+          channel/1, encode_frame/2, decode_frame/2,
+          finality_begin/3, finality_block/2, verify_finality/4, verify_forward_group/5,
+-         open_history_transfer/3, transfer_open/3, transfer_page/2, transfer_begin/6, transfer_accept/3,
++         open_history_transfer/3, transfer_open/3, transfer_page/3, transfer_begin/6, transfer_accept/3,
+          range_begin/7, range_accept/5, range_context/1, range_delta/1,
+          evidence_open/4, evidence_begin/3, evidence_accept/4, evidence_result/1,
+          catch_up/7]).
+@@ -48,10 +48,6 @@
+ -endif.
+ 
+ -define(REQ_TIMEOUT_MS,  8000).
+--define(MAX_BLOCKS,      ?QUOD_MAX_FOREIGN_PAGE_ENTRIES).
+--define(RESP_BUDGET,     ?QUOD_MAX_FOREIGN_PAGE_BYTES).
+-                                         %% frame MUST fit quod_link's 1 MiB cap (it EXITs the link on a
+-                                         %% larger frame), so we leave headroom for the envelope
+ 
+ -record(client_pull, {
+           from :: gen_server:from() | none,
+@@ -78,7 +74,7 @@
+ -record(transfer, {binding, last, next, projection, index, mode, stage, delta,
+                     entries = [], finality = pending}).
+ -opaque transfer() :: #transfer{}.
+--record(transfer_sender, {next, last, current = none, pending = none, selections = range,
++-record(transfer_sender, {next, last, current = none, pending = [], selections = range,
+                           known_root = none}).
+ -opaque transfer_sender() :: #transfer_sender{}.
+ -record(range_receiver, {binding, to, mode, stage, context, projection, index, delta,
+@@ -199,15 +195,17 @@
+     term_to_binary({catchup, Ns}, [deterministic]).
+ 
+ -doc "Encode one catch-up frame; committed entries travel only as their canonical blobs.".
+--spec encode_frame(binary(), term()) -> binary().
++-spec encode_frame(binary(), term()) -> {ok, binary()} | {error, term()}.
+ encode_frame(Ns, Term) when is_binary(Ns) ->
+-    {ok, Term, _} = decode_wire_term(Term, 0),
+-    {ok, Inner} = quod_safe_term:encode_canonical(
+-                    Term, ?QUOD_LINK_PAYLOAD_CAPACITY),
+-    {ok, Outer} = quod_safe_term:encode_canonical(
+-      {catchup, 3, Ns, Inner},
+-      ?QUOD_LINK_PAYLOAD_CAPACITY),
+-    Outer.
++    case decode_wire_term(Term, 0) of
++        {ok, Term, _} ->
++            case quod_safe_term:encode_canonical(Term, ?QUOD_LINK_PAYLOAD_CAPACITY) of
++                {ok, Inner} -> quod_safe_term:encode_canonical(
++                                 {catchup, 3, Ns, Inner}, ?QUOD_LINK_PAYLOAD_CAPACITY);
++                {error, _} = Error -> Error
++            end;
++        {error, _} = Error -> Error
++    end.
+ 
+ -doc "Decode one existing catch-up frame, returning its inner encoded byte count.".
+ -spec decode_frame(binary(), binary()) ->
+@@ -244,13 +242,13 @@
+    Continuation, <<_:128>> = Next} = Term, Bytes)
+   when is_integer(Height), Height >= 0 ->
+     case Grant =/= Next andalso valid_transfer_continuation(Continuation)
+-         andalso valid_transfer_parts(Parts, 0, 0) of
++         andalso valid_transfer_parts(Parts) of
+         true -> {ok, Term, Bytes};
+         false -> {error, bad_frame}
+     end;
+ decode_wire_term(
+   {history_error3, <<_:128>> = Grant, <<_:128>>, Reason, <<_:128>> = Next} = Term, Bytes)
+-  when Grant =/= Next, (Reason =:= not_ready orelse Reason =:= server_error) ->
++  when Grant =/= Next, (Reason =:= not_ready orelse Reason =:= server_error orelse Reason =:= frame_unrepresentable) ->
+     {ok, Term, Bytes};
+ decode_wire_term(_Term, _Bytes) ->
+     {error, bad_frame}.
+@@ -277,18 +275,18 @@
+ valid_transfer_continuation(_) -> false.
+ 
+ %% Read already-verified material for the derived foreign projection. This
+-%% bounded work unit is not a history transport or a certificate verifier.
++%% local read is not a history transport or a certificate verifier.
+ -spec read_blocks(quod_ledger_store:handle(), non_neg_integer(), log_index()) ->
+           {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
+ read_blocks(Store, From0, To) ->
+     From = max(1, From0),
+     try
+         LastI = quod_ledger_store:last(Store),
+-        To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
++        To1 = min(To, LastI),
+         {ok, Es} = measure_serve_stage(
+                      serve_range_read,
+                      fun() -> quod_ledger_store:read_range(Store, From, To1, all) end),
+-        {ok, cap_bytes(Es, 0), LastI}
++        {ok, Es, LastI}
+     catch _:R -> {error, R}
+     end.
+ 
+@@ -353,7 +351,8 @@
+     quod_dtx_phase_index:authority_path(Index, KnownEra, Era).
+ 
+ serve_transfer_pages(Store, Cursor, Owner, Token, Sequence, Deadline, Gate) ->
+-    case transfer_page(Store, Cursor) of
++    case transfer_page(Store, Cursor,
++                       {quod_ledger_store:namespace(Store), {Token, Sequence + 1}}) of
+         {ok, Parts, Next} ->
+             Continuation = case Next of done -> done; _ -> {Token, Sequence + 1} end,
+             Owner ! {reader_result, Token, self(),
+@@ -385,20 +384,6 @@
+ serve_stage_result({ok, _}) -> ok;
+ serve_stage_result({error, _}) -> failed.
+ 
+-%% Keep one bounded materializer work unit, including at least one legal
+-%% material entry. Transport separately pages proof groups with its cursor.
+-cap_bytes([], _Acc) -> [];
+-cap_bytes([E | Rest], Acc) ->
+-    EntryBytes = case E of
+-        Bytes when is_binary(Bytes) -> Bytes;
+-        _ -> {ok, Bytes} = quod_ledger:encode_entry(E), Bytes
+-    end,
+-    Acc1 = Acc + byte_size(EntryBytes),
+-    case Acc =:= 0 orelse Acc1 =< ?RESP_BUDGET of
+-        true  -> [E | cap_bytes(Rest, Acc1)];
+-        false -> []
+-    end.
+-
+ -doc """
+ Capture a material range for the existing reader. The last selected archive
+ group is completed even if it extends beyond To; certified material cannot be
+@@ -409,37 +394,97 @@
+ transfer_open(Store, From, To) when is_integer(From), From > 0, is_integer(To), To >= From ->
+     #transfer_sender{next = From, last = min(To, quod_ledger_store:last(Store))}.
+ 
+--doc "Produce a bounded page without restarting its proof cursor; retain one lookahead item.".
+--spec transfer_page(quod_ledger_store:handle(),
+-                    transfer_sender() | done) ->
++-doc "Page one retained proof cursor against its complete consumer frame.".
++-spec transfer_page(quod_ledger_store:handle(), transfer_sender() | done,
++                    unlimited | {binary(), {binary(), pos_integer()}}) ->
+           {ok, [term()], transfer_sender() | done} | {error, term()}.
+-transfer_page(_Store, done) -> {ok, [], done};
+-transfer_page(Store, State) -> transfer_page(Store, State, [], 0, 0).
+-
+-transfer_page(Store, State = #transfer_sender{pending = Pending}, Acc, Count, Size) ->
+-    Next = case Pending of
+-        none -> next_transfer_part(Store, State);
+-        _ -> {ok, Pending, State#transfer_sender{pending = none}}
+-    end,
+-    case Next of
++transfer_page(_Store, done, _Context) -> {ok, [], done};
++transfer_page(Store, State, Context) ->
++    case page_allowances(Store, Context) of
++        {ok, Allowances} -> transfer_page(Store, State, Allowances, [], 0);
++        {error, _} = Error -> Error
++    end.
++
++page_allowances(_Store, unlimited) -> {ok, {unlimited, unlimited}};
++page_allowances(Store, {Ns, Continuation}) ->
++    Height = quod_ledger_store:last(Store),
++    case {page_part_allowance(Ns, Height, Continuation),
++          page_part_allowance(Ns, Height, done)} of
++        {{ok, More}, {ok, Done}} -> {ok, {More, Done}};
++        {{error, Why}, _} -> {error, Why};
++        {_, {error, Why}} -> {error, Why}
++    end.
++
++%% The envelope includes the actual namespace, height and continuation integer.
++%% Fixed-width request/grant values have identical encoded sizes for every value.
++%% Measure the nonempty list wrapper once; each part contributes its ETF body.
++page_part_allowance(Ns, Height, Continuation) ->
++    Sample = {history_page3, <<0:128>>, <<0:128>>, [end_group], Height,
++              Continuation, <<1:128>>},
++    {ok, <<131, Body/binary>>} = quod_safe_term:encode_canonical(end_group, unlimited),
++    case encode_frame(Ns, Sample) of
++        {ok, Frame} -> {ok, page_capacity() - byte_size(Frame) + byte_size(Body)};
++        {error, too_large} -> {error, frame_unrepresentable};
++        {error, _} = Error -> Error
++    end.
++
++transfer_page(Store, State, Allowances = {More, _Done}, Acc, Size) ->
++    case take_transfer_part(Store, State) of
+         done -> {ok, lists:reverse(Acc), done};
+         {ok, Part, State1} ->
+-            case quod_safe_term:encode_canonical(Part, ?RESP_BUDGET) of
+-                {ok, Encoded} when Count < ?MAX_BLOCKS, Size + byte_size(Encoded) =< ?RESP_BUDGET ->
+-                    transfer_page(Store, State1, [Part | Acc], Count + 1,
+-                                  Size + byte_size(Encoded));
+-                {ok, _} -> {ok, lists:reverse(Acc), State1#transfer_sender{pending = Part}};
+-                {error, _} -> {error, transfer_part_too_large}
++            Added = part_body_size(Part),
++            case More =:= unlimited orelse Size + Added =< More of
++                true -> transfer_page(Store, State1, Allowances, [Part | Acc], Size + Added);
++                false -> finish_page(Store, State1, Allowances, Acc, [Part], Size + Added)
+             end
+     end.
+ 
+-next_transfer_part(_Store, #transfer_sender{current = none, selections = []}) -> done;
+-next_transfer_part(Store, S = #transfer_sender{current = none, selections = [{Kind, Height} | Rest]}) ->
++%% A terminal envelope is smaller than a continuation envelope. Retain only
++%% the lookahead which could still complete that terminal frame. If it cannot,
++%% emit the already representable prefix and retain every read part exactly once.
++finish_page(Store, State, Allowances = {_More, Done}, Prefix, Tail, Size) ->
++    case Done =:= unlimited orelse Size =< Done of
++        false -> deferred_page(State, Prefix, Tail);
++        true ->
++            case take_transfer_part(Store, State) of
++                done -> {ok, lists:reverse(Prefix) ++ lists:reverse(Tail), done};
++                {ok, Part, State1} ->
++                    finish_page(Store, State1, Allowances, Prefix, [Part | Tail],
++                                Size + part_body_size(Part))
++            end
++    end.
++
++deferred_page(_State, [], _Tail) -> {error, frame_unrepresentable};
++deferred_page(State = #transfer_sender{pending = Pending}, Prefix, Tail) ->
++    {ok, lists:reverse(Prefix),
++     State#transfer_sender{pending = lists:reverse(Tail) ++ Pending}}.
++
++part_body_size(Part) ->
++    {ok, <<131, Body/binary>>} = quod_safe_term:encode_canonical(Part, unlimited),
++    byte_size(Body).
++
++take_transfer_part(Store, State = #transfer_sender{pending = []}) ->
++    next_transfer_part(Store, State);
++take_transfer_part(_Store, State = #transfer_sender{pending = [Part | Rest]}) ->
++    {ok, Part, State#transfer_sender{pending = Rest}}.
++
++transfer_complete(#transfer_sender{pending = [], current = none, selections = []}) -> true;
++transfer_complete(#transfer_sender{pending = [], current = none, selections = range,
++                                    next = Next, last = Last}) -> Next > Last;
++transfer_complete(_) -> false.
++
++next_transfer_part(Store, State) ->
++    case transfer_complete(State) of
++        true -> done;
++        false -> transfer_part(Store, State)
++    end.
++
++transfer_part(Store, S = #transfer_sender{current = none, selections = [{Kind, Height} | Rest]}) ->
+     {ok, Entry} = quod_ledger_store:read_at(Store, Height),
+     {ok, Block} = entry_block(Entry),
+     {ok, {evidence, Kind, Height}, S#transfer_sender{
+         current = {evidence_entry, Entry, quod_ledger:block_ref(Block)}, selections = Rest}};
+-next_transfer_part(Store, S = #transfer_sender{current = {evidence_entry, Entry, Ref}}) ->
++transfer_part(Store, S = #transfer_sender{current = {evidence_entry, Entry, Ref}}) ->
+     Height = quod_ledger:entry_index(Entry),
+     {ok, Bytes} = quod_ledger:encode_entry(Entry),
+     Next = case Height =:= 1 orelse S#transfer_sender.known_root =:= {Height, element(3, Ref)} of
+@@ -448,7 +493,7 @@
+                  {evidence_proof, Cursor, Ref}
+     end,
+     {ok, {entry, Bytes}, S#transfer_sender{current = Next}};
+-next_transfer_part(Store, S = #transfer_sender{current = {evidence_proof, Cursor, Ref}}) ->
++transfer_part(Store, S = #transfer_sender{current = {evidence_proof, Cursor, Ref}}) ->
+     case quod_ledger_store:proof_next(Store, Cursor) of
+         {ok, Bytes, NextCursor} ->
+             {ok, Block} = quod_ledger:decode_block(Bytes, wrapped),
+@@ -459,14 +504,12 @@
+             {ok, {proof, Bytes}, S#transfer_sender{current = Next}};
+         done -> error(incomplete_selected_witness)
+     end;
+-next_transfer_part(_Store, S = #transfer_sender{current = evidence_end}) ->
++transfer_part(_Store, S = #transfer_sender{current = evidence_end}) ->
+     {ok, end_group, S#transfer_sender{current = none}};
+-next_transfer_part(_Store, #transfer_sender{current = none, selections = range, next = Next, last = Last})
+-  when Next > Last -> done;
+-next_transfer_part(Store, S = #transfer_sender{current = none, next = First}) ->
++transfer_part(Store, S = #transfer_sender{current = none, next = First}) ->
+     {ok, Last, Cursor} = quod_ledger_store:transfer_cursor(Store, First),
+     {ok, {group, First, Last}, S#transfer_sender{next = Last + 1, current = Cursor}};
+-next_transfer_part(Store, S = #transfer_sender{current = Cursor}) ->
++transfer_part(Store, S = #transfer_sender{current = Cursor}) ->
+     case quod_ledger_store:transfer_next(Store, Cursor) of
+         done -> {ok, end_group, S#transfer_sender{current = none}};
+         {ok, Part, Next} -> {ok, Part, S#transfer_sender{current = Next}}
+@@ -500,7 +543,7 @@
+ -spec transfer_accept(transfer(), [{entry | proof, binary()}], more | done) ->
+           {more, transfer()} | {done, map()} | {error, term()}.
+ transfer_accept(T, Parts, End) when End =:= more; End =:= done ->
+-    case valid_transfer_parts(Parts, 0, 0) of
++    case valid_transfer_parts(Parts) of
+         true ->
+             case transfer_parts(Parts, T, quod_transaction:decode_context()) of
+                 {ok, T1, _Decoded} when End =:= more -> {more, T1};
+@@ -511,14 +554,10 @@
+     end;
+ transfer_accept(_, _, _) -> {error, malformed_transfer_page}.
+ 
+-valid_transfer_parts([], _Count, _Bytes) -> true;
+-valid_transfer_parts([Part | Rest], Count, Size) when Count < ?MAX_BLOCKS ->
+-    case valid_transfer_part(Part) andalso quod_safe_term:encode_canonical(Part, ?RESP_BUDGET) of
+-        {ok, Encoded} when Size + byte_size(Encoded) =< ?RESP_BUDGET ->
+-            valid_transfer_parts(Rest, Count + 1, Size + byte_size(Encoded));
+-        _ -> false
+-    end;
+-valid_transfer_parts(_, _, _) -> false.
++valid_transfer_parts([]) -> true;
++valid_transfer_parts([Part | Rest]) ->
++    valid_transfer_part(Part) andalso valid_transfer_parts(Rest);
++valid_transfer_parts(_) -> false.
+ 
+ valid_transfer_part({Kind, Bytes}) when Kind =:= entry; Kind =:= proof -> is_binary(Bytes);
+ valid_transfer_part({group, First, Last}) ->
+@@ -613,7 +652,7 @@
+             %% Authentication reuse belongs only to this bounded page. It is
+             %% not retained in either cursor and cannot become authority for
+             %% committee, reference, freshness or finality decisions.
+-            case valid_transfer_parts(Parts, 0, 0) of
++            case valid_transfer_parts(Parts) of
+                 false -> {error, malformed_transfer_page, R};
+                 true ->
+                     case consume_range_parts(Parts, R#range_receiver{height = RemoteHeight},
+@@ -850,7 +889,7 @@
+ -spec evidence_accept(term(), [term()], non_neg_integer(), more | done) -> {ok, term()} | {error, term()}.
+ evidence_accept(R = #evidence_receiver{height = OldHeight, complete = false}, Parts, Height, End)
+   when is_integer(Height), Height >= 0, (OldHeight =:= none orelse OldHeight =:= Height) ->
+-    case valid_transfer_parts(Parts, 0, 0) andalso (End =:= more orelse End =:= done) of
++    case valid_transfer_parts(Parts) andalso (End =:= more orelse End =:= done) of
+         true ->
+             case consume_evidence(Parts, R#evidence_receiver{height = Height}, quod_transaction:decode_context()) of
+                 {ok, Next = #evidence_receiver{active = none, entry = Entry}, _}
+@@ -1033,7 +1072,8 @@
+ 
+ catch_up_loop(Binding, Fetch, Sink, View = #{owner := Owner, projection := Projection},
+               From, MaxHeight, Stage) ->
+-    To = From + ?MAX_BLOCKS - 1,
++    %% The existing range owner captures its actual last committed entry.
++    To = ?QUOD_SCOPE_WIRE_MAX_UINT64,
+     Deadline = quod_time:mono_ms() + ?REQ_TIMEOUT_MS,
+     Range = range_begin(Binding, To, materialized, Stage, View, Projection,
+                         maps:get(history_index, Projection)),
+@@ -1137,6 +1177,9 @@
+ handle_call(Request, _From, S) -> test_call(Request, S).
+ 
+ -ifdef(TEST).
++test_transfer_parts(Parts, Allowances) ->
++    transfer_page(undefined, #transfer_sender{next = 1, last = 0, pending = Parts},
++                  Allowances, [], 0).
+ test_call(test_recovery_state, S) ->
+     {reply, #{openings => S#s.openings, contacts => S#s.contacts,
+               bindings => maps:map(
+@@ -1152,18 +1195,26 @@
+                                operation => R#reader.operation, sequence => R#reader.sequence,
+                                started_ms => R#reader.started_ms} end,
+                 S#s.inflight)}, S};
++test_call({test_page_capacity, Bytes}, S)
++  when is_integer(Bytes), Bytes > 0, Bytes =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
++    put({?MODULE, page_capacity}, Bytes), {reply, ok, S};
+ test_call({test_hold_next_reader, Point, TestPid}, S)
+   when (Point =:= before_read orelse Point =:= after_result), is_pid(TestPid) ->
+     put({?MODULE, reader_gate}, {Point, TestPid}),
+     {reply, ok, S};
+ test_call(_, S) -> {reply, {error, unknown_call}, S}.
+ 
+-take_reader_gate() -> erase({?MODULE, reader_gate}).
+-reader_gate(Point, {Point, TestPid}, Op) ->
++page_capacity() ->
++    case get({?MODULE, page_capacity}) of undefined -> ?QUOD_LINK_PAYLOAD_CAPACITY; N -> N end.
++take_reader_gate() -> {erase({?MODULE, reader_gate}), page_capacity()}.
++reader_gate(Point, {Gate, Capacity}, Op) ->
++    put({?MODULE, page_capacity}, Capacity), hold_reader(Point, Gate, Op).
++hold_reader(Point, {Point, TestPid}, Op) ->
+     TestPid ! {reader_held, self(), Op, Point},
+     receive {release_reader, Op} -> ok end;
+-reader_gate(_, _, _) -> ok.
++hold_reader(_, _, _) -> ok.
+ -else.
++page_capacity() -> ?QUOD_LINK_PAYLOAD_CAPACITY.
+ test_call(_, S) -> {reply, {error, unknown_call}, S}.
+ take_reader_gate() -> none.
+ reader_gate(_, _, _) -> ok.
+@@ -1322,6 +1373,8 @@
+                  end,
+         case Result of
+             ok -> ok;
++            {error, frame_unrepresentable} = Error ->
++                Owner ! {reader_result, Token, self(), Error};
+             {error, _} -> Owner ! {reader_result, Token, self(), {error, not_ready}}
+         end
+     end, [link, {monitor, [{tag, {page_worker_down, Token}}]}]),
+--- a/src/quod_client_auth.erl
++++ b/src/quod_client_auth.erl
+@@ -42,9 +42,7 @@
+ -endif.
+ 
+ -define(TTL_MS, 60000).
+--define(MAX_CHALLENGES, 256).
+ -define(SESSION_TTL_MS, 900000).
+--define(MAX_SESSIONS, 256).
+ -define(PRUNE_INTERVAL_MS, 30000).
+ -include("quod_client_goal_limits.hrl").
+ 
+@@ -53,16 +51,16 @@
+             challenges = #{} :: #{binary() => map()},
+             sessions = #{} :: #{binary() => map()},
+             ttl_ms :: pos_integer(),
+-            max_challenges :: pos_integer(),
++            max_challenges :: pos_integer() | unlimited,
+             session_ttl_ms :: pos_integer(),
+-            max_sessions :: pos_integer(),
++            max_sessions :: pos_integer() | unlimited,
+             challenge_rate :: none | quod_rate:limiter(),
+             goal_signing_key_rate :: none | quod_rate:limiter(),
+             goal_peer_rate :: none | quod_rate:limiter(),
+             symbol_signing_key_rate :: none | quod_rate:limiter(),
+             symbol_peer_rate :: none | quod_rate:limiter(),
+             atom_baseline :: non_neg_integer(),
+-            max_materialized_atoms :: non_neg_integer()}).
++            max_materialized_atoms :: non_neg_integer() | unlimited}).
+ 
+ -define(ATOM_BASELINE_KEY, {?MODULE, atom_baseline}).
+ -define(CHALLENGE_DOMAIN, <<"quod.agent.challenge.v1", 0>>).
+@@ -157,9 +155,9 @@
+     S = #s{network_id = maps:get(network_id, Options, undefined),
+             node_key = maps:get(node_key, Options, undefined),
+             ttl_ms = maps:get(ttl_ms, Options, ?TTL_MS),
+-            max_challenges = maps:get(max_challenges, Options, ?MAX_CHALLENGES),
++            max_challenges = maps:get(max_challenges, Options, unlimited),
+             session_ttl_ms = maps:get(session_ttl_ms, Options, ?SESSION_TTL_MS),
+-            max_sessions = maps:get(max_sessions, Options, ?MAX_SESSIONS),
++            max_sessions = maps:get(max_sessions, Options, unlimited),
+             challenge_rate = optional_rate(
+                                rate_limit(challenge_limit, Options, RateLimits)),
+             goal_signing_key_rate = optional_rate(
+@@ -175,7 +173,7 @@
+             atom_baseline = atom_baseline(Options),
+             max_materialized_atoms =
+                 maps:get(max_materialized_atoms, Options,
+-                         ?QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS)},
++                         unlimited)},
+     quod_reg:publish({client_auth, node}, {client_auth_ready, self()}),
+     {ok, S}.
+ 
+@@ -277,7 +275,7 @@
+     {{ok, Reply}, S#s{challenges = Challenges#{ChallengeId => Challenge}}}.
+ 
+ challenges_full(#s{challenges = Challenges, max_challenges = Max}) ->
+-    map_size(Challenges) >= Max.
++    Max =/= unlimited andalso map_size(Challenges) >= Max.
+ 
+ %% Capacity is tested BEFORE the take: a challenge is single-use, so consuming
+ %% one only to refuse the session would cost the client a full round trip for
+@@ -360,7 +358,7 @@
+       public_key => PublicKey}.
+ 
+ sessions_full(#s{sessions = Sessions, max_sessions = Max}) ->
+-    map_size(Sessions) >= Max.
++    Max =/= unlimited andalso map_size(Sessions) >= Max.
+ 
+ %% ======================================================================
+ %% plumbing
+@@ -446,7 +444,7 @@
+                            max_materialized_atoms = Max} = S0)
+   when Count > 0, is_function(Materialize, 0) ->
+     Used = max(0, erlang:system_info(atom_count) - Baseline),
+-    case Used + Count =< Max of
++    case Max =:= unlimited orelse Used + Count =< Max of
+         false ->
+             {{error, client_symbol_budget_exhausted}, S0};
+         true ->
+@@ -457,8 +455,8 @@
+                     {Error, S1};
+                 {ok, S1} ->
+                     %% The owner serializes client vocabulary allocation.  The
+-                    %% existing materializer still enforces per-request and VM
+-                    %% headroom limits shared with every other wire boundary.
++                    %% shared materializer checks actual VM atom capacity. Explicit
++                    %% finite owner allowances and rates remain enforced above.
+                     materialized_reply(Materialize(), S1)
+             end
+     end.
+--- a/src/quod_dtx.erl
++++ b/src/quod_dtx.erl
+@@ -282,15 +282,11 @@
+           quod_wire_term:encode_canonical(Bridges),
+           quod_wire_term:encode_canonical(Transcript)} of
+         {{ok, DiffBlob}, {ok, ReadCheckBlob}, {ok, EffectsBlob},
+-         {ok, BridgesBlob}, {ok, TranscriptBlob}}
+-          when byte_size(EffectsBlob) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
++         {ok, BridgesBlob}, {ok, TranscriptBlob}} ->
+             {ok, DiffBlob, ReadCheckBlob, EffectsBlob, BridgesBlob,
+              TranscriptBlob};
+-        {{ok, _}, {ok, _}, {ok, EffectsBlob}, {ok, _}, {ok, _}}
+-          when byte_size(EffectsBlob) > ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
+-            {error, {too_large, effects}};
+         _ ->
+-            {error, {too_large, plan}}
++            {error, malformed_material}
+     end.
+ 
+ %% A material diff must not rest on live-bridge truth (module doc); the plan
+@@ -417,7 +413,6 @@
+         is_binary(Diff) andalso
+         is_binary(ReadCheck) andalso
+         is_binary(Effects) andalso
+-        byte_size(Effects) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES andalso
+         is_binary(Bridges) andalso
+         is_binary(Transcript);
+ valid_core(_) ->
+--- a/src/quod_dtx_coordinator.erl
++++ b/src/quod_dtx_coordinator.erl
+@@ -2669,8 +2669,7 @@
+         {error, Reason} -> {fatal, Reason, S}
+     end.
+ 
+-valid_committee(Committee) when is_list(Committee), Committee =/= [],
+-                                length(Committee) =< ?MAX_VALIDATORS ->
++valid_committee(Committee) when is_list(Committee), Committee =/= [] ->
+     Committee =:= lists:usort(Committee) andalso
+         lists:all(
+           fun(Key) -> is_binary(Key) andalso byte_size(Key) =:= 32 end,
+@@ -2679,7 +2678,7 @@
+     false.
+ 
+ valid_validator_routes(Routes, Committee)
+-  when is_map(Routes), map_size(Routes) =< ?MAX_VALIDATORS ->
++  when is_map(Routes) ->
+     lists:all(fun(Key) -> lists:member(Key, Committee) end,
+               maps:keys(Routes)) andalso
+         maps:fold(
+--- a/src/quod_dtx_current_view.erl
++++ b/src/quod_dtx_current_view.erl
+@@ -975,8 +975,7 @@
+         is_integer(Slot) andalso Slot > 0 andalso
+         is_integer(Applied) andalso Applied >= 0 andalso Applied =< Slot andalso
+         is_map(Projection);
+-valid_source({remote, Routes}) when is_list(Routes), Routes =/= [],
+-                                    length(Routes) =< ?MAX_VALIDATORS ->
++valid_source({remote, Routes}) when is_list(Routes), Routes =/= [] ->
+     quod_foreign_log:valid_route_candidates(Routes);
+ valid_source(_) ->
+     false.
+@@ -1032,8 +1031,7 @@
+   #{identity := Target, committee := Committee,
+     committee_id := <<_:256>> = CommitteeId, routes := RouteMap})
+   when is_list(Committee), Committee =/= [],
+-       length(Committee) =< ?MAX_VALIDATORS,
+-       is_map(RouteMap), map_size(RouteMap) =< ?MAX_VALIDATORS ->
++       is_map(RouteMap) ->
+     Routes = lists:keysort(
+                1,
+                [{Key, [Endpoint]}
+@@ -1067,8 +1065,7 @@
+   when map_size(View) =:= 5,
+        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
+        is_list(Committee), Committee =/= [],
+-       length(Committee) =< ?MAX_VALIDATORS,
+-       is_list(Routes), length(Routes) =< ?MAX_VALIDATORS ->
++       is_list(Routes) ->
+     case Committee =:= lists:usort(Committee) andalso
+          lists:all(fun valid_key/1, Committee) andalso
+          valid_routes(Routes, Committee) of
+--- a/src/quod_dtx_endpoint.erl
++++ b/src/quod_dtx_endpoint.erl
+@@ -64,10 +64,6 @@
+ -define(VERSION, 13). %% Vote/Resolve/Complete and compact recovery presentation
+ -define(CHANNEL_TAG, quod_dtx).
+ -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
+-
+--if(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES >= ?QUOD_LINK_PAYLOAD_CAPACITY).
+--error("DTX endpoint envelope must stay below the transport frame bound").
+--endif.
+ 
+ -type request_id() :: <<_:?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS>>.
+ -type identity() :: {binary(), <<_:256>>}.
+@@ -171,14 +167,14 @@
+                     %% depth. Admit the complete inner bytes by the same rule
+                     %% as the receiver before emitting an undecodable frame.
+                     case quod_safe_term:validate_canonical(
+-                           InnerBinary, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
++                           InnerBinary, ?QUOD_LINK_PAYLOAD_CAPACITY) of
+                         ok ->
+                             Envelope = term_to_binary(
+                                          {?DOMAIN, ?VERSION, Namespace,
+                                           InnerBinary, TraceCarrier},
+                                          [deterministic]),
+                             case byte_size(Envelope) =<
+-                                 ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
++                                 ?QUOD_LINK_PAYLOAD_CAPACITY of
+                                 true -> {ok, Envelope};
+                                 false -> too_large(dtx_endpoint)
+                             end;
+@@ -222,9 +218,9 @@
+ 
+ decode_direction(Expected, Envelope, Direction)
+   when is_binary(Envelope),
+-       byte_size(Envelope) =< ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES ->
++       byte_size(Envelope) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
+     case quod_safe_term:decode(
+-           Envelope, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
++           Envelope, ?QUOD_LINK_PAYLOAD_CAPACITY) of
+         {ok, {?DOMAIN, ?VERSION, Namespace, InnerBinary, Carrier} = Outer} ->
+             case term_to_binary(Outer, [deterministic]) =:= Envelope of
+                 true ->
+@@ -265,7 +261,7 @@
+             %% This shared decoder verifies the original canonical bytes while
+             %% retaining unknown domain symbols without allocating atoms.
+             case quod_safe_term:decode_wrapped(
+-                   InnerBinary, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
++                   InnerBinary, ?QUOD_LINK_PAYLOAD_CAPACITY) of
+                 {ok, {Inner, RawHints}} ->
+                     case validate_bound_direction(Namespace, Inner, Direction) of
+                         ok ->
+@@ -388,7 +384,7 @@
+         case quod_dtx:certified_ref_binding(Ref) of
+             {ok, _Identity, Slot, _Digest} ->
+                 case quod_ledger:hint_bytes(Entry) of
+-                    {ok, Bytes} -> byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES;
++                    {ok, _Bytes} -> true;
+                     {error, _} -> false
+                 end;
+             _ ->
+@@ -481,8 +477,7 @@
+ %% authenticated peer/readiness checks; this framing layer never parses or
+ %% verifies the signed submission a second time.
+ valid_payload(Blob) when is_binary(Blob) ->
+-    byte_size(Blob) > 0 andalso
+-        byte_size(Blob) < ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES;
++    byte_size(Blob) > 0;
+ valid_payload(_Blob) ->
+     false.
+ 
+--- a/src/quod_erlog_db_local_prove.erl
++++ b/src/quod_erlog_db_local_prove.erl
+@@ -413,8 +413,8 @@
+   #est{db = #db{mod = ?MODULE} = Db} = St) ->
+     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0,
+            db = Db#db{loc = []},
+-           fail_reasons = [], fail_reason_count = 0,
+-           fail_reasons_truncated = false, fail_boundaries = 0,
++           fail_reasons = [],
++           fail_reasons_truncated = false,
+            checkpoint_depth = 0};
+ fresh_proof_state(_St) ->
+     erlang:error(badarg).
+@@ -469,8 +469,8 @@
+   #est{db = #db{mod = ?MODULE, ref = #lp{out_db = OutDb}}} = St) ->
+     ensure_access(St),
+     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0, db = OutDb,
+-           fail_reasons = [], fail_reason_count = 0,
+-           fail_reasons_truncated = false, fail_boundaries = 0,
++           fail_reasons = [],
++           fail_reasons_truncated = false,
+            checkpoint_depth = 0}.
+ 
+ -doc "Use the same staged view and read dependencies without generated following clauses.".
+--- a/src/quod_feed.erl
++++ b/src/quod_feed.erl
+@@ -850,9 +850,7 @@
+     Frame = encode(Ns, {block, Entry}),
+     case byte_size(Frame) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
+         false ->
+-            %% A block whose framed size exceeds quod_link's 1 MiB cap would EXIT the RECEIVER's link
+-            %% (not merely be dropped), so we never push it — the pull path (with chunking) carries an
+-            %% oversized block. Degenerate, not the common path (same posture as quod_catchup:cap_bytes).
++            %% The complete encoded push must fit the link length field.
+             drop(oversized, S);
+         true ->
+             _ = [quod_quic:send(Peer, Chan, Frame) || Peer <- fanout(quod_brahms:view(Ns))],
+--- a/src/quod_foreign_log.erl
++++ b/src/quod_foreign_log.erl
+@@ -95,8 +95,6 @@
+ -define(CACHE_VERSION, 7). %% signed material heights in archive and era authority
+ -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
+ -define(MAX_TIMER_MS, 16#FFFFFFFF).
+--define(MANIFEST_RESERVE_BYTES, 4096).
+--define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
+ -define(MAX_CHANGED_HEADS, ?QUOD_MAX_CHANGED_HEADS).
+ -define(TRACE_STAGE_ACTIVE, {?MODULE, trace_stage_active}).
+ 
+@@ -289,7 +287,6 @@
+           total_bytes = 0 :: non_neg_integer(),
+           projection_bytes = 0 :: non_neg_integer(),
+           follow_wakes = 0 :: non_neg_integer(),
+-          follow_pages = 0 :: non_neg_integer(),
+           follow_entries = 0 :: non_neg_integer(),
+           follow_bytes = 0 :: non_neg_integer(),
+           follow_coalesced = 0 :: non_neg_integer(),
+@@ -302,7 +299,6 @@
+           max_follow_lag = 0 :: non_neg_integer(),
+           bootstrap_accepted = 0 :: non_neg_integer(),
+           bootstrap_rejected = 0 :: non_neg_integer(),
+-          bootstrap_evicted = 0 :: non_neg_integer(),
+           page_bindings = #{} :: #{term() => #page_binding{}},
+           page_contacts = #{} :: #{term() => reference()},
+           page_openings = #{} :: #{reference() => reference()},
+@@ -767,7 +763,7 @@
+                            _ -> quod_catchup:open_history_transfer(Store, View, Query)
+                        end,
+                 Page = case Open of
+-                           {ok, Sender} -> quod_catchup:transfer_page(Store, Sender);
++                           {ok, Sender} -> quod_catchup:transfer_page(Store, Sender, unlimited);
+                            {error, _} = Error -> Error
+                        end,
+                 case Page of
+@@ -1034,7 +1030,7 @@
+       follow_consumers => 0, followed_histories => 0,
+       projection_workers => 0, projection_bytes => 0,
+       follow_building => 0, follow_unreachable => 0,
+-      follow_wakes => 0, follow_pages => 0,
++      follow_wakes => 0,
+       follow_entries => 0, follow_bytes => 0, follow_coalesced => 0,
+       follow_resnapshots => 0,
+       projection_rebuilds => 0, max_follow_lag => 0,
+@@ -1117,7 +1113,6 @@
+                                                reachability =
+                                                    {unreachable, _}} <- Followed]),
+               follow_wakes => S#s.follow_wakes,
+-              follow_pages => S#s.follow_pages,
+               follow_entries => S#s.follow_entries,
+               follow_bytes => S#s.follow_bytes,
+               follow_coalesced => S#s.follow_coalesced,
+@@ -1129,8 +1124,7 @@
+               max_follow_lag => S#s.max_follow_lag,
+               bootstrap_candidates => bootstrap_candidate_count(S),
+               bootstrap_accepted => S#s.bootstrap_accepted,
+-              bootstrap_rejected => S#s.bootstrap_rejected,
+-              bootstrap_evicted => S#s.bootstrap_evicted},
++              bootstrap_rejected => S#s.bootstrap_rejected},
+     {reply, Reply, S};
+ handle_call({follow, Identity, Interest}, From, S0) ->
+     {noreply, add_follow(Identity, Interest, From, S0)};
+@@ -2366,7 +2360,7 @@
+ 
+ normalize_entry_hint(Entry) ->
+     case quod_ledger:hint_bytes(Entry) of
+-        {ok, Bytes} when byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES -> Entry;
++        {ok, _Bytes} -> Entry;
+         _ -> none
+     end.
+ 
+@@ -2466,27 +2460,26 @@
+     end.
+ 
+ normalize_route_candidates(Routes) when is_list(Routes) ->
+-    normalize_route_candidates(Routes, 0, []);
++    normalize_route_candidates(Routes, []);
+ normalize_route_candidates(_) ->
+     error.
+ 
+-normalize_route_candidates([], _Count, Acc) ->
++normalize_route_candidates([], Acc) ->
+     {ok, lists:reverse(Acc)};
+ normalize_route_candidates(
+-  [{<<_:256>> = Peer, Endpoints0} | Rest], Count, Acc)
+-  when is_list(Endpoints0), Count < ?MAX_VALIDATORS ->
++  [{<<_:256>> = Peer, Endpoints0} | Rest], Acc)
++  when is_list(Endpoints0) ->
+     Endpoints = lists:uniq(Endpoints0),
+     case Endpoints0 =:= Endpoints andalso Endpoints =/= [] andalso
+-         length(Endpoints) =< 2 andalso
+          lists:all(fun quod_quic:valid_endpoint/1, Endpoints) andalso
+          not lists:keymember(Peer, 1, Acc) of
+         true ->
+             normalize_route_candidates(
+-              Rest, Count + 1, [{Peer, Endpoints} | Acc]);
++              Rest, [{Peer, Endpoints} | Acc]);
+         false ->
+             error
+     end;
+-normalize_route_candidates(_, _Count, _Acc) ->
++normalize_route_candidates(_, _Acc) ->
+     error.
+ 
+ selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
+@@ -2521,9 +2514,7 @@
+     end.
+ 
+ discovery_route_candidates(Request, Live, Supplied, Bootstrap) ->
+-    Routes = lists:sublist(
+-               stable_unique_routes(Request ++ Live ++ Supplied ++ Bootstrap),
+-               ?MAX_VALIDATORS),
++    Routes = stable_unique_routes(Request ++ Live ++ Supplied ++ Bootstrap),
+     [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
+ 
+ %% Fetching bytes and trusting an answer are different operations. Certified
+@@ -2568,18 +2559,15 @@
+         true ->
+             S1 = ensure_bootstrap_history(Identity, S0),
+             H0 = maps:get(Identity, S1#s.histories),
+-            {Hints, Evicted} = put_bootstrap_hint(
++            Hints = put_bootstrap_hint(
+                                  PeerKey, Endpoint,
+-                                 H0#history.bootstrap_hints,
+-                                 history_authority(H0)),
++                                 H0#history.bootstrap_hints),
+             H1 = H0#history{bootstrap_hints = Hints,
+                             last_used = quod_time:mono_ms()},
+             S2 = put_history(
+                    Identity, H1,
+                    S1#s{bootstrap_accepted =
+-                            S1#s.bootstrap_accepted + 1,
+-                        bootstrap_evicted =
+-                            S1#s.bootstrap_evicted + Evicted}),
++                            S1#s.bootstrap_accepted + 1}),
+             hibernate_history(
+               Identity, wake_follow(Identity, S2))
+     end.
+@@ -2592,45 +2580,9 @@
+ ensure_bootstrap_history(Identity, S) ->
+     ensure_history(Identity, S).
+ 
+-put_bootstrap_hint(PeerKey, Endpoint, Hints0, Projection) ->
+-    WithoutPeer = [{Peer, Ep} || {Peer, Ep} <- Hints0,
+-                                  Peer =/= PeerKey],
+-    Hints1 = [{PeerKey, Endpoint} | WithoutPeer],
+-    case length(Hints1) =< ?MAX_CURRENT_ROUTE_HINTS of
+-        true -> {Hints1, 0};
+-        false ->
+-            Committee = case is_map(Projection) of
+-                            true -> quod_simplex:history_committee(Projection);
+-                            false -> []
+-                        end,
+-            {evict_oldest_unprotected(Hints1, Committee), 1}
+-    end.
+-
+-evict_oldest_unprotected(Hints, ProtectedKeys) ->
+-    Reversed = lists:reverse(Hints),
+-    case drop_first(
+-           fun({Peer, _Endpoint}) ->
+-                   not lists:member(Peer, ProtectedKeys)
+-           end, Reversed) of
+-        {ok, Kept} -> lists:reverse(Kept);
+-        %% Defensive only: an overflow list cannot be entirely protected
+-        %% while committees are bounded below the hint cap. If that invariant
+-        %% ever changes, refuse the newest contact rather than evicting a
+-        %% current committee member.
+-        none -> tl(Hints)
+-    end.
+-
+-drop_first(_Predicate, []) ->
+-    none;
+-drop_first(Predicate, [Item | Rest]) ->
+-    case Predicate(Item) of
+-        true -> {ok, Rest};
+-        false ->
+-            case drop_first(Predicate, Rest) of
+-                {ok, Kept} -> {ok, [Item | Kept]};
+-                none -> none
+-            end
+-    end.
++put_bootstrap_hint(PeerKey, Endpoint, Hints0) ->
++    WithoutPeer = [{Peer, Ep} || {Peer, Ep} <- Hints0, Peer =/= PeerKey],
++    [{PeerKey, Endpoint} | WithoutPeer].
+ 
+ %% `entry` asks this same exact-reference verifier to accept either content or
+ %% a DTX control. Read certificates bind the last material ledger entry, whose
+@@ -4269,13 +4221,7 @@
+                     Height = maps:get(height, Meta, OldHeight),
+                     Bytes = maps:get(bytes, Meta, OldBytes),
+                     Entries = max(0, Height - OldHeight),
+-                    Pages = case Entries of
+-                                0 -> 0;
+-                                _ -> (Entries + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
+-                                     div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES
+-                            end,
+-                    S0#s{follow_pages = S0#s.follow_pages + Pages,
+-                         follow_entries = S0#s.follow_entries + Entries,
++                    S0#s{follow_entries = S0#s.follow_entries + Entries,
+                          follow_bytes = S0#s.follow_bytes + max(0, Bytes - OldBytes)};
+                 undefined -> S0
+             end;
+@@ -5672,7 +5618,7 @@
+                                   FetchFun, Deadline, Context) of
+                 {{ok, #{slot := Tip, route_candidates := Routes}}, Evidence} ->
+                     Remaining = max(0, Deadline - quod_time:mono_ms()),
+-                    Target = min(Tip, Cursor#verified_cursor.height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
++                    Target = Tip,
+                     Fallback = [{Peer, [Endpoint]} || {Peer, Endpoint} <-
+                                    history_fallback_sources(Sources, Routes)],
+                     case advance_snapshot_to_height(Routes ++ Fallback, Owner, RequestRef,
+@@ -5706,8 +5652,8 @@
+     end.
+ 
+ follow_local_snapshot(Owner, RequestRef, LocalPeer, Tip, Identity,
+-                      Root, FetchFun, PageTimeout, Cursor = #verified_cursor{height = Height}) ->
+-    Target = min(Tip, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
++                      Root, FetchFun, PageTimeout, Cursor = #verified_cursor{}) ->
++    Target = Tip,
+     case advance_snapshot_to_height(
+            [{LocalPeer, [local]}], Owner, RequestRef, Identity, Cursor,
+            Root, Target, FetchFun, PageTimeout) of
+@@ -5863,7 +5809,7 @@
+                 {ok, Projection} ->
+                     %% Replaying this explicit startup verifies an older checkpoint at
+                     %% its own group boundary and preserves every complete suffix group.
+-                    case write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) of
++                    case write_checkpoint(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs, Height, Projection) of
+                         ok -> {ok, Store, Height, Projection, PhaseIndex};
+                         {error, _} -> close_cache(Store, PhaseIndex, cache_io)
+                     end;
+@@ -6012,7 +5958,7 @@
+                  Identity, Root, Owner, RequestRef) ->
+     try
+         ok = persistence_stage(checkpoint_write,
+-               fun() -> write_checkpoint(Root, Identity, cache_namespace(Identity),
++               fun() -> write_checkpoint(Owner, RequestRef, Root, Identity, cache_namespace(Identity),
+                                          Height, Projection) end),
+         Bytes = cache_persisted_bytes(Root, cache_namespace(Identity)),
+         ok = persistence_stage(cache_accounting,
+@@ -6057,10 +6003,9 @@
+     %% No mutation precedes reservation. After append is attempted, any
+     %% failure invalidates the cursor, including failures after durable I/O.
+     StoredBytes = quod_ledger_store:group_size(Proof, Entries),
+-    Reservation = StoredBytes + ?QUOD_MAX_FOREIGN_PAGE_BYTES,
+     case valid_projection(Projection, Identity) andalso
+          persistence_reservation(measure_foreign_stage(cache_accounting,
+-           fun() -> gen_server:call(Owner, {reserve_page, RequestRef, Reservation}) end)) of
++           fun() -> gen_server:call(Owner, {reserve_page, RequestRef, StoredBytes}) end)) of
+         ok ->
+             try
+                 {ok, NextBatch} = persistence_stage(ledger_append,
+@@ -6402,7 +6347,7 @@
+ advance_snapshot_to_height(Sources, Owner, RequestRef, Identity,
+                            Cursor = #verified_cursor{height = Height},
+                            Root, Target, FetchFun, PageTimeout) ->
+-    PageTarget = min(Target, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
++    PageTarget = Target,
+     case advance_snapshot_sources(Sources, Owner, RequestRef, Identity, Cursor,
+                                   Root, PageTarget, FetchFun, PageTimeout) of
+         {ok, Next = #verified_cursor{height = NextHeight}} when NextHeight > Height ->
+@@ -6689,15 +6634,15 @@
+     Path = manifest_path(Root, CacheNs),
+     Expected = {quod_foreign_log_cache, ?CACHE_VERSION,
+                 Ns, Anchor, CacheNs},
+-    case read_small_term(Path) of
++    case read_cache_term(Path) of
+         {ok, Expected} -> ok;
+         {error, enoent} ->
++            Blob = term_to_binary(Expected, [deterministic]),
+             case gen_server:call(
+                    Owner,
+-                   {reserve_page, RequestRef, ?MANIFEST_RESERVE_BYTES}) of
++                   {reserve_page, RequestRef, byte_size(Blob)}) of
+                 ok ->
+-                    atomic_write(
+-                      Path, term_to_binary(Expected, [deterministic]));
++                    atomic_write(Path, Blob);
+                 {error, _} ->
+                     {error, cache_unavailable}
+             end;
+@@ -6708,19 +6653,19 @@
+             {error, corrupt_manifest}
+     end.
+ 
+-write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) ->
++write_checkpoint(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs, Height, Projection) ->
+     Bytes = cache_log_bytes(Root, CacheNs),
+     Term = {quod_foreign_log_checkpoint, ?CACHE_VERSION,
+             Ns, Anchor, Height, Bytes, checkpoint_projection(Projection)},
+     Blob = term_to_binary(Term, [deterministic]),
+-    case byte_size(Blob) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
+-        true -> atomic_write(checkpoint_path(Root, CacheNs), Blob);
+-        false -> {error, checkpoint_too_large}
++    case gen_server:call(Owner, {reserve_page, RequestRef, byte_size(Blob)}) of
++        ok -> atomic_write(checkpoint_path(Root, CacheNs), Blob);
++        {error, _} -> {error, cache_unavailable}
+     end.
+ 
+ load_checkpoint(Root, Identity = {Ns, Anchor}, CacheNs, Store) ->
+     Path = checkpoint_path(Root, CacheNs),
+-    case read_small_term(Path) of
++    case read_cache_term(Path) of
+         {ok, {quod_foreign_log_checkpoint, ?CACHE_VERSION,
+               Ns, Anchor, Height, StoredBytes, Projection}}
+           when is_integer(StoredBytes), StoredBytes >= 0 ->
+@@ -6736,22 +6681,14 @@
+         _ -> {error, corrupt_checkpoint}
+     end.
+ 
+-read_small_term(Path) ->
+-    case file:read_file_info(Path) of
+-        {ok, Info} when element(2, Info) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES ->
+-            case file:read_file(Path) of
+-                {ok, Bin} ->
+-                    %% Read the version even when a superseded projection
+-                    %% names symbols no longer loaded by this code. Wrapped
+-                    %% decoding proves canonical bytes without atom creation.
+-                    case quod_safe_term:decode_wrapped(
+-                           Bin, ?QUOD_MAX_FOREIGN_PAGE_BYTES) of
+-                        {ok, Term} -> {ok, Term};
+-                        {error, _} -> {error, bad_term}
+-                    end;
+-                {error, Reason} -> {error, Reason}
++read_cache_term(Path) ->
++    case file:read_file(Path) of
++        {ok, Bin} ->
++            %% Canonical wrapped decoding does not create historical atoms.
++            case quod_safe_term:decode_wrapped(Bin, unlimited) of
++                {ok, Term} -> {ok, Term};
++                {error, _} -> {error, bad_term}
+             end;
+-        {ok, _} -> {error, too_large};
+         {error, Reason} -> {error, Reason}
+     end.
+ 
+@@ -6855,7 +6792,7 @@
+     end, S0, S0#s.histories).
+ 
+ load_history_dir(Root, Dir) ->
+-    case read_small_term(filename:join(Dir, ?MANIFEST)) of
++    case read_cache_term(filename:join(Dir, ?MANIFEST)) of
+         {ok, {quod_foreign_log_cache, ?CACHE_VERSION,
+               Ns, <<_:256>> = Anchor, <<_:256>> = CacheNs}}
+           when is_binary(Ns), byte_size(Ns) > 0,
+@@ -6920,12 +6857,8 @@
+     dtx := Dtx, dtx_lanes := DtxLanes} = Projection,
+   ExpectedIdentity)
+   when is_map(Routes), is_map(Admissions), is_map(Sequences),
+-       is_map(DtxLanes),
+-       map_size(Routes) =< ?MAX_VALIDATORS,
+-       map_size(Admissions) =< ?MAX_VALIDATORS,
+-       map_size(Sequences) =< ?MAX_VALIDATORS,
+-       map_size(DtxLanes) =< ?MAX_VALIDATORS ->
+-    bounded_committee(Committee, 0) andalso
++       is_map(DtxLanes) ->
++    quod_quorum:committee_size(Committee) =/= error andalso
+         valid_validator_routes(Routes, Committee) andalso
+         (CommitteeId =:= undefined orelse
+          (is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32)) andalso
+@@ -6966,7 +6899,7 @@
+ valid_committee_view_rows(
+   [{Start, Committee, <<_:256>>, Routes} | Rest])
+   when is_integer(Start), Start > 0, is_map(Routes) ->
+-    bounded_committee(Committee, 0) andalso
++    quod_quorum:committee_size(Committee) =/= error andalso
+         valid_validator_routes(Routes, Committee) andalso
+         valid_committee_view_rows(Rest, Start);
+ valid_committee_view_rows(_) -> false.
+@@ -6976,7 +6909,7 @@
+   [{Start, Committee, <<_:256>>, Routes} | Rest], PreviousStart)
+   when is_integer(Start), Start > 0, Start < PreviousStart,
+        is_map(Routes) ->
+-    bounded_committee(Committee, 0) andalso
++    quod_quorum:committee_size(Committee) =/= error andalso
+         valid_validator_routes(Routes, Committee) andalso
+         valid_committee_view_rows(Rest, Start);
+ valid_committee_view_rows(_, _) -> false.
+@@ -7005,11 +6938,6 @@
+               false
+       end, true, Routes).
+ 
+-bounded_committee([], _Count) -> true;
+-bounded_committee([<<_:256>> | Rest], Count) when Count < ?MAX_VALIDATORS ->
+-    bounded_committee(Rest, Count + 1);
+-bounded_committee(_, _Count) -> false.
+-
+ valid_dtx_target(
+   #{target := Identity, generation := Generation}, Identity)
+   when is_integer(Generation), Generation >= 0,
+--- a/src/quod_foreign_projection.erl
++++ b/src/quod_foreign_projection.erl
+@@ -159,8 +159,7 @@
+         _ when Height =:= Applied ->
+             publish_ready(Head, S);
+         _ ->
+-            Resnapshot = S#s.resnapshot orelse Applied =:= 0 orelse
+-                         Height - Applied > ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
++            Resnapshot = S#s.resnapshot orelse Applied =:= 0,
+             S1 = S#s{target_height = Height, target_head = Head, projection_id = none,
+                      from_height = Applied, changed = [],
+                      publications = case Resnapshot of
+@@ -177,7 +176,7 @@
+                         projection = Projection0,
+                         target_height = Target}) ->
+     From = quod_committed_projection:applied(Projection0) + 1,
+-    To = min(Target, From + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
++    To = Target,
+     case quod_ledger_store:open_ro_snapshot(maps:get(snapshot, View)) of
+         {ok, Store} ->
+             Result = try quod_catchup:read_blocks(Store, From, To)
+--- a/src/quod_ingress_state.erl
++++ b/src/quod_ingress_state.erl
+@@ -2,7 +2,7 @@
+ -moduledoc """
+ Pure state and routing policy for consensus ingress.
+ 
+-The module owns the bounded parked queue and one canonical snapshot
++The module owns the parked queue and one canonical snapshot
+ of the consensus facts that routing is allowed to inspect.  It performs no
+ signing, decoding, I/O, tracing, replies, or consensus mutation.  Callers
+ execute the returned routing decision and publish a new view when those effects
+@@ -47,9 +47,6 @@
+ 
+ -export_type([state/0]).
+ 
+--define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).
+--define(MAX_INGRESS_PER_AUTHOR, 64).
+-
+ -type pass() :: entry | drain.
+ -type route_origin() ::
+         local
+@@ -57,7 +54,7 @@
+       | {relayed, term(), slot()}.
+ -type park_cause() :: barrier | fifo | awaiting_turn.
+ -type route_decision() ::
+-        {reject, bad_change | too_large | stale_seq}
++        {reject, bad_change | stale_seq}
+       | redirect
+       | {park, park_cause()}
+       | {collect, slot()}
+@@ -94,7 +91,7 @@
+ -record(request, {
+     change :: #transaction{},
+     membership = unknown :: unknown | boolean(),
+-    item_bytes = unknown :: unknown | pos_integer()
++    item_bytes = unknown :: unknown | invalid | pos_integer()
+ }).
+ 
+ -record(item, {
+@@ -163,20 +160,17 @@
+                membership = unknown,
+                item_bytes = unknown},
+   Membership) when is_boolean(Membership) ->
+-    SignedBytes =
+-        case quod_transaction:encoded_ledger_transaction_size(Change) of
+-            {ok, Size} -> Size;
+-            {error, _} -> ?MAX_BLOCK_BYTES + 1
+-        end,
+-    Request#request{
+-      membership = Membership,
+-      item_bytes = ?BATCH_ENVELOPE_BYTES + SignedBytes};
++    ItemBytes = case quod_transaction:encoded_ledger_transaction_size(Change) of
++        {ok, Size} -> ?BATCH_ENVELOPE_BYTES + Size;
++        {error, _} -> invalid
++    end,
++    Request#request{membership = Membership, item_bytes = ItemBytes};
+ prepare_request(Request = #request{
+                             membership = Membership,
+                             item_bytes = ItemBytes},
+                 Membership)
+   when is_boolean(Membership),
+-       is_integer(ItemBytes), ItemBytes > 0 ->
++       (ItemBytes =:= invalid orelse (is_integer(ItemBytes) andalso ItemBytes > 0)) ->
+     Request.
+ 
+ -spec request_change(request()) -> #transaction{}.
+@@ -226,7 +220,7 @@
+     {Key, Ready}.
+ 
+ -spec enqueue(term(), term(), request(), integer(), state()) ->
+-          {ok, pos_integer(), state()} | full.
++          {ok, pos_integer(), state()}.
+ enqueue(Context, Waiter,
+         Request = #request{
+                     change = #transaction{author = Author},
+@@ -239,30 +233,23 @@
+   when is_boolean(Membership), is_integer(ItemBytes), ItemBytes > 0,
+        is_integer(Anchor) ->
+     PerAuthor = maps:get(Author, Authors, 0),
+-    case Count >= ?MAX_INGRESS_TXS
+-         orelse Bytes + ItemBytes > ?MAX_INGRESS_BYTES
+-         orelse PerAuthor >= ?MAX_INGRESS_PER_AUTHOR of
+-        true ->
+-            full;
+-        false ->
+-            Item = #item{
+-                      context = Context,
+-                      waiter = Waiter,
+-                      request = Request,
+-                      anchor = Anchor},
+-            Depth = Count + 1,
+-            {ok, Depth,
+-             State#state{
+-               queue = queue:in(Item, Queue),
+-               count = Depth,
+-               bytes = Bytes + ItemBytes,
+-               authors = Authors#{Author => PerAuthor + 1},
+-               wake_revision =
+-                   case PerAuthor of
+-                       0 -> WakeRevision + 1;
+-                       _ -> WakeRevision
+-                   end}}
+-    end;
++    Item = #item{
++              context = Context,
++              waiter = Waiter,
++              request = Request,
++              anchor = Anchor},
++    Depth = Count + 1,
++    {ok, Depth,
++     State#state{
++       queue = queue:in(Item, Queue),
++       count = Depth,
++       bytes = Bytes + ItemBytes,
++       authors = Authors#{Author => PerAuthor + 1},
++       wake_revision =
++           case PerAuthor of
++               0 -> WakeRevision + 1;
++               _ -> WakeRevision
++           end}};
+ enqueue(_Context, _Waiter, _Request, _Anchor, _State) ->
+     erlang:error(badarg).
+ 
+@@ -349,8 +336,8 @@
+                     {{reject, bad_change}, Request};
+                 {valid, Membership} ->
+                     case prepare_for_route(Request, Membership) of
+-                        {too_large, Prepared} ->
+-                            {{reject, too_large}, Prepared};
++                        {invalid, Prepared} ->
++                            {{reject, bad_change}, Prepared};
+                         {ok, Prepared} ->
+                             Decision = case Capability of
+                                 hold -> {park, awaiting_turn};
+@@ -382,8 +369,8 @@
+                         current ->
+                             case prepare_for_route(
+                                    Request, Membership) of
+-                                {too_large, Prepared} ->
+-                                    {{reject, too_large}, Prepared};
++                                {invalid, Prepared} ->
++                                    {{park, awaiting_turn}, Prepared};
+                                 {ok, Prepared} ->
+                                     {place(Pass, custody, Prepared,
+                                            View, QueueCount),
+@@ -399,8 +386,8 @@
+             {{reject, bad_change}, Request};
+         {valid, Membership} ->
+             case prepare_for_route(Request, Membership) of
+-                {too_large, Prepared} ->
+-                    {{reject, too_large}, Prepared};
++                {invalid, Prepared} ->
++                    {{reject, bad_change}, Prepared};
+                 {ok, Prepared} ->
+                     case relay_target_open_view(
+                            Era, TargetSlot, View) of
+@@ -422,9 +409,9 @@
+ 
+ prepare_for_route(Request, Membership) ->
+     Prepared = prepare_request(Request, Membership),
+-    case oversized(Prepared) of
+-        true -> {too_large, Prepared};
+-        false -> {ok, Prepared}
++    case Prepared#request.item_bytes of
++        invalid -> {invalid, Prepared};
++        _ -> {ok, Prepared}
+     end.
+ 
+ place(_Pass, _Origin, _Request,
+@@ -542,22 +529,10 @@
+     admissible_without_queue(Request, View).
+ 
+ admissible_without_queue(
+-  #request{membership = Membership, item_bytes = ItemBytes},
++  #request{membership = Membership},
+   #view{membership_open = MembershipOpen, collecting = Collecting}) ->
+-    SignedBytes = ItemBytes - ?BATCH_ENVELOPE_BYTES,
+-    (not Membership orelse MembershipOpen)
+-        andalso
+-          case Collecting of
+-              none ->
+-                  true;
+-              {_Slot, _Count, Bytes} ->
+-                  not Membership
+-                      andalso
+-                        Bytes + SignedBytes =< ?MAX_BLOCK_BYTES
+-          end.
+-
+-oversized(#request{item_bytes = Bytes}) ->
+-    Bytes > ?MAX_BLOCK_BYTES.
++    (not Membership orelse MembershipOpen) andalso
++        (Collecting =:= none orelse not Membership).
+ 
+ custody_sequence_status(
+   #request{change = #transaction{author = Author, author_seq = Seq}},
+--- a/src/quod_ledger_store.erl
++++ b/src/quod_ledger_store.erl
+@@ -56,8 +56,6 @@
+ -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
+ -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
+ -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
+--define(MAX_FRAME_BYTES, (64 * 1024 * 1024)).  %% sanity cap on a frame's length field — a corrupted
+-                                               %% Len must never drive a giant pread allocation
+ 
+ -record(store, {dir         :: file:filename_all(),
+                 ns          :: binary(),
+@@ -690,8 +688,9 @@
+ base64url(Bin) ->
+     binary_to_list(base64:encode(Bin, #{mode => urlsafe, padding => false})).
+ 
+-frame(Payload) ->
+-    <<?MAGIC:32, (byte_size(Payload)):32, (erlang:crc32(Payload)):32, Payload/binary>>.
++frame(Payload) when byte_size(Payload) =< (1 bsl 32) - 1 ->
++    <<?MAGIC:32, (byte_size(Payload)):32, (erlang:crc32(Payload)):32, Payload/binary>>;
++frame(_Payload) -> error(frame_too_large).
+ 
+ %% Material seeking skips each proof extent in one step, regardless of its
+ %% number of carriers. At most 255 material headers follow the checkpoint.
+@@ -710,7 +709,7 @@
+ skip_material(Fd, Off, G, N) ->
+     case file:pread(Fd, Off, ?HDR_BYTES + 1) of
+         {ok, <<?MAGIC:32, Len:32, _CRC:32, 2>>}
+-          when Len > 1, Len =< ?MAX_FRAME_BYTES,
++          when Len > 1,
+                Off + ?HDR_BYTES + Len =< G#group.entries_end ->
+             Next = Off + ?HDR_BYTES + Len,
+             case Next =:= G#group.entries_end of
+@@ -842,8 +841,6 @@
+                     {stop, {unsupported_format, 7}, Off};
+                 <<?V8_MAGIC:32, _/binary>> ->
+                     {stop, {unsupported_format, 8}, Off};
+-                <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
+-                    {stop, {frame_too_big, Len}, Off};
+                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
+                     case fill(Fd, Off, Buf1, ?HDR_BYTES + Len) of
+                         {short, <<?V8_MAGIC:32, _/binary>>} ->
+@@ -861,11 +858,22 @@
+             end
+     end.
+ 
+-%% Grow `Buf` (the bytes at `Off`) to at least `Need` bytes with one ?READ_CHUNK-or-bigger
+-%% pread. `{short, Buf'}` = the file ends before `Need` bytes (pread returns short only at EOF).
++%% Read from the actual file extent, never allocate an advertised missing tail.
++%% Existing chunked reads preserve the cursor; a short frame remains a short frame.
+ fill(_Fd, _Off, Buf, Need) when byte_size(Buf) >= Need -> {ok, Buf};
+ fill(Fd, Off, Buf, Need) ->
+-    case file:pread(Fd, Off + byte_size(Buf), max(?READ_CHUNK, Need - byte_size(Buf))) of
++    case file:position(Fd, eof) of
++        {ok, End} ->
++            At = Off + byte_size(Buf),
++            Available = max(0, End - At),
++            Read = min(Available, max(?READ_CHUNK, Need - byte_size(Buf))),
++            fill_available(Fd, At, Buf, Need, Read);
++        {error, Reason} -> {io_error, Reason}
++    end.
++
++fill_available(_Fd, _At, Buf, _Need, 0) -> {short, Buf};
++fill_available(Fd, At, Buf, Need, Read) ->
++    case file:pread(Fd, At, Read) of
+         {ok, More} ->
+             Buf1 = <<Buf/binary, More/binary>>,
+             case byte_size(Buf1) >= Need of
+--- a/src/quod_link.erl
++++ b/src/quod_link.erl
+@@ -212,7 +212,7 @@
+ 
+ -doc "Finish one admitted server page; acceptance and continuation are asynchronous.".
+ -spec complete_page(pid(), reference(), {ok, [term()], non_neg_integer(), done | {binary(), non_neg_integer()}} |
+-                    {error, not_ready | server_error}) -> ok.
++                    {error, not_ready | server_error | frame_unrepresentable}) -> ok.
+ complete_page(Link, OperationRef, Result) ->
+     Link ! {complete_page, self(), OperationRef, Result},
+     ok.
+@@ -323,7 +323,7 @@
+                          S;
+                      #credit{ns = Ns} ->
+                          Grant = fresh_grant(none),
+-                         Payload = quod_catchup:encode_frame(Ns, {history_credit3, Grant}),
++                         {ok, Payload} = quod_catchup:encode_frame(Ns, {history_credit3, Grant}),
+                          Frames = <<(ack_frame())/binary, (frame(Payload))/binary>>,
+                          enqueue_send({ordered, Frames, {initial_credit, Grant}}, S)
+                  end,
+@@ -624,9 +624,12 @@
+                                          binding = BindingRef, grant = Grant,
+                                          pending = none}})
+   when is_binary(Grant), byte_size(Grant) =:= 16 ->
+-    Payload = quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, Query}),
+-    S1 = S#s{catchup = C#credit{grant = none, pending = {Grant, ReqId}}},
+-    enqueue_send({ordered, frame(Payload), request_accepted}, S1);
++    case quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, Query}) of
++        {ok, Payload} ->
++            S1 = S#s{catchup = C#credit{grant = none, pending = {Grant, ReqId}}},
++            enqueue_send({ordered, frame(Payload), request_accepted}, S1);
++        {error, Reason} -> protocol_failed(Reason, S)
++    end;
+ submit_page(_Producer, _BindingRef, _Grant, _ReqId, _Query, S) ->
+     %% Late controls belong to their original binding, never a replacement.
+     S.
+@@ -677,10 +680,16 @@
+     Control = case Result of
+                   {ok, Parts, Height, Continuation} ->
+                       {history_page3, Grant, ReqId, Parts, Height, Continuation, Next};
+-                  {error, Reason} when Reason =:= not_ready; Reason =:= server_error ->
++                  {error, Reason} when Reason =:= not_ready; Reason =:= server_error; Reason =:= frame_unrepresentable ->
+                       {history_error3, Grant, ReqId, Reason, Next}
+               end,
+-    Payload = quod_catchup:encode_frame(Ns, Control),
++    Encoded = case quod_catchup:encode_frame(Ns, Control) of
++        {ok, _} = Ok -> Ok;
++        {error, too_large} -> quod_catchup:encode_frame(
++                              Ns, {history_error3, Grant, ReqId, frame_unrepresentable, Next});
++        {error, EncodingReason} -> protocol_failed(EncodingReason, S)
++    end,
++    {ok, Payload} = Encoded,
+     S1 = S#s{catchup = C#credit{pending = {OperationRef, Grant, ReqId, sending}}},
+     enqueue_send({ordered, frame(Payload), {page_sent, OperationRef, Next}}, S1).
+ 
+--- a/src/quod_metrics.erl
++++ b/src/quod_metrics.erl
+@@ -267,7 +267,6 @@
+     _ = G(quod_consensus_pending,         "Change requests waiting to be made final right now."),
+     _ = G(quod_consensus_append_busy,     "Total change requests turned away as overloaded: the bounded waiting line was full, or a request waited past its cutoff during a stall. Requests that merely arrive at a busy moment now wait in line instead of being turned away, so any sustained increase here is an overload or a stalled cluster and deserves an alert (only ever goes up)."),
+     _ = G(quod_consensus_ingress_queued,  "Change requests this node is holding right now. Relayed requests wait only for their explicitly named target slot; local requests may wait behind an unresolved author lane. Membership changes also wait for the current pipeline to become final. A value that stays high means consensus is not making room as fast as requests arrive."),
+-    _ = G(quod_consensus_ingress_overflow, "Total requests refused because the bounded ingress line (or one author's fair share of it) was full (only ever goes up)."),
+     _ = G(quod_consensus_ingress_expired, "Total waiting requests cut loose because the cluster made no room for them within the ingress cutoff - a visible sign of a stall (only ever goes up)."),
+     _ = G(quod_consensus_ingress_forwarded, "Total locally queued requests sent to the proposer of their exact target slot when the queue became dispatchable (only ever goes up)."),
+     _ = G(quod_consensus_custody_depth, "Origin-owned signed content submissions this node is retaining until its local durable log proves inclusion or exclusion."),
+@@ -340,7 +339,6 @@
+     _ = N(quod_foreign_follow_building, "Followed targets whose certified fact projection is rebuilding."),
+     _ = N(quod_foreign_follow_unreachable, "Followed targets currently unreachable or not certifiable."),
+     _ = N(quod_foreign_follow_wakes, "Total coalesced message-driven certified-follow wake jobs started (only ever goes up)."),
+-    _ = N(quod_foreign_follow_pages, "Total certified history pages added by continuous follows (only ever goes up)."),
+     _ = N(quod_foreign_follow_entries, "Total certified ledger entries added by continuous follows (only ever goes up)."),
+     _ = N(quod_foreign_follow_bytes, "Total certified cache bytes added by continuous follows (only ever goes up)."),
+     _ = N(quod_foreign_follow_coalesced, "Total source-view notices collapsed behind an unacknowledged notice (only ever goes up)."),
+@@ -354,7 +352,6 @@
+     _ = N(quod_foreign_bootstrap_candidates, "TLS-authenticated foreign route candidates retained separately from dormant verified histories."),
+     _ = N(quod_foreign_bootstrap_accepted, "Total authenticated foreign route candidate observations accepted into the lazy history owner (only ever goes up)."),
+     _ = N(quod_foreign_bootstrap_rejected, "Total authenticated foreign route candidate observations refused by validation (only ever goes up)."),
+-    _ = N(quod_foreign_bootstrap_evicted, "Total older candidate endpoints evicted by the per-identity source bound (only ever goes up)."),
+     _ = prometheus_gauge:declare(
+           [{name, quod_directory_desired_hosts},
+            {help, "Ontology identities in the node manager's fact-derived desired-host projection, split only by the fixed discoverable/private visibility classes."},
+@@ -666,7 +663,6 @@
+     _ = Set(quod_foreign_follow_building, follow_building),
+     _ = Set(quod_foreign_follow_unreachable, follow_unreachable),
+     _ = Set(quod_foreign_follow_wakes, follow_wakes),
+-    _ = Set(quod_foreign_follow_pages, follow_pages),
+     _ = Set(quod_foreign_follow_entries, follow_entries),
+     _ = Set(quod_foreign_follow_bytes, follow_bytes),
+     _ = Set(quod_foreign_follow_coalesced, follow_coalesced),
+@@ -680,7 +676,6 @@
+     _ = Set(quod_foreign_bootstrap_candidates, bootstrap_candidates),
+     _ = Set(quod_foreign_bootstrap_accepted, bootstrap_accepted),
+     _ = Set(quod_foreign_bootstrap_rejected, bootstrap_rejected),
+-    _ = Set(quod_foreign_bootstrap_evicted, bootstrap_evicted),
+     _ = set_node_owner_rows(
+           foreign_history,
+           #{verifying => maps:get(pending, Stats, 0),
+@@ -791,7 +786,7 @@
+           commits := CM, submitted := SU, pending := PE,
+           r_busy := RB, r_redirect := RR, r_bad := RD, r_stale := RS,
+           membership_rejects := MR,
+-          ingress_queued := IQ, ingress_overflow := IO,
++          ingress_queued := IQ,
+           ingress_expired := IE, ingress_forwarded := IF,
+           custody_depth := CD, custody_ready := CR, custody_bytes := CB,
+           dtx_admission_waiting := DAW, dtx_admission_dormant := DAD,
+@@ -823,7 +818,6 @@
+             _ = S(quod_consensus_pending,         PE),
+             _ = S(quod_consensus_append_busy,     RB),
+             _ = S(quod_consensus_ingress_queued,  IQ),
+-            _ = S(quod_consensus_ingress_overflow, IO),
+             _ = S(quod_consensus_ingress_expired, IE),
+             _ = S(quod_consensus_ingress_forwarded, IF),
+             _ = S(quod_consensus_custody_depth, CD),
+@@ -904,7 +898,6 @@
+      quod_consensus_pending,
+      quod_consensus_append_busy,
+      quod_consensus_ingress_queued,
+-     quod_consensus_ingress_overflow,
+      quod_consensus_ingress_expired,
+      quod_consensus_ingress_forwarded,
+      quod_consensus_custody_depth,
+@@ -1795,7 +1788,7 @@
+      appends, proposals, batched_txs, batch_window_ms,
+      commits, submitted, pending,
+      r_busy, r_redirect, r_bad, r_stale, membership_rejects,
+-     ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
++     ingress_queued, ingress_expired, ingress_forwarded,
+      custody_depth, custody_ready, custody_bytes, ingress_retargets,
+      dtx_admission_waiting, dtx_admission_dormant,
+      owner_current, owner_peak, owner_bytes_current, owner_bytes_peak,
+--- a/src/quod_ontology.erl
++++ b/src/quod_ontology.erl
+@@ -44,7 +44,6 @@
+ 
+ -define(ROOT_NS, <<"quod:root">>).
+ -define(MAX_NAMESPACE_BYTES, 128).
+--define(MAX_ERROR_TERM_BYTES, 4096).
+ 
+ -type creation() ::
+         {ok, created | resumed, binary(), binary()} |
+@@ -898,8 +897,7 @@
+     end.
+ 
+ safe_error_term(Term) ->
+-    try erlang:external_size(Term) =< ?MAX_ERROR_TERM_BYTES
+-            andalso portable_term(Term)
++    try portable_term(Term)
+     catch _:_ -> false
+     end.
+ 
+--- a/src/quod_quorum.erl
++++ b/src/quod_quorum.erl
+@@ -1,13 +1,11 @@
+ -module(quod_quorum).
+ -moduledoc """
+-Shared bounded verification for signatures made by a certified validator set.
++Shared verification for signatures made by a certified validator set.
+ 
+ This module knows only committee membership, quorum arithmetic, and Ed25519
+ signatures. Consensus, exact `f + 1` read/application certificates and
+ proof-scoped agent identity share these rules, not their statement formats.
+ """.
+-
+--include("quod_ingress_limits.hrl").
+ 
+ -export([threshold/1, honest_threshold/1, verify_honest/3,
+          committee_size/1, valid_signature_list/2, canonical_signatures/1,
+@@ -43,13 +41,12 @@
+     committee_size(Committee, 0, #{}).
+ 
+ committee_size([], Count, _Seen) -> {ok, Count};
+-committee_size([<<_:256>> = Key | Rest], Count, Seen)
+-  when Count < ?MAX_VALIDATORS ->
++committee_size([<<_:256>> = Key | Rest], Count, Seen) ->
+     case maps:is_key(Key, Seen) of
+         false -> committee_size(Rest, Count + 1, Seen#{Key => true});
+         true -> error
+     end;
+-committee_size(_MalformedDuplicateOrTooLarge, _Count, _Seen) ->
++committee_size(_MalformedOrDuplicate, _Count, _Seen) ->
+     error.
+ 
+ -doc "Return the sorted, distinct, valid current-member signatures.".
+@@ -86,14 +83,16 @@
+ sanitize_at_least(_Committee, _Bytes, _Signatures, _Needed) ->
+     error.
+ 
+--doc "Check a nonempty bounded certificate signature list, sorted by distinct signer.".
++-doc "Check a nonempty certificate signature list, sorted by distinct signer.".
+ -spec canonical_signatures(term()) -> boolean().
+ canonical_signatures([_ | _] = Signatures) ->
+-    valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
++    valid_signature_list(Signatures, unlimited) andalso
+         Signatures =:= lists:ukeysort(1, Signatures);
+ canonical_signatures(_) -> false.
+ 
+--spec valid_signature_list(term(), non_neg_integer()) -> boolean().
++-spec valid_signature_list(term(), non_neg_integer() | unlimited) -> boolean().
++valid_signature_list(Signatures, unlimited) ->
++    signature_rows(Signatures);
+ valid_signature_list(Signatures, Maximum) when is_integer(Maximum), Maximum >= 0 ->
+     bounded_signatures(Signatures, Maximum);
+ valid_signature_list(_Signatures, _Maximum) ->
+@@ -106,6 +105,10 @@
+         error -> false
+     end.
+ 
++signature_rows([]) -> true;
++signature_rows([{<<_:256>>, <<_:512>>} | Rest]) -> signature_rows(Rest);
++signature_rows(_) -> false.
++
+ bounded_signatures([], _Remaining) -> true;
+ bounded_signatures(
+   [{<<_:256>>, <<_:512>>} | Rest], Remaining) when Remaining > 0 ->
+--- a/src/quod_scope_wire.erl
++++ b/src/quod_scope_wire.erl
+@@ -435,9 +435,8 @@
+ 
+ %% Complete envelopes own actual framing capacity. Material allocation is
+ %% checked by the proof's pinned Prolog policy, not a second payload quota.
+-payload_limit(failure_reasons) -> {ok, ?ERLOG_MAX_FAILURE_REASONS_BYTES};
+-payload_limit(erlog_error) -> {ok, ?ERLOG_MAX_FAILURE_REASON_BYTES};
+-payload_limit(Kind) when Kind =:= goal; Kind =:= answer; Kind =:= plan;
++payload_limit(Kind) when Kind =:= failure_reasons; Kind =:= erlog_error;
++                         Kind =:= goal; Kind =:= answer; Kind =:= plan;
+                          Kind =:= manifest; Kind =:= attestation;
+                          Kind =:= read_certificate; Kind =:= foreign_reads;
+                          Kind =:= result; Kind =:= operation_submission -> {ok, unlimited};
+--- a/src/quod_signing_journal.erl
++++ b/src/quod_signing_journal.erl
+@@ -935,8 +935,8 @@
+     current_admissions := Admissions,
+     pending_dtx := ValidatedPending} = Summary, PendingDtx)
+   when map_size(Summary) =:= 4, is_map(Archived),
+-       is_map(Live), map_size(Live) =< ?MAX_VALIDATORS,
+-       is_map(Admissions), map_size(Admissions) =< ?MAX_VALIDATORS,
++       is_map(Live),
++       is_map(Admissions),
+        is_map(ValidatedPending) ->
+     case valid_archived_protocol(maps:to_list(Archived)) andalso
+          valid_live_lanes(maps:to_list(Live)) andalso
+--- a/src/quod_simplex.erl
++++ b/src/quod_simplex.erl
+@@ -998,7 +998,6 @@
+           batch_window_ms => 25,        %% per-ontology micro-batch collection window
+           data_dir     => undefined}).
+ 
+--define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
+ -define(TICK_MS,     300).   %% consensus re-drive cadence: re-dial peers whose link never came up (liveness)
+ -define(DIAL_TIMEOUT_MS, 15000).  %% presume a dial lost if neither link_up nor link_error arrives within this
+ -define(LINK_CLOSE_TIMEOUT_MS, 500). %% graceful incarnation boundary: allow the ordered link FIFO to drain,
+@@ -1329,7 +1328,6 @@
+             r_stale    = 0 :: non_neg_integer(),    %% author sequence superseded (stale_seq — retryable,
+                                                     %% NOT malformed; keeping it out of r_bad keeps the
+                                                     %% "malformed workload" alarm honest)
+-            ingress_overflow  = 0 :: non_neg_integer(),  %% parks refused: queue item/byte/per-author bound hit
+             ingress_expired   = 0 :: non_neg_integer(),  %% parked items cut by ?INGRESS_TTL_MS
+             ingress_forwarded = 0 :: non_neg_integer(),  %% drained items routed onward after state moved
+             ingress_retargets = 0 :: non_neg_integer(),  %% exact signed submissions placed again after local exclusion
+@@ -4716,7 +4714,6 @@
+                     {ok, Registry} = quod_dtx_owner:attach_waiter(Digest, Waiter, S0#s.retained_dtx),
+                     {ok, schedule_dtx_drive(S0#s{retained_dtx = Registry})};
+                 [] ->
+-                    Prior = admission_state(S0),
+                     %% A duplicate cannot replace durable missing/bound
+                     %% preparation permission with peer-supplied own material.
+                     Pending = pending_votes_snapshot(S0#s.signing_journal),
+@@ -4724,17 +4721,10 @@
+                         {ok, #{material := Saved}} -> Saved;
+                         error -> Material
+                     end,
+-                    case maps:is_key(Id, Pending) orelse
+-                         quod_atomic_admission:has_capacity(Id, Prior#dtx_admission.waiting) of
+-                        false -> {error, busy};
+-                        true ->
+-                            %% Rejected admissions install no monitor or other
+-                            %% side effect which their unchanged state would lose.
+-                            S = refresh_dtx_admission_engine(S0), A = admission_state(S),
+-                            Rows = quod_atomic_admission:admit(
+-                                     Chosen, Waiter, quod_trace:context(), A#dtx_admission.waiting),
+-                            {ok, schedule_dtx_drive(S#s{dtx_admission = A#dtx_admission{waiting = Rows}})}
+-                    end
++                    S = refresh_dtx_admission_engine(S0), A = admission_state(S),
++                    Rows = quod_atomic_admission:admit(
++                             Chosen, Waiter, quod_trace:context(), A#dtx_admission.waiting),
++                    {ok, schedule_dtx_drive(S#s{dtx_admission = A#dtx_admission{waiting = Rows}})}
+             end;
+         error -> {error, invalid_dtx_submission}
+     end.
+@@ -7063,8 +7053,7 @@
+   Target,
+   #{identity := Target, committee := Committee,
+     committee_id := <<_:256>> = CommitteeId})
+-  when is_list(Committee), Committee =/= [],
+-       length(Committee) =< ?MAX_VALIDATORS ->
++  when is_list(Committee), Committee =/= [] ->
+     case quod_quorum:committee_size(Committee) of
+         {ok, N} when N =:= length(Committee) -> {ok, Committee, CommitteeId};
+         _ -> error
+@@ -8507,26 +8496,16 @@
+ %%% ingress park queue — take a ticket, drain on the pipeline's own events
+ %%%===================================================================
+ 
+-%% Park one append at the queue tail. Overflow of any bound is the real backpressure
+-%% boundary. Custody and relay maps have independent bounds.
++%% Park one append at the queue tail; the existing owner retains FIFO demand.
+ park_ingress(Origin, Cause, Waiter, Request, Anchor,
+              S = #s{ingress = Ingress}) ->
+-    case quod_ingress_state:enqueue(
+-           Origin, Waiter, Request, Anchor, Ingress) of
+-        full ->
+-            {S1, Actions} = reject_append(Waiter, busy, S),
+-            {S1#s{ingress_overflow = S1#s.ingress_overflow + 1}, Actions};
+-        {ok, Depth, Ingress1} ->
+-            _ = quod_trace:add_event(
+-                  waiter_trace_ctx(Waiter), <<"consensus.parked">>,
+-                  #{'quod.ingress.depth' => Depth,
+-                    'quod.ingress.cause' => Cause}),
+-            S1 = S#s{ingress = Ingress1},
+-            %% Parked demand arms the head watchdog constructively: every park is a
+-            %% claim that the pipeline floor must move, so register it as demand
+-            %% instead of relying on the park cause to coincide with head evidence.
+-            {watch_requested((S1#s.eng)#eng.view, S1), []}
+-    end.
++    {ok, Depth, Ingress1} = quod_ingress_state:enqueue(
++                            Origin, Waiter, Request, Anchor, Ingress),
++    _ = quod_trace:add_event(
++          waiter_trace_ctx(Waiter), <<"consensus.parked">>,
++          #{'quod.ingress.depth' => Depth, 'quod.ingress.cause' => Cause}),
++    S1 = S#s{ingress = Ingress1},
++    {watch_requested((S1#s.eng)#eng.view, S1), []}.
+ 
+ %% Retained signed work drains before unsigned ingress. The ordered ready set
+ %% contains only origin-local submissions whose exact prior slot is durably
+@@ -9055,7 +9034,7 @@
+ live_protocol_view(View, #eng{base = Base, view = Current}) ->
+     View > Base andalso View =< Current + 1.
+ 
+-%% Capacity and membership gating live in `quod_ingress_state` — inadmissible
++%% Membership and FIFO gating live in `quod_ingress_state` — inadmissible
+ %% work parks rather than rejecting. Only CONTENT verdicts remain here: a sequence below
+ %% the floor is `stale_seq` (retryable — newer approved history won first, while the
+ %% content remains valid), and a duplicate tx_id is `bad_change` (terminal).
+@@ -9545,10 +9524,9 @@
+     S1#s{collecting = none, r_bad = S1#s.r_bad + Count}.
+ 
+ encoded_change_size(Change) ->
+-    case quod_transaction:encode_ledger_transaction(Change) of
+-        {ok, Blob} -> byte_size(Blob);
+-        {error, _} -> ?MAX_BLOCK_BYTES + 1
+-    end.
++    %% Collection is reached only with a canonically validated transaction.
++    {ok, Blob} = quod_transaction:encode_ledger_transaction(Change),
++    byte_size(Blob).
+ 
+ consensus_barrier(S) ->
+     consensus_barrier(S, include_retained_dtx).
+@@ -10629,7 +10607,7 @@
+ 
+ encoded_block_payload_fits(Payload) ->
+     case quod_ledger:encoded_payload_size(Payload) of
+-        {ok, Bytes} -> Bytes =< ?MAX_BLOCK_BYTES;
++        {ok, _Bytes} -> true;
+         error -> false
+     end.
+ well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
+@@ -12762,7 +12740,7 @@
+         andalso genesis_predicate_manifest(Genesis) =/= error
+         andalso Removes =:= []
+         andalso Adds =/= []
+-        andalso length(Adds) =< ?MAX_VALIDATORS
++       
+         andalso Author =:= lists:min(Adds)
+         andalso founding_set_matches(ExpectedFounders, Adds);
+ valid_genesis_identity(
+@@ -12923,7 +12901,7 @@
+         false -> false;
+         true ->
+             Next = apply_membership_diff(Diff, Validators),
+-            Next =/= [] andalso length(Next) =< ?MAX_VALIDATORS
++            Next =/= []
+     end.
+         %% False for >1 op, mixed content, malformed heads, Id =/= Pk,
+         %% non-binary keys, and a transition that would empty the committee.
+@@ -13069,10 +13047,10 @@
+ 
+ buffer_frame(Frame, Frames) ->
+     %% Periodic vote redrive must leave one recoverable copy for a disconnected peer,
+-    %% not fill the bounded outbox with the same signed bytes every tick.
++    %% not fill the outbox with the same signed bytes every tick.
+     case lists:member(Frame, Frames) of
+         true  -> Frames;
+-        false -> lists:sublist([Frame | Frames], ?MAX_OUTBOX)
++        false -> [Frame | Frames]
+     end.
+ 
+ %% Re-drive (tick): re-dial every peer with buffered frames but no live link and no dial in flight — the
+@@ -15413,11 +15391,7 @@
+         L ->
+             case proper_list(L) andalso lists:all(fun valid_member/1, L) of
+                 true ->
+-                    Count = length(founding(Cfg, maps:get(node_id, Cfg))),
+-                    case Count =< ?MAX_VALIDATORS of
+-                        true  -> valid_mode(Cfg);
+-                        false -> {error, {committee_too_large, Count}}
+-                    end;
++                    valid_mode(Cfg);
+                 false -> {error, {bad_committee, L}}   %% a malformed element ⇒ fail-fast
+             end
+     end.
+@@ -15537,7 +15511,6 @@
+       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
+       r_stale => S#s.r_stale,
+       ingress_queued => IngressQueued,
+-      ingress_overflow => S#s.ingress_overflow,
+       ingress_expired => S#s.ingress_expired,
+       ingress_forwarded => S#s.ingress_forwarded,
+       custody_depth => map_size(S#s.custody),
+--- a/src/quod_transaction.erl
++++ b/src/quod_transaction.erl
+@@ -310,13 +310,12 @@
+         true ->
+             case encode_ledger_transaction(Transaction) of
+                 {ok, TransactionBytes} ->
+-                    %% Evidence is one transport frame, not a new semantic
+-                    %% quota.  Reuse the existing durable-operation envelope
+-                    %% bound so this codec and its only carrier cannot disagree.
++                    %% The endpoint admits its complete envelope. This codec
++                    %% validates exact evidence without a nested byte quota.
+                     case quod_safe_term:encode_canonical(
+                            {quod_transaction_evidence, 2,
+                             CertifiedRef, TransactionBytes},
+-                           ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
++                           unlimited) of
+                         {ok, Blob} -> {ok, Blob};
+                         {error, too_large} -> {error, too_large};
+                         {error, bad_term} -> {error, bad_remote_evidence}
+@@ -331,12 +330,11 @@
+ -spec decode_evidence(binary()) ->
+           {ok, term(), #transaction{}} | {error, bad_remote_evidence}.
+ decode_evidence(Blob)
+-  when is_binary(Blob),
+-       byte_size(Blob) =< ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES ->
++  when is_binary(Blob) ->
+     case {quod_safe_term:validate_canonical(
+-            Blob, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES),
++            Blob, unlimited),
+           quod_safe_term:decode(
+-            Blob, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES)} of
++            Blob, unlimited)} of
+         {ok, {ok, {quod_transaction_evidence, 2, CertifiedRef,
+                    TransactionBytes}}}
+           when is_binary(TransactionBytes) ->
+@@ -880,8 +878,7 @@
+           canonical_foreign_reads(ForeignReads),
+           valid_role_fields({TargetNs, TargetAnchor}, Transaction)} of
+         {{ok, MaterialWire, EffectsWire}, {ok, EvidenceWire},
+-         {ok, ForeignReads}, true}
+-          when byte_size(EffectsWire) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
++         {ok, ForeignReads}, true} ->
+             case quod_effect:validate_transaction(
+                    TargetNs, TargetAnchor, Author, Effects) of
+                 true ->
+@@ -1448,7 +1445,7 @@
+           when is_binary(Ns), is_integer(Sequence), Sequence >= 0 ->
+             case {term_to_binary(Decoded, [deterministic]) =:= Canonical,
+                   quod_wire_term:decode_canonical(
+-                    EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES)} of
++                    EffectsWire, unlimited)} of
+                 {true, {ok, Effects}} when is_list(Effects) ->
+                     {ok, #{target => {Ns, Anchor}, admission => Admission,
+                            tx_id => TxId, effects => Effects,
+@@ -1830,7 +1827,7 @@
+     case {quod_wire_term:decode_canonical(
+             MaterialWire, unlimited),
+           quod_wire_term:decode_canonical(
+-            EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES)} of
++            EffectsWire, unlimited)} of
+         {{ok, {Diff0, ReadPairs0}}, {ok, Effects0}}
+           when is_list(Diff0), is_list(ReadPairs0), is_list(Effects0) ->
+             case quod_read_set:valid_pairs(ReadPairs0) of
+--- a/src/quod_wire_term.erl
++++ b/src/quod_wire_term.erl
+@@ -22,7 +22,6 @@
+ checks the real VM headroom without re-admitting accepted history.
+ """.
+ 
+--include("quod_vm_limits.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+ 
+ -export([encode/1, decode/1,
+@@ -209,24 +208,21 @@
+ %% opaque: a relay must not turn an arbitrary caller datum into a target atom.
+ -spec materialize_goal_symbols(term()) ->
+           {ok, term()} |
+-          {error, malformed_material | too_many_new_atoms | atom_limit}.
++          {error, malformed_material | atom_limit}.
+ materialize_goal_symbols(Goal) -> materialize_goal_symbols(Goal, undefined).
+ 
+ %% Only an authenticated owner may supply its canonical namespace. Self-scoped
+ %% goals execute in that same owner; foreign inner callables remain deferred.
+ -spec materialize_goal_symbols(term(), binary() | undefined) ->
+-          {ok, term()} | {error, malformed_material | too_many_new_atoms | atom_limit}.
++          {ok, term()} | {error, malformed_material | atom_limit}.
+ materialize_goal_symbols(Goal, Owner) ->
+     case collect_goal_symbols(Goal, #{}, Owner) of
+-        {ok, Symbols}
+-          when map_size(Symbols) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS ->
++        {ok, Symbols} ->
+             Names = lists:sort(maps:keys(Symbols)),
+             case materialize_symbol_names(Names) of
+                 ok -> {ok, replace_goal_symbols(Goal, Owner)};
+                 {error, _} = Error -> Error
+             end;
+-        {ok, _TooMany} ->
+-            {error, too_many_new_atoms};
+         error ->
+             {error, malformed_material}
+     end.
+@@ -345,7 +341,7 @@
+     end.
+ 
+ materialize_valid_symbol_names(Names) ->
+-    case atom_headroom(length(Names)) of
++    case atom_headroom(length([N || N <- Names, not existing_symbol(N)])) of
+         true ->
+             try
+                 _ = [binary_to_atom(Name, utf8) || Name <- Names],
+@@ -359,8 +355,12 @@
+     end.
+ 
+ atom_headroom(NewAtoms) ->
+-    erlang:system_info(atom_count) + NewAtoms + ?QUOD_ATOM_SAFETY_MARGIN <
++    erlang:system_info(atom_count) + NewAtoms =<
+         erlang:system_info(atom_limit).
++
++existing_symbol(Name) ->
++    try binary_to_existing_atom(Name, utf8), true
++    catch error:badarg -> false end.
+ 
+ collect_new_symbols({'$quod_symbol', Name}, Acc) when is_binary(Name) ->
+     {ok, Acc#{Name => true}};
+@@ -589,28 +589,22 @@
+ 
+ -doc "Encode one complete, possibly-empty Erlog failure-reason stack.".
+ -spec encode_failure_reasons(term()) ->
+-          {ok, binary()} | {error, bad_term | too_large}.
++          {ok, binary()} | {error, bad_term}.
+ encode_failure_reasons(Reasons) ->
+-    case validate_failure_reasons(Reasons, 0) of
++    case validate_failure_reasons(Reasons) of
+         ok -> encode_failure_reason_stack(Reasons);
+         {error, _} = Error -> Error
+     end.
+ 
+ -doc "Decode and re-canonicalize one complete Erlog failure-reason stack.".
+ -spec decode_failure_reasons(term()) ->
+-          {ok, [term()]} | {error, bad_term | too_large}.
+-decode_failure_reasons(Blob)
+-  when is_binary(Blob),
+-       byte_size(Blob) =< ?ERLOG_MAX_FAILURE_REASONS_BYTES ->
+-    case quod_safe_term:decode(Blob, ?ERLOG_MAX_FAILURE_REASONS_BYTES) of
++          {ok, [term()]} | {error, bad_term}.
++decode_failure_reasons(Blob) when is_binary(Blob) ->
++    case quod_safe_term:decode(Blob, unlimited) of
+         {ok, Wire} -> decode_failure_reason_wire(Blob, Wire);
+-        {error, too_large} -> {error, too_large};
+         {error, _} -> {error, bad_term}
+     end;
+-decode_failure_reasons(Blob) when is_binary(Blob) ->
+-    {error, too_large};
+-decode_failure_reasons(_) ->
+-    {error, bad_term}.
++decode_failure_reasons(_) -> {error, bad_term}.
+ 
+ -doc "Return whether a full stack satisfies the canonical Quod wire contract.".
+ -spec valid_failure_reason_stack(term()) -> boolean().
+@@ -620,48 +614,28 @@
+         {error, _} -> false
+     end.
+ 
+-validate_failure_reasons([], _Count) ->
+-    ok;
+-validate_failure_reasons([_ | _], Count)
+-  when Count >= ?ERLOG_MAX_FAILURE_REASONS ->
+-    {error, too_large};
+-validate_failure_reasons([Reason | Rest], Count) ->
++validate_failure_reasons([]) -> ok;
++validate_failure_reasons([Reason | Rest]) ->
+     case validate_failure_reason(Reason) of
+-        ok -> validate_failure_reasons(Rest, Count + 1);
++        ok -> validate_failure_reasons(Rest);
+         {error, _} = Error -> Error
+     end;
+-validate_failure_reasons(_, _Count) ->
+-    {error, bad_term}.
++validate_failure_reasons(_) -> {error, bad_term}.
+ 
+ validate_failure_reason(Reason) ->
+-    %% The bounded structural pass runs first, so the portability walk below
+-    %% never traverses an application term beyond the codec's depth bound.
+     case encode(Reason) of
+-        {ok, Wire} ->
++        {ok, _Wire} ->
+             case erlog_int:valid_failure_reason(Reason) of
+-                true ->
+-                    case byte_size(canonical(Wire)) =<
+-                         ?ERLOG_MAX_FAILURE_REASON_BYTES of
+-                        true -> ok;
+-                        false -> {error, too_large}
+-                    end;
+-                false ->
+-                    {error, bad_term}
+-            end;
+-        {error, bad_term} ->
+-            {error, bad_term}
++                true -> ok;
++                false -> {error, bad_term}
++            end;
++        {error, bad_term} -> {error, bad_term}
+     end.
+ 
+ encode_failure_reason_stack(Reasons) ->
+     case encode(Reasons) of
+-        {ok, Wire} ->
+-            Blob = canonical(Wire),
+-            case byte_size(Blob) =< ?ERLOG_MAX_FAILURE_REASONS_BYTES of
+-                true -> {ok, Blob};
+-                false -> {error, too_large}
+-            end;
+-        {error, bad_term} ->
+-            {error, bad_term}
++        {ok, Wire} -> {ok, canonical(Wire)};
++        {error, bad_term} -> {error, bad_term}
+     end.
+ 
+ decode_failure_reason_wire(Blob, Wire) ->
+--- a/test/quod_agent_ref_tests.erl
++++ b/test/quod_agent_ref_tests.erl
+@@ -1,7 +1,7 @@
+ -module(quod_agent_ref_tests).
+ 
+ -include_lib("eunit/include/eunit.hrl").
+--include("quod_vm_limits.hrl").
++-include("retired_remaining_sizes.hrl").
+ 
+ -define(NS, <<"quod:agent-ref-test">>).
+ -define(ANCHOR, <<16#a7:256>>).
+@@ -31,11 +31,9 @@
+        {error, invalid_agent_reference},
+        quod_agent_ref:decode(<<Blob/binary, 0>>)).
+ 
+-symbol_budget_is_vm_independent_test() ->
++opaque_identity_symbols_do_not_have_a_population_quota_test() ->
+     Names = [<<"identity_symbol_", (integer_to_binary(I))/binary>>
+-             || I <- lists:seq(1, ?QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
++             || I <- lists:seq(1, ?LEGACY_QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
+     Text = iolist_to_binary([
+              "identity(", lists:join($,, [[$', Name, $'] || Name <- Names]), ")."]),
+-    ?assertEqual(
+-       {error, invalid_agent_reference},
+-       quod_agent_ref:from_text(?NS, ?ANCHOR, Text, 2)).
++    ?assertMatch({ok, _}, quod_agent_ref:from_text(?NS, ?ANCHOR, Text, 2)).
+--- a/test/quod_atomic_admission_tests.erl
++++ b/test/quod_atomic_admission_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_atomic_admission_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_dtx_owner.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -223,27 +224,28 @@
+                            Checking, [Fifth, Fourth, First, Third]),
+     ?assertEqual(Empty, Finished).
+ 
+-admission_bound_preserves_existing_and_durable_work_test_() ->
++admission_retains_new_existing_and_durable_work_test_() ->
+     {timeout, 30, fun() ->
+-        Materials = [material() || _ <- lists:seq(1, ?MAX_INGRESS_TXS + 1)],
++        Materials = [material() || _ <- lists:seq(1, ?LEGACY_MAX_INGRESS_TXS + 1)],
+         [Extra | Enrolled] = Materials,
+         Full = lists:foldl(fun(M, Acc) ->
+             {ok, Next} = quod_atomic_admission:reserve(self(), make_ref(), M, #{}, Acc), Next
+         end, quod_atomic_admission:new(), Enrolled),
+-        ?assertEqual({0, ?MAX_INGRESS_TXS}, quod_atomic_admission:counts(Full)),
+-        ?assertNot(quod_atomic_admission:has_capacity(group(Extra), Full)),
+-        ?assertEqual({error, busy}, quod_atomic_admission:reserve(self(), make_ref(), Extra, #{}, Full)),
++        ?assertEqual({0, ?LEGACY_MAX_INGRESS_TXS}, quod_atomic_admission:counts(Full)),
++        {ok, Expanded} = quod_atomic_admission:reserve(self(), make_ref(), Extra, #{}, Full),
++        ?assertEqual({0, ?LEGACY_MAX_INGRESS_TXS + 1}, quod_atomic_admission:counts(Expanded)),
++        ?assertEqual({error, invalid_dtx_intent},
++                     quod_atomic_admission:reserve(self(), make_ref(), Extra, #{}, Expanded)),
+         First = hd(Enrolled),
+-        ?assert(quod_atomic_admission:has_capacity(group(First), Full)),
+         Attached = quod_atomic_admission:admit(First, {dtx_endpoint, self()}, #{}, Full),
+         ?assertEqual(quod_atomic_admission:counts(Full), quod_atomic_admission:counts(Attached)),
+         %% Restore is not a fresh admission: a journal duty must never be
+         %% discarded just because the volatile capacity is already occupied.
+         Restored = quod_atomic_admission:admit(Extra, none, #{}, Attached),
+-        ?assertEqual({1, ?MAX_INGRESS_TXS}, quod_atomic_admission:counts(Restored)),
++        ?assertEqual({1, ?LEGACY_MAX_INGRESS_TXS}, quod_atomic_admission:counts(Restored)),
+         {_, Removed} = quod_atomic_admission:take(group(Extra), Restored),
+         {_, Released} = quod_atomic_admission:take(group(First), Removed),
+-        ?assert(quod_atomic_admission:has_capacity(group(Extra), Released))
++        ?assertEqual({0, ?LEGACY_MAX_INGRESS_TXS - 1}, quod_atomic_admission:counts(Released))
+     end}.
+ 
+ retained(M, F) ->
+--- a/test/quod_atomic_projection_tests.erl
++++ b/test/quod_atomic_projection_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_atomic_projection_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_dtx_owner.hrl").
+@@ -1179,7 +1180,7 @@
+         setelement(3, Request, <<0:256>>), [], 1, From, S)),
+     ?assertEqual(error, quod_atomic:decode_presentation(foreign(F), Id, quod_atomic:encode_group(G))).
+ 
+-presentation_capacity_returns_busy_without_losing_existing_work_test_() ->
++presentation_retains_all_work_and_one_engine_monitor_test_() ->
+     {timeout, 30, {spawn, fun() ->
+         {ok, _} = application:ensure_all_started(gproc),
+         F = fixture(), {Ns, Anchor} = maps:get(origin, F),
+@@ -1201,13 +1202,13 @@
+         end,
+         Full = lists:foldl(fun(_, S) ->
+             Enroll(Request(fixture(#{node_identity => Node})), S)
+-        end, Enroll(First, S0), lists:seq(2, ?MAX_INGRESS_TXS)),
+-        ?assertMatch(#{active := ?MAX_INGRESS_TXS, reserved := 0},
++        end, Enroll(First, S0), lists:seq(2, ?LEGACY_MAX_INGRESS_TXS)),
++        ?assertMatch(#{active := ?LEGACY_MAX_INGRESS_TXS, reserved := 0},
+                      quod_simplex:test_dtx_admission_state(Full)),
+         Extra = Request(fixture(#{node_identity => Node})),
+         ?assertEqual(Full, Enroll(First, Full)),
+-        %% A newly registered engine must not leak a monitor through a rejected
+-        %% callback's discarded tentative state. This stand-in performs no proof.
++        %% A newly registered engine is retained exactly once by the real callback.
++        %% This stand-in performs no proof.
+         Caller = self(),
+         Engine = spawn(fun() ->
+             true = quod_reg:reg({quod_prolog, Ns}),
+@@ -1218,9 +1219,14 @@
+             receive {Engine, registered} -> ok
+             after 1000 -> error(capacity_engine_missing) end,
+             Before = process_info(self(), monitors),
+-            ?assertEqual({error, busy},
+-                quod_simplex:test_start_local_dtx_endpoint_request(Extra, [], 1, From, Full)),
+-            ?assertEqual(Before, process_info(self(), monitors))
++            Expanded = Enroll(Extra, Full),
++            ?assertMatch(#{active := 513, reserved := 0},
++                         quod_simplex:test_dtx_admission_state(Expanded)),
++            {monitors, Prior} = Before,
++            {monitors, After} = process_info(self(), monitors),
++            ?assertEqual([{process, Engine}], After -- Prior),
++            ?assertEqual(Expanded, Enroll(Extra, Expanded)),
++            ?assertEqual({monitors, After}, process_info(self(), monitors))
+         after
+             Monitor = monitor(process, Engine), Engine ! stop,
+             receive {'DOWN', Monitor, process, Engine, normal} -> ok
+--- a/test/quod_atomic_tests.erl
++++ b/test/quod_atomic_tests.erl
+@@ -1,6 +1,7 @@
+ -module(quod_atomic_tests).
+ -include("retired_presentation_sizes.hrl").
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_proof_limits.hrl").
+ 
+@@ -209,7 +210,7 @@
+         ?assert(quod_atomic:verify_control(quod_atomic:record_target(Record), Control)),
+         ?assert(byte_size(Envelope) =< ?LEGACY_MAX_DTX_CONTROL_BYTES),
+         ?assert(byte_size(term_to_binary({batch, [{dtx, Envelope}]}, [deterministic]))
+-                =< ?MAX_BLOCK_BYTES),
++                =< ?LEGACY_MAX_BLOCK_BYTES),
+         {{ok, Expected}, {call_time, Auth}} = tprof:profile(fun() ->
+             quod_atomic:encoded_reference_requirements(Blob)
+         end, #{type => call_time, report => return, set_on_spawn => false,
+@@ -219,7 +220,7 @@
+           {Complete, [{resolve, R} || {_, R, _} <- CompleteRows]}]),
+     ?assertEqual(?LEGACY_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
+                  byte_size(term_to_binary({batch, [{dtx, <<>>}]}, [deterministic]))),
+-    ?assertEqual(?MAX_BLOCK_BYTES - ?LEGACY_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
++    ?assertEqual(?LEGACY_MAX_BLOCK_BYTES - ?LEGACY_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
+                  ?LEGACY_MAX_DTX_CONTROL_BYTES),
+     ?assertEqual(error, quod_atomic:decode_material(not_binary)),
+     ?assertEqual(error, quod_atomic:decode_material(<<0:(?LEGACY_MAX_DTX_BODY_BYTES + 1)/unit:8>>)).
+--- a/test/quod_catchup_tests.erl
++++ b/test/quod_catchup_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_catchup_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_proof_limits.hrl").
+ -include("quod_transport_limits.hrl").
+@@ -440,7 +441,7 @@
+     end.
+ 
+ consume_evidence_sender(Store, Sender, Receiver, Acc) ->
+-    {ok, Parts, Next} = quod_catchup:transfer_page(Store, Sender),
++    {ok, Parts, Next} = quod_catchup:transfer_page(Store, Sender, unlimited),
+     End = case Next of done -> done; _ -> more end,
+     {ok, Received} = quod_catchup:evidence_accept(Receiver, Parts,
+                                                 quod_ledger_store:last(Store), End),
+@@ -480,8 +481,8 @@
+             Before = quod_dtx_phase_index:stats(I),
+             Send = quod_catchup:transfer_open(SourceStore, 2, 2),
+             try
+-                %% Sparse proofs use the same bounded pages through the local
+-                %% byte adapter, whose continuation is not a wire nonce.
++                %% The borrowed local view has no enclosing transport frame; its
++                %% complete proof still uses the same verification owner.
+                 {ok, _} = application:ensure_all_started(gproc),
+                 true = quod_reg:reg({quod_simplex, Ns}),
+                 {ok, Reader} = quod_ledger_store:open_ro_snapshot(
+@@ -498,7 +499,7 @@
+                     PageResult
+                 end,
+                 try
+-                    ?assertMatch({ok, ok, 2, {{local, _}, 1}},
++                    ?assertMatch({ok, ok, 2, done},
+                         quod_foreign_log:local_view_fetch(View, Reader, Query,
+                             Deadline, fun(_, _, _) -> ok end)),
+                     {ok, Evidence} = quod_foreign_log:fetch_evidence_pages(
+@@ -513,7 +514,7 @@
+                 end,
+                 quod_ledger_store:with_proof_stage(filename:join(Dir, "interrupted"), fun(Stage) ->
+                     {ok, T} = quod_catchup:transfer_begin(Binding, 2, P, I, wrapped, Stage),
+-                    {ok, [{group, 2, 2} | Page], More} = quod_catchup:transfer_page(SourceStore, Send),
++                    {ok, [{group, 2, 2} | Page], More} = fixture_transfer_page(SourceStore, Send),
+                     ?assertNotEqual(done, More),
+                     ?assertEqual({error, incomplete_transfer}, quod_catchup:transfer_accept(T, Page, done)),
+                     ?assertEqual(1, quod_ledger_store:last(Target)),
+@@ -543,9 +544,13 @@
+         after file:del_dir_r(Dir) end
+     end}.
+ 
++fixture_transfer_page(Store, Send) ->
++    %% Deliberately small test envelope forces the existing cursor to retain
++    %% a partially streamed group without constructing multi-gigabyte fixtures.
++    quod_catchup:transfer_page(Store, Send, {65536, 65536}, [], 0).
++
+ transfer_all_pages(Store, Send, Receive, Count) ->
+-    {ok, Parts, Next} = quod_catchup:transfer_page(Store, Send),
+-    ?assert(length(Parts) =< ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
++    {ok, Parts, Next} = fixture_transfer_page(Store, Send),
+     {ok, Wire} = quod_safe_term:encode_canonical(Parts, ?QUOD_LINK_PAYLOAD_CAPACITY),
+     {ok, Decoded} = quod_safe_term:decode_wrapped(Wire, ?QUOD_LINK_PAYLOAD_CAPACITY),
+     Payload = case Decoded of [{group, 2, 2} | Rest] -> Rest; _ -> Decoded end,
+@@ -580,11 +585,11 @@
+         try
+             ?assertMatch({ok, [{group, 2, 2}, {entry, _}, {proof, _}, end_group,
+                                {group, 3, 3}, {entry, _}, {proof, _}, end_group], done},
+-                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 100))),
++                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 100), unlimited)),
+             ?assertMatch({ok, [{group, 2, 2}, {entry, _}, {proof, _}, end_group], done},
+-                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 2))),
++                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 2), unlimited)),
+             ?assertEqual({ok, [], done},
+-                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 4, 4))),
++                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 4, 4), unlimited)),
+             %% The second block deliberately repeats the first author sequence.
+             %% Verification of a later group must preserve the context of the
+             %% successfully appended prefix, including its current raw handle.
+@@ -592,7 +597,7 @@
+             {ok, Target} = quod_ledger_store:open(Ns, filename:join(Dir, "receiver")),
+             try
+                 {ok, WholePage, done} = quod_catchup:transfer_page(Store,
+-                    quod_catchup:transfer_open(Store, 1, 3)),
++                    quod_catchup:transfer_open(Store, 1, 3), unlimited),
+                 quod_ledger_store:with_proof_stage(filename:join(Dir, "range-stage"), fun(Stage) ->
+                     Range = quod_catchup:range_begin(maps:get(identity, F), 3, wrapped, Stage,
+                         Target, quod_simplex:history_projection(maps:get(identity, F)), Index),
+@@ -626,7 +631,7 @@
+              {history_page3, Grant, Req, [end_group], 100, done, Next},
+              {history_error3, Grant, Req, not_ready, Next}],
+     lists:foreach(fun(Term) ->
+-        Wire = quod_catchup:encode_frame(Ns, Term),
++        {ok, Wire} = quod_catchup:encode_frame(Ns, Term),
+         ?assertMatch({ok, Term, _}, quod_catchup:decode_frame(Ns, Wire)),
+         ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(<<"other">>, Wire))
+     end, Terms),
+@@ -634,7 +639,7 @@
+            {history_request3, Grant, Req, {continue, {disk_offset, 100}, 1}},
+            {history_page3, Grant, Req, [end_group], 100, {{local, sender}, 1}, Next},
+            {history_page3, Grant, Req, [end_group], 100, done, Grant},
+-           {history_page3, Grant, Req, lists:duplicate(?QUOD_MAX_FOREIGN_PAGE_ENTRIES + 1, end_group),
++           {history_page3, Grant, Req, improper,
+             100, done, Next},
+            {blocks_req, Grant, Req, 2, 3}],
+     lists:foreach(fun(Term) ->
+@@ -731,7 +736,7 @@
+         {module, crypto} = code:ensure_loaded(crypto),
+         {{ok, Parts, done}, {call_count, Rows}} = tprof:profile(fun() ->
+             {ok, Store} = quod_ledger_store:open_ro_snapshot(Snapshot),
+-            try quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 3, 5))
++            try quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 3, 5), unlimited)
+             after quod_ledger_store:close(Store) end
+         end, #{type => call_count, report => return,
+                pattern => [{crypto, verify, 5}], timeout => 5000}),
+@@ -756,7 +761,7 @@
+             try
+                 Read = fun(From, To) ->
+                     {ok, Parts, done} = quod_catchup:transfer_page(Store,
+-                        quod_catchup:transfer_open(Store, From, To)),
++                        quod_catchup:transfer_open(Store, From, To), unlimited),
+                     [quod_ledger:entry_view(E) || {entry, B} <- Parts,
+                          {ok, E} <- [quod_ledger:decode_entry(B)]]
+                 end,
+@@ -772,9 +777,8 @@
+          end)]
+      end}.
+ 
+-%% The byte budget caps the response so it fits one quod_link frame (1 MiB) — a window of large blocks is
+-%% returned as a shorter prefix (the joiner loops for the rest), never an oversized frame that kills the link.
+-byte_cap_test() ->
++%% Regression input exceeds both former page and link quotas.
++complete_large_local_page_test() ->
+     Dir = filename:join("/tmp", "quod_catchup_big_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
+     Ns  = <<"catchup:big">>,
+     Big = binary:copy(<<0>>, 200 * 1024),   %% ~200 KiB payload per entry
+@@ -790,32 +794,32 @@
+               || I <- lists:seq(1, 8)],      %% 8 × ~200 KiB = ~1.6 MiB total, over the ~900 KiB budget
+         {ok, S1} = quod_ledger_store:append(S0, {none, Es}),
+         {ok, Parts, More} = quod_catchup:transfer_page(S1,
+-            quod_catchup:transfer_open(S1, 1, 1000)),
+-        ?assertNotEqual(done, More),
++            quod_catchup:transfer_open(S1, 1, 1000), unlimited),
++        ?assertEqual(done, More),
+         Served = [B || {entry, B} <- Parts],
+         ok = quod_ledger_store:close(S1),
+         ?assert(length(Served) >= 1),      %% always makes progress
+-        ?assert(length(Served) < 8),       %% but byte-capped below the full window
++        ?assertEqual(8, length(Served)),       %% every requested entry is present
+         Bytes = lists:sum([byte_size(Blob) || Blob <- Served]),
+-        ?assert(Bytes < 1024 * 1024)       %% the served entries fit under quod_link's 1 MiB frame cap
++        ?assert(Bytes > 1024 * 1024)       %% no silent truncation at the former link quota
+     after
+         _ = file:del_dir_r(Dir)
+     end.
+ 
+-count_cap_serves_a_contiguous_prefix_test() ->
++complete_catalogue_has_no_part_count_quota_test() ->
+     Dir = filename:join("/tmp", "quod_catchup_count_" ++
+                         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+     Ns = <<"catchup:count">>,
+     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+     try
+-        Height = ?QUOD_MAX_FOREIGN_PAGE_ENTRIES + 10,
++        Height = ?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES + 10,
+         Entries = [entry(I, {batch, [tx(I)]}, 0, none) || I <- lists:seq(1, Height)],
+         {ok, Store} = quod_ledger_store:append(Store0, {none, Entries}),
+         {ok, Parts, More} = quod_catchup:transfer_page(Store,
+-            quod_catchup:transfer_open(Store, 1, Height)),
+-        ?assertNotEqual(done, More),
+-        ?assertEqual(?QUOD_MAX_FOREIGN_PAGE_ENTRIES, length(Parts)),
+-        ?assertEqual(lists:seq(1, ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
++            quod_catchup:transfer_open(Store, 1, Height), unlimited),
++        ?assertEqual(done, More),
++        ?assertEqual(Height + 2, length(Parts)),
++        ?assertEqual(lists:seq(1, Height),
+                      [quod_ledger:entry_index(E) || {entry, B} <- Parts,
+                          {ok, E} <- [quod_ledger:decode_entry(B)]])
+     after
+@@ -851,18 +855,18 @@
+ 
+ page_count_bytes_and_frame_headroom_test() ->
+     Ns = <<"catchup:bounds">>, Grant = <<1:128>>, ReqId = <<2:128>>, Next = <<3:128>>,
+-    AtCount = lists:duplicate(?QUOD_MAX_FOREIGN_PAGE_ENTRIES, end_group),
++    AtCount = lists:duplicate(?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES, end_group),
+     Page = fun(Parts) -> {history_page3, Grant, ReqId, Parts, 9, done, Next} end,
+     ?assertMatch({ok, _, _}, quod_catchup:decode_frame(Ns, raw_frame(Ns, Page(AtCount)))),
+-    ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(
++    ?assertMatch({ok, _, _}, quod_catchup:decode_frame(
+       Ns, raw_frame(Ns, Page([end_group | AtCount])))),
+     {ok, EmptyPart} = quod_safe_term:encode_canonical({entry, <<>>}, 1024),
+-    Limit = ?QUOD_MAX_FOREIGN_PAGE_BYTES - byte_size(EmptyPart),
++    Limit = ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES - byte_size(EmptyPart),
+     AtBytes = [{entry, binary:copy(<<0>>, Limit)}],
+-    Frame = quod_catchup:encode_frame(Ns, Page(AtBytes)),
++    {ok, Frame} = quod_catchup:encode_frame(Ns, Page(AtBytes)),
+     ?assert(byte_size(Frame) < ?QUOD_LINK_PAYLOAD_CAPACITY),
+     ?assertMatch({ok, _, _}, quod_catchup:decode_frame(Ns, Frame)),
+-    ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(
++    ?assertMatch({ok, _, _}, quod_catchup:decode_frame(
+       Ns, raw_frame(Ns, Page([{entry, binary:copy(<<0>>, Limit + 1)}])))),
+     ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(
+       Ns, binary:copy(<<0>>, 1024 * 1024 + 1))).
+@@ -883,7 +887,7 @@
+                           block_bytes = BlockBytes, cert = none}),
+     {ok, Blob} = quod_ledger:encode_entry(Entry),
+     Grant = <<1:128>>, ReqId = <<2:128>>, Next = <<3:128>>,
+-    Frame = quod_catchup:encode_frame(
++    {ok, Frame} = quod_catchup:encode_frame(
+       Ns, {history_page3, Grant, ReqId, [{entry, Blob}], 1, done, Next}),
+     ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)),
+     {ok, {history_page3, Grant, ReqId, [{entry, Received}], 1, done, Next}, _} =
+@@ -1306,14 +1310,14 @@
+             Client ! {catchup_credit, self(), Ref, Grant},
+             transfer_link(Endpoint, Client, Ns, Ref, Grant, Pending);
+         {request_page, Client, Binding, Grant, Request, Query} when Pending =:= none ->
+-            Frame = quod_catchup:encode_frame(Ns, {history_request3, Grant, Request, Query}),
++            {ok, Frame} = quod_catchup:encode_frame(Ns, {history_request3, Grant, Request, Query}),
+             {ok, {history_request3, Grant, Request, Decoded}, _} = quod_catchup:decode_frame(Ns, Frame),
+             Op = make_ref(),
+             Endpoint ! {catchup_request, self(), Op, Decoded, quod_time:mono_ms()},
+             transfer_link(Endpoint, Client, Ns, Binding, Grant, {Op, Request});
+         {complete_page, Endpoint, Op, {ok, Parts, Height, More}} when element(1, Pending) =:= Op ->
+             {Op, Request} = Pending, Next = crypto:strong_rand_bytes(16),
+-            Frame = quod_catchup:encode_frame(Ns, {history_page3, Grant, Request, Parts, Height, More, Next}),
++            {ok, Frame} = quod_catchup:encode_frame(Ns, {history_page3, Grant, Request, Parts, Height, More, Next}),
+             {ok, {history_page3, Grant, Request, Payload, Height, More, Next}, _} =
+                 quod_catchup:decode_frame(Ns, Frame),
+             Endpoint ! {catchup_page_sent, self(), Op},
+@@ -1638,9 +1642,17 @@
+         {ok, S1} = quod_ledger_store:append(S0,
+             {none, [quod_ledger:entry(1, maps:get(genesis, F), none)]}),
+         {ok, S2} = quod_ledger_store:append(S1, {Source, [Entry]}),
++        {ok, Parts, done} = quod_catchup:transfer_page(S2,
++            quod_catchup:transfer_open(S2, 2, 2), unlimited),
++        Half = lists:sublist(Parts, length(Parts) div 2),
++        {ok, HalfFrame} = quod_catchup:encode_frame(Ns,
++            {history_page3, <<0:128>>, <<0:128>>, Half, 2, {<<0:128>>, 1}, <<1:128>>}),
+         ok = quod_ledger_store:close(S2),
+         with_endpoint_source(Dir, Ns, Anchor, 2,
+-          fun(C) -> Fun(C#{fixture => F, entry => Entry}) end)
++          fun(C) ->
++              ok = gen_server:call(maps:get(endpoint, C),
++                                   {test_page_capacity, byte_size(HalfFrame)}),
++              Fun(C#{fixture => F, entry => Entry}) end)
+     after file:del_dir_r(Dir) end.
+ 
+ with_endpoint_source(Dir, Ns, Anchor, Height, Fun) ->
+@@ -1878,3 +1890,17 @@
+ reader_for_operation(Endpoint, Op) ->
+     [Row] = [R || R = #{operation := Operation} <- maps:values(readers(Endpoint)), Operation =:= Op],
+     Row.
++
++terminal_frame_lookahead_preserves_every_part_test() ->
++    Part = {entry, <<1,2,3>>}, End = end_group,
++    Size = fun quod_catchup:part_body_size/1,
++    More = Size(Part) - 1, Done = Size(Part) + Size(End),
++    ?assertEqual({ok, [Part, End], done},
++        quod_catchup:test_transfer_parts([Part, End], {More, Done})),
++    Prefix = {group, 1, 1}, Parts = [Prefix, Part, End],
++    Allowances = {Size(Prefix) + More, Size(Prefix) + Done - 1},
++    {ok, [Prefix], Retained} = quod_catchup:test_transfer_parts(Parts, Allowances),
++    ?assertEqual({ok, [Part, End], done},
++        quod_catchup:transfer_page(undefined, Retained, {More, Done}, [], 0)),
++    ?assertEqual({error, frame_unrepresentable},
++        quod_catchup:test_transfer_parts([Part, End], {More, Done - 1})).
+--- a/test/quod_catchup_verify_tests.erl
++++ b/test/quod_catchup_verify_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_catchup_verify_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -48,18 +49,6 @@
+     {ok, Block} = quod_ledger:new_block(
+                     {genesis, 0}, none, 1, {batch, [Transaction]}, 0),
+     quod_ledger:entry(1, Block, none).
+-
+-%% Build an over-cap record without teaching the canonical founding helper how
+-%% to create invalid state.  The verifier must reject this wire/history input.
+-oversized_genesis(Pubs) ->
+-    Founding = lists:sublist(Pubs, ?MAX_VALIDATORS),
+-    Extra = lists:nth(?MAX_VALIDATORS + 1, Pubs),
+-    Entry0 = genesis(Founding),
+-    #entry{data = {batch, [Tx0]}} = quod_ledger:entry_view(Entry0),
+-    ExtraAdmission =
+-        {assert, {{peer_admitted, Extra, undefined, undefined, Extra}, true}},
+-    Tx1 = Tx0#transaction{diff = Tx0#transaction.diff ++ [ExtraAdmission]},
+-    entry_with_data(Entry0, {batch, [Tx1]}).
+ 
+ entry_with_data(Entry, Data) ->
+     {ok, Changed} = quod_ledger:decode_entry(entry_bytes_with_data(Entry, Data)),
+@@ -166,16 +155,15 @@
+         ?assertEqual({ok, Entry}, quod_ledger:decode_entry(Bytes))
+     end, [G, B]).
+ 
+-validator_cap_history_boundary_test() ->
+-    N = ?MAX_VALIDATORS, C = committee(N), G = genesis(pubs(C)),
++full_committee_history_boundary_test() ->
++    N = ?LEGACY_MAX_VALIDATORS, C = committee(N), G = genesis(pubs(C)),
+     {ok, P} = verify_chain(C, [G]),
+     ?assertEqual(pubs(C), quod_simplex:history_committee(P)),
+-    Oversized = oversized_genesis(pubs(committee(N + 1))),
+-    ?assertEqual({error, {invalid_transaction, 1}},
+-        verify_entries({?NS, gen_hash(Oversized)}, [Oversized])),
++    Expanded = committee(N + 1),
++    ?assertMatch({ok, _}, verify_chain(Expanded, [genesis(pubs(Expanded))])),
+     {Extra, _} = quod_identity:generate(),
+     Admission = committed(2, admit_tx(Extra, C), P, C, quod_simplex:quorum(N)),
+-    ?assertEqual({error, {invalid_transaction, 2}}, verify_chain(C, [G, Admission])).
++    ?assertMatch({ok, _}, verify_chain(C, [G, Admission])).
+ 
+ batch_hash_is_verified_test() ->
+     C = committee(4), G = genesis(pubs(C)),
+--- a/test/quod_client_auth_tests.erl
++++ b/test/quod_client_auth_tests.erl
+@@ -473,3 +473,17 @@
+     application:set_env(quod, client_rate_limits, Value);
+ restore_rate_policy(undefined) ->
+     application:unset_env(quod, client_rate_limits).
++
++default_auth_tables_retain_more_than_256_entries_test() ->
++    with_auth(fun() ->
++        KeyPair = quod_identity:generate(),
++        Pending = [signed_challenge(KeyPair, <<N:256>>) || N <- lists:seq(1, 257)],
++        Sessions = [begin
++            {ok, #{session_id := Id}} = quod_client_auth:complete_challenge(C, Sig), Id
++        end || {C, Sig} <- Pending],
++        ?assertEqual(257, length(lists:usort(Sessions))),
++        lists:foreach(fun(Id) -> ?assertMatch({ok, _}, quod_client_auth:session(Id)) end, Sessions),
++        lists:foreach(fun({C, Sig}) ->
++            ?assertEqual({error, invalid_challenge}, quod_client_auth:complete_challenge(C, Sig))
++        end, Pending)
++    end).
+--- a/test/quod_committee_predicates_tests.erl
++++ b/test/quod_committee_predicates_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_committee_predicates_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -70,12 +71,10 @@
+     ?assertEqual(fail, with_ready(Ns, Ready,
+                                   fun() -> scope(ctx(Ns, kb([])), {admit, Cold, "10.0.0.9", 9000}) end)).
+ 
+-%% The predicate gives an honest caller the same bounded-committee result as
+-%% the authoritative proposal/history gate: member 64 can be staged, member
+-%% 65 cannot.
+-admit_enforces_validator_cap_test() ->
++%% Admission remains governed by readiness and existing permission predicates.
++admit_has_no_validator_population_quota_test() ->
+     Ns = <<"cp:cap">>,
+-    Members = [<<I:256>> || I <- lists:seq(0, ?MAX_VALIDATORS - 1)],
++    Members = [<<I:256>> || I <- lists:seq(0, ?LEGACY_MAX_VALIDATORS - 1)],
+     Candidate = lists:last(Members),
+     AtLimitChanges =
+         with_ready(
+@@ -88,9 +87,9 @@
+           end),
+     ?assertMatch([{assert, {{peer_admitted, Candidate, "h", 1,
+                              Candidate}, _}}], AtLimitChanges),
+-    Extra = <<?MAX_VALIDATORS:256>>,
+-    ?assertEqual(
+-       fail,
++    Extra = <<?LEGACY_MAX_VALIDATORS:256>>,
++    ?assertMatch(
++       [{assert, {{peer_admitted, Extra, "h", 1, Extra}, _}}],
+        with_ready(
+          Ns, Extra,
+          fun() ->
+--- a/test/quod_common_primitives_tests.erl
++++ b/test/quod_common_primitives_tests.erl
+@@ -6,8 +6,8 @@
+ %% and the contexts where it must refuse (no proof, verdict engines).
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ -define(NS, <<"test:primitives">>).
+ -define(DRAW, '$quod_draw').
+@@ -406,7 +406,7 @@
+ program_source_large_draft_still_allocates_no_atoms_test() ->
+     Suffix = integer_to_binary(erlang:unique_integer([positive, monotonic])),
+     Names = [<<"quod_edit_budget_", Suffix/binary, "_", (integer_to_binary(N))/binary>>
+-             || N <- lists:seq(1, ?QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
++             || N <- lists:seq(1, ?LEGACY_QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
+     Text = iolist_to_binary([[Name, ".\n"] || Name <- Names]),
+     with_authored([], fun(St) ->
+         Clauses = value({'Program'}, {'$quod_program_source', {'Program'}, Text}, St),
+--- a/test/quod_dtx_endpoint_tests.erl
++++ b/test/quod_dtx_endpoint_tests.erl
+@@ -2,6 +2,7 @@
+ -include("retired_presentation_sizes.hrl").
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ 
+ owner_errors_use_the_wire_refusal_vocabulary_test() ->
+     Id = <<77:128>>,
+@@ -32,10 +33,7 @@
+     ?assertEqual(
+        term_to_binary({quod_dtx, Ns}, [deterministic]),
+        quod_dtx_endpoint:channel(Ns)),
+-    ?assertEqual(?QUOD_MAX_FOREIGN_PAGE_BYTES,
+-                 ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES),
+-    ?assert(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES <
+-            ?QUOD_LINK_PAYLOAD_CAPACITY).
++    ?assertEqual((1 bsl 32) - 1, ?QUOD_LINK_PAYLOAD_CAPACITY).
+ 
+ trace_carrier_is_transport_only_and_never_changes_correlation_test() ->
+     Ns = <<"quod:endpoint">>,
+@@ -482,10 +480,10 @@
+        {error, {protocol_error, bad_etf}},
+        quod_dtx_endpoint:decode_request(Ns, <<131, 80, 0, 0, 0, 1, 0>>)),
+     ?assertEqual(
+-       {error, {too_large, dtx_endpoint}},
++       {error, {protocol_error, bad_etf}},
+        quod_dtx_endpoint:decode_request(
+          Ns,
+-         <<0:(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES + 1)/unit:8>>)),
++         <<0:(?LEGACY_QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES + 1)/unit:8>>)),
+ 
+     CompressedRecord = term_to_binary(binary_to_term(record_blob(), [safe]), [compressed]),
+     ?assertMatch(<<131, 80, _/binary>>, CompressedRecord),
+--- a/test/quod_dtx_tests.erl
++++ b/test/quod_dtx_tests.erl
+@@ -11,7 +11,6 @@
+ -include("quod_ledger.hrl").
+ -include("quod_client_goal_limits.hrl").
+ -include("quod_proof_limits.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ -define(NS, <<"quod:dtx">>).
+ 
+--- a/test/quod_entry_selection_tests.erl
++++ b/test/quod_entry_selection_tests.erl
+@@ -95,7 +95,7 @@
+ serve(Snapshot, From, To) ->
+     case quod_ledger_store:open_ro_snapshot(Snapshot) of
+         {ok, Reader} ->
+-            try quod_catchup:transfer_page(Reader, quod_catchup:transfer_open(Reader, From, To))
++            try quod_catchup:transfer_page(Reader, quod_catchup:transfer_open(Reader, From, To), unlimited)
+             after quod_ledger_store:close(Reader) end;
+         {error, _} = Error -> Error
+     end.
+--- a/test/quod_foreign_log_tests.erl
++++ b/test/quod_foreign_log_tests.erl
+@@ -1,6 +1,7 @@
+ -module(quod_foreign_log_tests).
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("opentelemetry/include/otel_span.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_proof_limits.hrl").
+@@ -177,7 +178,7 @@
+                              end;
+                          {continue, Token, Sequence} -> fixture_resume(Token, Sequence)
+                      end,
+-            {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender),
++            {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender, unlimited),
+             Continue = fixture_continue(Query, Next),
+             Test ! {foreign_stream_fetch, Query, Continue, Deadline},
+             H = quod_ledger_store:last(Read),
+@@ -3384,12 +3385,12 @@
+         end
+     end).
+ 
+-authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
++authenticated_bootstrap_candidates_are_complete_and_peer_unique_test() ->
+     Dir = temp_dir("bootstrap-bounds"),
+     Pid = start_owner(
+             Dir, fun(_, _, _, _, _, _) -> {error, unavailable} end),
+     Identity = {unique_ns(), key(95)},
+-    Limit = 2 * ?MAX_VALIDATORS,
++    Limit = 2 * ?LEGACY_MAX_VALIDATORS,
+     try
+         lists:foreach(
+           fun(N) ->
+@@ -3397,9 +3398,8 @@
+                 Identity, {key(1000 + N), {"127.0.0.1", 20000 + N}})
+           end, lists:seq(1, Limit + 1)),
+         Stats1 = quod_foreign_log:stats(),
+-        ?assertEqual(Limit, maps:get(bootstrap_candidates, Stats1)),
++        ?assertEqual(Limit + 1, maps:get(bootstrap_candidates, Stats1)),
+         ?assertEqual(Limit + 1, maps:get(bootstrap_accepted, Stats1)),
+-        ?assertEqual(1, maps:get(bootstrap_evicted, Stats1)),
+ 
+         %% Re-observing one authenticated peer replaces its endpoint; it
+         %% cannot consume another source slot for the same identity.
+@@ -3407,12 +3407,12 @@
+         Replacement = {"127.0.0.1", 29999},
+         quod_foreign_log:observe_candidate(Identity, {Peer, Replacement}),
+         {ok, Selected} = quod_foreign_log:route_hints(Identity, []),
+-        ?assert(length(Selected) =< ?MAX_VALIDATORS),
++        ?assertEqual(Limit + 1, length(Selected)),
+         ?assertEqual(length(Selected),
+                      length(lists:usort([K || {K, _} <- Selected]))),
+         ?assertEqual([{Peer, [Replacement]}],
+                      [Row || Row = {K, _} <- Selected, K =:= Peer]),
+-        ?assertEqual(Limit,
++        ?assertEqual(Limit + 1,
+                      maps:get(bootstrap_candidates,
+                               quod_foreign_log:stats()))
+     after
+@@ -3508,7 +3508,7 @@
+                         {evidence, KnownEra, Selection} -> fixture_evidence_sender(Read, KnownEra, Selection);
+                         {continue, Token, Sequence} -> fixture_resume(Token, Sequence)
+                     end,
+-                    {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender),
++                    {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender, unlimited),
+                     Continuation = fixture_continue(Query, Next),
+                     Height = quod_ledger_store:last(Read),
+                     {ok, Consume(Parts, Height, Continuation), Height, Continuation}
+@@ -3541,7 +3541,7 @@
+     CacheNs = quod_foreign_log:cache_namespace(Identity),
+     CacheLog = filename:join(
+                  quod_ledger_store:ns_dir(CacheDir, CacheNs), "log.0001"),
+-    ?assert(filelib:file_size(CacheLog) > ?QUOD_MAX_FOREIGN_PAGE_BYTES),
++    ?assert(filelib:file_size(CacheLog) > ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES),
+     NoFetch = fun(_, _, _, _, _, _) -> {error, network_used} end,
+     Pid2 = start_owner(CacheDir, NoFetch),
+     try
+@@ -3791,7 +3791,7 @@
+               quod_foreign_log:observe_candidate(
+                 Identity,
+                 {key(3000 + N), {"127.0.0.1", 22000 + N}})
+-          end, lists:seq(1, 2 * ?MAX_VALIDATORS)),
++          end, lists:seq(1, 2 * ?LEGACY_MAX_VALIDATORS)),
+         {ok, Candidates} = quod_foreign_log:route_hints(Identity, []),
+         ?assertEqual(
+            [OldLive, OldHistorical],
+@@ -3803,9 +3803,8 @@
+            lists:sort([Old, New]),
+            lists:sort([Key || {Key, _Endpoints} <- Candidates])),
+         Stats = quod_foreign_log:stats(),
+-        ?assertEqual(2 * ?MAX_VALIDATORS,
+-                     maps:get(bootstrap_candidates, Stats)),
+-        ?assertEqual(2, maps:get(bootstrap_evicted, Stats))
++        ?assertEqual(2 * ?LEGACY_MAX_VALIDATORS + 2,
++                     maps:get(bootstrap_candidates, Stats))
+     after
+         stop_owner(Pid),
+         _ = file:del_dir_r(Dir)
+@@ -7329,8 +7328,8 @@
+     Ns = <<"foreign:frame-bound">>,
+     Payload = largest_payload(Ns),
+     {ok, PayloadBytes} = quod_ledger:encoded_payload_size(Payload),
+-    ?assert(PayloadBytes =< ?MAX_BLOCK_BYTES),
+-    Signatures = lists:sort([{key(I), <<I:512>>} || I <- lists:seq(1, ?MAX_VALIDATORS)]),
++    ?assert(PayloadBytes =< ?LEGACY_MAX_BLOCK_BYTES),
++    Signatures = lists:sort([{key(I), <<I:512>>} || I <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)]),
+     Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
+     {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 2, Payload, 0),
+     {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), 2, empty, 0),
+@@ -7341,9 +7340,9 @@
+     Parts = [{group, 2, 2}, {entry, Blob},
+              {proof, quod_ledger:block_bytes(Carrier)},
+              {proof, quod_ledger:block_bytes(Material)}, end_group],
+-    Frame = quod_catchup:encode_frame(
++    {ok, Frame} = quod_catchup:encode_frame(
+               Ns, {history_page3, <<1:128>>, <<2:128>>, Parts, 2, done, <<3:128>>}),
+-    ?assert(byte_size(Frame) < ?QUOD_MAX_FOREIGN_PAGE_BYTES),
++    ?assert(byte_size(Frame) =< ?QUOD_LINK_PAYLOAD_CAPACITY),
+     ?assertMatch({ok, {history_page3, _, _, Parts, 2, done, _}, _},
+                  quod_catchup:decode_frame(Ns, Frame)).
+ 
+@@ -7740,7 +7739,7 @@
+     end.
+ 
+ fixture_evidence_pages(Store, Sender, Pages) ->
+-    case quod_catchup:transfer_page(Store, Sender) of
++    case quod_catchup:transfer_page(Store, Sender, unlimited) of
+         {ok, Parts, done} -> lists:append(lists:reverse([Parts | Pages]));
+         {ok, Parts, Next} -> fixture_evidence_pages(Store, Next, [Parts | Pages])
+     end.
+@@ -7783,10 +7782,10 @@
+ 
+ fixture_transfer_page([], Acc, _) -> {lists:reverse(Acc), []};
+ fixture_transfer_page([Part | Rest] = Parts, Acc, Bytes) ->
+-    {ok, Encoded} = quod_safe_term:encode_canonical(Part, ?QUOD_MAX_FOREIGN_PAGE_BYTES),
++    {ok, Encoded} = quod_safe_term:encode_canonical(Part, ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES),
+     Size = byte_size(Encoded),
+-    case length(Acc) < ?QUOD_MAX_FOREIGN_PAGE_ENTRIES andalso
+-         Bytes + Size =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
++    case length(Acc) < ?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES andalso
++         Bytes + Size =< ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES of
+         true -> fixture_transfer_page(Rest, [Part | Acc], Bytes + Size);
+         false -> {lists:reverse(Acc), Parts}
+     end.
+@@ -8157,7 +8156,7 @@
+     Ref.
+ 
+ largest_payload(Ns) ->
+-    largest_payload(Ns, 0, ?MAX_BLOCK_BYTES).
++    largest_payload(Ns, 0, ?LEGACY_MAX_BLOCK_BYTES).
+ 
+ largest_payload(Ns, Low, High) when Low + 1 >= High ->
+     {ok, Payload} = payload(Ns, Low),
+@@ -8169,7 +8168,7 @@
+         {error,too_large} = Error -> Error
+     end,
+     case SizeResult of
+-        {ok, Size} when Size =< ?MAX_BLOCK_BYTES ->
++        {ok, Size} when Size =< ?LEGACY_MAX_BLOCK_BYTES ->
+             largest_payload(Ns, Mid, High);
+         _ ->
+             largest_payload(Ns, Low, Mid)
+@@ -8513,3 +8512,10 @@
+     after
+         stop_owner(Owner), Link ! close, _ = file:del_dir_r(Dir)
+     end.
++
++all_authored_route_endpoints_keep_order_and_shape_test() ->
++    Routes = [{<<1:256>>, [{"first", 1001}, {"second", 1002}, {"third", 1003}]}],
++    ?assertEqual({ok, Routes}, quod_foreign_log:normalize_route_candidates(Routes)),
++    ?assertEqual(error, quod_foreign_log:normalize_route_candidates(Routes ++ Routes)),
++    ?assertEqual(error, quod_foreign_log:normalize_route_candidates([{<<1:256>>, [{"first", 1001}, {"first", 1001}]}])),
++    ?assertEqual(error, quod_foreign_log:normalize_route_candidates([{<<1:256>>, [{"first", 0}]}])).
+--- a/test/quod_foreign_residency_tests.erl
++++ b/test/quod_foreign_residency_tests.erl
+@@ -1,6 +1,7 @@
+ -module(quod_foreign_residency_tests).
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("opentelemetry/include/otel_span.hrl").
+ -include("quod_proof_limits.hrl").
+ 
+@@ -17,7 +18,7 @@
+     Dir = quod_foreign_log_tests:temp_dir("range-checkpoint"),
+     Owner = quod_foreign_log_tests:start_owner(
+         Dir, quod_foreign_log_tests:chain_fetch(Ns, Chain)),
+-    MFA = {quod_foreign_log, write_checkpoint, 5},
++    MFA = {quod_foreign_log, write_checkpoint, 7},
+     SyncMFA = {quod_foreign_log, persistence_stage, 2},
+     Session = trace:session_create(?MODULE, self(), []),
+     try
+@@ -28,8 +29,7 @@
+         ?assertMatch({ok, #{slot := Height}}, quod_foreign_log_tests:prime_projection(
+             [{Peer, [{"127.0.0.1", 19000}]}], Identity, Height, 3000)),
+         Delivery = trace:delivered(Session, all),
+-        Ranges = (Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
+-                 div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
++        Ranges = 1,
+         ?assertEqual({Ranges, Ranges}, checkpoint_calls(Delivery, {0, 0})),
+         assert_retained_entries(Owner, Identity, Chain)
+     after
+@@ -90,7 +90,7 @@
+ 
+ checkpoint_calls(Delivery, {Count, Syncs}) ->
+     receive
+-        {trace, _, call, {quod_foreign_log, write_checkpoint, 5}} ->
++        {trace, _, call, {quod_foreign_log, write_checkpoint, 7}} ->
+             checkpoint_calls(Delivery, {Count + 1, Syncs});
+         {trace, _, call, {quod_foreign_log, persistence_stage, 2}} ->
+             checkpoint_calls(Delivery, {Count, Syncs + 1});
+--- a/test/quod_genesis_tests.erl
++++ b/test/quod_genesis_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_genesis_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -44,27 +45,27 @@
+          Base#{genesis_diff => [
+                   {assert, {{valid_prefix, ok}, true}} | improper_tail]})).
+ 
+-founding_committee_cap_test() ->
++founding_committee_has_no_population_quota_test() ->
+     Self = <<0:256>>,
+-    Members = [<<I:256>> || I <- lists:seq(1, ?MAX_VALIDATORS)],
++    Members = [<<I:256>> || I <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
+     AtLimit = (base_config(Self))#{committee => lists:sublist(
+                                                   Members,
+-                                                  ?MAX_VALIDATORS - 1)},
++                                                  ?LEGACY_MAX_VALIDATORS - 1)},
+     AboveLimit = (base_config(Self))#{committee => Members},
+     ?assertEqual(ok, quod_simplex:test_valid_config(AtLimit)),
+     ?assertEqual(
+-       {error, {committee_too_large, ?MAX_VALIDATORS + 1}},
++       ok,
+        quod_simplex:test_valid_config(AboveLimit)).
+ 
+ genesis_configuration_does_not_readmit_retained_content_test() ->
+     Self = <<0:256>>,
+     Base = base_config(Self),
+     %% Configuration is also inspected on resume, where the source is ignored.
+-    %% Only a fresh founding's complete encoded envelope determines capacity.
+-    AboveEnvelope = sized_diff(?MAX_BLOCK_BYTES + 1),
++    %% Retained source is not readmitted; fresh founding keeps its complete material.
++    AboveEnvelope = sized_diff(?LEGACY_MAX_BLOCK_BYTES + 1),
+     ?assertEqual(ok, quod_simplex:test_valid_genesis_source(
+                        Base#{genesis_diff => AboveEnvelope})),
+-    ?assertMatch({error, _}, quod_simplex:prepare_genesis(
++    ?assertMatch({ok, _, _}, quod_simplex:prepare_genesis(
+                    Base#{genesis_diff => AboveEnvelope}, <<"genesis:oversized">>, Self)).
+ 
+ generated_genesis_source_equivalence_test() ->
+@@ -125,18 +126,17 @@
+        quod_simplex:genesis_predicate_manifest(
+          Genesis0#transaction{diff = [Malformed | Diff0]})).
+ 
+-complete_genesis_keeps_block_bound_test() ->
++complete_genesis_retains_all_authored_material_test() ->
+     Self = <<0:256>>,
+     Ns = <<"genesis:complete-bound">>,
+     Incarnation = <<16#6b:256>>,
+-    InitialDiff = sized_diff(?MAX_BLOCK_BYTES - 64 * 1024),
+-    %% Initial content alone fits the carrier. The generated
+-    %% committee fact pushes the complete transaction above the block limit.
++    InitialDiff = sized_diff(?LEGACY_MAX_BLOCK_BYTES - 64 * 1024),
++    %% Include generated committee facts beyond the historical block quota.
+     OversizedHost = binary:copy(<<"h">>, 70 * 1024),
+     Config =
+         (base_config(Self))#{
+           committee => [{<<1:256>>, OversizedHost, 14567}],
+           genesis_diff => InitialDiff},
+-    ?assertThrow(
+-       {genesis_failed, invalid_generated_genesis},
++    ?assertMatch(
++       #transaction{},
+        quod_simplex:test_genesis_tx(Config, Ns, Self, Incarnation)).
+--- a/test/quod_ingress_state_tests.erl
++++ b/test/quod_ingress_state_tests.erl
+@@ -1,6 +1,7 @@
+ -module(quod_ingress_state_tests).
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -229,10 +230,10 @@
+          entry, local, Membership, NonEmptyBatch)),
+     OversizedChange =
+         (tx(<<"oversized">>, B, 0, none))#transaction{
+-          goal = binary:copy(<<0>>, ?MAX_BLOCK_BYTES)},
++          goal = binary:copy(<<0>>, ?LEGACY_MAX_BLOCK_BYTES)},
+     Oversized = quod_ingress_state:request(OversizedChange),
+     ?assertEqual(
+-       {reject, too_large},
++       {collect, 4},
+        route(
+          entry, local, Oversized,
+          with_view(B, [A, B], #{}))).
+@@ -293,22 +294,20 @@
+     ?assertEqual(0, quod_ingress_state:count(Reset)),
+     ?assertEqual(Source, quod_ingress_state:view_source(Reset)).
+ 
+-queue_per_author_bound_test() ->
++queue_preserves_all_authors_test() ->
+     [A, B] = validators(),
+     Request = request(<<"bounded">>, A, 0, none, false),
+     S0 = with_view(B, [A, B], #{}),
+     Prepared = prepared(Request, S0),
+     S64 = enqueue_n(64, Prepared, S0),
+-    ?assertEqual(
+-       full,
+-       quod_ingress_state:enqueue(
+-         local, overflow, Prepared, 65, S64)),
++    {ok, 65, Expanded} = quod_ingress_state:enqueue(
++         local, next, Prepared, 65, S64),
+     Other = request(<<"other">>, B, 0, none, false),
+-    OtherPrepared = prepared(Other, S64),
+-    {ok, 65, S65} =
+-        quod_ingress_state:enqueue(
+-          local, other, OtherPrepared, 66, S64),
+-    ?assertEqual(#{A => 64, B => 1},
++    OtherPrepared = prepared(Other, Expanded),
++    {ok, 66, S65} =
++        quod_ingress_state:enqueue(
++          local, other, OtherPrepared, 66, Expanded),
++    ?assertEqual(#{A => 65, B => 1},
+                  maps:get(authors,
+                           quod_ingress_state:summary(S65))).
+ 
+--- a/test/quod_ledger_artifact_tests.erl
++++ b/test/quod_ledger_artifact_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_ledger_artifact_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -35,7 +36,7 @@
+                    Block#block{timestamp = 77}, Block#block{payload = {batch, []}},
+                    Block#block{block_bytes = <<>>}]).
+ 
+-block_binding_owns_the_payload_limit_test() ->
++block_binding_preserves_exact_large_payload_test() ->
+     F = fixture(quod_ledger), {Ns, Anchor} = Binding = maps:get(binding, F),
+     Make = fun(Size) ->
+         Base = maps:get(transaction, F),
+@@ -45,20 +46,19 @@
+         {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Tx1, maps:get(signer, F)),
+         {ok, Blob} = quod_transaction:encode_ledger_transaction(Tx),
+         Wire = {batch, [{transaction, Blob}]},
+-        {ok, PayloadBytes} = quod_safe_term:encode_canonical(Wire, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
++        {ok, PayloadBytes} = quod_safe_term:encode_canonical(Wire, unlimited),
+         {Tx, Wire, byte_size(PayloadBytes)}
+     end,
+     {_, _, Overhead} = Make(0),
+     lists:foreach(fun(Extra) ->
+-        {Tx, Wire, Size} = Make(?MAX_BLOCK_BYTES - Overhead + Extra),
+-        ?assertEqual(?MAX_BLOCK_BYTES + Extra, Size),
++        {Tx, Wire, Size} = Make(?LEGACY_MAX_BLOCK_BYTES - Overhead + Extra),
++        ?assertEqual(?LEGACY_MAX_BLOCK_BYTES + Extra, Size),
+         Era = maps:get(era, F), Max = (1 bsl 64) - 1,
+         Root = {Era, Max - 1, maps:get(anchor, F)},
+         Bytes = canonical({quod_block, 3, Era, Max, Root, Max, Wire, Max}),
+-        ?assert(byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
+         Block = #block{era = Era, slot = Max, parent = Root, height = Max, payload = {batch, [Tx]}, timestamp = Max, block_bytes = Bytes},
+-        ?assertEqual(Extra =:= 0, quod_ledger:valid_block_view(Block)),
+-        ?assertEqual(Extra =:= 0, quod_simplex:well_formed_block(Block))
++        ?assert(quod_ledger:valid_block_view(Block)),
++        ?assert(quod_simplex:well_formed_block(Block))
+     end, [0, 1]).
+ 
+ checked_constructors_reject_changed_views_test() ->
+--- a/test/quod_lens_tests.erl
++++ b/test/quod_lens_tests.erl
+@@ -11,7 +11,6 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ %% The components this ontology's own release actually has, in miniature: two
+ %% licences whose copyleft stops at the file, one that stops at the library's
+--- a/test/quod_licence_tests.erl
++++ b/test/quod_licence_tests.erl
+@@ -8,7 +8,6 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ -define(NS, <<"quod:licence">>).
+ 
+--- a/test/quod_lifecycle_single_path_tests.erl
++++ b/test/quod_lifecycle_single_path_tests.erl
+@@ -2,7 +2,6 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include("quod_ledger.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ -define(ROOT_NS, <<"quod:root">>).
+ -define(NODE_NS, <<"quod:node">>).
+--- a/test/quod_link_tests.erl
++++ b/test/quod_link_tests.erl
+@@ -130,7 +130,7 @@
+           Link ! {data, frame(<<>>), false},
+           receive {link_up, Channel, _, Link, out} -> ?assert(false)
+           after 20 -> ok end,
+-          Credit = frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})),
++          Credit = frame(catchup_frame(Ns, {history_credit3, Grant})),
+           <<Prefix:5/binary, Rest/binary>> = Credit,
+           Link ! {data, Prefix, false},
+           Link ! {data, Rest, false},
+@@ -148,7 +148,7 @@
+           %% Transport must not decode entry bytes or mint atoms from them.
+           Opaque = <<"entry decoding belongs to the reader">>,
+           Response = {history_page3, Grant, ReqId, [{entry, Opaque}], 1, done, Next},
+-          Link ! {data, frame(quod_catchup:encode_frame(Ns, Response)), false},
++          Link ! {data, frame(catchup_frame(Ns, Response)), false},
+           receive
+               {catchup_page, Link, Binding, Grant, ReqId, {ok, [{entry, Opaque}], 1, done}, Next} -> ok
+           after 1000 -> error(no_page_result) end,
+@@ -156,7 +156,7 @@
+           after 20 -> ok end,
+           %% A duplicate terminal has no live operation and resets the stream.
+           MRef = monitor(process, Link),
+-          Link ! {data, frame(quod_catchup:encode_frame(Ns, Response)), false},
++          Link ! {data, frame(catchup_frame(Ns, Response)), false},
+           receive {'DOWN', MRef, process, Link, catchup_response_violation} -> ok
+           after 1000 -> error(duplicate_response_not_reset) end,
+           ?assert(is_process_alive(Conn))
+@@ -295,7 +295,7 @@
+       fun(Link, _Conn, _Tag, Ns, Channel) ->
+           Grant = <<50:128>>,
+           Link ! {data, <<(frame(<<>>))/binary,
+-                          (frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})))/binary>>,
++                          (frame(catchup_frame(Ns, {history_credit3, Grant})))/binary>>,
+                   false},
+           receive {link_up, Channel, _, Link, out} -> ok
+           after 1000 -> error(no_link_up) end,
+@@ -314,7 +314,7 @@
+       fun(Link, Conn, _Tag, Ns, Channel) ->
+           Grant = <<51:128>>,
+           Link ! {data, <<(frame(<<>>))/binary,
+-                          (frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})))/binary>>,
++                          (frame(catchup_frame(Ns, {history_credit3, Grant})))/binary>>,
+                   false},
+           receive {link_up, Channel, _, Link, out} -> ok
+           after 1000 -> error(no_link_up) end,
+@@ -423,7 +423,7 @@
+     Grant.
+ 
+ credit_request(Ns, Grant, ReqId) ->
+-    frame(quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, {range, 1, 1}})).
++    frame(catchup_frame(Ns, {history_request3, Grant, ReqId, {range, 1, 1}})).
+ 
+ stop_credit_link(Link) ->
+     MRef = monitor(process, Link),
+@@ -434,3 +434,7 @@
+ flush_credit_wire(Tag) ->
+     receive {credit_wire, Tag, _} -> flush_credit_wire(Tag)
+     after 0 -> ok end.
++
++catchup_frame(Ns, Term) ->
++    {ok, Bytes} = quod_catchup:encode_frame(Ns, Term),
++    Bytes.
+--- a/test/quod_measure_tests.erl
++++ b/test/quod_measure_tests.erl
+@@ -7,7 +7,6 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ signature_test() ->
+     with_measure(fun(St) ->
+--- a/test/quod_names_tests.erl
++++ b/test/quod_names_tests.erl
+@@ -10,7 +10,6 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ -define(NS, <<"quod:names">>).
+ -define(HALFLING_MALES, 48 * 8).
+--- a/test/quod_predicate_failure_tests.erl
++++ b/test/quod_predicate_failure_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_predicate_failure_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -91,7 +92,7 @@
+             {remove,<<2:256>>},proof_state(Base),#{}))
+     end),
+     Facts = [{peer_admitted,<<I:256>>,<<"host">>,1,<<I:256>>}
+-             || I <- lists:seq(1,?MAX_VALIDATORS)],
++             || I <- lists:seq(1,?LEGACY_MAX_VALIDATORS)],
+     with_state(Facts,fun(Base) ->
+         assert_reason(committee_full,quod_proof_session:run_first(
+             {admit,<<0:256>>,<<"host">>,1},proof_state(Base),#{}))
+--- a/test/quod_quorum_tests.erl
++++ b/test/quod_quorum_tests.erl
+@@ -1,6 +1,7 @@
+ -module(quod_quorum_tests).
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+ threshold_matches_simplex_rule_test() ->
+@@ -8,34 +9,34 @@
+                  [{N, quod_quorum:threshold(N)} || N <- [1, 3, 4, 7, 64]]).
+ 
+ committee_and_signature_bounds_are_shared_test() ->
+-    Members = [<<N:256>> || N <- lists:seq(1, ?MAX_VALIDATORS)],
+-    ?assertEqual({ok, ?MAX_VALIDATORS},
++    Members = [<<N:256>> || N <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
++    ?assertEqual({ok, ?LEGACY_MAX_VALIDATORS},
+                  quod_quorum:committee_size(Members)),
+-    ?assertEqual(error,
++    ?assertEqual({ok, ?LEGACY_MAX_VALIDATORS + 1},
+                  quod_quorum:committee_size(Members ++ [<<0:256>>])),
+     ?assertEqual(error,
+                  quod_quorum:committee_size([<<1:256>>, <<1:256>>])),
+     ?assertEqual({ok, 2},
+                  quod_quorum:committee_size([<<2:256>>, <<1:256>>])),
+     Rows = [{Member, <<0:512>>} || Member <- Members],
+-    ?assert(quod_quorum:valid_signature_list(Rows, ?MAX_VALIDATORS)),
++    ?assert(quod_quorum:valid_signature_list(Rows, ?LEGACY_MAX_VALIDATORS)),
+     ?assertNot(
+        quod_quorum:valid_signature_list(
+-         Rows ++ [{<<0:256>>, <<0:512>>}], ?MAX_VALIDATORS)).
++         Rows ++ [{<<0:256>>, <<0:512>>}], ?LEGACY_MAX_VALIDATORS)).
+ 
+ honest_threshold_has_one_arithmetic_owner_test() ->
+     ?assertEqual([1, 1, 2, 3, 22],
+                  [quod_quorum:honest_threshold(N) || N <- [1, 3, 4, 7, 64]]).
+ 
+ canonical_certificate_rows_share_shape_order_and_duplicate_rules_test() ->
+-    Rows = [{<<N:256>>, <<N:512>>} || N <- lists:seq(1, ?MAX_VALIDATORS)],
++    Rows = [{<<N:256>>, <<N:512>>} || N <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
+     [A, B | _] = Rows,
+     ?assert(quod_quorum:canonical_signatures([A])),
+     ?assert(quod_quorum:canonical_signatures(Rows)),
++    ?assert(quod_quorum:canonical_signatures(Rows ++ [{<<999:256>>, <<999:512>>}])),
+     lists:foreach(fun(Invalid) ->
+         ?assertNot(quod_quorum:canonical_signatures(Invalid))
+-    end, [[], [A, A], [B, A], [A | invalid], [invalid], [{<<1>>, <<2>>}],
+-          Rows ++ [{<<999:256>>, <<999:512>>}]]).
++    end, [[], [A, A], [B, A], [A | invalid], [invalid], [{<<1>>, <<2>>}]]).
+ 
+ honest_signature_rows_are_bounded_once_test() ->
+     {Pub, Identity} = identity(), Bytes = <<"one-signature-shape-pass">>,
+--- a/test/quod_receiver_decode_tests.erl
++++ b/test/quod_receiver_decode_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_receiver_decode_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_proof_limits.hrl").
+ 
+@@ -126,9 +127,9 @@
+     end).
+ 
+ page_count_limit_still_precedes_decoding_test() ->
+-    {Tx, _, _} = signed(), Count = ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
++    {Tx, _, _} = signed(), Count = ?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES,
+     Parts = [{entry, entry_bytes(Tx, I)} || I <- lists:seq(2, Count + 1)],
+-    ?assert(lists:sum([byte_size(B) || {entry, B} <- Parts]) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES),
++    ?assert(lists:sum([byte_size(B) || {entry, B} <- Parts]) =< ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES),
+     F = quod_ct:protocol_fixture(<<"receiver:limit">>),
+     Path = filename:join("/tmp", "quod-receiver-limit-" ++
+         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+--- a/test/quod_relay_tests.erl
++++ b/test/quod_relay_tests.erl
+@@ -1,6 +1,7 @@
+ -module(quod_relay_tests).
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_ingress_limits.hrl").
+ 
+@@ -166,7 +167,7 @@
+          setelement(6, Submit,
+                     {submit, Author, <<4:504>>, <<5, 6, 7>>}),
+          setelement(6, Submit,
+-                    {submit, Author, Signature, <<0:(?QUOD_MAX_CANONICAL_TRANSACTION_BYTES + 1)/unit:8>>}),
++                    {submit, Author, Signature, <<0:(?LEGACY_QUOD_MAX_CANONICAL_TRANSACTION_BYTES + 1)/unit:8>>}),
+          setelement(7, Submit, [{<<"baggage">>, <<"not-accepted">>}])],
+     [?assertEqual(
+        error,
+--- /dev/null
++++ b/test/quod_remaining_admission_tests.erl
+@@ -0,0 +1,69 @@
++%% Proposed tests only. Not installed or executed in this campaign.
++-module(quod_remaining_admission_tests).
++-include_lib("eunit/include/eunit.hrl").
++-include("erlog_int.hrl").
++-export([two_reasons/1]).
++
++committee_population_keeps_crypto_and_exact_honest_count_test() ->
++    Identities = [begin
++        {Pub, Seed} = quod_identity:generate(),
++        {Pub, #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}
++    end || _ <- lists:seq(1,65)],
++    Members = lists:sort([P || {P,_} <- Identities]),
++    Bytes = <<"remaining-admission/committee">>,
++    Rows = lists:sort([{P,quod_identity:sign(Bytes,I)} || {P,I} <- Identities]),
++    ?assertEqual({ok,65},quod_quorum:committee_size(Members)),
++    ?assert(quod_quorum:verify(Members,Bytes,Rows)),
++    Honest = lists:sublist(Rows,quod_quorum:honest_threshold(65)),
++    ?assert(quod_quorum:verify_honest(Members,Bytes,Honest)),
++    ?assertNot(quod_quorum:verify_honest(Members,Bytes,Rows)),
++    ?assertNot(quod_quorum:verify(Members,<<"wrong-domain">>,Rows)),
++    ?assertNot(quod_quorum:verify([hd(Members)|Members],Bytes,Rows)),
++    ?assertNot(quod_quorum:canonical_signatures([hd(Rows)|Rows])).
++
++complete_page_above_former_count_and_byte_quotas_test() ->
++    %% Carrier shape only; authenticated history acceptance is a separate owner.
++    Parts = [{group,N,N} || N <- lists:seq(1,257)] ++
++            [{entry,binary:copy(<<0>>,901*1024)}],
++    Page = {history_page3,<<1:128>>,<<2:128>>,Parts,257,done,<<3:128>>},
++    {ok,Blob} = quod_catchup:encode_frame(<<"remaining:test">>,Page),
++    ?assertMatch({ok,Page,_},quod_catchup:decode_frame(<<"remaining:test">>,Blob)),
++    ?assertMatch({error,_},quod_catchup:decode_frame(<<"wrong:owner">>,Blob)),
++    ?assertMatch({error,_},quod_catchup:decode_frame(<<"remaining:test">>,<<Blob/binary,0>>)),
++    ?assertMatch({error,_},quod_catchup:encode_frame(<<"remaining:test">>,setelement(4,Page,[invalid]))).
++
++callable_population_preserves_opaque_argument_data_test() ->
++    Names = [<<"remaining_callable_",(integer_to_binary(N))/binary>> || N <- lists:seq(1,513)],
++    Goal = lists:foldr(fun(N,Rest)->{',',{'$quod_symbol',N},Rest} end,true,Names),
++    ?assertMatch({ok,_},quod_wire_term:materialize_goal_symbols(Goal)),
++    Opaque = {'$quod_symbol',<<"unmaterialized_argument_",(binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>},
++    ?assertEqual({ok,{known,Opaque}},quod_wire_term:materialize_goal_symbols({known,Opaque})),
++    ?assertException(error,badarg,binary_to_existing_atom(element(2,Opaque),utf8)).
++
++single_effect_with_canonical_large_actor_keeps_semantic_singleton_test() ->
++    Text = <<"human_user(<<\"",(binary:copy(<<"a">>,2200))/binary,"\">>).">>,
++    {ok,#{blob := Actor}} = quod_agent_ref:from_text(<<"quod:agent">>,<<5:256>>,Text,2),
++    {ok,Effect} = quod_effect:new(create,<<1:256>>,{agent,Actor},
++                                  {<<"quod:effect">>,<<2:256>>},<<3:256>>,<<4:256>>),
++    ?assert(quod_effect:validate_list([Effect])),
++    ?assertNot(quod_effect:validate_list([Effect,Effect])),
++    ?assertNot(quod_effect:validate_list([{invalid_effect}])),
++    ?assertMatch({ok,_,_,_,_,_},quod_dtx:encode_material([],#{},[Effect],[],[])).
++
++complete_diagnostics_and_explicit_finite_callback_test() ->
++    {ok,Native} = erlog_int:new(erlog_db_dict,null),
++    St = erlog_int:set_failure_reason_policy({quod_wire_term,valid_failure_reason_stack},Native),
++    Large = {because,binary:copy(<<"d">>,4097)},
++    Next = lists:foldl(fun(_,S)->erlog_int:add_failure_reason(Large,S) end,St,lists:seq(1,257)),
++    Reasons = Next#est.fail_reasons,
++    ?assertEqual(257,length(Reasons)),
++    ?assertNot(lists:member(fail_reasons_truncated,Reasons)),
++    {ok,Blob} = quod_wire_term:encode_failure_reasons(Reasons),
++    ?assertEqual({ok,Reasons},quod_wire_term:decode_failure_reasons(Blob)),
++    ?assertEqual({error,bad_term},quod_wire_term:encode_failure_reasons([{'Unbound'}])),
++    ?assertEqual({error,bad_term},quod_wire_term:encode_failure_reasons([ok|invalid])),
++    Finite = erlog_int:set_failure_reason_policy({?MODULE,two_reasons},Native),
++    Refused = lists:foldl(fun(_,S)->erlog_int:add_failure_reason(reason,S) end,Finite,lists:seq(1,3)),
++    ?assertEqual([fail_reasons_truncated,reason],Refused#est.fail_reasons).
++
++two_reasons(Reasons) -> length(Reasons) =< 2.
+--- a/test/quod_rendering_tests.erl
++++ b/test/quod_rendering_tests.erl
+@@ -9,7 +9,6 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ kinds_declare_their_fields_in_order_test() ->
+     with_rendering(fun(St) ->
+--- a/test/quod_runtime_tests.erl
++++ b/test/quod_runtime_tests.erl
+@@ -539,7 +539,6 @@
+            #{followed_histories := 1, follow_consumers := 1,
+              projection_workers := 1, follow_building := 0,
+              follow_unreachable := 0}, FollowStats),
+-        ?assert(maps:get(follow_pages, FollowStats) > 0),
+         ?assert(maps:get(follow_entries, FollowStats) > 0),
+         ?assert(maps:get(projection_rebuilds, FollowStats) > 0),
+         ?assertMatch(
+--- a/test/quod_scope_wire_tests.erl
++++ b/test/quod_scope_wire_tests.erl
+@@ -2,6 +2,7 @@
+ -include("retired_presentation_sizes.hrl").
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+ -include("quod_proof_limits.hrl").
+ 
+@@ -352,7 +353,7 @@
+ 
+ operation_effect_submission_crosses_scope_without_subquota_test() ->
+     SubmissionBlob =
+-        <<0:?QUOD_MAX_OPERATION_SUBMISSION_BYTES/unit:8>>,
++        <<0:?LEGACY_QUOD_MAX_OPERATION_SUBMISSION_BYTES/unit:8>>,
+     Command = command({bind_operation_effect, SubmissionBlob}),
+     {ok, Encoded} = quod_scope_wire:encode_command(Command),
+     %% This is the regression: the old independent 128 KiB envelope rejected
+@@ -506,7 +507,7 @@
+         ?assertEqual({ok, Value}, quod_scope_wire:decode_payload(Kind, Blob))
+     end, [goal, answer]),
+     exact_failure_reason_payload_boundary(),
+-    exact_payload_boundary(erlog_error, ?ERLOG_MAX_FAILURE_REASON_BYTES),
++    exact_payload_boundary(erlog_error, ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
+     ?assertEqual(
+        {ok, [{because, no_clause}]},
+        quod_scope_wire:decode_payload(
+@@ -521,18 +522,16 @@
+     Reasons = failure_reason_stack_at_wire_limit(),
+     {ok, AtLimit} = quod_scope_wire:encode_payload(
+                       failure_reasons, Reasons),
+-    ?assertEqual(?ERLOG_MAX_FAILURE_REASONS_BYTES, byte_size(AtLimit)),
++    ?assertEqual(?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES, byte_size(AtLimit)),
+     ?assertEqual(
+        {ok, Reasons},
+        quod_scope_wire:decode_payload(failure_reasons, AtLimit)),
+     Prefix = lists:droplast(Reasons),
+     Last = lists:last(Reasons),
+     TooLarge = Prefix ++ [<<Last/binary, 0>>],
+-    ?assertEqual(
+-       {error, {too_large, failure_reasons}},
+-       quod_scope_wire:encode_payload(failure_reasons, TooLarge)),
+-    ?assertEqual(
+-       {error, {too_large, failure_reasons}},
++    ?assertMatch({ok, _}, quod_scope_wire:encode_payload(failure_reasons, TooLarge)),
++    ?assertEqual(
++       {error, {protocol_error, bad_payload}},
+        quod_scope_wire:decode_payload(
+          failure_reasons, <<AtLimit/binary, 0>>)),
+     ?assertEqual(
+@@ -823,11 +822,9 @@
+     {ok, AtLimit} = quod_scope_wire:encode_payload(Kind, Term),
+     ?assertEqual(MaxBytes, byte_size(AtLimit)),
+     ?assertEqual({ok, Term}, quod_scope_wire:decode_payload(Kind, AtLimit)),
+-    ?assertEqual(
+-       {error, {too_large, Kind}},
+-       quod_scope_wire:encode_payload(Kind, <<Term/binary, "x">>)),
+-    ?assertEqual(
+-       {error, {too_large, Kind}},
++    ?assertMatch({ok, _}, quod_scope_wire:encode_payload(Kind, <<Term/binary, "x">>)),
++    ?assertEqual(
++       {error, {protocol_error, bad_payload}},
+        quod_scope_wire:decode_payload(Kind, <<AtLimit/binary, 0>>)).
+ 
+ reason_wire_size(Reason) ->
+@@ -846,15 +843,15 @@
+     Binary.
+ 
+ failure_reason_stack_at_wire_limit() ->
+-    MaxReason = reason_binary_at_wire_size(?ERLOG_MAX_FAILURE_REASON_BYTES),
++    MaxReason = reason_binary_at_wire_size(?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
+     Prefix = lists:duplicate(7, MaxReason),
+     BaseSize = reason_stack_wire_size(Prefix ++ [<<>>]),
+-    Growth = ?ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
++    Growth = ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
+     true = Growth >= 0,
+     Last = binary:copy(<<"s">>, Growth),
+-    true = reason_wire_size(Last) =< ?ERLOG_MAX_FAILURE_REASON_BYTES,
++    true = reason_wire_size(Last) =< ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES,
+     Reasons = Prefix ++ [Last],
+-    ?ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
++    ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
+     Reasons.
+ 
+ payload(Kind, Term) ->
+--- a/test/quod_simplex_tests.erl
++++ b/test/quod_simplex_tests.erl
+@@ -7,6 +7,7 @@
+ are covered by `simplex_SUITE`.
+ """.
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ -include_lib("opentelemetry/include/otel_span.hrl").
+ -include("quod_ledger.hrl").
+ -include("quod_ingress_limits.hrl").
+@@ -6113,7 +6114,7 @@
+ %% Capacity backpressure is author-local. A large A1 that cannot join the open
+ %% batch holds A2 behind it, preserving signed author sequence, while a small B
+ %% may fill the otherwise usable block. The held pair is restored in order.
+-blocked_author_does_not_block_other_authors_test() ->
++large_author_keeps_order_without_blocking_other_authors_test() ->
+     Committee = committee(4),
+     Validators = pubs(Committee),
+     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+@@ -6121,11 +6122,11 @@
+         [P || {Pub, _} = P <- Committee, Pub =/= Me],
+     Filler = signed_tx(
+                <<"t">>, <<"batch-filler">>,
+-               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
++               [{assert, {{blob, binary:copy(<<1>>, ?LEGACY_MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+                {FillerAuthor, FillerId}),
+     A1 = signed_tx_seq(
+            <<"t">>, <<"a-large">>, 10,
+-           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
++           [{assert, {{blob, binary:copy(<<2>>, ?LEGACY_MAX_BLOCK_BYTES div 2)}, true}}],
+            {AuthorA, IdA}),
+     A2 = signed_tx_seq(
+            <<"t">>, <<"a-small">>, 11,
+@@ -6150,26 +6151,19 @@
+     A1Origin = quod_simplex:test_relay_origin(AuthorA, 4, A1, Queued),
+     A2Origin = quod_simplex:test_relay_origin(AuthorA, 4, A2, Queued),
+     BOrigin = quod_simplex:test_relay_origin(AuthorB, 4, B, Queued),
+-    ?assertMatch({park, _},
++    ?assertEqual({collect, 4},
+                  quod_simplex:test_route(drain, A1Origin, A1, Queued)),
+     ?assertEqual({collect, 4},
+                  quod_simplex:test_route(drain, A2Origin, A2, Queued)),
+     ?assertEqual({collect, 4},
+                  quod_simplex:test_route(drain, BOrigin, B, Queued)),
+     {Drained, _Actions} = quod_simplex:test_drain(Queued),
+-    {2, _, #{AuthorA := 2},
+-     [{relayed, A1Id, _}, {relayed, A2Id, _}]} =
+-        quod_simplex:test_ingress(Drained),
+-    ?assertEqual(A1#transaction.tx_id, A1Id),
+-    ?assertEqual(A2#transaction.tx_id, A2Id),
+-    ?assertEqual(2, maps:get(appends, quod_simplex:stats_map(Drained))),
++    {0, 0, _, []} = quod_simplex:test_ingress(Drained),
++    ?assertEqual(4, maps:get(appends, quod_simplex:stats_map(Drained))),
+     ?assertNot(quod_simplex:test_ingress_needs_drain(Drained, Drained)).
+ 
+-%% The first pass can itself change routing: B and C fill and seal slot 4 while
+-%% A1/A2 are held behind A1's capacity block. The second pass must then revisit A
+-%% and reject its now-closed exact target. A one-pass drain leaves both A requests
+-%% stranded even though the route changed during the same statem event.
+-drain_rechecks_held_authors_after_route_change_test() ->
++%% All queued material is retained without an artificial batch-byte closure.
++large_batch_drain_preserves_all_authors_test() ->
+     Committee = committee(5),
+     Validators = pubs(Committee),
+     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+@@ -6178,11 +6172,11 @@
+         [P || {Pub, _} = P <- Committee, Pub =/= Me],
+     Filler = signed_tx(
+                <<"t">>, <<"multipass-filler">>,
+-               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
++               [{assert, {{blob, binary:copy(<<1>>, ?LEGACY_MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+                {FillerAuthor, FillerId}),
+     A1 = signed_tx_seq(
+            <<"t">>, <<"multipass-a-large">>, 10,
+-           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
++           [{assert, {{blob, binary:copy(<<2>>, ?LEGACY_MAX_BLOCK_BYTES div 2)}, true}}],
+            {AuthorA, IdA}),
+     A2 = signed_tx_seq(
+            <<"t">>, <<"multipass-a-small">>, 11,
+@@ -6210,8 +6204,8 @@
+     {Drained, _Actions} = quod_simplex:test_drain(Queued),
+     {0, 0, _, []} = quod_simplex:test_ingress(Drained),
+     Stats = quod_simplex:stats_map(Drained),
+-    ?assertEqual(3, maps:get(appends, Stats)),
+-    ?assertEqual(2, maps:get(r_redirect, Stats)).
++    ?assertEqual(5, maps:get(appends, Stats)),
++    ?assertEqual(0, maps:get(r_redirect, Stats)).
+ 
+ %% A participant can temporarily lose voting capability while recovering or while a
+ %% finality cert arrives before its block. Unsigned local work and authenticated
+@@ -6252,10 +6246,8 @@
+     {0, 0, _, []} = quod_simplex:test_ingress(Drained),
+     ?assertEqual(1, maps:get(appends, quod_simplex:stats_map(Drained))).
+ 
+-%% Shared and per-author bounds: overflow is the only remaining live source of busy.
+-%% A foreign author reaches this node only over the signed relay, so its park rides
+-%% the relayed entry; the flooding author's overflow never blocks anyone else's seat.
+-ingress_overflow_and_author_cap_test() ->
++%% The real append owner retains every distinct waiter while consensus is blocked.
++ingress_retains_all_authors_test() ->
+     Committee = committee(2),
+     Validators = pubs(Committee),
+     %% the node that leads the blocked-time floor (slot 6) — local items park HERE
+@@ -6275,13 +6267,13 @@
+     %% the 65th from the SAME author overflows busy; another author still parks
+     FromB = {self(), make_ref()},
+     {S65, A65} = quod_simplex:test_append(FromB, lt(65, Me), S64),
+-    ?assert(lists:member({reply, FromB, {error, busy}}, A65)),
+-    ?assertEqual(1, maps:get(ingress_overflow, quod_simplex:stats_map(S65))),
++    ?assertEqual([], A65),
++    ?assertMatch({65, _, #{Me := 65}, _}, quod_simplex:test_ingress(S65)),
+     OtherTx = signed_tx(<<"t">>, <<"other-park">>,
+                         [{assert, {{other, fact}, true}}], {Other, OtherId}),
+     {S66, []} = quod_simplex:test_relayed_append(
+                   Other, OtherTx, S65),
+-    {65, _, #{Other := 1}, _} = quod_simplex:test_ingress(S66).
++    {66, _, #{Me := 65, Other := 1}, _} = quod_simplex:test_ingress(S66).
+ 
+ %% TTL expiry fails VISIBLY (busy) and walks only the queue head — a stalled cluster
+ %% must never silently hold callers hostage.
+@@ -7150,7 +7142,7 @@
+ %% Ready custody always precedes this author's later unsigned ingress. In
+ %% particular, a large lower sequence that cannot fit the remaining active
+ %% batch must stop a later small write that otherwise could join and commit.
+-ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
++ready_lower_sequence_keeps_priority_without_byte_quota_test() ->
+     Committee = committee(4),
+     Validators = pubs(Committee),
+     Target4 = quod_simplex:leader(4, Validators),
+@@ -7167,11 +7159,11 @@
+            author = Me, sig = none, read_check = #{},
+            diff =
+                [{assert,
+-                 {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES div 2)}, true}}]}),
++                 {{blob, binary:copy(<<1>>, ?LEGACY_MAX_BLOCK_BYTES div 2)}, true}}]}),
+     Filler =
+         signed_tx(
+           <<"t">>, <<"ready-order-filler">>,
+-          [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
++          [{assert, {{blob, binary:copy(<<2>>, ?LEGACY_MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+           {FillerAuthor, FillerId}),
+     Small = bind_test_id(
+         #transaction{
+@@ -7214,7 +7206,7 @@
+         quod_simplex:test_relayed_append(
+           FillerAuthor, Filler, Ready),
+     ?assertEqual(
+-       {park, awaiting_turn},
++       {collect, 5},
+        quod_simplex:test_route(
+          drain, {custody, SubmissionId}, SignedLower, WithBatch)),
+ 
+@@ -7224,14 +7216,13 @@
+     {1, _, #{Me := 1}, [{local, SmallId, _}]} =
+         quod_simplex:test_ingress(ParkedSmall),
+     ?assertEqual(Small#transaction.tx_id, SmallId),
+-    {CustodyHeld, []} =
++    {CustodyHeld, _} =
+         quod_simplex:test_drain_custody(ParkedSmall),
+-    {StillHeld, []} = quod_simplex:test_drain(CustodyHeld),
+-    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+-        quod_simplex:test_custody(StillHeld),
+-    {1, _, #{Me := 1}, [{local, SmallId, _}]} =
+-        quod_simplex:test_ingress(StillHeld),
+-    ?assertEqual(1, maps:get(appends, quod_simplex:stats_map(StillHeld))),
++    {StillHeld, _} = quod_simplex:test_drain(CustodyHeld),
++    [{SubmissionId, 1, Submission, {local, 5}, Deadline, 1},
++     {_, 2, _, {local, 5}, _, 1}] = quod_simplex:test_custody(StillHeld),
++    {0, 0, _, []} = quod_simplex:test_ingress(StillHeld),
++    ?assertEqual(3, maps:get(appends, quod_simplex:stats_map(StillHeld))),
+     assert_no_reply(LowerFrom),
+     assert_no_reply(SmallFrom).
+ 
+@@ -8968,7 +8959,7 @@
+     ?assertNot(quod_simplex:verify_cert(?DOMAIN, Wrapped, Vals)).
+ 
+ validator_cap_certificate_boundary_test() ->
+-    N = ?MAX_VALIDATORS,
++    N = ?LEGACY_MAX_VALIDATORS,
+     Ids = committee(N + 1),
+     AtLimitIds = take(N, Ids),
+     AtLimitVals = pubs(AtLimitIds),
+@@ -9583,13 +9574,13 @@
+                  tx([{assert, {{peer_admitted, na, undefined, undefined, na}, true}}]), [A])),
+     ?assertNot(quod_simplex:membership_change_ok(tx([{retract, garbage}]), [A])).  %% catch-all is total
+ 
+-membership_gate_enforces_validator_cap_test() ->
+-    Current = [<<I:256>> || I <- lists:seq(1, ?MAX_VALIDATORS)],
+-    Candidate = <<(?MAX_VALIDATORS + 1):256>>,
++membership_gate_uses_shape_and_permission_not_population_test() ->
++    Current = [<<I:256>> || I <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
++    Candidate = <<(?LEGACY_MAX_VALIDATORS + 1):256>>,
+     ?assert(quod_simplex:membership_change_ok(
+               tx([pa(lists:last(Current))]),
+-              lists:sublist(Current, ?MAX_VALIDATORS - 1))),
+-    ?assertNot(quod_simplex:membership_change_ok(
++              lists:sublist(Current, ?LEGACY_MAX_VALIDATORS - 1))),
++    ?assert(quod_simplex:membership_change_ok(
+                  tx([pa(Candidate)]), Current)),
+     %% Reasserting an existing member does not grow the set and remains a
+     %% shape-valid no-op for the later KB verdict to classify.
+@@ -10300,3 +10291,35 @@
+     end.
+ 
+ result_state(Result) -> element(2, Result).
++
++outbox_preserves_every_distinct_frame_and_deduplicates_test() ->
++    Frames = [<<N:64>> || N <- lists:seq(1, 1025)],
++    Buffered = lists:foldl(fun quod_simplex:buffer_frame/2, [], Frames),
++    ?assertEqual(lists:reverse(Frames), Buffered),
++    ?assertEqual(Buffered, quod_simplex:buffer_frame(hd(Frames), Buffered)).
++
++held_membership_rechecks_after_same_event_batch_seal_test() ->
++    Committee = committee(4), Validators = pubs(Committee),
++    {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
++    [{A, IdA}, {B, IdB}, {C, IdC}] = [P || {Pub, _} = P <- Committee, Pub =/= Me],
++    First = signed_tx(<<"t">>, <<"fixed-point-first">>, [{assert, {{ordinary, first}, true}}], {B, IdB}),
++    Second = signed_tx(<<"t">>, <<"fixed-point-second">>, [{assert, {{ordinary, second}, true}}], {C, IdC}),
++    Membership = signed_tx_seq(<<"t">>, <<"fixed-point-member">>, 10, [pa(<<99:256>>)], {A, IdA}),
++    Tail = signed_tx_seq(<<"t">>, <<"fixed-point-tail">>, 11, [{assert, {{ordinary, tail}, true}}], {A, IdA}),
++    Base = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
++                slot => 3, history_head => {3, <<1:256>>}, eng => root_engine(3)}),
++    Now = quod_time:mono_ms(),
++    Queued = quod_simplex:test_state_set(ingress,
++        [{relayed, B, 4, First, Now}, {relayed, C, 4, Second, Now + 1},
++         {relayed, A, 4, Membership, Now + 2}, {relayed, A, 4, Tail, Now + 3}], Base),
++    %% The first two ordinary items form a batch. Membership cannot join it;
++    %% stopping that pass seals the batch and closes its exact relay target.
++    %% A single pass leaves the last two rows stranded. The existing fixed-point
++    %% owner must revisit and redirect both during this same test_drain call.
++    {Drained, Actions} = quod_simplex:test_drain(Queued),
++    ?assert(lists:member({{timeout, batch}, cancel}, Actions)),
++    ?assertMatch({0, 0, _, []}, quod_simplex:test_ingress(Drained)),
++    Stats = quod_simplex:stats_map(Drained),
++    ?assertEqual(2, maps:get(appends, Stats)),
++    ?assertEqual(2, maps:get(r_redirect, Stats)),
++    ?assertNot(quod_simplex:test_ingress_needs_drain(Drained, Drained)).
+--- a/test/quod_transaction_tests.erl
++++ b/test/quod_transaction_tests.erl
+@@ -2,7 +2,6 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include("quod_ledger.hrl").
+--include("quod_vm_limits.hrl").
+ 
+ -define(NS, <<"test:transactions">>).
+ -define(ANCHOR, <<11:256>>).
+--- a/test/quod_wire_term_tests.erl
++++ b/test/quod_wire_term_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_wire_term_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("retired_remaining_sizes.hrl").
+ 
+ self_scoped_symbols_use_the_same_admission_walk_test() ->
+     S = fun(B) -> {'$quod_symbol', B} end,
+@@ -272,16 +273,16 @@
+                  quod_wire_term:decode_failure_reasons(Blob)),
+     ?assertEqual(Blob, canonical_failure_reasons(Reasons)).
+ 
+-quod_policy_bounds_the_real_erlog_stack_before_encoding_test() ->
++quod_policy_preserves_the_real_erlog_stack_before_encoding_test() ->
+     {ok, Native0} = erlog_int:new(erlog_db_dict, null),
+     St0 = erlog_int:set_failure_reason_policy(
+             {quod_wire_term, valid_failure_reason_stack}, Native0),
+     St1 = lists:foldl(
+             fun(_, St) -> erlog_int:add_failure_reason(refused, St) end,
+-            St0, lists:seq(1, ?ERLOG_MAX_FAILURE_REASONS + 20)),
++            St0, lists:seq(1, ?LEGACY_ERLOG_MAX_FAILURE_REASONS + 20)),
+     CountBounded = St1#est.fail_reasons,
+-    ?assertEqual(?ERLOG_MAX_FAILURE_REASONS, length(CountBounded)),
+-    ?assertEqual(fail_reasons_truncated, hd(CountBounded)),
++    ?assertEqual(?LEGACY_ERLOG_MAX_FAILURE_REASONS + 20, length(CountBounded)),
++    ?assertNot(lists:member(fail_reasons_truncated, CountBounded)),
+     ?assert(quod_wire_term:valid_failure_reason_stack(CountBounded)),
+     {ok, CountBlob} = quod_wire_term:encode_failure_reasons(CountBounded),
+     ?assertEqual(
+@@ -289,23 +290,22 @@
+        quod_wire_term:decode_failure_reasons(CountBlob)),
+ 
+     %% Native ETF counts this high-arity reason below 4 KiB, while the
+-    %% atom-safe wire form is above it. The installed policy truncates at the
+-    %% creation seam instead of letting scope completion or Decision reject it.
++    %% atom-safe wire form is above it. Both representations preserve the reason.
+     CanonicallyLarge = list_to_tuple(lists:duplicate(1200, a)),
+     ?assert(erlang:external_size(CanonicallyLarge) =<
+-                ?ERLOG_MAX_FAILURE_REASON_BYTES),
++                ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
+     St2 = erlog_int:add_failure_reason(CanonicallyLarge, St0),
+-    ?assertEqual([fail_reasons_truncated], St2#est.fail_reasons),
++    ?assertEqual([CanonicallyLarge], St2#est.fail_reasons),
+     ?assert(quod_wire_term:valid_failure_reason_stack(
+               St2#est.fail_reasons)).
+ 
+ failure_reason_count_and_shape_bounds_are_exact_test() ->
+-    AtCount = lists:duplicate(?ERLOG_MAX_FAILURE_REASONS, refused),
++    AtCount = lists:duplicate(?LEGACY_ERLOG_MAX_FAILURE_REASONS, refused),
+     ?assertMatch({ok, _}, quod_wire_term:encode_failure_reasons(AtCount)),
+-    ?assertEqual(
+-       {error, too_large},
++    ?assertMatch(
++       {ok, _},
+        quod_wire_term:encode_failure_reasons([refused | AtCount])),
+-    ?assertNot(quod_wire_term:valid_failure_reason_stack(
++    ?assert(quod_wire_term:valid_failure_reason_stack(
+                  [refused | AtCount])),
+     ?assertEqual(
+        {error, bad_term},
+@@ -318,24 +318,24 @@
+        quod_wire_term:encode_failure_reasons([ok | improper_tail])).
+ 
+ failure_reason_canonical_byte_bounds_are_exact_test() ->
+-    AtReason = reason_binary_at_wire_size(?ERLOG_MAX_FAILURE_REASON_BYTES),
++    AtReason = reason_binary_at_wire_size(?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
+     ?assertMatch(
+        {ok, _}, quod_wire_term:encode_failure_reasons([AtReason])),
+-    ?assertEqual(
+-       {error, too_large},
++    ?assertMatch(
++       {ok, _},
+        quod_wire_term:encode_failure_reasons(
+          [<<AtReason/binary, 0>>])),
+ 
+     AtStack = failure_reason_stack_at_wire_limit(),
+     {ok, AtLimitBlob} = quod_wire_term:encode_failure_reasons(AtStack),
+-    ?assertEqual(?ERLOG_MAX_FAILURE_REASONS_BYTES,
++    ?assertEqual(?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES,
+                  byte_size(AtLimitBlob)),
+     ?assertEqual({ok, AtStack},
+                  quod_wire_term:decode_failure_reasons(AtLimitBlob)),
+     Prefix = lists:droplast(AtStack),
+     Last = lists:last(AtStack),
+-    ?assertEqual(
+-       {error, too_large},
++    ?assertMatch(
++       {ok, _},
+        quod_wire_term:encode_failure_reasons(
+          Prefix ++ [<<Last/binary, 0>>])).
+ 
+@@ -371,13 +371,13 @@
+     Binary.
+ 
+ failure_reason_stack_at_wire_limit() ->
+-    MaxReason = reason_binary_at_wire_size(?ERLOG_MAX_FAILURE_REASON_BYTES),
++    MaxReason = reason_binary_at_wire_size(?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
+     Prefix = lists:duplicate(7, MaxReason),
+     BaseSize = reason_stack_wire_size(Prefix ++ [<<>>]),
+-    Growth = ?ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
++    Growth = ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
+     true = Growth >= 0,
+     Last = binary:copy(<<"s">>, Growth),
+-    true = reason_wire_size(Last) =< ?ERLOG_MAX_FAILURE_REASON_BYTES,
++    true = reason_wire_size(Last) =< ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES,
+     Reasons = Prefix ++ [Last],
+-    ?ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
++    ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
+     Reasons.
+--- /dev/null
++++ b/test/retired_remaining_sizes.hrl
+@@ -0,0 +1,19 @@
++%% Regression input sizes from the retained failing baseline; never runtime quotas.
++-ifndef(RETIRED_REMAINING_SIZES_HRL).
++-define(RETIRED_REMAINING_SIZES_HRL, true).
++-define(LEGACY_MAX_VALIDATORS, 64).
++-define(LEGACY_MAX_INGRESS_TXS, 512).
++-define(LEGACY_MAX_BLOCK_BYTES, 456832).
++-define(LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
++-define(LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES, 921600).
++-define(LEGACY_QUOD_MAX_DIRECT_EFFECT_BYTES, 2048).
++-define(LEGACY_QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES, 921600).
++-define(LEGACY_QUOD_MAX_CANONICAL_BLOCK_BYTES, 457073).
++-define(LEGACY_QUOD_MAX_CANONICAL_TRANSACTION_BYTES, 456689).
++-define(LEGACY_QUOD_MAX_OPERATION_SUBMISSION_BYTES, 456817).
++-define(LEGACY_QUOD_MAX_NEW_MATERIAL_ATOMS, 512).
++-define(LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES, 4096).
++-define(LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES, 32768).
++-define(LEGACY_ERLOG_MAX_FAILURE_REASONS, 256).
++-define(LEGACY_ERLOG_MAX_FAILURE_BOUNDARIES, 256).
++-endif.

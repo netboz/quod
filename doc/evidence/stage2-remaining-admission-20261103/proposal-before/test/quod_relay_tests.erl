@@ -1,0 +1,193 @@
+-module(quod_relay_tests).
+
+-include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
+-include("quod_ingress_limits.hrl").
+
+frame_dispatch_test() ->
+    Ns = <<"relay:test">>,
+    SubmissionId = <<1:128>>,
+    AttemptId = <<2:128>>,
+    CommitteeId = <<8:256>>,
+    Slot = 17,
+    Submission = {submit, <<3:256>>, <<4:512>>, <<5, 6, 7>>},
+    Carrier =
+        [{<<"traceparent">>,
+          <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>}],
+    Submit =
+        {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
+         Submission, Carrier},
+    Accepted =
+        {relay_accepted, SubmissionId, AttemptId, CommitteeId, Slot},
+    Result =
+        {relay_result, SubmissionId, AttemptId, CommitteeId,
+         Slot, {ok, Slot}},
+    [?assertEqual(
+       {relay, Message},
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Message), Ns))
+     || Message <- [Submit, Accepted, Result]],
+    MaxSlotSubmit = setelement(5, Submit, 16#FFFFFFFFFFFFFFFF),
+    ?assertEqual(
+       {relay, MaxSlotSubmit},
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, MaxSlotSubmit), Ns)),
+    ?assertEqual(
+       error,
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Submit), <<"other:ontology">>)),
+
+    Consensus = {share, example},
+    Inner = term_to_binary(Consensus, [deterministic]),
+    Frame = term_to_binary({sx3, Ns, Inner}, [deterministic]),
+    ?assertEqual({consensus, Consensus},
+                 quod_relay:decode_consensus_frame(Frame, Ns)),
+    ?assertEqual(error, quod_relay:decode_relay_frame(Frame, Ns)),
+    ?assertEqual(
+       error, quod_relay:decode_consensus_frame(Frame, <<"other">>)),
+    ?assertEqual(
+       error,
+       quod_relay:decode_consensus_frame(
+         quod_relay:encode(Ns, Submit), Ns)),
+    OldRelay = term_to_binary({sx_relay, Ns, term_to_binary(Submit, [deterministic])}),
+    ?assertEqual(error, quod_relay:decode_relay_frame(OldRelay, Ns)),
+    OldFrame = term_to_binary({sx2, Ns, Inner}, [deterministic]),
+    ?assertEqual(error, quod_relay:decode_consensus_frame(OldFrame, Ns)),
+    ?assertEqual(error, quod_relay:decode_consensus_frame(term_to_binary({sx, Ns, Inner}), Ns)).
+
+canonical_block_and_sidecar_wire_test() ->
+    Ns = <<"relay:canonical">>,
+    F = quod_ct:protocol_fixture(Ns),
+    {_Ns, Anchor} = maps:get(identity, F), Era = maps:get(era, F),
+    Tx = maps:get(transaction, F),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, 2, {batch, [Tx]}, 7),
+    Entry = quod_ledger:entry(2, Block, quod_ct:protocol_certificate(Block, F)),
+    {ok, Ref} = quod_dtx:certified_entry_ref(maps:get(identity, F), Entry, Tx),
+    Hints = [{Ref, Entry}],
+    Frame = quod_relay:encode_consensus_frame(
+              Ns, {propose, Block, Hints}),
+    {sx3, Ns, Inner} = binary_to_term(Frame, [safe]),
+    {propose_bytes, BlockBytes,
+     [{entry_bytes, Ref, EntryBytes}]} = binary_to_term(Inner, [safe]),
+    ?assertEqual(quod_ledger:block_bytes(Block), BlockBytes),
+    ?assert(is_binary(EntryBytes)),
+    {consensus, {propose, Block, [{Ref, Received}]}} =
+        quod_relay:decode_consensus_frame(Frame, Ns),
+    ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Received)),
+    ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Received)),
+
+    SubmitFrame = quod_relay:encode_consensus_frame(
+                    Ns, {dtx_submit, [<<"control">>], Hints}),
+    {sx3, Ns, SubmitInner} = binary_to_term(SubmitFrame, [safe]),
+    {dtx_submit_bytes, [<<"control">>],
+     [{entry_bytes, Ref, EntryBytes}]} =
+        binary_to_term(SubmitInner, [safe]),
+    {consensus, {dtx_submit, [<<"control">>], [{Ref, Submitted}]}} =
+        quod_relay:decode_consensus_frame(SubmitFrame, Ns),
+    ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Submitted)).
+
+decoded_block_wire_shapes_are_hard_rejected_test() ->
+    Ns = <<"relay:old-record-wire">>,
+    Payload = quod_ct:atomic_resolve_payload(),
+    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, 2, Payload, 7),
+    OldMessages =
+        [{propose, Block, []},
+         {certified_block, Block, none},
+         {dtx_submit, [<<"control">>], []}],
+    lists:foreach(
+      fun(Message) ->
+          Inner = term_to_binary(Message, [deterministic]),
+          Frame = term_to_binary({sx3, Ns, Inner}, [deterministic]),
+          ?assertEqual(error,
+                       quod_relay:decode_consensus_frame(Frame, Ns))
+      end, OldMessages).
+
+certified_reply_carries_hash_not_a_second_certificate_test() ->
+    Ns = <<"relay:certified-by-requester">>,
+    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, 1, empty, 7),
+    Hash = quod_simplex:block_hash(Block),
+    Frame = quod_relay:encode_consensus_frame(Ns, {certified_block, Block, Hash}),
+    ?assertEqual({consensus, {certified_block, Block, Hash}},
+                 quod_relay:decode_consensus_frame(Frame, Ns)),
+    {sx3, Ns, Inner} = binary_to_term(Frame, [safe]),
+    ?assertEqual({certified_block_bytes, quod_ledger:block_bytes(Block), Hash},
+                 binary_to_term(Inner, [safe])),
+    %% A transport-only clean break; no legacy certificate-bearing reply arm.
+    lists:foreach(fun(OldOrMalformed) ->
+        Bytes = term_to_binary({certified_block_bytes, quod_ledger:block_bytes(Block), OldOrMalformed}),
+        ?assertEqual(error, quod_relay:decode_consensus_frame(
+                             term_to_binary({sx3, Ns, Bytes}), Ns))
+    end, [none, {cert, support, 2, Hash, []}, <<0:248>>, <<0:264>>]).
+
+bounded_result_cache_test() ->
+    Now = quod_time:mono_ms(),
+    AttemptId = <<1:128>>,
+    Expired = #{<<0:128>> => {peer, old, Now - 1}},
+    Live = quod_relay:put_result(
+             AttemptId, {peer, fresh, Now + 1000}, Expired),
+    ?assertEqual(false, maps:is_key(<<0:128>>, Live)),
+    ?assertEqual(
+       {peer, fresh, Now + 1000}, maps:get(AttemptId, Live)),
+    NotOverwritten =
+        quod_relay:put_result(
+          AttemptId, {other_peer, divergent, Now + 9000}, Live),
+    ?assertEqual(Live, NotOverwritten).
+
+frame_shape_rejection_test() ->
+    Ns = <<"relay:bounds">>,
+    Sid = <<1:128>>,
+    Aid = <<2:128>>,
+    CommitteeId = <<8:256>>,
+    Slot = 7,
+    Author = <<3:256>>,
+    Signature = <<4:512>>,
+    Submission = {submit, Author, Signature, <<5, 6, 7>>},
+    Carrier = [],
+    Submit =
+        {relay_submit, Sid, Aid, CommitteeId, Slot, Submission, Carrier},
+    UnsupportedShapes =
+        [{relay_submit, Sid, Slot, Submission, Carrier},
+         {relay_accepted, Sid},
+         {relay_result, Sid, {ok, Slot}}],
+    [?assertEqual(
+       error,
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Unsupported), Ns))
+     || Unsupported <- UnsupportedShapes],
+    BadSubmits =
+        [setelement(2, Submit, <<1:120>>),
+         setelement(3, Submit, <<2:120>>),
+         setelement(4, Submit, <<8:248>>),
+         setelement(5, Submit, 0),
+         setelement(5, Submit, 16#10000000000000000),
+         setelement(5, Submit, <<"7">>),
+         setelement(6, Submit,
+                    {submit, <<3:248>>, Signature, <<5, 6, 7>>}),
+         setelement(6, Submit,
+                    {submit, Author, <<4:504>>, <<5, 6, 7>>}),
+         setelement(6, Submit,
+                    {submit, Author, Signature, <<0:(?QUOD_MAX_CANONICAL_TRANSACTION_BYTES + 1)/unit:8>>}),
+         setelement(7, Submit, [{<<"baggage">>, <<"not-accepted">>}])],
+    [?assertEqual(
+       error,
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Bad), Ns))
+     || Bad <- BadSubmits],
+    Accepted = {relay_accepted, Sid, Aid, CommitteeId, Slot},
+    Result = {relay_result, Sid, Aid, CommitteeId, Slot, {ok, Slot}},
+    BadReplies =
+        [setelement(2, Accepted, <<1:120>>),
+         setelement(3, Accepted, <<2:120>>),
+         setelement(4, Accepted, <<8:248>>),
+         setelement(5, Accepted, 0),
+         setelement(2, Result, <<1:120>>),
+         setelement(3, Result, <<2:120>>),
+         setelement(4, Result, <<8:248>>),
+         setelement(5, Result, 16#10000000000000000),
+         setelement(6, Result, {ok, 0}),
+         setelement(6, Result, {error, unknown})],
+    [?assertEqual(
+       error,
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Bad), Ns))
+     || Bad <- BadReplies].

@@ -1,0 +1,95 @@
+OWNER_BEAMS [{erlog_int,"/checks/lib/erlog/ebin/erlog_int.beam"},
+             {quod_prolog,"/checks/lib/quod/ebin/quod_prolog.beam"},
+             {quod_erlog_db_local_prove,
+                 "/checks/lib/quod/ebin/quod_erlog_db_local_prove.beam"},
+             {quod_agent_hosting_tests,
+                 "/checks/lib/quod/test/quod_agent_hosting_tests.beam"}]
+======================== EUnit ========================
+quod_foreign_log_tests: -era_foreign_stream_restores_a_long_witness_and_restarts_test_/0-fun-0-...*failed*
+in function quod_foreign_log_tests:foreign_stream_case/2 (/checks/source/test/quod_foreign_log_tests.erl, line 169)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{badmatch,{error,bad_frame}}
+  output:<<"">>
+
+quod_foreign_log_tests: building_subscriber_baselines_without_replaying_live_occurrences_test...[0.183 s] ok
+quod_foreign_log_tests: material_network_dependency_stops_route_failover_test...*failed*
+in function quod_ct:commit_kb/3 (/checks/source/test/quod_ct.erl, line 1021)
+  called as commit_kb({est,[],#{},1,
+     {db,quod_erlog_db_mvcc,
+         {ref,#Ref<23074.2032814976.1874198529.54019>,0,#{},none},
+         [],#{},#{}},
+     [{bounded,false,none},
+      {debug,off,[off,on]},
+      {dialect,erlog,none},
+      {double_quotes,codes,none},
+      {iso,true,none},
+      {max_arity,250,...},
+      {unknown,...},
+      {...}],
+     [],0,false,0,
+     {quod_wire_term,valid_failure_reason_stack},
+     0,none},1,1)
+in call from quod_ct:signed_fixture_plan/6 (/checks/source/test/quod_ct.erl, line 451)
+in call from quod_ct:'-signed_plan_fixture/2-lc$^0/1-0-'/6 (/checks/source/test/quod_ct.erl, line 399)
+in call from quod_ct:signed_plan_fixture/2 (/checks/source/test/quod_ct.erl, line 403)
+in call from quod_ct:signed_atomic_fixture/1 (/checks/source/test/quod_ct.erl, line 365)
+in call from quod_foreign_log_tests:signed_content_fixture/1 (/checks/source/test/quod_foreign_log_tests.erl, line 7464)
+in call from quod_foreign_log_tests:material_network_dependency_case/0 (/checks/source/test/quod_foreign_log_tests.erl, line 6525)
+in call from peer:'-do_call/4-fun-0-'/5 (peer.erl, line 1557)
+**error:function_clause
+  output:<<"">>
+
+quod_foreign_residency_tests: -checkpoint_once_per_verified_range_test_/0-fun-1- (2)...[0.077 s] ok
+quod_foreign_residency_tests: -checkpoint_once_per_verified_range_test_/0-fun-1- (64)...[0.178 s] ok
+quod_foreign_residency_tests: -checkpoint_once_per_verified_range_test_/0-fun-1- (257)...[0.612 s] ok
+quod_foreign_residency_tests: -startup_retains_complete_groups_after_checkpoint_test_/0-fun-1- (older)...[0.084 s] ok
+quod_foreign_residency_tests: -startup_retains_complete_groups_after_checkpoint_test_/0-fun-1- (missing)...[0.090 s] ok
+quod_foreign_residency_tests: -warm_exact_routes_preserve_verified_cursor_test_/0-fun-2- (healthy prefix 1)...[0.094 s] ok
+quod_foreign_residency_tests: -warm_exact_routes_preserve_verified_cursor_test_/0-fun-2- (transient_fallback prefix 1)...[0.077 s] ok
+quod_foreign_residency_tests: -warm_exact_routes_preserve_verified_cursor_test_/0-fun-2- (healthy prefix 2)...[0.107 s] ok
+quod_foreign_residency_tests: -warm_exact_routes_preserve_verified_cursor_test_/0-fun-2- (transient_fallback prefix 2)...[0.108 s] ok
+quod_foreign_residency_tests: -definitive_request_failure_does_not_discard_a_healthy_cursor_test_/0-fun-0-...[0.112 s] ok
+quod_foreign_residency_tests: -interrupted_sparse_proof_preserves_retained_material_prefix_test_/0-fun-0-...[0.108 s] ok
+erl_eval: -expr/6-fun-3-...[0.071 s] ok
+quod_foreign_residency_tests: failed_tip_confirmation...[0.320 s] ok
+quod_foreign_residency_tests: follow_borrow_refusal...[0.121 s] ok
+quod_foreign_residency_tests: -resident_failure_only_wakes_waiters_on_real_advance_test_/0-fun-1- (unchanged_prefix)...[0.370 s] ok
+quod_foreign_residency_tests: -resident_failure_only_wakes_waiters_on_real_advance_test_/0-fun-1- (advanced_prefix)...[0.417 s] ok
+quod_ledger_store_tests: -t_empty/1-fun-2-...ok
+quod_ledger_store_tests: -t_append_read/1-fun-6-...[0.001 s] ok
+quod_ledger_store_tests: -t_opaque_payload_roundtrip/1-fun-3-...[0.001 s] ok
+quod_ledger_store_tests: -t_wrapped_foreign_store_never_materializes_symbols/1-fun-3-...[0.001 s] ok
+quod_ledger_store_tests: -t_reopen_persists/1-fun-2-...[0.001 s] ok
+quod_ledger_store_tests: -t_read_snapshot_preserves_verified_index/1-fun-3-...[0.001 s] ok
+quod_ledger_store_tests: -t_read_snapshot_accepts_append_but_refuses_truncation/1-fun-3-...[0.002 s] ok
+quod_ledger_store_tests: -t_resume_snapshot_appends_without_rescan/1-fun-2-...[0.002 s] ok
+quod_ledger_store_tests: -t_resume_snapshot_refuses_a_changed_file/1-fun-2-...[0.002 s] ok
+quod_ledger_store_tests: -t_torn_tail_recovery/1-fun-2-...[0.002 s] ok
+quod_ledger_store_tests: -t_torn_tail_bad_crc_trims/1-fun-2-...[0.003 s] ok
+quod_ledger_store_tests: -t_interior_corruption_fail_stops/1-fun-1-...[0.001 s] ok
+quod_ledger_store_tests: -t_chunked_tail_detects_distant_magic/1-fun-2-...[0.006 s] ok
+quod_ledger_store_tests: -t_chunked_tail_detects_split_magic/1-fun-4-...[0.087 s] ok
+quod_ledger_store_tests: -t_chunked_marker_free_tail_trims/1-fun-2-...[0.008 s] ok
+quod_ledger_store_tests: -t_open_ro_reads/1-fun-4-...[0.001 s] ok
+quod_ledger_store_tests: -t_traced_open_profiles_scan_without_per_entry_spans/1-fun-11-...[0.002 s] ok
+quod_ledger_store_tests: -t_traced_append_separates_encode_write_and_sync/1-fun-9-...[0.005 s] ok
+quod_ledger_store_tests: -t_open_ro_non_truncating/1-fun-5-...[0.003 s] ok
+quod_ledger_store_tests: -t_checkpointed_reads/1-fun-14-...[0.040 s] ok
+quod_ledger_store_tests: -t_trim_across_checkpoints/1-fun-10-...[0.017 s] ok
+quod_ledger_store_tests: -t_rejects_wrong_first_index/1-fun-4-...ok
+quod_ledger_store_tests: -t_fold_beyond_tail/1-fun-3-...[0.001 s] ok
+quod_ledger_store_tests: -t_huge_len_tail_trimmed/1-fun-2-...[0.002 s] ok
+quod_ledger_store_tests: -t_legacy_format_fails_without_mutation/1-fun-5-...[0.002 s] ok
+quod_ledger_store_tests: -t_legacy_tail_fails_without_mutation/1-fun-5-...[0.002 s] ok
+quod_ledger_store_tests: -t_short_legacy_header_fails_without_mutation/1-fun-5-...[0.002 s] ok
+quod_ledger_store_tests: -t_short_legacy_tail_fails_without_mutation/1-fun-5-...[0.002 s] ok
+quod_ledger_store_tests: -t_corrupt_current_before_legacy_fails_without_mutation/1-fun-3-...[0.001 s] ok
+quod_signing_journal_tests: real_qsj4_is_refused_by_name_and_empty_qsj6_opens_test...[0.016 s] ok
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 47.

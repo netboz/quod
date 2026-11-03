@@ -1,0 +1,56 @@
+{
+  "rows": [
+    [
+      "scene/traversal",
+      "gui_scene.pl limit(scene,512); common space_scene_parts threads remaining count",
+      "remove both counts; retain exact recursion path/cycle/physical rules"
+    ],
+    [
+      "descriptor text",
+      "gui_scene label24/id256/namespace64 and common/gui_tools shortening",
+      "remove arbitrary length checks and producer shortening; retain binary/nonempty/anchor types"
+    ],
+    [
+      "coordinates/geometry",
+      "gui_scene extent100000/offset1000000/scale100000/mesh reach and terrain horizon",
+      "remove upper magnitudes; retain integer/positive/reduced rational, shape relationships, finite engine conversion"
+    ],
+    [
+      "lens/workbench",
+      "gui_tools marks256, within(marks), graph node+mark counters",
+      "remove duplicate ceilings and requirement; retain declared measures/group order/colours"
+    ],
+    [
+      "GUI inputs",
+      "quod_gui max_bytes default4096; browser/native already accept absent property",
+      "make explicit authored max_bytes optional in existing property owner; retain supplied bounds and requiredness"
+    ],
+    [
+      "assets",
+      "gui_scene 8MB/16MB/250k/1024/256/16M global allowance maxima; per-appearance signed resources checked by render-resources/glb-profile and native controller owners",
+      "remove global maxima; retain explicit authored resources; existing terrain producer uses unallocated/unlimited presentation descriptor, existing consumer measurements/lifetimes, no physical admission changes"
+    ],
+    [
+      "physical/encoding",
+      "uint64 body/revision, uint16 terrain material, SHA256 sizes, normalized rotations/material factors, GLB static profile and finite transforms",
+      "retain: identity/type/format/semantic correctness, not population ceilings"
+    ],
+    [
+      "proof/material",
+      "material_policy selects pinned heap_bytes/answer_bytes; sealed plan/read/operation/symbol policies and transport envelope",
+      "retain existing owners, unchanged deadlines; measure exposed proof work"
+    ],
+    [
+      "transport/source",
+      "quod_client_goal MAX_REPLY_BYTES512KiB/MAX_ENVELOPE, shared term depth64; source current cursor carries frame-sized chunks with exact revisions",
+      "audit as existing shared protocol/admission constraints, not scene-specific counts; do not mislabel byte allowance as inherent JSON capacity"
+    ],
+    [
+      "render/layout",
+      "ScenePanel finite float conversion; native Label3D automatic sizing; browser has no mark or text count limit; layout grid spacing and GUI scroll sizes",
+      "retain layout/style and actual finite numeric checks; no source truncation"
+    ]
+  ],
+  "before_production_edits": true,
+  "new_hardcoded_limits": false
+}

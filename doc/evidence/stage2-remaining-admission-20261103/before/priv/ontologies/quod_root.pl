@@ -1,0 +1,156 @@
+%% quod:root — the root ontology.
+%%
+%% This is the SEED content the founding node reads once at network creation and
+%% commits into the ledger as the genesis. After birth it lives in the replicated
+%% ledger; joining nodes sync it and never re-read this file. Modeled on onia_root.pl.
+
+%% The ACL authority anchor for this network (exactly one). `quod:root` is the
+%% structured name form — `:` reads "belongs-to" (doc/proofs.md): the
+%% ontology `root`, owned by `quod`.
+acl_sovereign(quod:root).
+
+%% Public callers may inspect the catalogue and request governed creation.
+%% Creation permission is checked by the action below. Root mutations require
+%% an admitted physical node or an explicitly named administrator agent.
+%% Founding also supplies the local empty-call-chain host entry; signed goals
+%% and cross-ontology callers still enter through these authored rules.
+can_invoke(Goal, _, _, _) :- root_public_goal(Goal).
+can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :-
+    root_public_goal(Goal).
+can_invoke(create_ontology(_, _, _), Principal, Chain, Namespace) :-
+    root_creation_context(Principal, Chain, Namespace).
+can_invoke((current_executor_key(_), create_ontology(_, _, _)), Principal, Chain, Namespace) :-
+    root_creation_context(Principal, Chain, Namespace).
+can_invoke(_, node(Key), Chain, Namespace) :-
+    root_direct_context(node(Key), Chain, Namespace),
+    peer_admitted(Key, _, _, Key).
+can_invoke(_, Principal, Chain, Namespace) :-
+    root_direct_context(Principal, Chain, Namespace),
+    root_administrator_agent(Principal).
+
+%% General creation grants do not lend authority to a foreign implementation.
+%% Its public entry must enforce this too: can_create_ontology/3 is an action
+%% prerequisite and does not receive the authenticated calling path. Callers
+%% without these elevated grants still use the delegated creation policy.
+root_creation_context(Principal, Chain, Namespace) :-
+    (Principal = node(_) -> root_direct_context(Principal, Chain, Namespace)
+    ; root_administrator_agent(Principal) -> root_direct_context(Principal, Chain, Namespace)
+    ; ontology_creator_agent(Principal) -> root_direct_context(Principal, Chain, Namespace)
+    ; true).
+
+%% Native root bootstrap uses the empty path. A signed agent's direct request
+%% starts in its own ontology; an intermediate ontology cannot disappear from
+%% the engine-owned path. The durable grant above pins the complete principal.
+root_direct_context(node(_), [], _).
+root_direct_context(node(_), [Namespace], Namespace).
+root_direct_context(agent_instance_ref(Origin, _, _), [Origin], _).
+
+root_public_goal(system_ontology(_, _)).
+root_public_goal(ontology_creation_policy(_, _)).
+root_public_goal(effect_custody_limits(_, _)).
+root_public_goal(peer_admitted(_, _, _, _)).
+root_public_goal(acl_sovereign(_)).
+root_public_goal(system_source_access(_, _)).
+root_public_goal(Goal) :- system_source_query(Goal).
+root_public_goal(findall(_, Query, _)) :- root_catalogue_query(Query).
+
+root_catalogue_query(system_ontology(_, _)).
+root_catalogue_query(ontology_creation_policy(_, _)).
+root_catalogue_query(peer_admitted(_, _, _, _)).
+
+%% Source reading and editing are distinct authorities over an exact identity.
+%% Private root/user state remains restricted; public systems expose all
+%% stored clauses, independently of their callable domain APIs.
+system_source_access(ontology_ref(Namespace, Anchor), Access) :-
+    system_source_target(Namespace, Anchor),
+    current_principal(Principal),
+    (root_administrator_agent(Principal) -> Access = editable
+    ; Namespace \== <<"quod:root">>, Namespace \== <<"quod:user">>,
+      Access = read_only).
+
+system_source_target(<<"quod:root">>, Anchor) :-
+    current_ontology_identity(<<"quod:root">>, Anchor).
+system_source_target(Namespace, Anchor) :-
+    system_ontology(Namespace, Anchor).
+
+%% Root is the one ontology every node starts before it can execute durable
+%% effects, so it owns both the active custody count and prepared bytes per
+%% effect. An operator may call the setter or atomically replace the single
+%% override fact. Allocation has no compiled maximum; `unlimited` is explicit.
+effect_custody_limits(Count, PreparedBytes) :-
+    effect_custody_limits_override(Count, PreparedBytes).
+effect_custody_limits(64, unlimited) :-
+    \+ effect_custody_limits_override(_, _).
+
+valid_effect_custody_limit(unlimited).
+valid_effect_custody_limit(Limit) :-
+    integer(Limit),
+    Limit >= 0.
+
+set_effect_custody_limits(Count, PreparedBytes) :-
+    valid_effect_custody_limit(Count),
+    valid_effect_custody_limit(PreparedBytes),
+    abolish(effect_custody_limits_override/2),
+    assertz(effect_custody_limits_override(Count, PreparedBytes)).
+
+%% Root governs the creation of new ontology identities. The node which authors
+%% the accepted root transaction remains the direct-effect executor and
+%% initially hosts the new ontology; other nodes join that exact identity
+%% through quod:node.
+ontology_hosted(Name) :- ontology_join_state(Name, starting).
+ontology_hosted(Name) :- ontology_join_state(Name, joining).
+ontology_hosted(Name) :- ontology_join_state(Name, ready).
+ontology_created(Name, Anchor) :-
+    ontology_hosted(Name),
+    ontology_genesis_anchor(Name, Anchor).
+
+action('$quod_stage_ontology'(Handle, create_ontology(Name, Options, Anchor),
+                              ontology_created(Name, Anchor)),
+       [current_principal(Agent),
+        can_create_ontology(Agent, Name, Options),
+        ontology_join_state(Name, not_hosted)],
+       ontology_created(Name, Anchor)).
+
+%% An admitted root validator may found a general ontology. Signed agents use
+%% the same action only when root contains their exact durable grant.
+can_create_ontology(node(NodeKey), _Name, _Options) :-
+    peer_admitted(NodeKey, _, _, NodeKey).
+
+can_create_ontology(AgentRef, _Name, _Options) :-
+    ontology_creator_agent(AgentRef).
+
+%% Root may delegate a bounded creation policy to an exact ontology history.
+%% The selected policy must approve the complete founding options in this same
+%% proof; a class, namespace convention or client request grants no authority.
+can_create_ontology(Principal, Name, Options) :-
+    ontology_creation_policy(Namespace, Anchor),
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                ontology_creation_allowed(Principal, Name, Options)).
+
+%% Admission rule proved when a node asks to join this namespace's committee. Proved TWICE: once by
+%% the submitting node (via the `admit` predicate), then re-proved by EVERY validator against its own
+%% kb before it will support-sign the membership change (`quod_prolog:request_membership_verdict/5`) —
+%% so admission is a decision of the committee, not the submitter. Goal shape: `can_join(Ns, [Host, Port],
+%% Pubkey)` — arg 2 is `[Host, Port]`, arg 3 the advertised pubkey (== NodeId at this stage).
+%% Load-bearing like can_invoke: with NO clause, a join fail-closes (the re-proof fails → invalid). It must
+%% be **side-effect-free** — a `can_join` that stages a write is rejected network-wide (the proof overlay
+%% would ride its ops into the committed membership diff).
+%%
+%% The gate: `peer_ready` (a read-only external predicate) is true iff the judging node has a fresh feed
+%% digest from the candidate at (near) its own height — provably alive and caught up. A dead or lagging
+%% candidate is REFUSED instead of freezing a small (quorum = all) committee. Validators may split on it
+%% (each observes liveness independently); that fail-closes the slot and the submitter retries. It is
+%% liveness UX, not a security boundary (the height claim is unauthenticated) — narrow further with an
+%% allowlist / signature check once membership signing (Phase B) lands.
+can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
+
+%% System ontologies are created through the ordinary lifecycle first.  Once
+%% their exact genesis anchor is known, root may register them as:
+%%
+%% system_ontology(Name, GenesisAnchor).
+%%
+%% Root itself is the configured bootstrap exception and is never listed here.
+%% A catalogue row contains no endpoint, source file, module name, or runtime
+%% option. Nodes join the exact recorded history through normal routing; that
+%% ontology's immutable genesis carries its own hashed predicate-module
+%% manifest.

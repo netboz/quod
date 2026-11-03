@@ -1,0 +1,66 @@
+--- a/test/quod_material_admission_tests.erl
++++ b/test/quod_material_admission_tests.erl
+@@ -176,3 +176,63 @@
+     #{target => {<<"admission:test">>, <<1:256>>}, base_height => 1,
+       proof_id => <<2:256>>, origin => {<<"admission:test">>, <<1:256>>},
+       principal => anonymous, request_binding => none}.
++
++shared_binary_accounting_uses_existing_proof_installer_test() ->
++    %% Aliases and slices are not summed by application code. The installer
++    %% uses the same binary virtual-heap counters as max_heap_size.
++    Binary = binary:copy(<<$b>>,2*1024*1024),
++    put(shared_binary_fixture,[Binary,Binary,binary:part(Binary,1,1000)]),
++    try
++        with_session([],fun(_Session) ->
++            ?assertMatch({max_heap_size,#{size := 0,include_shared_binaries := true}},
++                         process_info(self(),max_heap_size)),
++            {garbage_collection_info,Info} = process_info(self(),garbage_collection_info),
++            Counters = maps:from_list(Info),
++            ?assert(maps:get(bin_vheap_size,Counters)+maps:get(bin_old_vheap_size,Counters) > 0)
++        end),
++        Est = quod_ct:committed_kb([{material_limit_override,proof,heap_bytes,0}]),
++        #est{db = #db{ref = Ref}} = Est,
++        try
++            ?assertException(throw,{quod_ask_error,{material_limit,proof,heap_bytes,_,0}},
++                quod_proof_session:start(Est,#{proof_context => {origin,test}}))
++        after quod_erlog_db_mvcc:delete(Ref) end
++    after erase(shared_binary_fixture) end.
++
++finite_shared_binary_budget_kills_at_gc_in_real_proof_worker_test() ->
++    Parent = self(), Budget = 8*1024*1024,
++    {Worker,Monitor} = spawn_monitor(fun() ->
++        with_session([{material_limit_override,proof,heap_bytes,Budget}],fun(_Session) ->
++            Parent ! {installed,self(),process_info(self(),max_heap_size)},
++            receive allocate -> ok end,
++            put(proof_binary_fixture,binary:copy(<<$x>>,Budget*2)),
++            erlang:garbage_collect(),
++            Parent ! {unexpected_survival,self()}
++        end)
++    end),
++    receive {installed,Worker,{max_heap_size,#{include_shared_binaries := true}}} -> Worker ! allocate
++    after 1000 -> error(proof_policy_not_installed) end,
++    receive {'DOWN',Monitor,process,Worker,killed} -> ok
++    after 5000 -> error(shared_binary_policy_not_enforced) end.
++
++shared_parent_is_charged_by_initial_proof_admission_test() ->
++    Parent = self(), Binary = binary:copy(<<$s>>,16*1024*1024),
++    ParentBytes = byte_size(Binary), Slice = binary:part(Binary,1,1000),
++    lists:foreach(fun(Value) ->
++        {Worker,Monitor} = spawn_monitor(fun() ->
++            put(shared_parent_fixture,[Value,Value]),
++            #est{db = #db{ref = Ref}} = Est = quod_ct:committed_kb(
++                [{material_limit_override,proof,heap_bytes,8*1024*1024}]),
++            try
++                try quod_proof_session:start(Est,#{proof_context => {origin,test}}) of
++                    Session -> quod_proof_session:stop(Session),error(parent_bytes_not_charged)
++                catch throw:{quod_ask_error,{material_limit,proof,heap_bytes,Actual,Limit}} ->
++                    ?assert(Actual >= ParentBytes),?assertEqual(8*1024*1024,Limit),
++                    Parent ! {parent_refused,self()}
++                end
++            after quod_erlog_db_mvcc:delete(Ref),erase(shared_parent_fixture) end
++        end),
++        receive {parent_refused,Worker} -> ok
++        after 1000 -> error(parent_refusal_missing) end,
++        receive {'DOWN',Monitor,process,Worker,normal} -> ok
++        after 1000 -> error(parent_worker_not_retired) end
++    end,[Binary,Slice]).

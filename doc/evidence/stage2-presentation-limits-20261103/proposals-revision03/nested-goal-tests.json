@@ -1,0 +1,37 @@
+{
+  "revision": 3,
+  "applied": false,
+  "compiled_or_executed": false,
+  "files": [
+    {
+      "path": "test/quod_scope_wire_tests.erl",
+      "before_sha256": "c72ee60cd82efe9e3e9f8d580236e04d228140c75e79ebced79960f8582b31ef",
+      "proposed_sha256": "e75883ca3d99870f1975632d0cd97eecf4d4123675eda8af5ead909c44cdc721",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "test/quod_dtx_tests.erl",
+      "before_sha256": "5f0204c736dfe8895d0252739106c7a0e24d594eaea95f246402469e6e6fb771",
+      "proposed_sha256": "40afffda4ad7abd9f04a0a0729be5476d27b4677e9a2c34db3f27ea6acbd8e2d",
+      "added": 28,
+      "removed": 13
+    },
+    {
+      "path": "test/quod_proof_answer_tests.erl",
+      "before_sha256": "03ee153e01021093b7058407e62608cab5ca779fe14ad67ac01400fcff1dbc30",
+      "proposed_sha256": "0b11c4ae01cf74f8a6e6287aa879fc3143b1752104e80927193f3209b4d67f67",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "test/quod_scope_session_tests.erl",
+      "before_sha256": "020600800d1ff724cac916e734e16ac0727f614a1c5d6029d3f7eb876156fdfd",
+      "proposed_sha256": "6d3957a2369e066fb75ded812baaf78bfac031ad0b4e248dece6da7a80960e26",
+      "added": 26,
+      "removed": 0
+    }
+  ],
+  "added": 56,
+  "removed": 15
+}

@@ -1,0 +1,20 @@
+{
+  "exact_tested_files_copied": true,
+  "files": {
+    "src/erlog_int.erl": {
+      "before": "40793ec49ceb9baf29d5889a93ce9f2b494228168ed83d9da5c4d65b67ad35f6",
+      "after": "3d24510c60da34323a9bc02ed2fea8fbee4bf9e2c1426fd35b8c233069b8ed0c"
+    },
+    "src/erlog_int.hrl": {
+      "before": "fc2290033440d71447bb0b19eac04e81de1998438cfc225082e9200ac9595f20",
+      "after": "833233fb56b7d28f19251484354e870b1aca9458c4ee7a9ac45ed53ba4fee707"
+    },
+    "test/erlog_failure_reasons_tests.erl": {
+      "before": "7cbcf3533e4788d81f5792bd136937576d87f89716bc9221af21ff8880701ef7",
+      "after": "b7070200ca0ba93f3ab50d56c7cb4417bae203dd17ca267d69001e20f177cb19"
+    }
+  },
+  "committed": false,
+  "published": false,
+  "pin_changed": false
+}

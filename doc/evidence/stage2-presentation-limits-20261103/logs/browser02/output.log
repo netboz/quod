@@ -1,0 +1,35 @@
+✔ asymmetric static GLB measures its actual geometry, hierarchy and PNG (3.670824ms)
+✔ each scene node referencing a mesh counts its drawn vertices and triangles (1.289208ms)
+✔ external resources, extensions and dynamic features fail before loading (3.334957ms)
+✔ reused accessors retain their measured costs and bounds (0.437197ms)
+✔ each measured resource is checked against its authorized allowance (1.513728ms)
+✔ unallocated presentation still validates and measures the asset (0.54541ms)
+✔ terrain descriptors bind generated resources to an anchored physical body (2.528155ms)
+✔ multiple ontology mark occurrences retain one exact instance and no body identity (0.780922ms)
+✔ a reply becomes drawable marks (4.068341ms)
+✔ a mark may show nothing and carry no label (0.736051ms)
+✔ several marks may depict one entity (0.504975ms)
+✔ an unreadable descriptor fails closed (1.37414ms)
+✔ capsules and tori keep their neutral dimensions (0.477128ms)
+✔ a sky sphere keeps its renderer-neutral diameter (0.141813ms)
+✔ a binary that did not survive the reply is refused (0.540147ms)
+✔ the reader accepts what the renderer writes and nothing more (0.487515ms)
+✔ the reader enforces the shared structural-depth boundary (0.216209ms)
+✔ the lens is asked by its flat binary name, with the dot the grammar needs (0.43923ms)
+✔ binary identities and UTF-8 text survive lossless signed bindings (0.492641ms)
+✔ texture slots carry digest identity and explicit sampling; invalid bindings fail (1.633768ms)
+✔ mesh marks carry typed digest, local frame, scale and asset surfaces (0.820854ms)
+✔ complete large scene preserves long names, labels and coordinates (39.804629ms)
+✔ native surface positions, winding and material survive decoding (3.307814ms)
+✔ complete framing, palette and allocation are mandatory (1.590896ms)
+✔ empty and full chunks can carry an empty surface (0.19692ms)
+✔ adjacent negative-coordinate chunks preserve texture phase and vertical walls have nondegenerate UVs (3.861202ms)
+✔ unallocated presentation keeps measured cost and finite authored refusal (2.530156ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 113.259144

@@ -1,0 +1,13 @@
+{
+  "applied": false,
+  "runtime_executed": false,
+  "status": "Rejected in source review: aggregate history frame loses streaming; retained literally.",
+  "hashes": {
+    "manifest.json": "c0f8fd8c95ea68d3f7b98fe4d697a6728af2b4b74d2e6f7be482b2bfe4503db6",
+    "parent-review01.md": "47e4369d1f0dc7421e26c4c7f1e6d393b9e0ce7c80e140894456a62891e5d92f",
+    "erlog-diagnostics.patch": "89315dad43d30f173f1e56b9de9fa73ff1e31ba3189551306780ab2876782430",
+    "namespace-manifest.json": "8580cd85b335600d6ab30157a5a9bfb9e0d8c54b64aa4ed45e9c3411d984e069",
+    "namespace-admission-CONDITIONAL.patch": "548943be5c20d7d3073c5d9d75986eb6b3a2597f3e2774e17a113d03ff91f96c",
+    "remaining-owners.patch": "1879537009f5a2ec24ab51b32994e87523287dc687a0ed469e13a0490dfad679"
+  }
+}

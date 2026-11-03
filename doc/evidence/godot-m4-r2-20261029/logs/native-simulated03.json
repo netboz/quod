@@ -1,0 +1,21 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+    "native-simulated03",
+    "--mode",
+    "simulated",
+    "--export",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/dist/quod.x86_64"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T09:55:18Z",
+  "elapsed_seconds": 9.093632698059082,
+  "child_exit": 1,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/native-simulated03.log",
+  "raw_sha256": "2c68209ba0d02ab9be0c701d2f190c9f7f6ea193675e6e456d1243ca9e72605d",
+  "sanitized_sha256": "2c68209ba0d02ab9be0c701d2f190c9f7f6ea193675e6e456d1243ca9e72605d",
+  "redactions": 0,
+  "error_diagnostics": 1
+}

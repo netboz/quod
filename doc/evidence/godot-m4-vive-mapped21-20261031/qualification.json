@@ -1,0 +1,168 @@
+{
+  "scope": "Case21 human FAILED panel usability; mapped current-space GUI activation NOT passed. Normal owned retirement.",
+  "protocol_retirement_passed": true,
+  "human_response": {
+    "exact_text": "so I see the controller, the gui looks better, but isstill displayed in an impossible position I mean you know I am a huma being, you know how I am made, where are my eyes.Them why displaying the panel in such impossible positions ?",
+    "received_before_utc": "2026-10-31T00:33:21.993Z",
+    "exact_look_interval": null
+  },
+  "baseline_snapshot_utc": "2026-10-31T00:28:32.2074672+00:00",
+  "post_response_snapshot_utc": "2026-10-31T00:33:54.9805081+00:00",
+  "post_response_later_than_human_look": true,
+  "manual_instructions": [
+    "status",
+    "geometry",
+    "stop",
+    "finish"
+  ],
+  "original_bounds": {
+    "startup": 30,
+    "single_inventory": 5,
+    "participant": 1800,
+    "close": 60,
+    "wrapper": 2100
+  },
+  "client_runtime_server_driver_wrapper_exits": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "case_eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "runtime-stdout": true,
+    "runtime-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "wrapper_eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "reader_errors": [],
+  "case_elapsed_seconds": 392.43913221359253,
+  "target_button_counts": [
+    0,
+    0
+  ],
+  "raw_edge_counts_baseline": [
+    0,
+    0
+  ],
+  "raw_edge_counts_later": [
+    0,
+    8
+  ],
+  "extra_edges": "Four RIGHT trigger press/release pairs, no LEFT edge; action not accessibly instructed, intent/authorization/product-effect credit not inferred.",
+  "post_response_native_state": {
+    "native_session": "Focused",
+    "lifecycle": {
+      "Active": true,
+      "PresentationVisible": true,
+      "NativeRunning": true,
+      "PredictedDisplayTime": 3189779745277
+    },
+    "head": {
+      "tracked": true,
+      "confidence": "High"
+    },
+    "sources": [
+      {
+        "hand": "left",
+        "current": true,
+        "aim": {
+          "tracked": true,
+          "confidence": "Low"
+        },
+        "grip": {
+          "tracked": true,
+          "confidence": "Low"
+        },
+        "models": 1,
+        "visible_roots": 1,
+        "visible_meshes": 6
+      },
+      {
+        "hand": "right",
+        "current": true,
+        "aim": {
+          "tracked": true,
+          "confidence": "High"
+        },
+        "grip": {
+          "tracked": true,
+          "confidence": "High"
+        },
+        "models": 1,
+        "visible_roots": 1,
+        "visible_meshes": 6
+      }
+    ],
+    "window_focused": false,
+    "latest_cue_marker": "M4_VIVE_LOOK_CUE READY frame=16929"
+  },
+  "assignment_unchanged_at_sampled_instants": true,
+  "pending_unchanged_zero": true,
+  "captures_zero_at_sampled_instants": true,
+  "target_activation_passed": false,
+  "hardware_button_defect_demonstrated": false,
+  "final_metrics": {
+    "Running": false,
+    "Subscriptions": 0,
+    "sources": 0,
+    "appearances": 0,
+    "MenuRedraws": 0,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 0,
+    "StopRequests": 0,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 2,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 2,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 0,
+      "LiveLeases": 0
+    }
+  },
+  "calibration_unchanged_reported": true,
+  "hdmi_restored_disabled": true,
+  "fresh_other_displays_and_current_configs_unchanged": true,
+  "current_config_files": 76,
+  "ordinary_launch_focus_dispatches": 1,
+  "extra_focus_dispatches": 0,
+  "focus_listener_started": false,
+  "diagnostic_nondistributable": true,
+  "payload_manifest_sha256": "4e6bcf7daf995305e004eb8a9164cb862f7aa84dd257404f37c089aa672ff884",
+  "supplied_inputs": 95,
+  "export_files": 196,
+  "no_90sample_gui_check_submit_travel_synthetic_input": true,
+  "api_private_reference": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product21/api-dump.raw",
+    "bytes": 222637656,
+    "driver_recorded_sha256": "f609050cc204621ecdfca036a3ca07e34d6d782a25417d51b22ab51ec49bcafc",
+    "stat_key": [
+      2050,
+      4461634,
+      222637656,
+      1793406844006093491,
+      1793406845251382000
+    ],
+    "parsed": false,
+    "hashed_again": false,
+    "scope": "Original executed-driver digest and post-exit stat only; not opened by this binder."
+  },
+  "full_M4_accepted": false,
+  "human_controller_visibility": "positive",
+  "human_GUI_appearance": "improved",
+  "placement_usability": "FAILED",
+  "left_action_accessibly_instructed": false,
+  "remaining": "Responsible-owner upright-placement correction and affected software qualification; first-wearing/heading lifetime remains a separate limitation; stage-specific instruction must use existing headset label before any separately authorized run."
+}

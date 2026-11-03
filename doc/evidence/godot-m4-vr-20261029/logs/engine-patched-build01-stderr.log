@@ -1,0 +1,6 @@
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_linuxbsd.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+fatal: not a git repository (or any of the parent directories): .git

@@ -1,0 +1,60 @@
+{
+  "passed": true,
+  "scope": "Actual invoked paths plus unchanged qualified file identities; no whole-host or memory-image claim.",
+  "commit": "59be345db769a89c93d1bdf6ed8316fa6209d8ae",
+  "outputs": {
+    "bin/monado-service": {
+      "sha256": "a39b0f5576710be49895f0d5b92b9423077323e093ae946fc048ebd85a315331",
+      "actual_bytes": 48623456,
+      "full_mode": "0o100755",
+      "stat_key": [
+        66305,
+        43013721,
+        48623456,
+        1793268351000000000,
+        1793268405552990919
+      ],
+      "strict_cache_hit": false
+    },
+    "bin/monado-ctl": {
+      "sha256": "047c02efd3bb79f5e8dddf2ec2ebb60bc00997cf538f4b74f4b6ed63697fa970",
+      "actual_bytes": 1215888,
+      "full_mode": "0o100755",
+      "stat_key": [
+        66305,
+        43013720,
+        1215888,
+        1793268314000000000,
+        1793268405520437334
+      ],
+      "strict_cache_hit": false
+    },
+    "lib/libopenxr_monado.so": {
+      "sha256": "831bc32e912e02b0b0dc80ffc52701271cc198ca5aa827bc7b63113df8def856",
+      "actual_bytes": 41794856,
+      "full_mode": "0o100755",
+      "stat_key": [
+        66305,
+        39898664,
+        41794856,
+        1793268315000000000,
+        1793268405267417108
+      ],
+      "strict_cache_hit": false
+    },
+    "share/openxr/1/openxr_monado.json": {
+      "sha256": "a6fe164702281f786bcc9c3a4e1951d8fedade04bd56570ce503c6f62ebee538",
+      "actual_bytes": 207,
+      "full_mode": "0o100644",
+      "stat_key": [
+        66305,
+        42257956,
+        207,
+        1793268405000000000,
+        1793268405244601855
+      ],
+      "strict_cache_hit": false
+    }
+  },
+  "new_build_or_runtime_execution": false
+}

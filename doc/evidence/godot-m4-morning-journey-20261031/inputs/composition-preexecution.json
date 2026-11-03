@@ -1,0 +1,37 @@
+{
+  "Composition.csproj": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/morning-cue-composition01/Composition.csproj",
+    "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/morning-cue-composition01/Composition.csproj",
+    "sha256": "38e201f047792df530db8c7d157c2b6b19d1ed2e4134dba5da5c59e97d3b0da2",
+    "bytes": 211,
+    "mode": 384
+  },
+  "CueCompositionChecks.cs": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/morning-cue-composition01/CueCompositionChecks.cs",
+    "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/morning-cue-composition01/CueCompositionChecks.cs",
+    "sha256": "7c3ad2e1254f9419f0f712bba984a5cd0b71f28c4dcaa300f0f82163550750e6",
+    "bytes": 1593,
+    "mode": 420
+  },
+  "NuGet.Config": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/morning-cue-composition01/NuGet.Config",
+    "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/morning-cue-composition01/NuGet.Config",
+    "sha256": "3eb413f39fb8791745d58c6769618f9ada15a480caca042d72838817c4b7c359",
+    "bytes": 73,
+    "mode": 384
+  },
+  "ViveLookCue.cs": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/morning-cue-composition01/ViveLookCue.cs",
+    "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/morning-cue-composition01/ViveLookCue.cs",
+    "sha256": "aecd70b8755fa7beaa783d460424a7e018e001a2bd067c776cd10a56a97777e3",
+    "bytes": 908,
+    "mode": 420
+  },
+  "global.json": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/morning-cue-composition01/global.json",
+    "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/morning-cue-composition01/global.json",
+    "sha256": "58cf5bad3915ebd7a3e327e9ad99ded232e9a4f03ff46917126a1df3019713a3",
+    "bytes": 55,
+    "mode": 420
+  }
+}

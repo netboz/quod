@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Run an owned private Monado service and the exact clean exported XR consumer."""
+import argparse,hashlib,json,os,re,selectors,shutil,subprocess,threading,time
+from pathlib import Path
+
+p=argparse.ArgumentParser();p.add_argument('label');p.add_argument('--export',type=Path,required=True)
+p.add_argument('--mode',choices=['simulated','hardware'],required=True);a=p.parse_args()
+root=Path.cwd();evidence=Path(__file__).resolve().parent;out=evidence/a.label;out.mkdir(exist_ok=False)
+private=Path('/home/yan/.cache/quod-m4-r2-artifacts/private')/a.label;private.mkdir(mode=0o700)
+for n in ['runtime','config','data']:(private/n).mkdir(mode=0o700)
+retained=out/'native-xr-driver.py';shutil.copy2(__file__,retained)
+bundle=Path('/home/yan/.cache/quod-m4-r2-artifacts/runtime')
+libs=json.loads((evidence/'inputs/private-library-path.json').read_text())['LD_LIBRARY_PATH']
+env=dict(os.environ,LD_LIBRARY_PATH=libs,XR_RUNTIME_JSON=str(bundle/'monado-system/openxr_monado.json'),
+    XDG_RUNTIME_DIR=str(private/'runtime'),XDG_CONFIG_HOME=str(private/'config'),XDG_DATA_HOME=str(private/'data'),
+    M1B_PHASE='openxr',M1B_RESULT=str(out/'client-result.json'),XR_LOADER_DEBUG='all')
+env.pop('LD_PRELOAD',None)
+display=os.environ.get('WAYLAND_DISPLAY')
+if display:env['WAYLAND_DISPLAY']=display if Path(display).is_absolute() else str(Path(os.environ['XDG_RUNTIME_DIR'])/display)
+if a.mode=='simulated':env.update(SIMULATED_ENABLE='1',SIMULATED_LEFT='simple',SIMULATED_RIGHT='simple',XRT_COMPOSITOR_FORCE_XCB='1',XRT_COMPOSITOR_SCALE_PERCENTAGE='50',SDL_VIDEODRIVER='x11')
+else:env['SIMULATED_ENABLE']='0'
+service_command=[str(bundle/'monado-system/bin/monado-service')]
+client_command=[str(a.export),'--display-driver','wayland','--audio-driver','Dummy','--xr-mode','on','--rendering-method','mobile','--rendering-driver','vulkan','--','--qualification','--profile',str(private/'identity')]
+record={'mode':a.mode,'physical_acceptance':False,'service_command':service_command,'client_command':client_command,
+    'worker':'ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f','driver_sha256':hashlib.sha256(retained.read_bytes()).hexdigest(),
+    'client_executable_sha256':hashlib.sha256(a.export.read_bytes()).hexdigest(),'runtime_manifest':env['XR_RUNTIME_JSON'],
+    'private_runtime_dir':env['XDG_RUNTIME_DIR'],'private_library_path':libs,'watchdog_seconds':90,'passed':False}
+(out/'invocation.json').write_text(json.dumps(record,indent=2)+'\n')
+service=client=drain=None;start=time.monotonic()
+def sanitized(data):return re.sub(rb'LHR-[A-Za-z0-9]+',b'<device-serial-redacted>',data)
+try:
+    with (private/'runtime-raw.log').open('xb') as runtime_log:
+        service=subprocess.Popen(service_command,cwd=private,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+        selector=selectors.DefaultSelector();selector.register(service.stdout,selectors.EVENT_READ);received=b'';deadline=time.monotonic()+30
+        while b'The Monado service has started.' not in received:
+            left=deadline-time.monotonic()
+            if left<=0 or not selector.select(left):raise TimeoutError('Owned service startup deadline')
+            block=os.read(service.stdout.fileno(),65536)
+            if not block:raise RuntimeError('Owned service ended before readiness')
+            received+=block;runtime_log.write(block);runtime_log.flush()
+        selector.close();record['service_ready']=True
+        def receive():
+            for block in iter(lambda:os.read(service.stdout.fileno(),65536),b''):runtime_log.write(block);runtime_log.flush()
+        drain=threading.Thread(target=receive);drain.start()
+        print('R2_PRIVATE_XR_SERVICE_READY '+a.label,flush=True)
+        with (private/'client-raw.log').open('xb') as client_log:
+            client=subprocess.Popen(client_command,cwd=root,env=env,stdout=client_log,stderr=subprocess.STDOUT)
+            try:record['client_exit']=client.wait(timeout=90)
+            except subprocess.TimeoutExpired:
+                record['client_timeout']=True;client.kill();record['client_exit']=client.wait(timeout=10)
+        # The service's documented stdin exit is owned by this driver. Keep its
+        # output drain alive until the service has actually exited and EOF arrives.
+        if service.poll() is None:service.stdin.write(b'\n');service.stdin.flush();service.stdin.close()
+        record['service_exit']=service.wait(timeout=15);drain.join(timeout=5)
+        if drain.is_alive():raise RuntimeError('Owned runtime output did not reach EOF')
+except Exception as error:record['error']=type(error).__name__+': '+str(error)
+finally:
+    if client is not None and client.poll() is None:client.kill();record['client_exit']=client.wait(timeout=10)
+    if service is not None and service.poll() is None:
+        service.terminate()
+        try:record['service_exit']=service.wait(timeout=15)
+        except subprocess.TimeoutExpired:service.kill();record['service_exit']=service.wait(timeout=10)
+    if drain is not None:drain.join(timeout=5)
+    for n in ['runtime','client']:
+        raw=private/(n+'-raw.log')
+        if raw.exists():raw.chmod(0o600);(out/(n+'.log')).write_bytes(sanitized(raw.read_bytes()))
+    if (out/'client.log').exists():
+        text=(out/'client.log').read_text(errors='replace')
+        record['client_diagnostics']=[s for s in text.splitlines() if 'ERROR' in s or 'leaked' in s or "isn't part of an action set" in s]
+        record['completion_marker']='M4_XR_PASS' in text
+    record['completed']=(out/'client-result.json').exists()
+    record['elapsed_seconds']=time.monotonic()-start
+    record['passed']=record['completed'] and record.get('completion_marker') and record.get('client_exit')==0 and record.get('service_exit')==0 and not record.get('client_timeout') and not record.get('client_diagnostics') and not record.get('error')
+    (out/'result.json').write_text(json.dumps(record,indent=2)+'\n');print(json.dumps(record),flush=True)
+raise SystemExit(0 if record['passed'] else 1)

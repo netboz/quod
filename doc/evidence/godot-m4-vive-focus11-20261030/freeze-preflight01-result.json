@@ -1,0 +1,25 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "-B",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-focus11-20261030/freeze_preflight.py",
+    "--child"
+  ],
+  "true_child_exit": 0,
+  "timed_out": false,
+  "elapsed_seconds": 3.372593624999354,
+  "streams": {
+    "stdout": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/metadata-inputs/focus11-freeze-preflight01/stdout.raw",
+      "sha256": "d4b0fbddfc428e7314a105583cfa2a8b0d4deebbb425999ceea7d31b44cbee1a",
+      "bytes": 548,
+      "eof": true
+    },
+    "stderr": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/metadata-inputs/focus11-freeze-preflight01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "eof": true
+    }
+  }
+}

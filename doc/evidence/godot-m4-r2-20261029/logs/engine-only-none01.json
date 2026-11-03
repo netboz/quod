@@ -1,0 +1,19 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/engine-isolation.py",
+    "engine-only-none01",
+    "--profiles",
+    "none"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T10:05:21Z",
+  "elapsed_seconds": 4.679731607437134,
+  "child_exit": 1,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/engine-only-none01.log",
+  "raw_sha256": "f2f6d0caa75b7c977066510385da410987833a62cd3713e509af4d685c612ef0",
+  "sanitized_sha256": "f2f6d0caa75b7c977066510385da410987833a62cd3713e509af4d685c612ef0",
+  "redactions": 0,
+  "error_diagnostics": 1
+}

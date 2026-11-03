@@ -1,0 +1,37 @@
+[
+  {
+    "installed_path": "/usr/bin/monado-service",
+    "path": "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-system/bin/monado-service",
+    "sha256": "ff2d7c4d21a2acbce2493114cf12562b3755bfa75fa3268e99e852b1886c7d56",
+    "bytes": 3704952,
+    "mode": 493
+  },
+  {
+    "installed_path": "/usr/bin/monado-cli",
+    "path": "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-system/bin/monado-cli",
+    "sha256": "1ca8091101600e6c22643eef5ea6240e25f767bfde9514285cb64c060f48a90f",
+    "bytes": 1506912,
+    "mode": 493
+  },
+  {
+    "installed_path": "/usr/bin/monado-ctl",
+    "path": "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-system/bin/monado-ctl",
+    "sha256": "68cf8beae92446d7a9790e98019681c82b182059298cbc74556ea68118fdcea0",
+    "bytes": 35056,
+    "mode": 493
+  },
+  {
+    "installed_path": "/usr/lib/libopenxr_monado.so",
+    "path": "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-system/lib/libopenxr_monado.so",
+    "sha256": "507dec77f62821fe12e8f73bb83d2413991d98e162630ef49ca7ffbed71d41fc",
+    "bytes": 962408,
+    "mode": 493
+  },
+  {
+    "installed_path": "/usr/lib/libmonado.so.25.1.0",
+    "path": "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-system/lib/libmonado.so.25.1.0",
+    "sha256": "4a32dc2f8cdf2b7de50b2c42a6ad6327fb51dca7f65ce9571e25afc7749f3231",
+    "bytes": 202840,
+    "mode": 493
+  }
+]

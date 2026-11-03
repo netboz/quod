@@ -1,0 +1,7 @@
+{
+  "chunk_id": "1dead8",
+  "wall_time_seconds": 0.19950827,
+  "exit_code": 0,
+  "original_token_count": 72,
+  "output": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"structured\\\":{\\\"windowHours\\\":24,\\\"totalThreads\\\":0,\\\"threads\\\":[],\\\"sameItem\\\":[],\\\"waitingOnYou\\\":[],\\\"youHandedOff\\\":[],\\\"truncated\\\":false},\\\"summary\\\":\\\"0 recent work threads across 0 actor lanes; 0 shared-item signals.\\\"}\"}],\"isError\":false}\n"
+}

@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tools/run.py",
+    "--export"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 12.306666591000976
+}

@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "checks": [
+    "prepared invocation is offline with explicit PTY ownership required",
+    "prepared inputs and invocation remain task-private",
+    "invocation binds the exact selected diagnostic manifest",
+    "current product and removable diagnostic input/output sets are explicit",
+    "all existing absolute bounds are preserved",
+    "generated preflight and digest binding are exact before execution",
+    "future case label and private target are supplied fresh",
+    "future receipt cache cannot overwrite the closed case21 cache",
+    "preflight selects the new current payload rather than a historical cue",
+    "prepared current-provider preflight contains no readiness polling or retries",
+    "future provider snapshot retains the same approved HDMI exception and restoration owner",
+    "single supported live path keeps interactive stdin and both-device admission",
+    "a fresh preflight failure stops the launch without a fallback",
+    "retained server/runtime and accepted closure references are explicit",
+    "runtime content hashes are accepted references, not fabricated fresh cache hits"
+  ],
+  "prepared_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-launch-inputs02/prepared.json",
+  "prepared_sha256": "bcdd55be554101e1d28652f7a3880444cf55331ebeaec26a7fb5e8549fcd4298",
+  "live_code_imported": false,
+  "live_query_or_launch": false
+}

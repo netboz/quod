@@ -1,0 +1,394 @@
+{
+  "diagnostic": true,
+  "hardware": true,
+  "checks": [
+    "enabled action create-key",
+    "enabled action connect",
+    "physical fixture authenticates the exact owned network",
+    "enabled action register",
+    "physical fixture retains its original signed human",
+    "enabled action prepare",
+    "enabled action setup",
+    "physical fixture has no unknown original operation",
+    "signed projection selects the pinned admitted Vive appearance",
+    "enabled action start-xr",
+    "ordinary signed-in Start OpenXR attaches the real owner"
+  ],
+  "snapshots": [
+    {
+      "phase": "ready",
+      "frames": 0,
+      "validHead": 0,
+      "highHead": 0,
+      "sources": [],
+      "button_presses": {
+        "start-xr": 1
+      },
+      "router": {
+        "available": true,
+        "revision": "0",
+        "digest": "EWOaAaDhlG1m-sE4f_1thzMcbIf5ANlDI7k0M0eAYk4",
+        "choices": {},
+        "sources": [
+          {
+            "id": "1",
+            "hand": "left",
+            "profile": "htc_vive_controller",
+            "tracked": false,
+            "bindings": [
+              "select",
+              "drive",
+              "snap",
+              "teleport"
+            ],
+            "reason": ""
+          },
+          {
+            "id": "2",
+            "hand": "right",
+            "profile": "htc_vive_controller",
+            "tracked": false,
+            "bindings": [
+              "select",
+              "menu"
+            ],
+            "reason": ""
+          }
+        ]
+      },
+      "metrics": {
+        "Running": true,
+        "Subscriptions": 13,
+        "sources": 2,
+        "appearances": 2,
+        "MenuRedraws": 0,
+        "LateCallbacks": 0,
+        "captures": 0,
+        "DriveRequests": 0,
+        "StopRequests": 0,
+        "SnapRequests": 0,
+        "TeleportRequests": 0,
+        "resources": {
+          "Acquisitions": 2,
+          "Releases": 0,
+          "Decodes": 0,
+          "InstancesCreated": 0,
+          "InstancesReleased": 0,
+          "NodesBuilt": 0,
+          "TexturesDecoded": 0,
+          "LiveTemplates": 1,
+          "LiveLeases": 2
+        }
+      },
+      "cancellations": 0,
+      "state": {
+        "state": "account-ready",
+        "busy": false,
+        "public_key": "0Qn0MJHhz0QW-LRP7rArFffg3CGxHRYLy_BUfl6Kyj4",
+        "network": "IEVFWzDuQtWRuGdDvd-Bl1u98eUoLeSkWXs-OuG7i90",
+        "human": {
+          "Namespace": "human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw",
+          "Anchor": "B_7qKC0eFcLOz9SeAdOFoXoypVmwj3C2NDxcd-G5B9c",
+          "InstanceText": "me."
+        },
+        "setup": "account(agent_instance_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,me),agent_instance_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,personal),entity_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,<<\"01M66AY6S3843Y1C8MXDYFY77T\">>),ontology_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>),<<\"\\x9d\\\\xec\\\\x02\\}\\xba\\\\xb0\\\\xbd\\\\xc9\\P\\x03\\\\xd7\\\\xe3\\\\x9c\\\\xe3\\\\xe3\\\\x8d\\\\xc6\\\\x0f\\\\xdf\\%\\x1a\\\\x0b\\l\\x0e\\\\xe1\\\\xc0\\\\xad\\b\\x16\\\\x02\\\\x19\\o\">>,pins(<<\"u6\\xae\\\\xa9\\\\xff\\_\\xd5\\\\x99\\\\x81\\\\x99\\!\\xa5\\#\\x99\\ua\\xc7\\X(\\xfd\\\\x80\\'A\\x0e\\5\\xe4\\\\xc1\\\\xc8\\\\x16\\8KC\">>,<<\"\\xac\\\\x1c\\!\\\"w\\x86\\\\x10\\\\\"\\x06\\-\\xbc\\j\\xdb\\\\x02\\\\xbd\\\\xd5\\`~E\\xad\\;#\\xda\\\\xfc\\\\x9c\\\\x18\\\\xd9\\\\x96\\u\\xab\\<\\xff\\\">>,<<\"[~\\xc1\\^q\\xec\\('\\xf3\\\\x97\\E09\\xec\\\\xe8\\\\x93\\\\x84\\\\xc3\\\\xd4\\\\x84\\\\x89\\\\xbf\\\\x84\\0\\xca\\\\xfa\\%\\xd2\\l\\x1f\\F\\xcf\\\">>,<<\"\\xee\\\\x12\\\\xe2\\O\\xa7\\\\xd4\\\\xe4\\c\\x19\\\\xf6\\{\\x16\\\\x12\\\\xd8\\\\xf7\\I\\xcb\\w\\x0c\\\\xfe\\\\x94\\a1\\x85\\\\x06\\\\x9d\\\\x93\\\\x97\\\\xed\\4\\xf1\\U\">>,<<\"\\xac\\?\\xcb\\\\x00\\7\\xed\\\\xf7\\7,\\xee\\\\x13\\<\\x81\\\\xb5\\\\xbb\\\\xac\\\\xa3\\\\xa7\\s\\x11\\\\xf3\\\\xdb\\?\\xea\\{5M \\x05\\3\\x90\\$\">>))",
+        "pending": 0,
+        "world_accepted": true,
+        "live_sockets": 5,
+        "ignored_projections": 0,
+        "question_receiver_ready": true,
+        "current_location": "placed(entity_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,<<\"01M66AY6S3843Y1C8MXDYFY77T\">>),transform(0,0,0,0,0,0))",
+        "assignment_revision": "1",
+        "physical_selection": "nonphysical",
+        "physical_tick": null,
+        "scene_count": 0,
+        "operation_available": true,
+        "operation_status": "Current offered fields. Edits stay local until Submit.",
+        "status": "Current committed space. Click a subject for its offered operations; focus the scene for WASD/QE and right-drag viewing.",
+        "controller_status": {
+          "available": true,
+          "revision": "0",
+          "digest": "EWOaAaDhlG1m-sE4f_1thzMcbIf5ANlDI7k0M0eAYk4",
+          "choices": {},
+          "sources": [
+            {
+              "id": "1",
+              "hand": "left",
+              "profile": "htc_vive_controller",
+              "tracked": false,
+              "bindings": [
+                "select",
+                "drive",
+                "snap",
+                "teleport"
+              ],
+              "reason": ""
+            },
+            {
+              "id": "2",
+              "hand": "right",
+              "profile": "htc_vive_controller",
+              "tracked": false,
+              "bindings": [
+                "select",
+                "menu"
+              ],
+              "reason": ""
+            }
+          ]
+        },
+        "controller_metrics": {
+          "Running": true,
+          "Subscriptions": 13,
+          "sources": 2,
+          "appearances": 2,
+          "MenuRedraws": 0,
+          "LateCallbacks": 0,
+          "captures": 0,
+          "DriveRequests": 0,
+          "StopRequests": 0,
+          "SnapRequests": 0,
+          "TeleportRequests": 0,
+          "resources": {
+            "Acquisitions": 2,
+            "Releases": 0,
+            "Decodes": 0,
+            "InstancesCreated": 0,
+            "InstancesReleased": 0,
+            "NodesBuilt": 0,
+            "TexturesDecoded": 0,
+            "LiveTemplates": 1,
+            "LiveLeases": 2
+          }
+        }
+      },
+      "geometry_receipt": {
+        "raw_retained_privately": true,
+        "window_focused": true,
+        "session_state": "Focused",
+        "render_getters_observed": false,
+        "native_view_success_not_exposed": true,
+        "panel_size": [
+          3.7298386,
+          1
+        ],
+        "gui_pixels": [
+          1850,
+          496
+        ],
+        "model_visibility": [
+          {
+            "hand": "left",
+            "current": true,
+            "visible_roots": 0,
+            "visible_meshes": 0
+          },
+          {
+            "hand": "right",
+            "current": true,
+            "visible_roots": 0,
+            "visible_meshes": 0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "observer-retired",
+      "frames": 1,
+      "validHead": 1,
+      "highHead": 1,
+      "sources": [
+        {
+          "name": "left_hand",
+          "instance": "9223372051635503398",
+          "hand": "left",
+          "profile": "/interaction_profiles/htc/vive_controller",
+          "tracked_frames": 1,
+          "pose_disagreements": 0,
+          "edges": [],
+          "pose": "True:High/True:High"
+        },
+        {
+          "name": "right_hand",
+          "instance": "9223372051652280615",
+          "hand": "right",
+          "profile": "/interaction_profiles/htc/vive_controller",
+          "tracked_frames": 1,
+          "pose_disagreements": 0,
+          "edges": [],
+          "pose": "True:High/True:High"
+        }
+      ],
+      "button_presses": {
+        "start-xr": 1
+      },
+      "router": {
+        "available": true,
+        "revision": "0",
+        "digest": "EWOaAaDhlG1m-sE4f_1thzMcbIf5ANlDI7k0M0eAYk4",
+        "choices": {},
+        "sources": [
+          {
+            "id": "1",
+            "hand": "left",
+            "profile": "htc_vive_controller",
+            "tracked": true,
+            "bindings": [
+              "select",
+              "drive",
+              "snap",
+              "teleport"
+            ],
+            "reason": ""
+          },
+          {
+            "id": "2",
+            "hand": "right",
+            "profile": "htc_vive_controller",
+            "tracked": true,
+            "bindings": [
+              "select",
+              "menu"
+            ],
+            "reason": ""
+          }
+        ]
+      },
+      "metrics": {
+        "Running": true,
+        "Subscriptions": 13,
+        "sources": 2,
+        "appearances": 2,
+        "MenuRedraws": 0,
+        "LateCallbacks": 0,
+        "captures": 0,
+        "DriveRequests": 0,
+        "StopRequests": 0,
+        "SnapRequests": 0,
+        "TeleportRequests": 0,
+        "resources": {
+          "Acquisitions": 2,
+          "Releases": 0,
+          "Decodes": 1,
+          "InstancesCreated": 1,
+          "InstancesReleased": 0,
+          "NodesBuilt": 76,
+          "TexturesDecoded": 1,
+          "LiveTemplates": 1,
+          "LiveLeases": 2
+        }
+      },
+      "cancellations": 0,
+      "state": {
+        "state": "account-ready",
+        "busy": false,
+        "public_key": "0Qn0MJHhz0QW-LRP7rArFffg3CGxHRYLy_BUfl6Kyj4",
+        "network": "IEVFWzDuQtWRuGdDvd-Bl1u98eUoLeSkWXs-OuG7i90",
+        "human": {
+          "Namespace": "human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw",
+          "Anchor": "B_7qKC0eFcLOz9SeAdOFoXoypVmwj3C2NDxcd-G5B9c",
+          "InstanceText": "me."
+        },
+        "setup": "account(agent_instance_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,me),agent_instance_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,personal),entity_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,<<\"01M66AY6S3843Y1C8MXDYFY77T\">>),ontology_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>),<<\"\\x9d\\\\xec\\\\x02\\}\\xba\\\\xb0\\\\xbd\\\\xc9\\P\\x03\\\\xd7\\\\xe3\\\\x9c\\\\xe3\\\\xe3\\\\x8d\\\\xc6\\\\x0f\\\\xdf\\%\\x1a\\\\x0b\\l\\x0e\\\\xe1\\\\xc0\\\\xad\\b\\x16\\\\x02\\\\x19\\o\">>,pins(<<\"u6\\xae\\\\xa9\\\\xff\\_\\xd5\\\\x99\\\\x81\\\\x99\\!\\xa5\\#\\x99\\ua\\xc7\\X(\\xfd\\\\x80\\'A\\x0e\\5\\xe4\\\\xc1\\\\xc8\\\\x16\\8KC\">>,<<\"\\xac\\\\x1c\\!\\\"w\\x86\\\\x10\\\\\"\\x06\\-\\xbc\\j\\xdb\\\\x02\\\\xbd\\\\xd5\\`~E\\xad\\;#\\xda\\\\xfc\\\\x9c\\\\x18\\\\xd9\\\\x96\\u\\xab\\<\\xff\\\">>,<<\"[~\\xc1\\^q\\xec\\('\\xf3\\\\x97\\E09\\xec\\\\xe8\\\\x93\\\\x84\\\\xc3\\\\xd4\\\\x84\\\\x89\\\\xbf\\\\x84\\0\\xca\\\\xfa\\%\\xd2\\l\\x1f\\F\\xcf\\\">>,<<\"\\xee\\\\x12\\\\xe2\\O\\xa7\\\\xd4\\\\xe4\\c\\x19\\\\xf6\\{\\x16\\\\x12\\\\xd8\\\\xf7\\I\\xcb\\w\\x0c\\\\xfe\\\\x94\\a1\\x85\\\\x06\\\\x9d\\\\x93\\\\x97\\\\xed\\4\\xf1\\U\">>,<<\"\\xac\\?\\xcb\\\\x00\\7\\xed\\\\xf7\\7,\\xee\\\\x13\\<\\x81\\\\xb5\\\\xbb\\\\xac\\\\xa3\\\\xa7\\s\\x11\\\\xf3\\\\xdb\\?\\xea\\{5M \\x05\\3\\x90\\$\">>))",
+        "pending": 0,
+        "world_accepted": true,
+        "live_sockets": 5,
+        "ignored_projections": 0,
+        "question_receiver_ready": true,
+        "current_location": "placed(entity_ref(<<\"human:2RF6aHcC_7SXaMUGmoubso4cbxIfy84WdICrw9yYVpw\">>,<<\"\\x07\\\\xfe\\\\xea\\(-\\x1e\\\\x15\\\\xc2\\\\xce\\\\xcf\\\\xd4\\\\x9e\\\\x01\\\\xd3\\\\x85\\\\xa1\\z2\\xa5\\Y\\xb0\\\\x8f\\p\\xb6\\4<\\\\w\\xe1\\\\xb9\\\\x07\\\\xd7\\\">>,<<\"01M66AY6S3843Y1C8MXDYFY77T\">>),transform(0,0,0,0,0,0))",
+        "assignment_revision": "1",
+        "physical_selection": "nonphysical",
+        "physical_tick": null,
+        "scene_count": 0,
+        "operation_available": true,
+        "operation_status": "Current offered fields. Edits stay local until Submit.",
+        "status": "Current committed space. Click a subject for its offered operations; focus the scene for WASD/QE and right-drag viewing.",
+        "controller_status": {
+          "available": true,
+          "revision": "0",
+          "digest": "EWOaAaDhlG1m-sE4f_1thzMcbIf5ANlDI7k0M0eAYk4",
+          "choices": {},
+          "sources": [
+            {
+              "id": "1",
+              "hand": "left",
+              "profile": "htc_vive_controller",
+              "tracked": true,
+              "bindings": [
+                "select",
+                "drive",
+                "snap",
+                "teleport"
+              ],
+              "reason": ""
+            },
+            {
+              "id": "2",
+              "hand": "right",
+              "profile": "htc_vive_controller",
+              "tracked": true,
+              "bindings": [
+                "select",
+                "menu"
+              ],
+              "reason": ""
+            }
+          ]
+        },
+        "controller_metrics": {
+          "Running": true,
+          "Subscriptions": 13,
+          "sources": 2,
+          "appearances": 2,
+          "MenuRedraws": 0,
+          "LateCallbacks": 0,
+          "captures": 0,
+          "DriveRequests": 0,
+          "StopRequests": 0,
+          "SnapRequests": 0,
+          "TeleportRequests": 0,
+          "resources": {
+            "Acquisitions": 2,
+            "Releases": 0,
+            "Decodes": 1,
+            "InstancesCreated": 1,
+            "InstancesReleased": 0,
+            "NodesBuilt": 76,
+            "TexturesDecoded": 1,
+            "LiveTemplates": 1,
+            "LiveLeases": 2
+          }
+        }
+      },
+      "geometry_receipt": {
+        "raw_retained_privately": true,
+        "window_focused": true,
+        "session_state": "Focused",
+        "render_getters_observed": false,
+        "native_view_success_not_exposed": true,
+        "panel_size": [
+          3.7298386,
+          1
+        ],
+        "gui_pixels": [
+          1850,
+          496
+        ],
+        "model_visibility": [
+          {
+            "hand": "left",
+            "current": true,
+            "visible_roots": 0,
+            "visible_meshes": 0
+          },
+          {
+            "hand": "right",
+            "current": true,
+            "visible_roots": 0,
+            "visible_meshes": 0
+          }
+        ]
+      }
+    }
+  ]
+}

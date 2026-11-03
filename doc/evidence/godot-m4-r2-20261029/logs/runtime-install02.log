@@ -1,0 +1,18 @@
+-- Install configuration: "RelWithDebInfo"
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/lib/libmonado.so.25.1.0
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/lib/libmonado.so.25
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/lib/libmonado.so
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/include/monado/monado.h
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/openxr/1/openxr_monado.json
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/lib/libopenxr_monado.so
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/st-openvr
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/st-openvr/bin
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/st-openvr/bin/version.txt
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/st-openvr/bin/linux64
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/st-openvr/bin/linux64/vrclient.so
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-cli
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-gui
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-ctl
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-service
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/lib/systemd/user/monado.socket
+-- Installing: /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/lib/systemd/user/monado.service

@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/hardware-probe.py",
+    "vive-private-probe02",
+    "--diagnose"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T09:59:08Z",
+  "elapsed_seconds": 1.8751580715179443,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/vive-private-probe02.log",
+  "raw_sha256": "a066af043d89f9ee249fafbf6716866115ef38d46b0ea2cc2aa44ea3e57d95be",
+  "sanitized_sha256": "a066af043d89f9ee249fafbf6716866115ef38d46b0ea2cc2aa44ea3e57d95be",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

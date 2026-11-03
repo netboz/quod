@@ -1,0 +1,63 @@
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+Verbose [GENERAL | xrEnumerateApiLayerProperties | OpenXR-Loader] : Entering loader trampoline
+Verbose [GENERAL | xrEnumerateApiLayerProperties | OpenXR-Loader] : Entering loader trampoline
+Verbose [GENERAL | xrEnumerateInstanceExtensionProperties | OpenXR-Loader] : Entering loader trampoline
+Info [GENERAL | xrEnumerateInstanceExtensionProperties | OpenXR-Loader] : RuntimeManifestFile::FindManifestFiles - using environment variable override runtime file /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/openxr/1/openxr_monado.json
+Info [GENERAL |  | OpenXR-Loader] : RuntimeManifestFile::CreateIfValid - attempting to load /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/openxr/1/openxr_monado.json
+Info [GENERAL | xrEnumerateInstanceExtensionProperties | OpenXR-Loader] : RuntimeInterface::LoadRuntime succeeded loading runtime defined in manifest file /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/share/openxr/1/openxr_monado.json using interface version 1 and OpenXR API version 1.1
+Verbose [GENERAL | xrEnumerateInstanceExtensionProperties | OpenXR-Loader] : Completed loader trampoline
+Verbose [GENERAL | xrEnumerateInstanceExtensionProperties | OpenXR-Loader] : Entering loader trampoline
+Verbose [GENERAL | xrEnumerateInstanceExtensionProperties | OpenXR-Loader] : Completed loader trampoline
+Verbose [GENERAL | xrCreateInstance | OpenXR-Loader] : Entering loader trampoline
+Verbose [GENERAL | xrCreateInstance | OpenXR-Loader] : Entering LoaderInstance::CreateInstance
+Verbose [GENERAL | xrCreateInstance | OpenXR-Loader] : Entering loader terminator
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Quod
+	createInfo->applicationInfo.applicationVersion: 1
+	createInfo->applicationInfo.engineName: Godot Engine
+	createInfo->applicationInfo.engineVersion: 40702
+	createInfo->applicationInfo.apiVersion: 1.1.54
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.disable_quad_views: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+	quirks.ignore_invalid_swapchain_usage_bits: false
+	quirks.ignore_invalid_layer_flags_bits: false
+
+Verbose [GENERAL | xrCreateInstance | OpenXR-Loader] : Completed loader terminator
+Info [GENERAL | xrCreateInstance | OpenXR-Loader] : LoaderInstance::CreateInstance succeeded with 0 layers enabled and runtime interface - created instance = 0x000000002d5ff8c0
+Verbose [GENERAL | xrCreateInstance | OpenXR-Loader] : Completed loader trampoline
+ERROR [ipc_client_instance_is_system_available] ipc_call_instance_is_system_available failed: XRT_ERROR_VULKAN [/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/ipc/client/ipc_client_instance.c:139]
+XR_ERROR_RUNTIME_FAILURE in xrGetSystem: Call to xrt_instance_is_system_available failed: XRT_ERROR_VULKAN
+OpenXR: Created instance for OpenXR 1.1.54
+OpenXR: Running on OpenXR runtime:  Monado(XRT) by Collabora et al '59be345db769a89c93d1bdf6ed8316fa6209d8ae'   25.1.0
+OpenXR: Failed to get system for our form factor [ XR_ERROR_RUNTIME_FAILURE ]
+Verbose [GENERAL | xrDestroyInstance | OpenXR-Loader] : Entering loader trampoline
+Verbose [GENERAL | xrDestroyInstance | OpenXR-Loader] : Entering loader terminator
+Verbose [GENERAL | xrDestroyInstance | OpenXR-Loader] : Completed loader terminator
+Info [GENERAL | xrDestroyInstance | OpenXR-Loader] : Destroying LoaderInstance = 0x000000002d602140
+Verbose [GENERAL | xrDestroyInstance | OpenXR-Loader] : Completed loader trampoline
+Info [GENERAL | xrDestroyInstance | OpenXR-Loader] : RuntimeInterface::UnloadRuntime - Unloading RuntimeInterface
+Info [GENERAL |  | OpenXR-Loader] : RuntimeInterface being destroyed.
+WARNING: OpenXR was requested but failed to start.
+HMD was not detected or a required feature was not supported.
+
+Godot will start in normal mode.
+
+     at: initialize_openxr_module (modules/openxr/register_types.cpp:262)
+WARNING: xdg-toplevel-icon protocol not found! Cannot set window icon.
+     at: init (platform/linuxbsd/wayland/wayland_thread.cpp:5642)
+Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.","controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+System.Exception: installed OpenXR interface starts cycle 1: Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.
+   at ExportChecks.Check(Boolean yes, String name) in /home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/tests/ExportChecks.cs:line 20
+   at ExportChecks.OpenXRRuntime() in /home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/tests/OpenXRChecks.cs:line 14
+   at ExportChecks.Begin(Main application) in /home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/tests/ExportChecks.cs:line 57
+{"state":"offline","busy":false,"public_key":null,"network":null,"human":null,"setup":null,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.","controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.","controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}

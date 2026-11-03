@@ -1,0 +1,54 @@
+{
+  "command": [
+    "python3",
+    "client/native/tools/check.py",
+    "--evidence",
+    "doc/evidence/godot-m4-vive-headset-cue-20261030/pure-gates01",
+    "--",
+    "dotnet",
+    "run",
+    "--project",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/cue-gates01/CueGateChecks.csproj",
+    "-c",
+    "Release"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "arm.py": "f24ed12e8138bd429188c343d9d26e1c34db094b8bc07be86920d2166fa14117",
+    "capture.py": "9de3d437517cf374c7ce685eaa3211698ed98fedb44a8e9a70565bbb204ad5d1",
+    "freeze_hashes.py": "aea4703b936862bfb115d8ee8dee9933295c402b4f0e265a33a2d9180e8a01be",
+    "freeze_small.py": "b0315899bb72b1ef979682f64d9cf304eaea3e1f4b93e8b27d8dbe37b0ff1616",
+    "guard.py": "cb53d8d664b983aea17e8669d84172fcc2d3c9346936e78dc07b7cf43ee73dd4",
+    "prepare.py": "fb3ab16cec5565bff6dd3e9f0e22384ca9b3a00add8d125a998302df688d5649",
+    "qualify.py": "0dc3aa2cc5da1035ea819603ddf4408945ba1f19374c35b5e593c771e131e36f",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479"
+  },
+  "start_utc": "2026-10-30T18:16:33Z",
+  "elapsed_seconds": 1.1686580181121826,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/cue-gates01/stdout.raw",
+      "sha256": "d8c53437130edc73ba5c6551255646edcb44d916f1cd8ad7d13b1c021a326039",
+      "bytes": 441
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/cue-gates01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-focus15-20261030/logs/cue-gates01-stdout.log",
+      "sha256": "d8c53437130edc73ba5c6551255646edcb44d916f1cd8ad7d13b1c021a326039",
+      "bytes": 441
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-focus15-20261030/logs/cue-gates01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

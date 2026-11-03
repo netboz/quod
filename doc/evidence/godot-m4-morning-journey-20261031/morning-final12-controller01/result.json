@@ -1,0 +1,40 @@
+{
+  "command": [
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-morning-final12/source/client/godot/dist/quod.x86_64",
+    "--headless",
+    "--audio-driver",
+    "Dummy",
+    "--xr-mode",
+    "off",
+    "--rendering-method",
+    "mobile",
+    "--rendering-driver",
+    "vulkan",
+    "--",
+    "--qualification",
+    "--profile",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-final12-controller01/identity"
+  ],
+  "manifest": "doc/evidence/godot-m4-morning-journey-20261031/inputs/client-morning-final12-manifest.json",
+  "manifest_sha256": "903710125a1f2d2a812693991d78d57fb9972b9081d5a72910a77fca9f7941c6",
+  "actual_exports_admitted": 196,
+  "stat_bound_digest_hits": 196,
+  "driver_hashes": {
+    "application.py": "0292113cbb2947f8ef97e07e3167d38b4a280f16bf3c52cddddcac06810f0ebc",
+    "cue_hashes.py": "0cec06be894a6923314910931fe5f606177ba5359dca6521e82aa04dc4e69716",
+    "digests.py": "4c356fa8d6501037fa77bde705af6fd1e916a76e2efb744f2dae96e57b0edd19",
+    "desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"
+  },
+  "native_input": [],
+  "watchdog_seconds": 60,
+  "physical_acceptance": false,
+  "passed": true,
+  "reader_errors": [],
+  "client_exit": 0,
+  "eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "completion_marker": true,
+  "observation_marker": false
+}

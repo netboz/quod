@@ -1,0 +1,12 @@
+[
+  {
+    "pid": 666,
+    "comm": "Xorg",
+    "uid": 0
+  },
+  {
+    "pid": 1654,
+    "comm": "Xwayland",
+    "uid": 1000
+  }
+]

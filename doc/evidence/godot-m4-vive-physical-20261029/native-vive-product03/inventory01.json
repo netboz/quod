@@ -1,0 +1,23 @@
+{
+  "case": "native-vive-product03",
+  "command": [
+    "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-ctl"
+  ],
+  "private_ipc": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product03/runtime",
+  "true_child_exit": 0,
+  "streams": {
+    "stdout": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product03/inventory01/stdout.raw",
+      "sha256": "a15a591e4ab6773ed477bbba1cd522a72a18784934f2f454cdc90dae33b41e7a",
+      "bytes": 253,
+      "sanitized_sha256": "a15a591e4ab6773ed477bbba1cd522a72a18784934f2f454cdc90dae33b41e7a"
+    },
+    "stderr": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product03/inventory01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sanitized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "scope": "One temporary inventory client on the owned service; not an application session or hardware gesture."
+}

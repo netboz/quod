@@ -1,0 +1,89 @@
+{
+  "command": [
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-presentation-final02/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--audio-driver",
+    "Dummy",
+    "--xr-mode",
+    "off",
+    "--rendering-method",
+    "mobile",
+    "--rendering-driver",
+    "vulkan",
+    "--",
+    "--qualification",
+    "--profile",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/presentation-controller-final02/identity"
+  ],
+  "manifest": "doc/evidence/godot-m4-presentation-20261030/inputs/client-presentation-final02-manifest.json",
+  "manifest_sha256": "7abf72a2c42027e889a8df268e1edbcdb2f90e3622bdf023e1e5c84824ae4ff2",
+  "actual_exports_admitted": 196,
+  "stat_bound_digest_hits": 196,
+  "driver_hashes": {
+    "application.py": "b6ba8df50e9a963afbf84907f8a2b444d127b3a22eaafbcb52aa557d2306a8c5",
+    "digests.py": "4ea3723621d5e9e8a5a683acad8c4d819ce787a5f99cbc85b8d8ae9ddf2c8b0f",
+    "desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"
+  },
+  "native_input": [
+    {
+      "command": [
+        "hyprctl",
+        "dispatch",
+        "hl.dsp.cursor.move({x=580,y=350})"
+      ],
+      "child_exit": 0,
+      "stdout": "ok\n",
+      "stderr": "",
+      "owned_pid": 2220917,
+      "before_pid": 2220917,
+      "after_pid": 2220917,
+      "target_geometry": {
+        "address": "0x557166bc84c0",
+        "at": [
+          0,
+          0
+        ],
+        "size": [
+          1920,
+          1080
+        ]
+      }
+    },
+    {
+      "command": [
+        "ydotool",
+        "click",
+        "0xC0"
+      ],
+      "child_exit": 0,
+      "stdout": "c0 110\n",
+      "stderr": "",
+      "owned_pid": 2220917,
+      "before_pid": 2220917,
+      "after_pid": 2220917,
+      "target_geometry": {
+        "address": "0x557166bc84c0",
+        "at": [
+          0,
+          0
+        ],
+        "size": [
+          1920,
+          1080
+        ]
+      }
+    }
+  ],
+  "watchdog_seconds": 60,
+  "physical_acceptance": false,
+  "passed": true,
+  "reader_errors": [],
+  "client_exit": 0,
+  "eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "completion_marker": true,
+  "observation_marker": false
+}

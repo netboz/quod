@@ -1,0 +1,27 @@
+{
+  "ViveLookCue.cs": {
+    "sha256": "bf15ec17c0268d828b623fde1f2f13c788390389f2adb227d32f4345b2a779b6",
+    "mode": 420,
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/cue-gates02/ViveLookCue.cs"
+  },
+  "CueChecks.cs": {
+    "sha256": "b0e55f58f09bc929de77eba95d3aa990bb4cc535d6a35d647bf16d62a1877338",
+    "mode": 420,
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/cue-gates02/CueChecks.cs"
+  },
+  "CueGateChecks.csproj": {
+    "sha256": "38e201f047792df530db8c7d157c2b6b19d1ed2e4134dba5da5c59e97d3b0da2",
+    "mode": 384,
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/cue-gates02/CueGateChecks.csproj"
+  },
+  "global.json": {
+    "sha256": "278a2b892d2ef8ee4857a5ff79d82b83110a667a6bfa99168d613db5a1c4d901",
+    "mode": 384,
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/cue-gates02/global.json"
+  },
+  "NuGet.Config": {
+    "sha256": "412e351f0e339dcbab8b8e852a7fec4ecacf046f6e07ce8960e6941fe04f4509",
+    "mode": 384,
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/cue-gates02/NuGet.Config"
+  }
+}

@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/build.py", line 8, in <module>
+    digests=Digests()
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-presentation-20261030/digests.py", line 21, in __init__
+    rows={tuple(r['stat_key']):r['sha256'] for r in data['records']} if 'records' in data else {tuple(map(int,k.split(','))):v for k,v in data.items()}
+                ~^^^^^^^^^^^^
+TypeError: string indices must be integers, not 'str'

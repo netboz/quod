@@ -1,0 +1,133 @@
+{
+  "scope": "Current native-source observations and unchanged real-consumer model work; no participant attribution, ninety-frame gate or mapped-gesture pass",
+  "frame_interval": [
+    2860,
+    16909
+  ],
+  "resources_before": {
+    "Acquisitions": 2,
+    "Releases": 0,
+    "Decodes": 1,
+    "InstancesCreated": 2,
+    "InstancesReleased": 0,
+    "NodesBuilt": 114,
+    "TexturesDecoded": 1,
+    "LiveTemplates": 1,
+    "LiveLeases": 2
+  },
+  "resources_after": {
+    "Acquisitions": 2,
+    "Releases": 0,
+    "Decodes": 1,
+    "InstancesCreated": 2,
+    "InstancesReleased": 0,
+    "NodesBuilt": 114,
+    "TexturesDecoded": 1,
+    "LiveTemplates": 1,
+    "LiveLeases": 2
+  },
+  "model_work_unchanged": true,
+  "same_mapping_revision": true,
+  "same_mapping_digest": true,
+  "sources": [
+    {
+      "name": "left_hand",
+      "instance": "9223372051635503398",
+      "hand": "left",
+      "profile": "/interaction_profiles/htc/vive_controller",
+      "tracked_frames": 1618,
+      "pose_disagreements": 0,
+      "edges": [
+        {
+          "component": "xr-standard-trigger",
+          "pressed": true,
+          "frame": 16841,
+          "current": true,
+          "axes_x": 0,
+          "axes_y": 0
+        },
+        {
+          "component": "xr-standard-trigger",
+          "pressed": false,
+          "frame": 16851,
+          "current": true,
+          "axes_x": 0,
+          "axes_y": 0
+        }
+      ],
+      "pose": "True:High/True:High"
+    },
+    {
+      "name": "right_hand",
+      "instance": "9223372051652280615",
+      "hand": "right",
+      "profile": "/interaction_profiles/htc/vive_controller",
+      "tracked_frames": 1628,
+      "pose_disagreements": 0,
+      "edges": [
+        {
+          "component": "xr-standard-touchpad",
+          "pressed": true,
+          "frame": 16294,
+          "current": true,
+          "axes_x": -0.7162084,
+          "axes_y": 0.6544389
+        },
+        {
+          "component": "xr-standard-touchpad",
+          "pressed": false,
+          "frame": 16296,
+          "current": true,
+          "axes_x": -0.6707968,
+          "axes_y": 0.6707968
+        },
+        {
+          "component": "xr-standard-trigger",
+          "pressed": true,
+          "frame": 16855,
+          "current": true,
+          "axes_x": 0,
+          "axes_y": 0
+        },
+        {
+          "component": "xr-standard-trigger",
+          "pressed": false,
+          "frame": 16867,
+          "current": true,
+          "axes_x": 0,
+          "axes_y": 0
+        }
+      ],
+      "pose": "True:Low/True:Low"
+    }
+  ],
+  "button_presses": {
+    "start-xr": 1
+  },
+  "pending": 0,
+  "busy": false,
+  "metrics": {
+    "Running": true,
+    "Subscriptions": 12,
+    "sources": 2,
+    "appearances": 2,
+    "MenuRedraws": 0,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 0,
+    "StopRequests": 0,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 0,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 0,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 1,
+      "LiveLeases": 2
+    }
+  }
+}

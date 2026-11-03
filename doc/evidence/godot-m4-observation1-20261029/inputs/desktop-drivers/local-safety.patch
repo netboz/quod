@@ -1,0 +1,48 @@
+--- current/local.py
++++ diagnostic/local.py
+@@ -12,6 +12,7 @@
+ import ctypes
+ from desktop_input import deliver
+ 
++os.umask(0o077)
+ p = argparse.ArgumentParser()
+ p.add_argument('--export', type=Path, required=True)
+ p.add_argument('--phase', choices=['menu', 'crypto', 'backup-import', 'backup-cancel', 'crash'], required=True)
+@@ -48,21 +49,23 @@
+         for line in child.stdout: lines.put(line)
+         lines.put(None)
+     threading.Thread(target=receive, daemon=True).start()
+-    killed = False; text = ''
++    killed = False; text = ''; output_eof = False
+     with (a.evidence / (label + '.log')).open('x') as log:
+         while True:
+             try: line = lines.get(timeout=60)
+             except queue.Empty:
+-                diagnostic=a.evidence/(label+'-shutdown-stacks.log')
++                diagnostic=a.private/'shutdown-diagnostics'/(label+'-native-stacks.log')
++                diagnostic.parent.mkdir(mode=0o700,parents=True,exist_ok=False)
+                 probe_exit=None;probe_error=None
+                 try:
+                     with diagnostic.open('x') as trace:
+-                        probe=subprocess.run(['gdb','-q','-batch','-p',str(child.pid),'-ex','set print frame-arguments none','-ex','set print entry-values no','-ex','thread apply all bt 16'],stdout=trace,stderr=subprocess.STDOUT,timeout=15)
++                        diagnostic.chmod(0o600)
++                        probe=subprocess.run(['gdb','-q','-nx','-batch','-iex','set auto-load off','-iex','set debuginfod enabled off','-p',str(child.pid),'-ex','set print frame-arguments none','-ex','set print entry-values no','-ex','thread apply all bt 16','-ex','detach'],stdout=trace,stderr=subprocess.STDOUT,timeout=15)
+                         probe_exit=probe.returncode
+                 except Exception as error:probe_error=str(error)
+                 finally:child.kill();child.wait()
+-                records.append({'command': command, 'child_exit': child.returncode, 'watchdog': True,'diagnostic':str(diagnostic),'diagnostic_exit':probe_exit,'diagnostic_error':probe_error}); raise RuntimeError('No progress before original watchdog')
+-            if line is None: break
++                records.append({'command': command, 'child_exit': child.returncode, 'watchdog': True,'owned_pid':child.pid,'output_eof':False,'arguments':False,'memory_dump':False,'gdb_user_init':False,'gdb_auto_load':False,'diagnostic':str(diagnostic),'diagnostic_exit':probe_exit,'diagnostic_error':probe_error}); raise RuntimeError('No progress before original watchdog')
++            if line is None: output_eof = True; break
+             log.write(line); log.flush(); text += line; print(line.rstrip(), flush=True)
+             try: deliver(line,child.pid,a.desktop,native_inputs)
+             except Exception:
+@@ -70,7 +73,7 @@
+             if line.startswith('M1B_CRASH_SEAM ') and kill: child.kill(); killed = True
+     child.wait()
+     passed = child.returncode == (-9 if kill else 0) and 'ERROR:' not in text and (killed if kill else ('M1B_LOCAL_PASS' in text or phase == 'crash-recover' or (phase == 'menu' and 'M2_MENU_PASS' in text)))
+-    records.append({'phase': phase, 'case': label, 'command': command, 'child_exit': child.returncode, 'external_sigkill_at_observed_seam': killed, 'passed': passed})
++    records.append({'phase': phase, 'case': label, 'command': command, 'child_exit': child.returncode, 'external_sigkill_at_observed_seam': killed, 'output_eof':output_eof, 'watchdog':False, 'passed': passed})
+     if not passed: raise RuntimeError('Exported phase failed: ' + phase)
+ try:
+     if a.phase != 'crash': run(a.phase, a.private / 'identity')

@@ -1,0 +1,296 @@
+{
+  "cases": {
+    "native-vive-product06": {
+      "diagnostic": true,
+      "protocol_retirement_passed": true,
+      "full_physical_accepted": false,
+      "client_exit": 0,
+      "runtime_exit": 0,
+      "server_exit": 0,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "runtime-stdout": true,
+        "runtime-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "model_metrics_after": {
+        "Running": false,
+        "Subscriptions": 0,
+        "sources": 0,
+        "appearances": 0,
+        "MenuRedraws": 0,
+        "LateCallbacks": 0,
+        "captures": 0,
+        "DriveRequests": 0,
+        "StopRequests": 0,
+        "SnapRequests": 0,
+        "TeleportRequests": 0,
+        "resources": {
+          "Acquisitions": 2,
+          "Releases": 2,
+          "Decodes": 1,
+          "InstancesCreated": 2,
+          "InstancesReleased": 2,
+          "NodesBuilt": 114,
+          "TexturesDecoded": 1,
+          "LiveTemplates": 0,
+          "LiveLeases": 0
+        }
+      },
+      "frames": 99086,
+      "valid_head": 98525,
+      "high_head": 87870,
+      "sources": [
+        {
+          "hand": "left",
+          "profile": "/interaction_profiles/htc/vive_controller",
+          "current_predicate_frames": 83792,
+          "internal_adjusted_transform_disagreements": 0,
+          "raw_edges": 6
+        },
+        {
+          "hand": "right",
+          "profile": "/interaction_profiles/htc/vive_controller",
+          "current_predicate_frames": 83802,
+          "internal_adjusted_transform_disagreements": 0,
+          "raw_edges": 8
+        }
+      ],
+      "final_signed_state": {
+        "state": "account-ready",
+        "status": "Space unavailable: View suspended.",
+        "world_accepted": false,
+        "pending": 0,
+        "busy": false
+      },
+      "original_calibration_unchanged": true,
+      "display_and_config_preserved": true,
+      "api_dump": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product06/api-dump.raw",
+        "sha256": "24440bf23c2559fb09db9775d4707515089f0a912b9495095be8d5f2208c0dfd",
+        "bytes": 1402204108,
+        "scope": "call entries and arguments only; no returned-status or pixel claim",
+        "authenticated_current_stat_key": [
+          2050,
+          1578562,
+          1402204108,
+          1793313182398695526,
+          1793313183753647509
+        ],
+        "unchanged_dump_rehashed_or_reparsed": false
+      },
+      "commands": [
+        {
+          "command": [
+            "hyprctl",
+            "dispatch",
+            "hl.dsp.focus({window=\"address:0x557166b94190\"})"
+          ],
+          "exit": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        {
+          "diagnostic_instruction": "status",
+          "utc": "2026-10-29T22:06:13Z"
+        },
+        {
+          "diagnostic_instruction": "status",
+          "utc": "2026-10-29T22:10:08Z"
+        },
+        {
+          "diagnostic_instruction": "status",
+          "utc": "2026-10-29T22:12:19Z"
+        },
+        {
+          "command": [
+            "hyprctl",
+            "dispatch",
+            "hl.dsp.focus({window=\"address:0x557166b94190\"})"
+          ],
+          "exit": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        {
+          "diagnostic_instruction": "stop",
+          "utc": "2026-10-29T22:33:02Z"
+        },
+        {
+          "diagnostic_instruction": "finish",
+          "utc": "2026-10-29T22:33:02Z"
+        },
+        {
+          "command": [
+            "hyprctl",
+            "dispatch",
+            "hl.dsp.window.close({window=\"address:0x557166b94190\"})"
+          ],
+          "exit": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        }
+      ],
+      "formal_ninety_draw_gate": "UNRUN",
+      "mapped_gui_gesture_or_movement": "UNRUN"
+    },
+    "native-vive-product07": {
+      "diagnostic": true,
+      "protocol_retirement_passed": true,
+      "full_physical_accepted": false,
+      "client_exit": 0,
+      "runtime_exit": 0,
+      "server_exit": 0,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "runtime-stdout": true,
+        "runtime-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "model_metrics_after": {
+        "Running": false,
+        "Subscriptions": 0,
+        "sources": 0,
+        "appearances": 0,
+        "MenuRedraws": 0,
+        "LateCallbacks": 0,
+        "captures": 0,
+        "DriveRequests": 0,
+        "StopRequests": 0,
+        "SnapRequests": 0,
+        "TeleportRequests": 0,
+        "resources": {
+          "Acquisitions": 2,
+          "Releases": 2,
+          "Decodes": 1,
+          "InstancesCreated": 2,
+          "InstancesReleased": 2,
+          "NodesBuilt": 114,
+          "TexturesDecoded": 1,
+          "LiveTemplates": 0,
+          "LiveLeases": 0
+        }
+      },
+      "frames": 30740,
+      "valid_head": 30740,
+      "high_head": 30740,
+      "sources": [
+        {
+          "hand": "left",
+          "profile": "/interaction_profiles/htc/vive_controller",
+          "current_predicate_frames": 17200,
+          "internal_adjusted_transform_disagreements": 0,
+          "raw_edges": 0
+        },
+        {
+          "hand": "right",
+          "profile": "/interaction_profiles/htc/vive_controller",
+          "current_predicate_frames": 17212,
+          "internal_adjusted_transform_disagreements": 0,
+          "raw_edges": 0
+        }
+      ],
+      "final_signed_state": {
+        "state": "account-ready",
+        "status": "Space unavailable: Updating authorized view\u2026",
+        "world_accepted": false,
+        "pending": 0,
+        "busy": false
+      },
+      "original_calibration_unchanged": true,
+      "display_and_config_preserved": true,
+      "api_dump": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product07/api-dump.raw",
+        "sha256": "327dcf3096e9fac0cc3c88906557d353db01236f32b9b577473e8e7f0eca7b23",
+        "bytes": 442092467,
+        "scope": "call entries and arguments only; no returned-status or pixel claim",
+        "authenticated_current_stat_key": [
+          2050,
+          1708395,
+          442092467,
+          1793316804105013098,
+          1793316805818055625
+        ],
+        "unchanged_dump_rehashed_or_reparsed": false
+      },
+      "commands": [
+        {
+          "command": [
+            "hyprctl",
+            "dispatch",
+            "hl.dsp.focus({window=\"address:0x557168940020\"})"
+          ],
+          "exit": 0,
+          "stdout": "ok\n",
+          "stderr": "",
+          "before_owned_focus": true,
+          "after_owned_focus": true
+        },
+        {
+          "diagnostic_instruction": "geometry",
+          "utc": "2026-10-29T23:15:07Z"
+        },
+        {
+          "command": [
+            "hyprctl",
+            "dispatch",
+            "hl.dsp.focus({window=\"address:0x557168940020\"})"
+          ],
+          "exit": 0,
+          "stdout": "ok\n",
+          "stderr": "",
+          "before_owned_focus": false,
+          "after_owned_focus": true
+        },
+        {
+          "diagnostic_instruction": "geometry",
+          "utc": "2026-10-29T23:21:54Z"
+        },
+        {
+          "diagnostic_instruction": "geometry",
+          "utc": "2026-10-29T23:30:52Z"
+        },
+        {
+          "diagnostic_instruction": "stop",
+          "utc": "2026-10-29T23:33:20Z"
+        },
+        {
+          "diagnostic_instruction": "finish",
+          "utc": "2026-10-29T23:33:20Z"
+        },
+        {
+          "command": [
+            "hyprctl",
+            "dispatch",
+            "hl.dsp.window.close({window=\"address:0x557168940020\"})"
+          ],
+          "exit": 0,
+          "stdout": "ok\n",
+          "stderr": "",
+          "before_owned_focus": false
+        }
+      ],
+      "formal_ninety_draw_gate": "UNRUN",
+      "mapped_gui_gesture_or_movement": "UNRUN"
+    }
+  },
+  "human_case07": {
+    "source": "actual coordinator PromptForUserInput completion forwarded in meta-1793316251211-5f0llo4",
+    "respondedBy": "desktop",
+    "respondedAt": 1793316207996,
+    "released_controls_during_observation": true,
+    "current_readiness_inferred": false,
+    "models_exact": "I could see both, but as they are all black they are hard to distinguish. I see the yello beam going out of them thougth",
+    "interface_exact": "too distant",
+    "both_models_and_yellow_beams_visible_on_physical04": true,
+    "readable_gui_mapped_action_comfort_claim": false
+  },
+  "earlier_case06_human_failure_retained": true,
+  "prior_frozen_handoff_and_question37_pending_label": "Historical. Actual desktop cancellation receipt retained separately at /data/quod-m4-vr-ca84d4f8-20261029/artifacts/vive-physical-freeze-runs01/question37-real-cancellation-and-new-continuation.json; no worker widget was opened in this continuation.",
+  "full_m4_accepted": false,
+  "raw_room_geometry": "private0600 only; public relative observations retain actual distinct sample times and cached getter/native-status limits"
+}

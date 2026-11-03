@@ -1,0 +1,11 @@
+{
+  "original_path": "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+  "retained_path": "doc/evidence/godot-m4-r2-20261029/inputs/client-final03-builder.py",
+  "sha256": "184dfc825ce1ef09bf6a8e730604bda8d72dbd6b0dfc502d70bac9f19c1b3004",
+  "builder_ctime_ns": 1793274838930180507,
+  "builder_mtime_ns": 1793274838930180507,
+  "actual_build_start_utc": "2026-10-29T12:07:42Z",
+  "same_original_file_ctime_predates_execution": true,
+  "same_original_file_mtime_predates_execution": true,
+  "preservation": "Original helper existed before execution and is unchanged since; this additional per-build copy was made after execution. Exact staged inputs and command/output receipts are separately retained."
+}

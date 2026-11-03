@@ -1,0 +1,8 @@
+{
+  "rows": 23552,
+  "observation_only_changes": [
+    "client/godot/Core/SignedView.cs",
+    "client/godot/Main.cs"
+  ],
+  "errors": []
+}

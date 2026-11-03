@@ -1,0 +1,87 @@
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Quod
+	createInfo->applicationInfo.applicationVersion: 1
+	createInfo->applicationInfo.engineName: Godot Engine
+	createInfo->applicationInfo.engineVersion: 40702
+	createInfo->applicationInfo.apiVersion: 1.1.54
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.disable_quad_views: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+	quirks.ignore_invalid_swapchain_usage_bits: false
+	quirks.ignore_invalid_layer_flags_bits: false
+
+LOG in xrGetSystem: Selected devices
+	Head: 'Simulated HMD'
+	Eyes: '<none>'
+	Left: 'Simple Controller (Simulated)'
+	Right: 'Simple Controller (Simulated)'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+WARNING: xdg-toplevel-icon protocol not found! Cannot set window icon.
+     at: init (platform/linuxbsd/wayland/wayland_thread.cpp:5642)
+LOG in xrCreateVulkanInstanceKHR: Creation of VkInstance:
+	result: VK_SUCCESS
+	vulkanInstance: 0x55ec83dc7c80
+	extensions:
+		VK_KHR_external_fence_capabilities
+		VK_KHR_external_memory_capabilities
+		VK_KHR_external_semaphore_capabilities
+		VK_KHR_get_physical_device_properties2
+		VK_EXT_debug_utils
+		VK_KHR_surface
+		VK_KHR_wayland_surface
+		VK_EXT_swapchain_colorspace
+LOG in xrCreateVulkanDeviceKHR: Creation of VkDevice:
+	result: VK_SUCCESS
+	vulkanDevice: 0x55ec83ed68d0
+	vulkanInstance: 0x55ec83dc7c80
+	external_fence_fd: true
+	external_semaphore_fd: true
+	timelineSemaphore: true
+	extensions:
+		VK_KHR_dedicated_allocation
+		VK_KHR_external_fence
+		VK_KHR_external_memory
+		VK_KHR_external_semaphore
+		VK_KHR_get_memory_requirements2
+		VK_KHR_external_memory_fd
+		VK_KHR_16bit_storage
+		VK_KHR_acceleration_structure
+		VK_KHR_buffer_device_address
+		VK_KHR_create_renderpass2
+		VK_KHR_deferred_host_operations
+		VK_KHR_depth_stencil_resolve
+		VK_KHR_driver_properties
+		VK_KHR_fragment_shading_rate
+		VK_KHR_image_format_list
+		VK_KHR_maintenance2
+		VK_KHR_multiview
+		VK_KHR_ray_tracing_pipeline
+		VK_KHR_shader_float16_int8
+		VK_KHR_storage_buffer_storage_class
+		VK_KHR_swapchain
+		VK_KHR_synchronization2
+		VK_KHR_vulkan_memory_model
+		VK_EXT_device_fault
+		VK_EXT_pipeline_creation_cache_control
+		VK_EXT_subgroup_size_control
+		VK_KHR_external_semaphore_fd
+		VK_KHR_external_fence_fd
+		VK_KHR_timeline_semaphore
+M4_OBSERVER_SCENE_ENTER
+M4_OBSERVER_APP_ENTER
+M4_INTERACTIVE_XR_READY
+M4_INTERACTIVE_HEAD {"confidence":"2","frame":1}
+M4_INTERACTIVE_POSE {"aim":"missing","frame":1,"grip":"missing","source":"left_hand"}
+M4_INTERACTIVE_POSE {"aim":"missing","frame":1,"grip":"missing","source":"right_hand"}
+M4_INTERACTIVE_HEAD {"confidence":"missing","frame":718}
+M4_INTERACTIVE_OBSERVATION_RECORDED

@@ -1,0 +1,27 @@
+{"command": ["dotnet", "--info"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 0.521770680003101}
+{"command": ["python3", "client/godot-tools/run.py", "--bootstrap"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 5.367778553001699}
+{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=Debug", "-p:SelfContained=true", "--source", "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 3.9479855060053524}
+{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=ExportRelease", "-p:SelfContained=true", "--source", "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 2.3439767800009577}
+{"command": ["python3", "client/godot-tools/run.py", "--export"], "exit": 1, "diagnostic_failure": false, "elapsed_seconds": 5.718269496996072}
+  Determining projects to restore...
+  Restored /home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Quod.csproj (in 1.58 sec).
+/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Main.cs(370,70): error CS1525: Invalid expression term 'int' [/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Quod.csproj]
+/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Main.cs(370,74): error CS1003: Syntax error, ',' expected [/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Quod.csproj]
+
+Build FAILED.
+
+/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Main.cs(370,70): error CS1525: Invalid expression term 'int' [/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Quod.csproj]
+/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Main.cs(370,74): error CS1003: Syntax error, ',' expected [/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Quod.csproj]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:02.08
+Traceback (most recent call last):
+  File "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot-tools/run.py", line 67, in <module>
+    subprocess.run(['dotnet', 'build', str(project / 'Quod.csproj'), '--no-restore'], cwd=project, env=env, check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['dotnet', 'build', '/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/Quod.csproj', '--no-restore']' returned non-zero exit status 1.
+

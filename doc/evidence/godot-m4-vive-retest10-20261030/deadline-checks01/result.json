@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-vive-retest10-20261030/deadline_checks.py"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.05863459400097781
+}

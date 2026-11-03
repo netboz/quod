@@ -1,0 +1,1 @@
+SyntaxError: unterminated string literal (detected at line 124) (freeze.py, line 124)

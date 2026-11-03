@@ -1,0 +1,9 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-vive-retest-20261030/restore_server05.py"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.1501613410000573
+}

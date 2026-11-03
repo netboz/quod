@@ -1,0 +1,11 @@
+{
+  "tool": "PromptForUserInput",
+  "question_scope": "Temporary Vive-only runtime rule: hl.monitor({output=\"HDMI-A-1\",disabled=false}); no config-file or desktop-monitor-rule edits; restore disabled=true after owned testing and verify desktop state",
+  "result": {
+    "answers": {"vive_lease_exception": {"type": "singleSelect", "selectedId": "allow"}},
+    "respondedBy": "desktop",
+    "respondedAt": 1793290099639
+  },
+  "prior_boundary_exception": true,
+  "broader_global_mutation_authorized": false
+}

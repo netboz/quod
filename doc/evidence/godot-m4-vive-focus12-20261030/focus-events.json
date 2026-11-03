@@ -1,0 +1,112 @@
+{
+  "rows": [
+    {
+      "kind": "snapshot",
+      "monotonic": 11124.320140914,
+      "utc": "2026-10-30T12:19:41.260381+00:00",
+      "owned": true,
+      "ordered_event_barrier": false
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11143.960112798,
+      "utc": "2026-10-30T12:20:00.900794+00:00",
+      "owned": false
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11153.752626271,
+      "utc": "2026-10-30T12:20:10.693807+00:00",
+      "owned": true
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11154.193812526,
+      "utc": "2026-10-30T12:20:11.135079+00:00",
+      "owned": false
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11176.950665513,
+      "utc": "2026-10-30T12:20:33.891881+00:00",
+      "owned": true
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11177.177266536,
+      "utc": "2026-10-30T12:20:34.117800+00:00",
+      "owned": false
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11181.123020368,
+      "utc": "2026-10-30T12:20:38.063956+00:00",
+      "owned": true
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11182.147434272,
+      "utc": "2026-10-30T12:20:39.088785+00:00",
+      "owned": false
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11294.342344756,
+      "utc": "2026-10-30T12:22:31.283280+00:00",
+      "owned": true
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11295.188142633,
+      "utc": "2026-10-30T12:22:32.128589+00:00",
+      "owned": false
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11314.956405891,
+      "utc": "2026-10-30T12:22:51.897339+00:00",
+      "owned": true
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11324.485146935,
+      "utc": "2026-10-30T12:23:01.426439+00:00",
+      "owned": false
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11417.231957102,
+      "utc": "2026-10-30T12:24:34.174976+00:00",
+      "owned": true
+    },
+    {
+      "kind": "transition",
+      "monotonic": 11418.587492221,
+      "utc": "2026-10-30T12:24:35.528037+00:00",
+      "owned": false
+    },
+    {
+      "kind": "local_subscription_close",
+      "monotonic": 11499.322882924,
+      "utc": "2026-10-30T12:25:56.263196+00:00",
+      "incomplete_line": false
+    }
+  ],
+  "result": {
+    "armed": true,
+    "runtime_started": false,
+    "focus_changed": false,
+    "subscription_count": 1,
+    "errors": [],
+    "peer_pid": 1809,
+    "instance_sha256": "fdb2f0232f78b8a23aa7c7f23adcfd476a7715e40e9eee04d8f1bbeeb20e29d7",
+    "rows": 15,
+    "event_messages": 40,
+    "unparsed_fragment": false,
+    "local_connection_closed": true,
+    "remote_eof_observed": false,
+    "snapshot_is_not_ordered_event_barrier": true,
+    "continuous_native_or_pixel_claim": false
+  },
+  "scope": "Filtered receive timestamps/booleans only; no source acknowledgement, snapshot barrier or returned-native/pixel evidence."
+}

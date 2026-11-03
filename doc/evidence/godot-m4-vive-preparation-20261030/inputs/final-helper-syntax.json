@@ -1,0 +1,42 @@
+{
+  "passed": true,
+  "method": "ast.parse only; no functional test",
+  "sources": {
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/cache.py": {
+      "sha256": "e10353e00d18e4bc779a1bd969a0e94dc8e7233ef246b182f39eb15f8c03a8ba",
+      "bytes": 427
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/freeze.py": {
+      "sha256": "46fecc798e5f464608791c41f9bfaebfc1c160ec376722bdcf9aba8e5a6745dc",
+      "bytes": 12522
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/preflight.py": {
+      "sha256": "a81278171eb6515d039279b43bbf8b61e1efc32b17f45ecdadaebb62fa4d96b6",
+      "bytes": 1822
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/finish_metadata.py": {
+      "sha256": "3861dcad30b81262aeb9c22854686eb740c32345fa7840a5230b7adc7d34e5c2",
+      "bytes": 2988
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/run_build.py": {
+      "sha256": "52ec752b432407f12252904cdc1b54dc3dc5185ebc5116331ddec7e29e50ec1a",
+      "bytes": 3426
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/verify_build02.py": {
+      "sha256": "1198a1329c2d3a6446357fffee74ca1bdf48d256b5ac14a1381a954452213d40",
+      "bytes": 6738
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/build.py": {
+      "sha256": "c5a1b11774df45746e5be3270b914dd1021bacbe5878b96bd70258578e088ad0",
+      "bytes": 7207
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/verify_freeze.py": {
+      "sha256": "25fb8b6f0a0ec0191b7eb025cfc887683ef06210a78d38cc9c460bfe0a94f41f",
+      "bytes": 9581
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/verify_build.py": {
+      "sha256": "ccd2c1bf793038f90892d4137622e4726b339cee32123a35b56c3069c979aef9",
+      "bytes": 6325
+    }
+  }
+}

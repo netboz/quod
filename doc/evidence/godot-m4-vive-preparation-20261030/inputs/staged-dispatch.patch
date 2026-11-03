@@ -1,0 +1,10 @@
+--- accepted92/client/godot/tests/ExportChecks.cs
++++ diagnostic93/client/godot/tests/ExportChecks.cs
+@@ -59,6 +59,7 @@
+             if (phase is "openxr" or "openxr-input") { await OpenXRRuntime(); return; }
+             if (phase == "shutdown-connect") { await CloseDuringConnect(); return; }
+             if (phase == "physics") { await PhysicsJourney(); return; }
++            if (phase == "vive-physical") { await VivePhysical(); return; }
+             bool fresh = phase is "fresh" or "questions" or "m2-fresh" or "m3-fresh";
+             if (phase == "tls") { await Tls(); return; }
+             if (phase is "crypto" or "backup-import" or "backup-cancel" or "crash-before-rename" or "crash-after-rename" or "crash-recover") {

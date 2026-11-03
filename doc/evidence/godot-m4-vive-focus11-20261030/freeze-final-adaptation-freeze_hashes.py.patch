@@ -1,0 +1,31 @@
+--- accepted-case10/freeze_hashes.py
++++ failed-case11/freeze_hashes.py
+@@ -1,21 +1,14 @@
+-"""Authenticate sealed retest01 caches for additive source/output custody."""
++"""Authenticate accepted86 post-link custody before new additive evidence work."""
+ import importlib.util,json,sys
+ from pathlib import Path
+ sys.dont_write_bytecode=True
+-old=Path(__file__).resolve().parent.parent/'godot-m4-vive-retest-20261030/freeze_hashes.py'
+-before_path=list(sys.path)
++old=Path(__file__).resolve().parent.parent/'godot-m4-vive-retest10-20261030/freeze_hashes.py'
++before=list(sys.path)
+ try:
+     sys.path.insert(0,str(old.parent))
+-    spec=importlib.util.spec_from_file_location('prior_retest_freeze_hashes',old)
++    spec=importlib.util.spec_from_file_location('accepted_retest10_hashes',old)
+     prior=importlib.util.module_from_spec(spec);spec.loader.exec_module(prior)
+-finally:sys.path[:]=before_path
++finally:sys.path[:]=before
+ Digests,TASK,key,raw,SOURCES=prior.Digests,prior.TASK,prior.key,prior.raw,prior.SOURCES
+-boundary=TASK/'artifacts/quod-godot-m4-vive-retest-handoff-ca84d4f8-20261030-01'
+-assert raw(boundary/'snapshot.json')=='560ee1a4b1be5c01bac72d35318b4c2f2a4199e107ba9cf9870a87a9599dbcc4'
+-snapshot=json.loads((boundary/'snapshot.json').read_text())
+-for name in ['freeze-used-digests.json','reconstruction-used-digests.json']:
+-    SOURCES.append((boundary/name,snapshot['artifacts'][name]['sha256']))
+-SOURCES.append((TASK/'cache/coordinator-case10-83-hashes.json',
+-    '56a5c2f383868599ca06f7c09186dfe90274aa95654c7fda370ab0fc4f7ea484'))
+-SOURCES.append((TASK/'cache/coordinator-retest85-hashes.json',
+-    '3e8d661ce99c7af6a311bddb38ba3ea092b95586409a37b9b2db7486e1e04354'))
++SOURCES.append((TASK/'cache/coordinator-retest10-final86-hashes.json','a1c6e1b72b697cc47bfec27971bfb358731385748adffdf961fb76f423f635ba'))
++SOURCES.append((Path('/data/quod-m4-vr-ca84d4f8-20261029/cache/focus11-receipt-binding-hashes.json'),'fbae0a7095b0378447bde6828673438b4cb39b6fd1ccd478c5b9a70de9ffc0b0'))

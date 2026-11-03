@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"answers\":{\"vive_wands_ready\":{\"type\":\"singleSelect\",\"selectedId\":\"__other__\",\"otherText\":\"The controller went out of batteries meanwhile, I'm reloading them, we will retry later\"}},\"respondedBy\":\"desktop\",\"respondedAt\":1793299521534}"
+    }
+  ],
+  "isError": false
+}

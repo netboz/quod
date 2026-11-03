@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-physical-20261029/extract_api.py", line 21, in <module>
+    assert counts['xrEndFrame']>0 and sum(layers.values())==counts['xrEndFrame'],'Missing or malformed frameEndInfo layerCount field/header'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Missing or malformed frameEndInfo layerCount field/header

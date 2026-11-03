@@ -1,0 +1,45 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-vive-focus14-20261030/capture.py",
+    "baseline"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "arm.py": "f161014a30db5e93130f102b21ed0fa8f47f91d8bf708f84e8ee139e1be34386",
+    "capture.py": "01dd60e4636ef229c498f51ca1838b92ed6dfad72bd76f5e57bad02e649662c6",
+    "freeze_hashes.py": "aea4703b936862bfb115d8ee8dee9933295c402b4f0e265a33a2d9180e8a01be",
+    "guard.py": "c3b109e93b3256d3fb4af90dc242a89467fa228e6b5be5d2b7d4cb223f274362",
+    "prepare.py": "934065f4d80ea4cc9510462e335157663f9d6d3f777efee6a0332bbe3f118da0",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479"
+  },
+  "start_utc": "2026-10-30T15:09:41Z",
+  "elapsed_seconds": 0.0645291805267334,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/focus14-baseline-capture01/stdout.raw",
+      "sha256": "696855425b471fb12da0fe32b07e55b2804e5d115633775b7bde9636a6b35325",
+      "bytes": 1735
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/focus14-baseline-capture01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-focus14-20261030/logs/focus14-baseline-capture01-stdout.log",
+      "sha256": "696855425b471fb12da0fe32b07e55b2804e5d115633775b7bde9636a6b35325",
+      "bytes": 1735
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-focus14-20261030/logs/focus14-baseline-capture01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

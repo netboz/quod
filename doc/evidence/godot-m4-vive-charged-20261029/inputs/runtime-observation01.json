@@ -1,0 +1,24 @@
+{
+  "scope": "Bounded current runtime log observation before the physical response; no tracking/readiness or returned-code inference",
+  "streams": {
+    "stdout": {
+      "observed_bytes": 0,
+      "prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "warning_error_lines": []
+    },
+    "stderr": {
+      "observed_bytes": 10990,
+      "prefix_sha256": "3171e69d02051d4501fd7f1e9c9b58eaf451268e035867ac5ca853ff3d121b3e",
+      "warning_error_lines": [
+        "ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!",
+        " WARN [get_input_from_name] requested unknown input name /input/system/click for device <device-serial-redacted>",
+        " WARN [compositor_check_and_prepare_xdev] Had to fill in meshuv on xdev 'HTC Vive. MV', this should be done in the driver.",
+        " WARN [TrackedDeviceAdded] Cannot add device after setup; consider increasing LH_DISCOVER_WAIT_MS",
+        " WARN [TrackedDeviceAdded] Cannot add device after setup; consider increasing LH_DISCOVER_WAIT_MS",
+        " WARN [build_extension_list] Duplicate extension VK_KHR_get_surface_capabilities2 not added twice",
+        " WARN [u_linux_try_to_set_realtime_priority_on_thread] Could not raise priority for thread 'VBlank Events'",
+        " WARN [u_linux_try_to_set_realtime_priority_on_thread] Could not raise priority for thread 'Multi Client Module'"
+      ]
+    }
+  }
+}

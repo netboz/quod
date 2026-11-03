@@ -1,0 +1,74 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/serve.py",
+    "physics-shutdown-diagnostic04-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--qualified",
+    "--physics"
+  ],
+  "passed": true,
+  "native_input": [
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:1"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 551244,
+      "before_pid": 551244,
+      "after_pid": 551244
+    },
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:0"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 551244,
+      "before_pid": 551244,
+      "after_pid": 551244
+    }
+  ],
+  "driver_inputs": {
+    "doc/evidence/godot-m4-20261029/physics-campaign.py": "5f9fb3fe06af0c068e17a3fd2bbbee3a924d447b37f8c3489ba3e90f910db8d1",
+    "client/godot-tests/desktop_input.py": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26"
+  },
+  "retained_drivers": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/physics-shutdown-diagnostic04-drivers",
+  "endpoint": {
+    "port": 36181,
+    "physics": true,
+    "control_port": 35759,
+    "network": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACo"
+  },
+  "private_key_transfer": {
+    "command": [
+      "docker",
+      "cp",
+      "quod-m4-live-physics-shutdown-diagnostic04-server:/m1b/viewer.json",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/physics-shutdown-diagnostic04/viewer.json"
+    ],
+    "child_exit": 0
+  },
+  "client_command": [
+    "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final04/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/tmp/quod-m4-ca84d4f8/artifacts/private/physics-shutdown-diagnostic04/identity"
+  ],
+  "client_child_exit": 0,
+  "final_input_release_exit": 0,
+  "server_child_exit": 0
+}

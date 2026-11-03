@@ -1,0 +1,17 @@
+{
+  "cache_creation": {
+    "actual_exit": 1,
+    "scope": "Separate R1 cache creation, after copying new evidence drivers; no product build child",
+    "output": "separately labelled R1 drivers retained\nTraceback (most recent call last):\n  File \"<stdin>\", line 16, in <module>\n  File \"/usr/lib/python3.14/pathlib/__init__.py\", line 1011, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nOSError: [Errno 30] Read-only file system: '/home/yan/.cache/quod-m4-r1-artifacts'\n",
+    "disposition": "Authorized new task directory created with escalation; existing cache/artifacts unchanged."
+  },
+  "wrapper_argument_order": {
+    "command": ["python3", "doc/evidence/godot-m4-r1-20261029/run.py", "r1-client-diagnostic01", "--timeout", "900", "--", "python3", "doc/evidence/godot-m4-r1-20261029/freeze-client.py", "diagnostic01"],
+    "actual_wrapper_exit": 1,
+    "build_child_launched": false,
+    "build_child_exit": null,
+    "output": "Traceback (most recent call last):\n  File \"/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r1-20261029/run.py\", line 33, in <module>\n    child = subprocess.Popen(command, cwd=a.cwd, env=env, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)\n  File \"/usr/lib/python3.14/subprocess.py\", line 1039, in __init__\n    self._execute_child(args, executable, preexec_fn, close_fds,\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        pass_fds, cwd, env,\n                        ^^^^^^^^^^^^^^^^^^\n    ...<5 lines>...\n                        gid, gids, uid, umask,\n                        ^^^^^^^^^^^^^^^^^^^^^\n                        start_new_session, process_group)\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/subprocess.py\", line 1990, in _execute_child\n    raise child_exception_type(errno_num, err_msg, err_filename)\nFileNotFoundError: [Errno 2] No such file or directory: '--timeout'\n",
+    "disposition": "Separate r1-client-diagnostic02 wrapper label placed options before label and passed; original empty raw log retained."
+  },
+  "tracker_sandbox": "radar-sandbox-failure.json retains the complete actual exit1 ESRCH output; authorized escalated read succeeded."
+}

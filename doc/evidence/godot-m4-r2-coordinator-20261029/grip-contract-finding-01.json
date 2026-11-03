@@ -1,0 +1,130 @@
+{
+  "coordinator": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46",
+  "kind": "Independently confirmed source/caller contract mismatch; not a new runtime reproduction",
+  "engine": {
+    "path": "/tmp/quod-m4-ca84d4f8/upstream/modules/openxr/openxr_interface.cpp",
+    "sha256": "810451a0284d73ac7e4bc6891001b6d4b8f51f5911b6950c2452234566c16aac",
+    "creationLines": "437-449 rename pose action grip_pose to tracker pose grip",
+    "deliveryLines": "602-612 set_pose/invalidate_pose using translated action_name"
+  },
+  "filesAtRead": [
+    {
+      "path": "client/godot/OpenXRInput.cs",
+      "sha256": "a641e6c472beaba7c3d47c9dab4e24362d6d8fbf99e937b4773f072604074231",
+      "matchingLines": [
+        {
+          "line": 31,
+          "text": "public bool Current(ulong frame)=>Alive && XRServer.GetTracker(Tracker.Name)?.GetInstanceId()==Tracker.GetInstanceId() && Tracker.HasPose(\"aim\") && Tracker.HasPose(\"grip_pose\") &&"
+        },
+        {
+          "line": 32,
+          "text": "Tracker.GetPose(\"aim\").HasTrackingData && Tracker.GetPose(\"grip_pose\").HasTrackingData &&"
+        },
+        {
+          "line": 33,
+          "text": "Tracker.GetPose(\"aim\").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None && Tracker.GetPose(\"grip_pose\").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;"
+        },
+        {
+          "line": 35,
+          "text": "{ if(!Alive)return;if(Tracker.HasPose(\"aim\"))Aim.Transform=Tracker.GetPose(\"aim\").GetAdjustedTransform();if(Tracker.HasPose(\"grip_pose\"))Grip.Transform=Tracker.GetPose(\"grip_pose\").GetAdjustedTransform(); }"
+        }
+      ]
+    },
+    {
+      "path": "client/godot/xr_actions.tres",
+      "sha256": "9ca40226f9198fbc31db7220141e8126f3c03069a4de5758552da121e105339b",
+      "matchingLines": [
+        {
+          "line": 9,
+          "text": "[sub_resource type=\"OpenXRAction\" id=\"grip_pose\"]"
+        },
+        {
+          "line": 10,
+          "text": "resource_name = \"grip_pose\""
+        },
+        {
+          "line": 54,
+          "text": "actions = [SubResource(\"aim\"), SubResource(\"grip_pose\"), SubResource(\"trigger_press\"), SubResource(\"trigger_value\"), SubResource(\"squeeze_press\"), SubResource(\"pad_press\"), SubResource(\"pad_touch\"), SubResource(\"pad_axes\")]"
+        },
+        {
+          "line": 64,
+          "text": "[sub_resource type=\"OpenXRIPBinding\" id=\"grip_pose_left\"]"
+        },
+        {
+          "line": 65,
+          "text": "action = SubResource(\"grip_pose\")"
+        },
+        {
+          "line": 68,
+          "text": "[sub_resource type=\"OpenXRIPBinding\" id=\"grip_pose_right\"]"
+        },
+        {
+          "line": 69,
+          "text": "action = SubResource(\"grip_pose\")"
+        },
+        {
+          "line": 122,
+          "text": "bindings = [SubResource(\"aim_left\"), SubResource(\"aim_right\"), SubResource(\"grip_pose_left\"), SubResource(\"grip_pose_right\"), SubResource(\"trigger_press_left\"), SubResource(\"trigger_press_right\"), SubResource(\"trigger_value_left\"), SubResource(\"trigger_value_right\"), SubResource(\"squeeze_press_left\"), SubResource(\"squeeze_press_right\"), SubResource(\"pad_press_left\"), SubResource(\"pad_press_right\"), SubResource(\"pad_touch_left\"), SubResource(\"pad_touch_right\"), SubResource(\"pad_axes_left\"), SubResource(\"pad_axes_right\")]"
+        }
+      ]
+    },
+    {
+      "path": "client/godot/tests/ControllerChecks.cs",
+      "sha256": "3b98ba6a1c44f321db7078030fed6378f928448c0916eaf1085ca39ce1b271b7",
+      "matchingLines": [
+        {
+          "line": 28,
+          "text": "t.SetPose(\"grip_pose\",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);XRServer.AddTracker(t);return t;"
+        },
+        {
+          "line": 57,
+          "text": "Pose(left,button.GetGlobalRect().GetCenter());Advance();Held(left,\"trigger_press\",true);left.InvalidatePose(\"grip_pose\");Advance();Held(left,\"trigger_press\",false);"
+        },
+        {
+          "line": 59,
+          "text": "left.SetPose(\"grip_pose\",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();"
+        }
+      ]
+    },
+    {
+      "path": "client/godot/tests/ControllerLiveChecks.cs",
+      "sha256": "d60a863cfb4c422f3b2c1a2d3e43e6f36ce0aae6def4699b177d427ee2adc4b4",
+      "matchingLines": [
+        {
+          "line": 23,
+          "text": "tracker.SetPose(\"aim\",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose(\"grip_pose\",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);"
+        }
+      ]
+    },
+    {
+      "path": "client/godot/tests/PhysicsChecks.cs",
+      "sha256": "eef6b927771b72f3739190d52aaf8f9f73b3c069c791cd13d839a50a5830058c",
+      "matchingLines": [
+        {
+          "line": 131,
+          "text": "tracker.SetPose(\"aim\",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose(\"grip_pose\",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);"
+        }
+      ]
+    },
+    {
+      "path": "client/godot/tests/OpenXRChecks.cs",
+      "sha256": "077aa1a98a2403d922241b6ed1b6fe76f9729f100c4dd54dfd5c9502470281ab",
+      "matchingLines": [
+        {
+          "line": 70,
+          "text": "var observations=adapter.Sources.Select(s=>new { name=s.Tracker.Name.ToString(),profile=s.Tracker.Profile,hand=s.Hand,layout=s.Layout,tracked=tracked.Contains(s),aim=s.Tracker.HasPose(\"aim\") ? s.Tracker.GetPose(\"aim\").TrackingConfidence.ToString() : \"missing\",grip=s.Tracker.HasPose(\"grip_pose\") ? s.Tracker.GetPose(\"grip_pose\").TrackingConfidence.ToString() : \"missing\",released=components.Where(c=>completed.Contains((s,c))).ToArray() }).ToArray();"
+        }
+      ]
+    }
+  ],
+  "currentAdapterStillUsesWrongName": true,
+  "nativeEvidence": "native-vive-input02: Focused3553 frames, two Vive profiles, aim/grip observations missing, trackedfalse and no button edges",
+  "limits": [
+    "This confirms a grip lookup mismatch independent of native tracking availability.",
+    "It does not explain missing aim poses or zero button edges.",
+    "Injected fixtures use the same noncanonical name, so their success does not establish native grip compatibility."
+  ],
+  "productTestsRerun": false,
+  "coordinatorImplementationEdit": false,
+  "fullM4Accepted": false
+}

@@ -1,0 +1,700 @@
+{
+  "checkpoint": "M4-R1",
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "actual_model": "openai-codex:gpt-6.1-sol",
+  "launcher_requested_effort": "max",
+  "launcher_returned_effort": "max",
+  "effective_backend_effort": "unexposed",
+  "bounded_investigation_complete": true,
+  "cause_determined": false,
+  "production_correction": false,
+  "historical_failures_resolved": false,
+  "native_openxr_qualified": false,
+  "physical_vive_qualified": false,
+  "no_quest_claim": true,
+  "current_candidate09_inputs_exact": 91,
+  "tests": {
+    "physics-diagnostic01": {
+      "checks": 39,
+      "completion": "M3_PHYSICS_PASS",
+      "client_exit": 0,
+      "server_exit": 0,
+      "wrapper_exit": 0,
+      "timed_out": false,
+      "phase_observations": [
+        {
+          "phase": "close-enter",
+          "tick": 42503458784040,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-await",
+          "tick": 42503481949002,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-work-retired",
+          "tick": 42503481988118,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-dispose",
+          "tick": 42503482050933,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-retired",
+          "tick": 42503482054360,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "close-await-owners",
+          "tick": 42503482103042,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "owners-retired",
+          "tick": 42503482223238,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "models-dispose",
+          "tick": 42503482232458,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "models-retired",
+          "tick": 42503482366351,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "xr-shutdown",
+          "tick": 42503482375588,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "xr-retired",
+          "tick": 42503484522904,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "identity-release",
+          "tick": 42503484567095,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "identity-released",
+          "tick": 42503484682618,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "quit-requested",
+          "tick": 42503484730723,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "exit-tree-enter",
+          "tick": 42503487503808,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "session-await",
+          "tick": 42503487593250,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-work-retired",
+          "tick": 42503487607299,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-dispose",
+          "tick": 42503487614498,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-retired",
+          "tick": 42503487616825,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "exit-tree-return",
+          "tick": 42503487622307,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        }
+      ],
+      "diagnostic_captured": null,
+      "client_log_sha256": "948008ff133d47105bac25cb4f08345732c8890419251ffeab31249aeca0f02a"
+    },
+    "physics-diagnostic02": {
+      "checks": 39,
+      "completion": "M3_PHYSICS_PASS",
+      "client_exit": 0,
+      "server_exit": 0,
+      "wrapper_exit": 0,
+      "timed_out": false,
+      "phase_observations": [
+        {
+          "phase": "close-enter",
+          "tick": 42535874747176,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-await",
+          "tick": 42535897771924,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-work-retired",
+          "tick": 42535897813483,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-dispose",
+          "tick": 42535897868481,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-retired",
+          "tick": 42535897871857,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "close-await-owners",
+          "tick": 42535897919648,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "owners-retired",
+          "tick": 42535898046240,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "models-dispose",
+          "tick": 42535898055100,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "models-retired",
+          "tick": 42535898180717,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "xr-shutdown",
+          "tick": 42535898189518,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "xr-retired",
+          "tick": 42535900064406,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "identity-release",
+          "tick": 42535900076490,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "identity-released",
+          "tick": 42535900169853,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "quit-requested",
+          "tick": 42535900212085,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "exit-tree-enter",
+          "tick": 42535903246101,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "session-await",
+          "tick": 42535903374972,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-work-retired",
+          "tick": 42535903402000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-dispose",
+          "tick": 42535903416127,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-retired",
+          "tick": 42535903418285,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "exit-tree-return",
+          "tick": 42535903431884,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        }
+      ],
+      "diagnostic_captured": null,
+      "client_log_sha256": "e9e152a2e2fdf5893d97a9ff48af4faa08443d4a17726a23960dc14eb371b4fa"
+    },
+    "physics-baseline03": {
+      "checks": 39,
+      "completion": "M3_PHYSICS_PASS",
+      "client_exit": 0,
+      "server_exit": 0,
+      "wrapper_exit": 0,
+      "timed_out": false,
+      "phase_observations": [],
+      "diagnostic_captured": null,
+      "client_log_sha256": "37fa2fd2483b79bd3a19b906835b6a8a96e1dcc0d163e658f6a3af2027718e3f"
+    },
+    "local-diagnostic01": {
+      "checks": 3,
+      "phase": "backup-cancel",
+      "completion": "M1B_LOCAL_PASS",
+      "client_exit": 0,
+      "wrapper_exit": 0,
+      "timed_out": false,
+      "phase_observations": [
+        {
+          "phase": "close-enter",
+          "tick": 42656451205442,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 2,
+              "status": "WaitingForActivation"
+            }
+          ]
+        },
+        {
+          "phase": "session-await",
+          "tick": 42656459711046,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-work-retired",
+          "tick": 42656459796311,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-dispose",
+          "tick": 42656459868133,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-retired",
+          "tick": 42656459882051,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "close-await-owners",
+          "tick": 42656459919457,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 2,
+              "status": "WaitingForActivation"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "owners-retired",
+          "tick": 42656707453732,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "models-dispose",
+          "tick": 42656707500063,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "models-retired",
+          "tick": 42656708238117,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "xr-shutdown",
+          "tick": 42656708295945,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "xr-retired",
+          "tick": 42656712142274,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "identity-release",
+          "tick": 42656712203742,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "identity-released",
+          "tick": 42656712313541,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "quit-requested",
+          "tick": 42656712365965,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "exit-tree-enter",
+          "tick": 42656716747838,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "session-await",
+          "tick": 42656716826393,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            }
+          ]
+        },
+        {
+          "phase": "session-work-retired",
+          "tick": 42656716843099,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-dispose",
+          "tick": 42656716848741,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "transport-retired",
+          "tick": 42656716854786,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": []
+        },
+        {
+          "phase": "exit-tree-return",
+          "tick": 42656716863826,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "tasks": [
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 1,
+              "status": "RanToCompletion"
+            },
+            {
+              "id": 2,
+              "status": "RanToCompletion"
+            }
+          ]
+        }
+      ],
+      "diagnostic_captured": false,
+      "pending_backup_awaited_before_identity_release": true
+    }
+  },
+  "remaining_blocker": "Neither historical stall reproduced within the bounded attempts. No stack exists from either original killed process or a new causal stall, so no responsible-owner correction or shutdown acceptance is justified.",
+  "current_metadata": "in-review80, parent67 unchanged",
+  "production_delta_vs_candidate09": 0,
+  "test_delta_vs_candidate09": 0,
+  "server_production_delta": 0,
+  "relocations": 0,
+  "temporary_observation_source_retained": true,
+  "temporary_observation_removed_from_live_source": true
+}

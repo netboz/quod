@@ -1,0 +1,43 @@
+{
+  "certificate_command": [
+    "openssl",
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-keyout",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/renewal-owner-observation01/proxy-key.pem",
+    "-out",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/renewal-owner-observation01/proxy-ca.pem",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-addext",
+    "basicConstraints=critical,CA:TRUE"
+  ],
+  "certificate_child_exit": 0,
+  "origin": "https://127.0.0.1:34589",
+  "expected_hostname": "127.0.0.1",
+  "ca_sha256": "df01d90af8561509a899c56fef4bb29b1b022c1b0651fa3aab9a881de3aeefdb",
+  "backend_ca_sha256": "3cedabd97ee015f9ae1b60f3611ee8e00b6c40d8e326579991b73853a2d502e6",
+  "certificate_validation": true,
+  "drops": {
+    "signup": 0,
+    "setup": 0,
+    "instruction": 0
+  },
+  "question_faults": {
+    "question_reply_lost": 0,
+    "question_unknown_error": 0
+  },
+  "projection_injections": {
+    "duplicate_projection": 0,
+    "late_after_refresh": 0,
+    "prior_socket_projection": 0
+  },
+  "requests": []
+}

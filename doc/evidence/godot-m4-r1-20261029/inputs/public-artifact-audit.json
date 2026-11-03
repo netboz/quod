@@ -1,0 +1,25 @@
+{
+  "public_files_checked": 119,
+  "actual_new_private_seeds_observed": 3,
+  "seed_encodings_checked": 21,
+  "private_json_files_readable": 10,
+  "unreadable_private_json": [
+    {
+      "path": "/home/yan/.cache/quod-m4-r1-artifacts/artifacts/private/quod-m4-live-physics-baseline03-server/viewer.json",
+      "errno": 13
+    },
+    {
+      "path": "/home/yan/.cache/quod-m4-r1-artifacts/artifacts/private/quod-m4-live-physics-diagnostic01-server/viewer.json",
+      "errno": 13
+    },
+    {
+      "path": "/home/yan/.cache/quod-m4-r1-artifacts/artifacts/private/quod-m4-live-physics-diagnostic02-server/viewer.json",
+      "errno": 13
+    }
+  ],
+  "private_seed_matches": [],
+  "method": "Observed actual R1 private_jwk seeds, seven textual encodings; no seed values published.",
+  "prior_public_audit": "doc/evidence/godot-m4-20261029/inputs/public-artifact-audit-final01.json",
+  "prior_frozen_source_preserved": true,
+  "limit": "Root-owned unreadable originals are listed; owned viewer copies cover these three actual credentials. No raw secret-bearing/private store is a snapshot input."
+}

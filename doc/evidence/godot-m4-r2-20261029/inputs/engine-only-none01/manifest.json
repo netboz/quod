@@ -1,0 +1,10 @@
+{
+  "purpose": "negative engine-only isolation; direct engine quit intentionally does not claim production shutdown acceptance",
+  "profiles": "none",
+  "supplied_inputs": {
+    "close.gd": "6d20e9c073d019c60aaad38b3c26c0f879ebb39dc571f2defa6d986a72e90aaa",
+    "project.godot": "d621dce62e1048cef3a6b03293e6ffdb03aaf4784133a54302505e32e39df2f8",
+    "engine-isolation-driver.py": "9f4e0159b29ded864618b97e4c591790a3de73902ea3411b26dc2f6cafd0e66c",
+    "xr_actions.tres": "c6b4ea27407dce856398fa8039f106e015a2d755e4bcd998fdccdfdb61f8169f"
+  }
+}

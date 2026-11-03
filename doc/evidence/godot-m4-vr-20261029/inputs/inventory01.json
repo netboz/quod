@@ -1,0 +1,366 @@
+{
+  "commands": [
+    {
+      "command": [
+        "hyprctl",
+        "version"
+      ],
+      "child_exit": 0,
+      "stdout_sha256": "e0fb982b88d0017e13a5ee2697765a10c4c088eefc589bdc02656b9be7f2844f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/0"
+    },
+    {
+      "command": [
+        "hyprctl",
+        "-j",
+        "monitors",
+        "all"
+      ],
+      "child_exit": 0,
+      "stdout_sha256": "d8806b668cbd8b5a020b7b0c1eb55cefabf085ecc3400f8aea1603feaaea34f5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/1"
+    },
+    {
+      "command": [
+        "wayland-info"
+      ],
+      "unavailable": true
+    },
+    {
+      "command": [
+        "drm_info",
+        "-j"
+      ],
+      "unavailable": true
+    },
+    {
+      "command": [
+        "vulkaninfo",
+        "--summary"
+      ],
+      "child_exit": 0,
+      "stdout_sha256": "80ff90cd731423e864767e97e5ac62942629019cfff9bb041db3301c4143be62",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/4"
+    },
+    {
+      "command": [
+        "nvidia-smi",
+        "--query-gpu=name,driver_version,pci.bus_id,display_active,display_mode",
+        "--format=csv,noheader"
+      ],
+      "child_exit": 0,
+      "stdout_sha256": "a8673dd01180030a5fa7441fd2f1ab4477bc720134448116f86f5bfcacbefad6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/5"
+    },
+    {
+      "command": [
+        "scons",
+        "--version"
+      ],
+      "unavailable": true
+    },
+    {
+      "command": [
+        "gcc",
+        "--version"
+      ],
+      "child_exit": 0,
+      "stdout_sha256": "bdf8abcd8e56cec825a021925617afad1e7e258c738cc61d6325c7250da733cd",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/7"
+    },
+    {
+      "command": [
+        "clang",
+        "--version"
+      ],
+      "child_exit": 0,
+      "stdout_sha256": "0c87db8026d995452d7d0d3f24753ea4e1a3ce5dc48f415ada610b234a8a5f43",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/8"
+    },
+    {
+      "command": [
+        "dotnet",
+        "--info"
+      ],
+      "child_exit": 0,
+      "stdout_sha256": "faed99f05bdfb8f13b4a1f7c6508174902d5a6ceac31b55899bd1ff3cadc6ee6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/9"
+    },
+    {
+      "command": [
+        "pacman",
+        "-Q",
+        "hyprland",
+        "aquamarine",
+        "nvidia-utils",
+        "openxr",
+        "wayland",
+        "wayland-protocols",
+        "scons"
+      ],
+      "child_exit": 1,
+      "stdout_sha256": "c78ce87660d323321a32b5a60d33e9a9c19b5aaea6d398fc3c2a74d2d4b7f25b",
+      "stderr_sha256": "de457793f3d58386f9986734933fbde3e5fbfe5d47184c026864cfa4d509c8be",
+      "raw_prefix": "/data/quod-m4-vr-ca84d4f8-20261029/private/inventory01/10"
+    }
+  ],
+  "connectors": [
+    {
+      "connector": "card1-DP-1",
+      "status": "connected",
+      "enabled": [
+        "enabled"
+      ],
+      "dpms": [
+        "On"
+      ],
+      "connector_id": [
+        "833"
+      ],
+      "modes": [
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1600x1200",
+        "1680x1050",
+        "1280x1024",
+        "1280x1024",
+        "1440x900",
+        "1280x960",
+        "1280x800",
+        "1152x864",
+        "1280x720",
+        "1280x720",
+        "1280x720",
+        "1024x768",
+        "1024x768",
+        "1024x768",
+        "800x600",
+        "800x600",
+        "800x600",
+        "800x600",
+        "720x576",
+        "720x480",
+        "640x480",
+        "640x480",
+        "640x480"
+      ],
+      "edid_sha256": "45ca82a0d8f89d13d3d8adc420a6c9e661883622f4aebbe4a5654278d0f6262c",
+      "edid_manufacturer_hex": "4c2d",
+      "edid_product_hex": "8604"
+    },
+    {
+      "connector": "card1-DP-2",
+      "status": "connected",
+      "enabled": [
+        "enabled"
+      ],
+      "dpms": [
+        "On"
+      ],
+      "connector_id": [
+        "837"
+      ],
+      "modes": [
+        "4096x2160",
+        "4096x2160",
+        "4096x2160",
+        "4096x2160",
+        "3840x2160",
+        "3840x2160",
+        "3840x2160",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1600x1200",
+        "1680x1050",
+        "1400x1050",
+        "1280x1024",
+        "1280x1024",
+        "1440x900",
+        "1280x960",
+        "1280x800",
+        "1280x720",
+        "1280x720",
+        "1024x768",
+        "1024x768",
+        "1024x768",
+        "800x600",
+        "800x600",
+        "800x600",
+        "800x600",
+        "720x576",
+        "720x480",
+        "640x480",
+        "640x480",
+        "640x480",
+        "640x480"
+      ],
+      "edid_sha256": "e133ec6b56a573d547502d1f91eb81c48a43fddfe1dd23b392523c0403f1f927",
+      "edid_manufacturer_hex": "58b3",
+      "edid_product_hex": "0037"
+    },
+    {
+      "connector": "card1-DP-3",
+      "status": "connected",
+      "enabled": [
+        "enabled"
+      ],
+      "dpms": [
+        "On"
+      ],
+      "connector_id": [
+        "841"
+      ],
+      "modes": [
+        "1920x1080",
+        "1920x1080",
+        "1920x1080",
+        "1680x1050",
+        "1280x1024",
+        "1280x1024",
+        "1440x900",
+        "1280x960",
+        "1280x720",
+        "1280x720",
+        "1280x720",
+        "1024x768",
+        "1024x768",
+        "1024x768",
+        "800x600",
+        "800x600",
+        "800x600",
+        "800x600",
+        "720x576",
+        "720x480",
+        "640x480",
+        "640x480",
+        "640x480",
+        "640x480"
+      ],
+      "edid_sha256": "170185f9e641c0ada1a17c6fdf92f111cc01fd9b125bc0bd1e810d51ea77bb91",
+      "edid_manufacturer_hex": "05e3",
+      "edid_product_hex": "7023"
+    },
+    {
+      "connector": "card1-HDMI-A-1",
+      "status": "connected",
+      "enabled": [
+        "disabled"
+      ],
+      "dpms": [
+        "On"
+      ],
+      "connector_id": [
+        "828"
+      ],
+      "modes": [
+        "2160x1200",
+        "720x480",
+        "640x480"
+      ],
+      "edid_sha256": "da4eef6585ebf8c38415362b6c486fd40e97e4a616c721bb9653e1b60b8a5b38",
+      "edid_manufacturer_hex": "22d2",
+      "edid_product_hex": "01aa"
+    }
+  ],
+  "monitors": [
+    {
+      "name": "HDMI-A-1",
+      "description": "HTC Corportation HTC-VIVE",
+      "make": "HTC Corportation",
+      "model": "HTC-VIVE",
+      "width": 0,
+      "height": 0,
+      "disabled": true,
+      "dpmsStatus": true,
+      "drmFormat": null,
+      "nonDesktop": null
+    },
+    {
+      "name": "DP-1",
+      "description": "Samsung Electric Company SyncMaster",
+      "make": "Samsung Electric Company",
+      "model": "SyncMaster",
+      "width": 1920,
+      "height": 1080,
+      "disabled": false,
+      "dpmsStatus": true,
+      "drmFormat": null,
+      "nonDesktop": null
+    },
+    {
+      "name": "DP-3",
+      "description": "AOC 2370 <monitor-serial-redacted>",
+      "make": "AOC",
+      "model": "2370",
+      "width": 1920,
+      "height": 1080,
+      "disabled": false,
+      "dpmsStatus": true,
+      "drmFormat": null,
+      "nonDesktop": null
+    },
+    {
+      "name": "DP-2",
+      "description": "Vestel Elektronik Sanayi ve Ticaret A. S. 48UHD_LCD_TV",
+      "make": "Vestel Elektronik Sanayi ve Ticaret A. S.",
+      "model": "48UHD_LCD_TV",
+      "width": 1920,
+      "height": 1080,
+      "disabled": false,
+      "dpmsStatus": true,
+      "drmFormat": null,
+      "nonDesktop": null
+    }
+  ],
+  "relevant_processes_no_arguments": [
+    {
+      "pid": 666,
+      "comm": "Xorg"
+    },
+    {
+      "pid": 1473,
+      "comm": "Hyprland"
+    },
+    {
+      "pid": 1654,
+      "comm": "Xwayland"
+    }
+  ],
+  "environment": {
+    "DISPLAY": ":1",
+    "WAYLAND_DISPLAY": "wayland-1",
+    "XDG_RUNTIME_DIR": "/run/user/1000",
+    "XDG_SESSION_TYPE": "wayland",
+    "XR_RUNTIME_JSON": null
+  },
+  "task_free_bytes": 849500614656,
+  "task_device": 2050,
+  "tools": {
+    "scons": null,
+    "gcc": "/usr/bin/gcc",
+    "clang": "/usr/bin/clang",
+    "wayland-info": null,
+    "wayland-scanner": "/usr/bin/wayland-scanner",
+    "drm_info": null,
+    "pkg-config": "/usr/bin/pkg-config",
+    "curl": "/usr/bin/curl"
+  },
+  "cpu_threads": 8,
+  "modified_global_state": false
+}

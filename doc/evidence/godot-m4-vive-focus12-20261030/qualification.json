@@ -1,0 +1,222 @@
+{
+  "checkpoint": "QUO-65 case12 live focus evidence and diagnostic publication correction",
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "actual_api_model": "openai-codex:gpt-6.1-sol",
+  "launcher_requested_and_returned_effort": "max",
+  "effective_backend_effort": "unexposed",
+  "branch": "worktree/pearl-stone",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "parent": "f716ddf5e578df957a5b18421a0727a32c634f87",
+  "protocol_retirement_passed": true,
+  "full_physical_qualification_passed": false,
+  "human_look_model_visibility": "UNRUN/cancelled; root never issued look confirmation.",
+  "actual_cancel": {
+    "cancelled": true,
+    "respondedBy": "desktop",
+    "respondedAt": 1793363140589
+  },
+  "client_runtime_server_driver_observer_and_wrappers_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "case_eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "runtime-stdout": true,
+    "runtime-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "wrapper_eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "focus_wrapper_eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "reader_errors": [],
+  "diagnostics": [],
+  "timeout_or_stack": false,
+  "helper_checks": 13,
+  "publication_checks": 22,
+  "qualified_old_checks_repeated": false,
+  "case_elapsed_seconds": 454.21782422065735,
+  "listener_elapsed_seconds": 375.1691110134125,
+  "original_bounds": {
+    "runtime_startup": 30,
+    "single_inventory": 5,
+    "participant": 1800,
+    "close": 60,
+    "wrapper": 2100
+  },
+  "original_listener_absolute_deadline": 12872.204339049,
+  "listener_result": {
+    "armed": true,
+    "runtime_started": false,
+    "focus_changed": false,
+    "subscription_count": 1,
+    "errors": [],
+    "peer_pid": 1809,
+    "instance_sha256": "fdb2f0232f78b8a23aa7c7f23adcfd476a7715e40e9eee04d8f1bbeeb20e29d7",
+    "rows": 15,
+    "event_messages": 40,
+    "unparsed_fragment": false,
+    "local_connection_closed": true,
+    "remote_eof_observed": false,
+    "snapshot_is_not_ordered_event_barrier": true,
+    "continuous_native_or_pixel_claim": false
+  },
+  "owned_event_anchor": {
+    "kind": "transition",
+    "monotonic": 11314.956405891,
+    "utc": "2026-10-30T12:22:51.897339+00:00",
+    "owned": true
+  },
+  "subsequent_focus_loss": {
+    "kind": "transition",
+    "monotonic": 11324.485146935,
+    "utc": "2026-10-30T12:23:01.426439+00:00",
+    "owned": false
+  },
+  "observed_receive_interval_seconds": 9.528741043999617,
+  "focus_scope": "Event receive times are not server emission times. Owned interval lost before root look confirmation; no why-focus-changed attribution.",
+  "baseline_and_post_focus": "Head/both aim+grip High, models visible and lifecycle AppFocus true at post-focus geometry. GetWindow.HasFocus false is retained.",
+  "loss_geometry": "Later head/both aim+grip High remain but AppFocus false/models hidden; existing safety gating retained. No policy/source fix inferred.",
+  "final_metrics": {
+    "Running": false,
+    "Subscriptions": 0,
+    "sources": 0,
+    "appearances": 0,
+    "MenuRedraws": 0,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 0,
+    "StopRequests": 0,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 2,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 2,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 0,
+      "LiveLeases": 0
+    }
+  },
+  "manual_instructions": [
+    "geometry",
+    "geometry",
+    "geometry",
+    "stop",
+    "finish"
+  ],
+  "calibration_unchanged": true,
+  "hdmi_restored_disabled": true,
+  "other_displays_and_current_configs_unchanged": true,
+  "current_config_files": 76,
+  "api_counts": {
+    "xrAcquireSwapchainImage": 11522,
+    "xrBeginFrame": 12908,
+    "xrBeginSession": 1,
+    "xrCreateAction": 8,
+    "xrCreateActionSet": 1,
+    "xrCreateActionSpace": 4,
+    "xrCreateInstance": 1,
+    "xrCreateReferenceSpace": 2,
+    "xrCreateSession": 1,
+    "xrCreateSwapchain": 1,
+    "xrDestroyAction": 8,
+    "xrDestroyActionSet": 1,
+    "xrDestroyInstance": 1,
+    "xrDestroySession": 1,
+    "xrDestroySpace": 2,
+    "xrDestroySwapchain": 1,
+    "xrEndFrame": 12908,
+    "xrEndSession": 1,
+    "xrReleaseSwapchainImage": 11522,
+    "xrRequestExitSession": 1,
+    "xrWaitFrame": 12908,
+    "xrWaitSwapchainImage": 11522
+  },
+  "api_layer_counts": {
+    "0": 1386,
+    "1": 11522
+  },
+  "api_projection_view_counts": {
+    "2": 11522
+  },
+  "api_scope": "Official dump call entries/arguments only; no returned-result, acquired scanout or headset-pixel claim",
+  "source_bindings": {
+    "doc/evidence/godot-m4-vive-retest-20261030/physical09.py": "360b166bacb988cb972f53f1d78df15bca70baf95e4a7354c29094fc5cb053c0",
+    "doc/evidence/godot-m4-vive-preparation-20261030/inputs/client-physical-preparation01-manifest.json": "e34159ae24d5ec0ddf6f2324a93c3352203337d886f25b8aa0ff3e7074e01e53",
+    "doc/evidence/godot-m4-vive-retest10-20261030/focus_events.py": "bb63ff9db8f3aef231f22043e8336c263afcf52b553c908419ff3e0abdd584e2",
+    "doc/evidence/godot-m4-vive-physical-20261029/manual_run.py": "2620ffe864b19135f1557e19280cec34fe18c19ac51f940379573da56b0e9639",
+    "doc/evidence/godot-m4-vive-physical-20261029/serve.py": "f4cebe56f7939c887333d2fa357dc5df1a2c79cd42f56a3b8cc9bc43305eb96c",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+    "doc/evidence/godot-m4-vive-physical-20261029/godot_m3b_fixture.erl": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+    "doc/evidence/godot-m4-vive-physical-20261029/godot_m3b_physics_fixture.erl": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+    "doc/evidence/godot-m4-r2-20261029/private_vive.py": "e85993e8196ffbf2f4d2e0cd318c36a158be4c0de54b11391c7bacdc9594593c",
+    "doc/evidence/godot-m4-vr-20261029/vive_display.py": "987d616c5425003e74bd261c1a9de346c4d734ff69e72201c687eb59a79bed76",
+    "doc/evidence/godot-m4-vive-physical-20261029/publication.py": "e0fc88f6a546095e76f7d85d58e991d3f670925cd695d2a74002819dd2ee50e5",
+    "doc/evidence/godot-m4-vive-focus12-20261030/capture.py": "f0c094d5ece36c1e867e33c3e34f9114295c04e1e5937c0a1e1e351dd1b119fe",
+    "doc/evidence/godot-m4-vive-focus12-20261030/arm.py": "d2d96f1b128e0c35d430aafb56bcb66e72b7e6b75af8bc48e90dba352c4ab730"
+  },
+  "streams": {
+    "server-stdout": {
+      "raw_sha256": "8c6b9244fa73a9280d5b8413115d5294ae4de2cb77c3d062ee2b639e67a9e61d",
+      "public_sha256": "8c6b9244fa73a9280d5b8413115d5294ae4de2cb77c3d062ee2b639e67a9e61d",
+      "raw_mode": "0600",
+      "eof": true
+    },
+    "server-stderr": {
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_mode": "0600",
+      "eof": true
+    },
+    "runtime-stdout": {
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_mode": "0600",
+      "eof": true
+    },
+    "runtime-stderr": {
+      "raw_sha256": "1d37567ad1ebd96b4a5790c57f3858fdcf4c46ea07b9a7c84db8b63ac7ec2289",
+      "public_sha256": "beaa74ed1a5f4598095d3cb474a159a60773afc6a40802ef3e50426ebbb00038",
+      "raw_mode": "0600",
+      "eof": true
+    },
+    "client-stdout": {
+      "raw_sha256": "f8d84e311af1b08a41f65388dd5340cde1a2ec05c1a8df1b9c155e11c6cdaafe",
+      "public_sha256": "f8d84e311af1b08a41f65388dd5340cde1a2ec05c1a8df1b9c155e11c6cdaafe",
+      "raw_mode": "0600",
+      "eof": true
+    },
+    "client-stderr": {
+      "raw_sha256": "164c53723a74dbe79310a404c7763c4cf14237e1e1746451d2792dd45ce93701",
+      "public_sha256": "164c53723a74dbe79310a404c7763c4cf14237e1e1746451d2792dd45ce93701",
+      "raw_mode": "0600",
+      "eof": true
+    }
+  },
+  "inherited_diagnostic_publishers_changed": 2,
+  "one_shared_identifier_owner": true,
+  "product_csharp_export_engine_runtime_focus_helper_changes": 0,
+  "supplied_inputs_unchanged": 93,
+  "exported_files_unchanged": 196,
+  "diagnostic_nondistributable": true,
+  "new_product_builds_or_unchanged_suites": 0,
+  "remaining": [
+    "No case13 authority. Why desktop focus changes remains unknown. No speculative asset, lighting, pose, calibration, placement, focus-policy or close-order correction.",
+    "Controller visibility/readability/comfort and formal ninety-draw/transform/mapped physical gestures remain unqualified. Original failures and earlier panel pass retain their scope; no fullM4/QUO27/59/Stage2/Quest credit."
+  ]
+}

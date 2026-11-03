@@ -1,0 +1,55 @@
+{
+  "passed": true,
+  "case_label": "native-vive-product13",
+  "runtime_started": false,
+  "lease_requested": false,
+  "unchanged_private_invocation_sources": {
+    "doc/evidence/godot-m4-vive-retest-20261030/physical09.py": {
+      "sha256": "360b166bacb988cb972f53f1d78df15bca70baf95e4a7354c29094fc5cb053c0",
+      "bytes": 18152,
+      "mode": 384,
+      "private_executed_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case13-preparation01/unchanged-owners/godot-m4-vive-retest-20261030/physical09.py"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/manual_run.py": {
+      "sha256": "2620ffe864b19135f1557e19280cec34fe18c19ac51f940379573da56b0e9639",
+      "bytes": 2715,
+      "mode": 420,
+      "private_executed_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case13-preparation01/unchanged-owners/godot-m4-vive-physical-20261029/manual_run.py"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": {
+      "sha256": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+      "bytes": 1178,
+      "mode": 420,
+      "private_executed_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case13-preparation01/unchanged-owners/godot-m4-vive-physical-20261029/environment.py"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/publication.py": {
+      "sha256": "e0fc88f6a546095e76f7d85d58e991d3f670925cd695d2a74002819dd2ee50e5",
+      "bytes": 274,
+      "mode": 420,
+      "private_executed_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case13-preparation01/unchanged-owners/godot-m4-vive-physical-20261029/publication.py"
+    }
+  },
+  "actual_coordinator_binding_current": true,
+  "binding_sha256": "57e559cffa0e38d6240174e9b82c6839fd0e90bd08cb48894104f61d88a7cba7",
+  "binding_bytes": 208,
+  "raw_binding_public": false,
+  "payload_manifest_sha256": "e34159ae24d5ec0ddf6f2324a93c3352203337d886f25b8aa0ff3e7074e01e53",
+  "payload_outputs": 196,
+  "payload_strict_cache_reused": true,
+  "qualified_server_stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05",
+  "qualified_closure_reused": "accepted73:34apps/944modules/250priv; not rerun",
+  "other_runtime_app_conflicts": false,
+  "provider_command": [
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/display-inventory02/display-inventory",
+    "/dev/dri/card1"
+  ],
+  "provider_true_child_exit": 0,
+  "provider_complete": true,
+  "hdmi_offer": true,
+  "connector828_offered": true,
+  "provider_stdout_sha256": "39604cb960c8236131fadc1752435c9673537b7c29964727052af7b11d53ecc4",
+  "provider_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "hdmi_restored_disabled": true,
+  "other_displays_unchanged": true,
+  "config_unchanged": true
+}

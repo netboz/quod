@@ -1,0 +1,10 @@
+{
+  "command": [
+    "git",
+    "diff",
+    "--binary",
+    "HEAD"
+  ],
+  "exit": 0,
+  "sha256": "8d759963b1100714e6f1301175324168bab40bdb3125a02f8b5604cefeab4370"
+}

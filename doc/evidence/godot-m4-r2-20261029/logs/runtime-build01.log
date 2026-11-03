@@ -1,0 +1,225 @@
+[0/2] Re-checking globbed directories...
+[1/526] Building C object src/external/CMakeFiles/xrt-external-metrics.dir/metrics/monado_metrics.pb.c.o
+[2/526] Generating X_macro lists in /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/include/xrt/xrt_macro_lists.h.inc
+[3/526] Building C object src/external/CMakeFiles/xrt-external-nanopb.dir/nanopb/pb_common.c.o
+[4/526] Generating blit.comp.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/blit.comp
+[5/526] Generating blit_ms.comp.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/blit_ms.comp
+[6/526] Building C object src/xrt/auxiliary/os/CMakeFiles/aux_os.dir/os_hid_hidraw.c.o
+[7/526] Building CXX object src/xrt/auxiliary/os/CMakeFiles/aux_os.dir/os_time.cpp.o
+[8/526] Generating clear.comp.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/clear.comp
+[9/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_bitwise.c.o
+[10/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_body_tracker.c.o
+[11/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_body_tracker_ni.c.o
+[12/526] Building C object src/external/CMakeFiles/xrt-external-nanopb.dir/nanopb/pb_encode.c.o
+[13/526] Building C object src/xrt/auxiliary/os/CMakeFiles/aux_os.dir/os_serial_linux.c.o
+[14/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_builder_helpers.c.o
+[15/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_cobs.c.o
+[16/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_builder_search.c.o
+[17/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_device_id.c.o
+[18/526] Building C object src/external/CMakeFiles/xrt-external-nanopb.dir/nanopb/pb_decode.c.o
+[19/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_autoexpgain.c.o
+[20/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_debug.c.o
+[21/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_device_ni.c.o
+[22/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_distortion.c.o
+[23/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_device.c.o
+[24/526] Linking C static library src/external/libxrt-external-nanopb.a
+[25/526] Linking CXX static library src/xrt/auxiliary/os/libaux_os.a
+[26/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_file.cpp.o
+[27/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_format.c.o
+[28/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_file.c.o
+[29/526] Linking C static library src/external/libxrt-external-metrics.a
+[30/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_frameserver.c.o
+[31/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_distortion_mesh_rift.c.o
+[32/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_frameserver_ni.c.o
+[33/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_frame.c.o
+[34/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_distortion_mesh.c.o
+[35/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_handles.c.o
+[36/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_hand_tracking.c.o
+[37/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_hand_simulation.c.o
+[38/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_imu_sink_split.c.o
+[39/526] Generating render_shader_specialization.h.inc and render_shader_specialization.hpp.inc
+[40/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_imu_sink_force_monotonic.c.o
+[41/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_deque.cpp.o
+[42/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_limited_unique_id.cpp.o
+[43/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_metrics.c.o
+[44/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_logging.c.o
+[45/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_misc.c.o
+[46/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_pacing_app.c.o
+[47/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_future.cpp.o
+[48/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_live_stats.cpp.o
+[49/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_hashmap.cpp.o
+[50/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_pacing_compositor.c.o
+[51/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_prober.c.o
+[52/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_resampler.c.o
+[53/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_pacing_compositor_fake.c.o
+[54/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_system_devices.c.o
+[55/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_system_devices_ni.c.o
+[56/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_thread_priority.c.o
+[57/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_system_helpers.c.o
+[58/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_hashset.cpp.o
+[59/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_id_ringbuffer.cpp.o
+[60/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_trace_marker.c.o
+[61/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_time.cpp.o
+[62/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_tracked_imu_3dof.c.o
+[63/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_str_to_enum.c.o
+[64/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_visibility_mask.c.o
+[65/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_pretty_print.c.o
+[66/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_json.c.o
+[67/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_git_tag.c.o
+[68/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_win32_com_guard.cpp.o
+[69/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_linux.c.o
+[70/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_config_json.c.o
+[71/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_worker.c.o
+[72/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_clock_tracking.c.o
+[73/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_vector.cpp.o
+[74/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_filter_fifo.c.o
+[75/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_imu_3dof.c.o
+[76/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_filter_one_euro.c.o
+[77/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_worker.cpp.o
+[78/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_imu_pre.c.o
+[79/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_optics.c.o
+[80/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_permutation.c.o
+[81/526] Building C object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_predict.c.o
+[82/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_matrix_projection.cpp.o
+[83/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_hash.cpp.o
+[84/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_lowpass_float.cpp.o
+[85/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_lowpass_integer.cpp.o
+[86/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_space.cpp.o
+[87/526] Generating distortion.comp.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/distortion.comp
+[88/526] Generating layer.comp.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer.comp
+[89/526] Generating layer_cylinder.frag.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_cylinder.frag
+[90/526] Generating layer_cylinder.vert.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_cylinder.vert
+[91/526] Generating layer_equirect2.frag.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_equirect2.frag
+[92/526] Generating layer_equirect2.vert.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_equirect2.vert
+[93/526] Generating layer_projection.frag.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_projection.frag
+[94/526] Generating layer_projection.vert.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_projection.vert
+[95/526] Generating layer_quad.frag.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_quad.frag
+[96/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_relation_history.cpp.o
+[97/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_var.cpp.o
+[98/526] Merging JSON files into /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/ipc/proto.json
+[99/526] Generating layer_quad.vert.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/layer_quad.vert
+[100/526] Generating mesh.frag.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/mesh.frag
+[101/526] Generating mesh.vert.h
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/render/shaders/mesh.vert
+[102/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_blob_visualizer.c.o
+[103/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_combiner.c.o
+[104/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_force_genlock.c.o
+[105/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_deinterleaver.c.o
+[106/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_queue.c.o
+[107/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_simple_queue.c.o
+[108/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_quirk.c.o
+[109/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_stereo_sbs_split.c.o
+[110/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_split.c.o
+[111/526] Building C object src/xrt/base/CMakeFiles/base.dir/b_app_policy.c.o
+[112/526] Generating openvr_forward_macros.h
+Wrote 616 forwarding macro(s) and 84 FnTable macro(s) to /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/external/openvr_includes/openvr_forward_macros.h
+[113/526] Building CXX object src/xrt/auxiliary/util/CMakeFiles/aux_util.dir/u_extension_list.cpp.o
+[114/526] Linking CXX static library src/xrt/auxiliary/util/libaux_util.a
+[115/526] Building C object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_data_utils.c.o
+[116/526] Building C object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_dead_reckoning.c.o
+[117/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_camera_models.cpp.o
+[118/526] Building CXX object src/xrt/base/CMakeFiles/base.dir/b_io_cache.cpp.o
+[119/526] Building CXX object src/xrt/base/CMakeFiles/base.dir/b_body_tracker.cpp.o
+[120/526] Building CXX object src/xrt/base/CMakeFiles/base.dir/b_hand_tracker.cpp.o
+[121/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_sink.dir/u_sink_converter.c.o
+[122/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_quatexpmap.cpp.o
+[123/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_openvr_tracker.cpp.o
+[124/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_debug_hsv_filter.cpp.o
+[125/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_convert.cpp.o
+[126/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_debug_hsv_picker.cpp.o
+[127/526] Building C object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_hsv_filter.c.o
+[128/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_debug_hsv_viewer.cpp.o
+[129/526] Building C object src/xrt/base/CMakeFiles/base.dir/b_session.c.o
+[130/526] Building C object src/xrt/base/CMakeFiles/base.dir/b_space_overseer.c.o
+[131/526] Building C object src/xrt/base/CMakeFiles/base.dir/b_tracked_device.c.o
+[132/526] Building C object src/xrt/base/CMakeFiles/base.dir/b_system.c.o
+[133/526] Building C object src/xrt/base/CMakeFiles/base.dir/b_system_devices.c.o
+[134/526] Building C object src/xrt/base/CMakeFiles/base.dir/b_timing_source.c.o
+[135/526] Building C object src/xrt/auxiliary/vive/CMakeFiles/aux_vive.dir/vive_builder.c.o
+[136/526] Building C object src/xrt/auxiliary/vive/CMakeFiles/aux_vive.dir/vive_calibration.c.o
+[137/526] Building C object src/xrt/auxiliary/vive/CMakeFiles/aux_vive.dir/vive_common.c.o
+[138/526] Building C object src/xrt/auxiliary/vive/CMakeFiles/aux_vive.dir/vive_config.c.o
+[139/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_calibration.cpp.o
+[140/526] Building C object src/xrt/auxiliary/vive/CMakeFiles/aux_vive.dir/vive_poses.c.o
+[141/526] Building C object src/xrt/auxiliary/vive/CMakeFiles/aux_vive.dir/vive_tweaks.c.o
+[142/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_frame_cv_mat_wrapper.cpp.o
+[143/526] Building C object src/xrt/compositor/multi/CMakeFiles/comp_multi.dir/comp_multi_compositor.c.o
+[144/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_debug_gui.dir/u_debug_gui.c.o
+[145/526] Building C object src/xrt/auxiliary/util/CMakeFiles/aux_util_process.dir/u_process.c.o
+[146/526] Building C object src/xrt/compositor/multi/CMakeFiles/comp_multi.dir/comp_multi_system.c.o
+[147/526] Building C object src/xrt/drivers/CMakeFiles/drv_vp2.dir/vp2/vp2_hid.c.o
+[148/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_euroc_recorder.cpp.o
+[149/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_file.cpp.o
+[150/526] Building CXX object src/xrt/drivers/CMakeFiles/drv_vp2.dir/vp2/vp2_config.cpp.o
+[151/526] Building CXX object src/xrt/auxiliary/htc/CMakeFiles/aux_htc.dir/htc_config.cpp.o
+[152/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/backends/imgui_impl_opengl3.cpp.o
+[153/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_tables.cpp.o
+[154/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_demo.cpp.o
+[155/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_draw.cpp.o
+[156/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/cimgui/cimgui.cpp.o
+[157/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_imu.cpp.o
+FAILED: [code=1] src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_imu.cpp.o 
+/usr/bin/c++ -DCJSON_HIDE_SYMBOLS -D_GNU_SOURCE -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/auxiliary -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/include -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/include -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/metrics -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/nanopb -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/flexkalman -isystem /usr/include/opencv5 -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/cjson -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/bcdec -isystem /usr/include/eigen3 -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/hungarian -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/openvr_includes -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/external/openvr_includes -pedantic -Wall -Wextra -Wno-unused-parameter -msse2 -mfpmath=sse -O2 -g -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -O3 -MD -MT src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_imu.cpp.o -MF src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_imu.cpp.o.d -o src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_imu.cpp.o -c /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/tracking/t_imu.cpp
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/tracking/t_imu.cpp:194:1: fatal error: error writing to /tmp/ccWJUQYV.s: Disk quota exceeded
+  194 | }
+      | ^
+compilation terminated.
+[158/526] Building CXX object src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_base.cpp.o
+FAILED: [code=1] src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_base.cpp.o 
+/usr/bin/c++ -DCJSON_HIDE_SYMBOLS -D_GNU_SOURCE -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/auxiliary -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/include -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/include -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/metrics -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/nanopb -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/bcdec -isystem /usr/include/eigen3 -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/cjson -pedantic -Wall -Wextra -Wno-unused-parameter -msse2 -mfpmath=sse -O2 -g -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -O3 -MD -MT src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_base.cpp.o -MF src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_base.cpp.o.d -o src/xrt/auxiliary/math/CMakeFiles/aux_math.dir/m_base.cpp.o -c /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/math/m_base.cpp
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/math/m_base.cpp:1042:1: fatal error: error writing to /tmp/ccpbx5pL.s: Disk quota exceeded
+ 1042 | }
+      | ^
+compilation terminated.
+[159/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_demo.cpp.o
+FAILED: [code=1] src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_demo.cpp.o 
+/usr/bin/c++ -DCIMGUI_NO_EXPORT -DCIMGUI_USE_OPENGL3 -DIMGUI_IMPL_API="extern \"C\"" -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/cimgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/glad/include -pedantic -Wall -Wextra -Wno-unused-parameter -msse2 -mfpmath=sse -O2 -g -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -w -MD -MT src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_demo.cpp.o -MF src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_demo.cpp.o.d -o src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_demo.cpp.o -c /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot/implot_demo.cpp
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot/implot_demo.cpp:2500:1: fatal error: error writing to /tmp/cc289sED.s: Disk quota exceeded
+ 2500 | } // namespace MyImplot
+      | ^
+compilation terminated.
+[160/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_widgets.cpp.o
+FAILED: [code=1] src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_widgets.cpp.o 
+/usr/bin/c++ -DCIMGUI_NO_EXPORT -DCIMGUI_USE_OPENGL3 -DIMGUI_IMPL_API="extern \"C\"" -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/cimgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/glad/include -pedantic -Wall -Wextra -Wno-unused-parameter -msse2 -mfpmath=sse -O2 -g -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -w -MD -MT src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_widgets.cpp.o -MF src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_widgets.cpp.o.d -o src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui_widgets.cpp.o -c /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui/imgui_widgets.cpp
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui/imgui_widgets.cpp:10908:1: fatal error: error writing to /tmp/cc0hnPdv.s: Disk quota exceeded
+10908 | }
+      | ^
+compilation terminated.
+[161/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui.cpp.o
+FAILED: [code=1] src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui.cpp.o 
+/usr/bin/c++ -DCIMGUI_NO_EXPORT -DCIMGUI_USE_OPENGL3 -DIMGUI_IMPL_API="extern \"C\"" -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/cimgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/glad/include -pedantic -Wall -Wextra -Wno-unused-parameter -msse2 -mfpmath=sse -O2 -g -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -w -MD -MT src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui.cpp.o -MF src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui.cpp.o.d -o src/external/imgui/CMakeFiles/xrt-external-imgui.dir/imgui/imgui.cpp.o -c /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui/imgui.cpp
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui/imgui.cpp:24049:1: fatal error: error writing to /tmp/ccqruWJT.s: Disk quota exceeded
+24049 | }
+      | ^
+compilation terminated.
+[162/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot.cpp.o
+[163/526] Building CXX object src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_kalman.cpp.o
+FAILED: [code=1] src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_kalman.cpp.o 
+/usr/bin/c++ -DCJSON_HIDE_SYMBOLS -D_GNU_SOURCE -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/auxiliary -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/include -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/xrt/include -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/metrics -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/nanopb -I/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/flexkalman -isystem /usr/include/opencv5 -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/cjson -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/bcdec -isystem /usr/include/eigen3 -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/hungarian -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/openvr_includes -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-build/src/external/openvr_includes -pedantic -Wall -Wextra -Wno-unused-parameter -msse2 -mfpmath=sse -O2 -g -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -O3 -MD -MT src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_kalman.cpp.o -MF src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_kalman.cpp.o.d -o src/xrt/auxiliary/tracking/CMakeFiles/aux_tracking.dir/t_kalman.cpp.o -c /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/tracking/t_kalman.cpp
+In file included from /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/tracking/t_kalman.cpp:12:
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/xrt/auxiliary/tracking/t_tracker_psmv_fusion.cpp:240:1: fatal error: error writing to /tmp/cckecoRQ.s: Disk quota exceeded
+  240 | } // namespace xrt::auxiliary::tracking
+      | ^
+compilation terminated.
+[164/526] Building CXX object src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_items.cpp.o
+FAILED: [code=1] src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_items.cpp.o 
+/usr/bin/c++ -DCIMGUI_NO_EXPORT -DCIMGUI_USE_OPENGL3 -DIMGUI_IMPL_API="extern \"C\"" -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/imgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/cimgui -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot -isystem /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/glad/include -pedantic -Wall -Wextra -Wno-unused-parameter -msse2 -mfpmath=sse -O2 -g -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -w -MD -MT src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_items.cpp.o -MF src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_items.cpp.o.d -o src/external/imgui/CMakeFiles/xrt-external-imgui.dir/implot/implot_items.cpp.o -c /home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot/implot_items.cpp
+/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-current-source/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae/src/external/imgui/implot/implot_items.cpp:2850:1: fatal error: error writing to /tmp/ccyGA8vA.s: Disk quota exceeded
+ 2850 | } // namespace ImPlot
+      | ^
+compilation terminated.
+ninja: build stopped: subcommand failed.

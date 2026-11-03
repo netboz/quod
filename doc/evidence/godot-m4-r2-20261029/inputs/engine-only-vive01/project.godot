@@ -1,0 +1,8 @@
+config_version=5
+[application]
+config/name="Pinned engine teardown isolation"
+[xr]
+openxr/enabled=true
+openxr/default_action_map="res://xr_actions.tres"
+[rendering]
+renderer/rendering_method="mobile"

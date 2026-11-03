@@ -1,0 +1,69 @@
+[
+  {
+    "id": 1,
+    "scope": "One signed mapping/adapter, strict profiles/components/roles",
+    "result": "Final exported software qualified; canonical engine grip contract corrected; no full physical mapping claim",
+    "evidence": [
+      "input-final03",
+      "gui-desktop-final03/export-result.json.m4.json",
+      "inputs/canonical-hardware-observation05.json",
+      "engine-ownership.md"
+    ]
+  },
+  {
+    "id": 2,
+    "scope": "Native desktop/pointing/generic GUI and fenced private preferences",
+    "result": "Final exported software qualified including invalid-row ordinary Reset, conflict/recovery and fresh encrypted backup",
+    "evidence": [
+      "gui-desktop-final03",
+      "gui-desktop-final03-backup-import",
+      "scene-final03",
+      "../godot-m4-20261029/acceptance.json"
+    ]
+  },
+  {
+    "id": 3,
+    "scope": "Lifecycle, source identity, cancellation, neutral rearm and arbitration",
+    "result": "Actual desktop and injected real-engine frames qualified; native simulator assertions observed; full native teardown and physical reentry remain open",
+    "evidence": [
+      "input-final03/client-result.json",
+      "native-simulated-final03",
+      "shutdown-connect-final03",
+      "backup-cancel-final03"
+    ]
+  },
+  {
+    "id": 4,
+    "scope": "Current signed transient physics, lease/sequence/incarnation/deadline and uncertainty",
+    "result": "Final real HTTPS/WSS/native physics qualified with native WASD/injected controller source; prior unknown outcomes preserved",
+    "evidence": [
+      "physics-final03",
+      "../godot-m4-20261029/navigation-final06",
+      "../godot-m3b-20261029"
+    ]
+  },
+  {
+    "id": 5,
+    "scope": "Licensed verified representations and real consumer/resource lifetime",
+    "result": "Final admission/decode/render and unchanged renewals qualified; no watched history/install/write/sync work; real invalidation/repair and source release observed",
+    "evidence": [
+      "input-final03",
+      "gui-desktop-final03/export-result.json.m4.json",
+      "scene-final03"
+    ]
+  },
+  {
+    "id": 6,
+    "scope": "Actual OpenXR/runtime/start-stop, native teardown and Vive hardware",
+    "result": "Partial, not accepted: private runtime repaired, simulator stereo submissions and real canonical device poses/side-grips observed. Pinned-engine teardown errors, cold exported hardware rendering and HMD display/physical acceptance remain open; original desktop stalls unresolved",
+    "evidence": [
+      "runtime-repair.md",
+      "engine-ownership.md",
+      "shutdown-investigation.md",
+      "native-simulated-final03",
+      "native-fault-close-final03",
+      "native-vive-final03",
+      "vive-interactive05"
+    ]
+  }
+]

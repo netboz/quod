@@ -1,0 +1,1481 @@
+{
+  "backup-cancel-final03": {
+    "receipt": "logs/backup-cancel-final03.json",
+    "receipt_sha256": "8e2fca74f8d260cba661880f4b9d20ecbf0e4fe1ccb81302d91f8d0c8ebaa19f",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/local-campaign.py",
+      "backup-cancel-final03",
+      "--client",
+      "final03",
+      "--phase",
+      "backup-cancel"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 4.079490661621094,
+    "sanitized_log": "logs/backup-cancel-final03.log",
+    "sanitized_log_sha256": "b70822518c7d8d269cd7fde1bbb66d20343260fb3a3586d84cb1abd0cb41b78d"
+  },
+  "client-development01": {
+    "receipt": "logs/client-development01.json",
+    "receipt_sha256": "7a4158128a4515f952fe0e42f6662dacc6d6d53ad13161f0a3e3b49a242291e1",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "development01"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 42.085726737976074,
+    "sanitized_log": "logs/client-development01.log",
+    "sanitized_log_sha256": "83fad4ad782a1effc99c9677aa0b4c19d3b5bdd8fa9f83e45aa3cdfff050c3a1"
+  },
+  "client-development02": {
+    "receipt": "logs/client-development02.json",
+    "receipt_sha256": "3890e3361d1cf732e23104611384810a124222558b3eba366d4656194c6d5ad4",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "development02"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 36.170395612716675,
+    "sanitized_log": "logs/client-development02.log",
+    "sanitized_log_sha256": "d43a976b81c67c71ef920cb64e5aba9b10cf21f75cb0ef050a8095f9a66af3bc"
+  },
+  "client-development03": {
+    "receipt": "logs/client-development03.json",
+    "receipt_sha256": "af0c52e41b38a8512a2e358d53323806aa3533605a1602d169687cd2fc2e554b",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "development03"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 37.803200483322144,
+    "sanitized_log": "logs/client-development03.log",
+    "sanitized_log_sha256": "c3113eadcdc99d5ec542c15919185f04d977b3ec10c1af5596ea8a810f475dfc"
+  },
+  "client-development04": {
+    "receipt": "logs/client-development04.json",
+    "receipt_sha256": "3809dee22302ec5564885af42a546f4288faafb8fd3d1206800a1237d03b6e49",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "development04"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 36.563493967056274,
+    "sanitized_log": "logs/client-development04.log",
+    "sanitized_log_sha256": "f3018d4d563f8df033997df003f36299509bb211f21c4d9d75ba6495f39b0b27"
+  },
+  "client-final01": {
+    "receipt": "logs/client-final01.json",
+    "receipt_sha256": "be1a40c1b562fa5c854e73e853e6144fa3792079852151d8b53ae8400cdafcf9",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "final01"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 43.61052179336548,
+    "sanitized_log": "logs/client-final01.log",
+    "sanitized_log_sha256": "d37db0bf27304cdf395f87d5d25832b6a74cba47fe9a7c0c7d881db092fb3c2b"
+  },
+  "client-final02": {
+    "receipt": "logs/client-final02.json",
+    "receipt_sha256": "a24cf53f759933eb2314217ecd4431067aa4b57609b0d5ebcd674e10be282c21",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "final02"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 35.81414008140564,
+    "sanitized_log": "logs/client-final02.log",
+    "sanitized_log_sha256": "be0bac99cf444094edd5597414cef287326eb1c8c19a5d3cce2837220cbf0f87"
+  },
+  "client-final03": {
+    "receipt": "logs/client-final03.json",
+    "receipt_sha256": "a8e2856d63e301b8587247c0cd251a3b751dbecafd97c6321a92c2755c4aeb1f",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "final03"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 41.28597402572632,
+    "sanitized_log": "logs/client-final03.log",
+    "sanitized_log_sha256": "c02ee90646a57ee81b6f031e803451b45bb0104bde837d4b9db7cb5b6d8d63bf"
+  },
+  "client-pre-grip01": {
+    "receipt": "logs/client-pre-grip01.json",
+    "receipt_sha256": "13e8815964cfb3cf1deebc7e26de627a0d89fa56dafef0ad896e33270fe33e8a",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "pre-grip01",
+      "--pre-grip"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 36.197657108306885,
+    "sanitized_log": "logs/client-pre-grip01.log",
+    "sanitized_log_sha256": "229860b10e10051bbde3cf6df4d6ae0791de1c550803c6d1540aa651b795e316"
+  },
+  "client-pre-head01": {
+    "receipt": "logs/client-pre-head01.json",
+    "receipt_sha256": "e2b9b12406603b447a8e130b185bd541bb66c8533046a8f043d5c3153952fc9f",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "pre-head01",
+      "--pre-head"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 39.12612724304199,
+    "sanitized_log": "logs/client-pre-head01.log",
+    "sanitized_log_sha256": "2f61570071097f97066833521a0630027bba5f0a0006163e3d8e101ac7171589"
+  },
+  "client-renewal-diagnostic01": {
+    "receipt": "logs/client-renewal-diagnostic01.json",
+    "receipt_sha256": "062b1aa0d96be429307cad0bb3969af3ce70e3d0b9d062fd308b17a5b4eb7530",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "renewal-diagnostic01",
+      "--renewal-diagnostic"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 21.570756196975708,
+    "sanitized_log": "logs/client-renewal-diagnostic01.log",
+    "sanitized_log_sha256": "ae5ae5dc7761f63e32020a17ce01b01bf5d8b166e3cf58448434b4b23aead5c2"
+  },
+  "client-renewal-diagnostic02": {
+    "receipt": "logs/client-renewal-diagnostic02.json",
+    "receipt_sha256": "0b07e253a6e03a75e109c4a9e2011965849d886f776dd514fa10cf9d7c7031cd",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "renewal-diagnostic02",
+      "--renewal-diagnostic"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 41.48660659790039,
+    "sanitized_log": "logs/client-renewal-diagnostic02.log",
+    "sanitized_log_sha256": "955c9ae20c25dad8482456a0aaaa0e767d8859fccfd7d3ecaae2524a7debb1d2"
+  },
+  "client-shutdown-diagnostic01": {
+    "receipt": "logs/client-shutdown-diagnostic01.json",
+    "receipt_sha256": "76b42bc1690af20ac152e9f1b032d3413e2f5d96a79efb846405193a380ebcb5",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/freeze-client.py",
+      "shutdown-diagnostic01",
+      "--diagnostic"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 42.19402885437012,
+    "sanitized_log": "logs/client-shutdown-diagnostic01.log",
+    "sanitized_log_sha256": "6a5aa2b6c734a421d4b78fbc95ac5e4e780efd19075056a989ad7a9fedcfa5af"
+  },
+  "engine-only-none01": {
+    "receipt": "logs/engine-only-none01.json",
+    "receipt_sha256": "afc5f8c35b7fb8dc8a640953ee89b85f2b93de36f507f6f81e932ecd38b8e0d8",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/engine-isolation.py",
+      "engine-only-none01",
+      "--profiles",
+      "none"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 4.679731607437134,
+    "sanitized_log": "logs/engine-only-none01.log",
+    "sanitized_log_sha256": "f2f6d0caa75b7c977066510385da410987833a62cd3713e509af4d685c612ef0"
+  },
+  "engine-only-vive01": {
+    "receipt": "logs/engine-only-vive01.json",
+    "receipt_sha256": "3d461d655a8954392f5f5a8be100676e26b90b4b196aba01914df5cc6852e352",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/engine-isolation.py",
+      "engine-only-vive01",
+      "--profiles",
+      "vive"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 5.384623289108276,
+    "sanitized_log": "logs/engine-only-vive01.log",
+    "sanitized_log_sha256": "35e3085322449a650332c3d244efc46a6134da1e0667ed2ff123e620a70c5a17"
+  },
+  "engine-window-flags": {
+    "receipt": "logs/engine-window-flags.json",
+    "receipt_sha256": "caa70d39d23d4f31184e4e60838cf2f2f4a7b788da5de06f8e4f2c1f3f1b97ea",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+      "--help"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.03188514709472656,
+    "sanitized_log": "logs/engine-window-flags.log",
+    "sanitized_log_sha256": "5594880c0c79699e0174c0ad7f115c1671eaadfb1d635facc0e3db714c0b1478"
+  },
+  "final03-source-audit": {
+    "receipt": "logs/final03-source-audit.json",
+    "receipt_sha256": "17c3e2e5899cdb87d01a2c9728a79f8955bccb2d9f1893cfa576318db6fd39b4",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/audit-source.py",
+      "final03"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 2.1207683086395264,
+    "sanitized_log": "logs/final03-source-audit.log",
+    "sanitized_log_sha256": "bd0199b87a283955c2845ad5cd640b601c71fb35c4a1b3f4ac719f7d091fa32c"
+  },
+  "gui-desktop-final01-journey": {
+    "receipt": "logs/gui-desktop-final01-journey.json",
+    "receipt_sha256": "805a96604b1a9991a41ad3fd145633590732f971fb5c7ea80170f4969edbfb2c",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/gui-desktop-final01-drivers/journey.py",
+      "--journey",
+      "gui",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--backend-port",
+      "42997",
+      "--backend-ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-desktop-final01-server/backend-ca.pem",
+      "--control-port",
+      "34017",
+      "--network",
+      "UDpKELtYewacYvq6yVbyEVXGZ-Wa0f8ElgC3gVcH7yM",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/gui-desktop-final01",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-desktop-final01",
+      "--desktop",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 23.731711387634277,
+    "sanitized_log": "logs/gui-desktop-final01-journey.log",
+    "sanitized_log_sha256": "11203f8637b7e40bbcdc7d56f6729690dbf2c70d9bda0a014619f185947d0375"
+  },
+  "gui-desktop-final01-server-log": {
+    "receipt": "logs/gui-desktop-final01-server-log.json",
+    "receipt_sha256": "616913b359648d1ac3a60950257a50bc15a48394af60cf4954bacda641ac949c",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-desktop-final01-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.0026395320892333984,
+    "sanitized_log": "logs/gui-desktop-final01-server-log.log",
+    "sanitized_log_sha256": "3f520e9bac99a0883ec06c90d48024e7bc87d530b0fe367d8592d9288d62e92e"
+  },
+  "gui-desktop-final01": {
+    "receipt": "logs/gui-desktop-final01.json",
+    "receipt_sha256": "009d16b09f334aa81877ca0b4537583d5f852abeb1b887e9051ef02c0fd176c2",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/campaign.py",
+      "gui-desktop-final01",
+      "--client",
+      "final02",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod",
+      "--journey",
+      "gui",
+      "--controllers",
+      "--desktop"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 42.50402498245239,
+    "sanitized_log": "logs/gui-desktop-final01.log",
+    "sanitized_log_sha256": "1db0fae731619671df68753553ec10bb8c1356f6c70f6b9258876a2dee89f8c7"
+  },
+  "gui-desktop-final03-backup-import": {
+    "receipt": "logs/gui-desktop-final03-backup-import.json",
+    "receipt_sha256": "4346c8104380f4a56a19dc9d22e3e8313e418e4230e66a26f664d1de958a5dc4",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/gui-desktop-final03-drivers/local.py",
+      "--phase",
+      "backup-import",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--journey-private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-desktop-final03",
+      "--node",
+      "https://127.0.0.1:42667",
+      "--ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-desktop-final03-server/backend-ca.pem",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/gui-desktop-final03-backup-import",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-desktop-final03-backup-import",
+      "--desktop"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 20.864405155181885,
+    "sanitized_log": "logs/gui-desktop-final03-backup-import.log",
+    "sanitized_log_sha256": "50590a5cf58753c99b1f99cefcc6e5814ca2aa02c9d4c7a050f9d80fecc0101c"
+  },
+  "gui-desktop-final03-journey": {
+    "receipt": "logs/gui-desktop-final03-journey.json",
+    "receipt_sha256": "4a943e6a539f21ba9d4c32c5d1a03b58d11279125353566c5d367125097c8f18",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/gui-desktop-final03-drivers/journey.py",
+      "--journey",
+      "gui",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--backend-port",
+      "42667",
+      "--backend-ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-desktop-final03-server/backend-ca.pem",
+      "--control-port",
+      "41857",
+      "--network",
+      "fMgxq5pXZAmHMpDa7zLEgcYnOCkycctkrnzmNCrPISA",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/gui-desktop-final03",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-desktop-final03",
+      "--desktop",
+      "--controllers"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 131.83299899101257,
+    "sanitized_log": "logs/gui-desktop-final03-journey.log",
+    "sanitized_log_sha256": "aa96acfa69202e33697159187f49dcde550c700418bb3a40d8953703194cdb45"
+  },
+  "gui-desktop-final03-server-log": {
+    "receipt": "logs/gui-desktop-final03-server-log.json",
+    "receipt_sha256": "25cd23cc62f978b8ead08961abb86b6a2b8a874d9b24ea7dbd7e527018697c50",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-desktop-final03-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.006268978118896484,
+    "sanitized_log": "logs/gui-desktop-final03-server-log.log",
+    "sanitized_log_sha256": "aa1941ca57101d08c671b8ba70e8fa881309e93fa104918123278aeba6e00a7b"
+  },
+  "gui-desktop-final03": {
+    "receipt": "logs/gui-desktop-final03.json",
+    "receipt_sha256": "798410b8e01144aa332c5c3ba9e456ae51dcaa712360cba991da2f20a1fad7c5",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/campaign.py",
+      "gui-desktop-final03",
+      "--client",
+      "final03",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod",
+      "--journey",
+      "gui",
+      "--controllers",
+      "--desktop"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 171.94115018844604,
+    "sanitized_log": "logs/gui-desktop-final03.log",
+    "sanitized_log_sha256": "192cac85a8998a0029b35ea1e255a97ced83c2d39cfc2012983a95731f76be71"
+  },
+  "gui-headless-final01-journey": {
+    "receipt": "logs/gui-headless-final01-journey.json",
+    "receipt_sha256": "c65959817a7b9ae03dab9225958e567ab43e032c82302887705b48c2f794668e",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/gui-headless-final01-drivers/journey.py",
+      "--journey",
+      "gui",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--backend-port",
+      "39509",
+      "--backend-ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-headless-final01-server/backend-ca.pem",
+      "--control-port",
+      "46827",
+      "--network",
+      "NEYRoSzbdhy-9qaQ4KpRlGdulJRmRMTNCu1sRwmfnIo",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/gui-headless-final01",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-headless-final01",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 25.722425937652588,
+    "sanitized_log": "logs/gui-headless-final01-journey.log",
+    "sanitized_log_sha256": "d6705cf3ee51a55b1240eed16dae81b192910b7c0bef1a59f1a86913ed58437b"
+  },
+  "gui-headless-final01-server-log": {
+    "receipt": "logs/gui-headless-final01-server-log.json",
+    "receipt_sha256": "fc20bfdd6693aa0e47746f032179645f8656e4f9839b785b549c7ad2dacb7435",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-headless-final01-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.0019867420196533203,
+    "sanitized_log": "logs/gui-headless-final01-server-log.log",
+    "sanitized_log_sha256": "433a87e7bdf71db5eb5725dda765002e7784983fb43d857041c78ccd94061a7b"
+  },
+  "gui-headless-final01": {
+    "receipt": "logs/gui-headless-final01.json",
+    "receipt_sha256": "40a0406a33883bd0195eb13315a779bb100ee050980bbc934286c9bcb0f888bf",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/campaign.py",
+      "gui-headless-final01",
+      "--client",
+      "final02",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod",
+      "--journey",
+      "gui",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 45.83798861503601,
+    "sanitized_log": "logs/gui-headless-final01.log",
+    "sanitized_log_sha256": "4bc4c7ce2a9e5be9ebf3a623c6872ed2db5e5f66c0b8d345ad80d33dc28f25e2"
+  },
+  "gui-headless-final03-journey": {
+    "receipt": "logs/gui-headless-final03-journey.json",
+    "receipt_sha256": "a53f1ff4b44aaee0c3b04fd52fa89ffd4a16202fa593287ef5f5e17eb5d62903",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/gui-headless-final03-drivers/journey.py",
+      "--journey",
+      "gui",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--backend-port",
+      "43225",
+      "--backend-ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-headless-final03-server/backend-ca.pem",
+      "--control-port",
+      "34645",
+      "--network",
+      "DkdgN8wZrdqx8woqgXCL51NB6FdQMzCYr8G4rPRT9lY",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/gui-headless-final03",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-headless-final03",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 122.35496282577515,
+    "sanitized_log": "logs/gui-headless-final03-journey.log",
+    "sanitized_log_sha256": "54c896fa5157f7eb5941984b8fcd641e9b1fc0b5429dcc85ce557412c71e4bea"
+  },
+  "gui-headless-final03-server-log": {
+    "receipt": "logs/gui-headless-final03-server-log.json",
+    "receipt_sha256": "b246eeb3242dc25f30054db87b305bf3c9f4aa09e62802abac5b8af6734c6593",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-headless-final03-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.002376079559326172,
+    "sanitized_log": "logs/gui-headless-final03-server-log.log",
+    "sanitized_log_sha256": "2bdc70615858924e929106462b87bbb7acf8b0bfd70287740005ee558636f021"
+  },
+  "gui-headless-final03": {
+    "receipt": "logs/gui-headless-final03.json",
+    "receipt_sha256": "5840abd9ef85e96441689887b8823338dc7930ff7e1407f70d768fc5ee6e4314",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/campaign.py",
+      "gui-headless-final03",
+      "--client",
+      "final03",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod",
+      "--journey",
+      "gui",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 143.13899755477905,
+    "sanitized_log": "logs/gui-headless-final03.log",
+    "sanitized_log_sha256": "c779843c078bc2ec189c815656e2bc18b4059331e6b5bf808623c0e8f9b6039c"
+  },
+  "gui-headless-sized-final01-journey": {
+    "receipt": "logs/gui-headless-sized-final01-journey.json",
+    "receipt_sha256": "22b91c3346faf459810f810452581303dbf1ed03c01728ae675336acf0d40899",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/gui-headless-sized-final01-drivers/journey.py",
+      "--journey",
+      "gui",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--backend-port",
+      "37251",
+      "--backend-ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-headless-sized-final01-server/backend-ca.pem",
+      "--control-port",
+      "37273",
+      "--network",
+      "2r-Huy7RitTomTjf4o9FKVizVeskAQn2H51BJxzjrdw",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/gui-headless-sized-final01",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-headless-sized-final01",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 25.281327486038208,
+    "sanitized_log": "logs/gui-headless-sized-final01-journey.log",
+    "sanitized_log_sha256": "7630920865b1adbd8adaddeef0e5839b84c4819bc679c326e38086c500ca578a"
+  },
+  "gui-headless-sized-final01-server-log": {
+    "receipt": "logs/gui-headless-sized-final01-server-log.json",
+    "receipt_sha256": "2accf3dba303185380fc2190e0465cca686678c72152842cf623349dadf1ec5d",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-headless-sized-final01-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.005654335021972656,
+    "sanitized_log": "logs/gui-headless-sized-final01-server-log.log",
+    "sanitized_log_sha256": "459ccee3bce65008c0c6370e4fabb5bfe648efb8273a8530c8d2adc0c4f5840f"
+  },
+  "gui-headless-sized-final01": {
+    "receipt": "logs/gui-headless-sized-final01.json",
+    "receipt_sha256": "8aea7a8f31bdf326984aab7066bca0dc85946bb76b3131a243489b1eea0e9326",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/campaign.py",
+      "gui-headless-sized-final01",
+      "--client",
+      "final02",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod",
+      "--journey",
+      "gui",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 42.08540606498718,
+    "sanitized_log": "logs/gui-headless-sized-final01.log",
+    "sanitized_log_sha256": "3c459a5daa6404a2bc027d59504d09a688b9db1aae091b08479a81db1ceb5c5d"
+  },
+  "input-final01": {
+    "receipt": "logs/input-final01.json",
+    "receipt_sha256": "f5be5470559719e30e773f6931762445b20927a9333301cfbb6b362cd8adefe8",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/input-campaign.py",
+      "input-final01",
+      "--engine",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final01/source/client/godot/dist/quod.x86_64",
+      "--desktop"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 3.282191753387451,
+    "sanitized_log": "logs/input-final01.log",
+    "sanitized_log_sha256": "6303f95ecbc2055aa50d34fd90d9eea1c837b458eea4d5cf30c2ae60816791d6"
+  },
+  "input-final03": {
+    "receipt": "logs/input-final03.json",
+    "receipt_sha256": "63483c03c1a29a5a3fcb0cc189a655a119d5101632bc3cd3e37a672c56869498",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/input-campaign.py",
+      "input-final03",
+      "--engine",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--desktop"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 3.7848339080810547,
+    "sanitized_log": "logs/input-final03.log",
+    "sanitized_log_sha256": "8e2a138ae605ad5f11833912a280f51ae6a18ecb180c1eace518aa625203fad6"
+  },
+  "input-pre-grip01": {
+    "receipt": "logs/input-pre-grip01.json",
+    "receipt_sha256": "cce7a12abd3a4c4b41c462e51a91ae82527a7a0b42fa45d0a2428fb2f2c12e92",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/input-campaign.py",
+      "input-pre-grip01",
+      "--engine",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-pre-grip01/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 1.5196194648742676,
+    "sanitized_log": "logs/input-pre-grip01.log",
+    "sanitized_log_sha256": "d659e997715b1f115020521a6c53ad4aa2d6f496c2c28557b084f033210f9bde"
+  },
+  "native-fault-close-final03": {
+    "receipt": "logs/native-fault-close-final03.json",
+    "receipt_sha256": "f0b44aeb9c706a71f06dc45b52d0d3ca108074f2b4264e88ded4402d2934f1e4",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-fault-close-final03",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--mode",
+      "simulated",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--compositor",
+      "window",
+      "--api-dump",
+      "--fault-output"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 5.645503282546997,
+    "sanitized_log": "logs/native-fault-close-final03.log",
+    "sanitized_log_sha256": "8009f60ee215b35bf5bea1858a66fc812346aabbdb11d173d47ed987dff0e2ee"
+  },
+  "native-final-api-extraction": {
+    "receipt": "logs/native-final-api-extraction.json",
+    "receipt_sha256": "e86f9eb8583c742a93b0713106556e71634775cca6d8fb52524d7300570e1252",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/extract-api.py",
+      "native-simulated-final01",
+      "native-pre-head01",
+      "render-lifecycle-observation01",
+      "render-lifecycle-observation02",
+      "native-vive-final02",
+      "native-simulated-final03",
+      "native-fault-close-final03",
+      "native-vive-final03"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.46711063385009766,
+    "sanitized_log": "logs/native-final-api-extraction.log",
+    "sanitized_log_sha256": "964a3174dc03ea7738a5dbb181579fc37fec275bbef29568195a3aa82e4a7995"
+  },
+  "native-pre-head01": {
+    "receipt": "logs/native-pre-head01.json",
+    "receipt_sha256": "0f3b3f0af2129078d042f64a79a143013888472073dd6cbe9378432b164dbd5a",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-pre-head01",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-pre-head01/source/client/godot/dist/quod.x86_64",
+      "--mode",
+      "hardware",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 9.996347188949585,
+    "sanitized_log": "logs/native-pre-head01.log",
+    "sanitized_log_sha256": "ecf980adde83554c65f4a1c7a99a3abeb64342bccc42cb038c01c6fc731192cc"
+  },
+  "native-simulated-final01": {
+    "receipt": "logs/native-simulated-final01.json",
+    "receipt_sha256": "bfa3a615a431a0c2f1bc547f820ec8b4ea80457e955df3e2f0d15ede283ceca2",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-simulated-final01",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--mode",
+      "simulated",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 7.392998933792114,
+    "sanitized_log": "logs/native-simulated-final01.log",
+    "sanitized_log_sha256": "11835b664046d29ebfd926b5e00d5ee48badd963bb42db5e007577f0101f4ea8"
+  },
+  "native-simulated-final03": {
+    "receipt": "logs/native-simulated-final03.json",
+    "receipt_sha256": "59dfa8af9d94bba239d5b2c27bef333448f752e8c15f8333806632683d717b80",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-simulated-final03",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--mode",
+      "simulated",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 8.810374021530151,
+    "sanitized_log": "logs/native-simulated-final03.log",
+    "sanitized_log_sha256": "7f0192d5f201462c52f550213a4b8d3af1f80a2aefccab4ea44761a9a1aacd93"
+  },
+  "native-simulated01": {
+    "receipt": "logs/native-simulated01.json",
+    "receipt_sha256": "969a98e75ce4c4d4eed4fb649a04463d4c9ddcc645192fa166fdb64a7efbd9af",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-simulated01",
+      "--mode",
+      "simulated",
+      "--export",
+      "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 10.651134729385376,
+    "sanitized_log": "logs/native-simulated01.log",
+    "sanitized_log_sha256": "f1b1f7cdf7e616e3fe4dc3c1fc716a7f7e1c662a3b188e3014bd0fe8c049d5ea"
+  },
+  "native-simulated02": {
+    "receipt": "logs/native-simulated02.json",
+    "receipt_sha256": "f515019cea2f96f2f1f6f3f9cb107059315c274ce1e2ac78a47cae9439133fb1",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-simulated02",
+      "--mode",
+      "simulated",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development01/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 5.4963297843933105,
+    "sanitized_log": "logs/native-simulated02.log",
+    "sanitized_log_sha256": "e7ea7c50eb9a90578d7c20c25528d400a57332b024ce06d153148914678bcda2"
+  },
+  "native-simulated03": {
+    "receipt": "logs/native-simulated03.json",
+    "receipt_sha256": "9cf0146d1225f7dd12631708933a8b86a7e04d331ac9332baf70102cb5cbe0a8",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-simulated03",
+      "--mode",
+      "simulated",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 9.093632698059082,
+    "sanitized_log": "logs/native-simulated03.log",
+    "sanitized_log_sha256": "2c68209ba0d02ab9be0c701d2f190c9f7f6ea193675e6e456d1243ca9e72605d"
+  },
+  "native-simulated04": {
+    "receipt": "logs/native-simulated04.json",
+    "receipt_sha256": "30a31993294969f80f176caaa19eedaea773667f5ecf9d040892e35c3af8938e",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-simulated04",
+      "--mode",
+      "simulated",
+      "--api-dump",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development03/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 9.496926546096802,
+    "sanitized_log": "logs/native-simulated04.log",
+    "sanitized_log_sha256": "15f6dd09619c8c1f94c41b9df139d2f50d0d463cb29802defc740d4121ea9d30"
+  },
+  "native-vive-api01": {
+    "receipt": "logs/native-vive-api01.json",
+    "receipt_sha256": "f4795ca107d0c2ef806f3ab987439c9ec878c387ce160bfd6f760be196b988dc",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-vive-api01",
+      "--mode",
+      "hardware",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--api-dump",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-shutdown-diagnostic01/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 12.765345573425293,
+    "sanitized_log": "logs/native-vive-api01.log",
+    "sanitized_log_sha256": "b1a789d197e6cce461ba1358427ffdf2d69668ae655c3cd88287700fa016b772"
+  },
+  "native-vive-final01": {
+    "receipt": "logs/native-vive-final01.json",
+    "receipt_sha256": "6be9c4e8885e153a8d1ba3046041dd5adbbb0209163ad3d0df0087a01d60fcd9",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-vive-final01",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final01/source/client/godot/dist/quod.x86_64",
+      "--mode",
+      "hardware",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 10.494824886322021,
+    "sanitized_log": "logs/native-vive-final01.log",
+    "sanitized_log_sha256": "d8c3a4daf0cadf78fa4635a0de1943b95864687658544ebd4143f5ca3629d452"
+  },
+  "native-vive-final02": {
+    "receipt": "logs/native-vive-final02.json",
+    "receipt_sha256": "968899c9b05f113de94a456473bba5999ef7850c1effc9af6083a71eb1068e1c",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-vive-final02",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--mode",
+      "hardware",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 11.664870738983154,
+    "sanitized_log": "logs/native-vive-final02.log",
+    "sanitized_log_sha256": "ffa16a72391d3a6e1273b273a5533b390951b07bb9a3a9f6c555ea8659ddc0b0"
+  },
+  "native-vive-final03": {
+    "receipt": "logs/native-vive-final03.json",
+    "receipt_sha256": "81991d992345053bb4e7ed5b7deaa49bf7765ff381f28842b2634bb817b3e77a",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-vive-final03",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--mode",
+      "hardware",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 11.709728240966797,
+    "sanitized_log": "logs/native-vive-final03.log",
+    "sanitized_log_sha256": "0af375e815ec0859b1bf01cfc0318856fb93d666f95ab6dc5f7a287006b5f131"
+  },
+  "native-vive-window01": {
+    "receipt": "logs/native-vive-window01.json",
+    "receipt_sha256": "a77f7d98ae0dce3f4c71d5bcc65e9f240823273feec8aab3ffcdfe7a0cbb2457",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-vive-window01",
+      "--mode",
+      "hardware",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 12.770191192626953,
+    "sanitized_log": "logs/native-vive-window01.log",
+    "sanitized_log_sha256": "49cd9efebfca8b1b116102ac8f537c38965357e6e2444fe236df802051cee5d7"
+  },
+  "native-vive01": {
+    "receipt": "logs/native-vive01.json",
+    "receipt_sha256": "276083264b263eaef6d320215cf33d70be6aa939ae7b519ae5ddd0aab2281c4d",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-vive01",
+      "--mode",
+      "hardware",
+      "--lighthouse",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 83.08399558067322,
+    "sanitized_log": "logs/native-vive01.log",
+    "sanitized_log_sha256": "2f0cec4d8dbd8740706bc495649acd0a4466e823b08b2191e30067a939abd86c"
+  },
+  "native-vive02": {
+    "receipt": "logs/native-vive02.json",
+    "receipt_sha256": "9c543873818cf004836e1f78a182186459d99ec938005edb0a3735c4287fa192",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "native-vive02",
+      "--mode",
+      "hardware",
+      "--lighthouse",
+      "--compositor",
+      "wayland-lease",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 37.85636115074158,
+    "sanitized_log": "logs/native-vive02.log",
+    "sanitized_log_sha256": "68e08d22221dc5aa97f05c2eecf330f25b59fa44c2164698b823bb6c035573be"
+  },
+  "physics-final03-server-log": {
+    "receipt": "logs/physics-final03-server-log.json",
+    "receipt_sha256": "ceff70d6e083178dbd1264bcb0975041a0a3c904b96f31fbe2d3e642c4fbed70",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-physics-final03-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.00624537467956543,
+    "sanitized_log": "logs/physics-final03-server-log.log",
+    "sanitized_log_sha256": "cfcf136ec7cfb12842717fd8ee1420429ad9b7216b3676a61b5bc948719fc3a4"
+  },
+  "physics-final03": {
+    "receipt": "logs/physics-final03.json",
+    "receipt_sha256": "397f8b1d1e9367a3c4e6f325e15163d240b2b237e559e4b56bd60e2564942b1b",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/physics-campaign.py",
+      "physics-final03",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 39.1966598033905,
+    "sanitized_log": "logs/physics-final03.log",
+    "sanitized_log_sha256": "4576b06634c24470c90c1273092dfa4c5a5ca2dcc51bb431cf785afd07adfcae"
+  },
+  "render-lifecycle-observation01": {
+    "receipt": "logs/render-lifecycle-observation01.json",
+    "receipt_sha256": "fe4fc43bcee70c198f00feac190bba86b78b2e9ea35cbcfb56632952c7971fe7",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "render-lifecycle-observation01",
+      "--export",
+      "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+      "--project",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final01/source/client/godot",
+      "--script",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/render-observer.gd",
+      "--mode",
+      "hardware",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 11.651869297027588,
+    "sanitized_log": "logs/render-lifecycle-observation01.log",
+    "sanitized_log_sha256": "3a34edafe95f0c93b336b4f3c80f9a746b64b42aaf50469c5eb44da2418a66e1"
+  },
+  "render-lifecycle-observation02": {
+    "receipt": "logs/render-lifecycle-observation02.json",
+    "receipt_sha256": "96a81055354341d47a965c6bb4501d2e74a8ea670a75eb744e9a91092d2e7af3",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+      "render-lifecycle-observation02",
+      "--export",
+      "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+      "--project",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final01/source/client/godot",
+      "--script",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/render-observer.gd",
+      "--mode",
+      "hardware",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--lighthouse",
+      "--compositor",
+      "window",
+      "--api-dump"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 11.352372884750366,
+    "sanitized_log": "logs/render-lifecycle-observation02.log",
+    "sanitized_log_sha256": "d31643e2191f00fdf54f64ceed2cf02083342b84e22da667ce50eeb61e58067c"
+  },
+  "renewal-diagnostic-source": {
+    "receipt": "logs/renewal-diagnostic-source.json",
+    "receipt_sha256": "45407a2fe6585b46adb4943e6e57c47f77eee44584a7b17439ec16ce3dc19021",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/prepare-renewal-diagnostic.py"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.06522417068481445,
+    "sanitized_log": "logs/renewal-diagnostic-source.log",
+    "sanitized_log_sha256": "4c57360ca2e8f5a9e17c91f570df9f68c9f1a25c090e38a79b9d3b95a33b0935"
+  },
+  "renewal-owner-observation01-journey": {
+    "receipt": "logs/renewal-owner-observation01-journey.json",
+    "receipt_sha256": "83ec33ae47535a593ac5628b122059ea2a4458411f46e0478ef6b08223b46862",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/renewal-owner-observation01-drivers/journey.py",
+      "--journey",
+      "gui",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/dist/quod.x86_64",
+      "--backend-port",
+      "37541",
+      "--backend-ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-renewal-owner-observation01-server/backend-ca.pem",
+      "--control-port",
+      "33513",
+      "--network",
+      "GD1iNjlfDZ4B2nHtdYdC77zAeWPj1EUNLpuMgzYrfis",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/renewal-owner-observation01",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/renewal-owner-observation01",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 0.8672146797180176,
+    "sanitized_log": "logs/renewal-owner-observation01-journey.log",
+    "sanitized_log_sha256": "726c6263cc09f25f7a9e6ce4f5b129de73aa0b3c5899502a4ebb4bcc2750c1e6"
+  },
+  "renewal-owner-observation01-server-log": {
+    "receipt": "logs/renewal-owner-observation01-server-log.json",
+    "receipt_sha256": "34e0e94deeacc4312684887a1ad24ae6466774d428e3f6d3509a1c07d18056d1",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-renewal-owner-observation01-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.002275228500366211,
+    "sanitized_log": "logs/renewal-owner-observation01-server-log.log",
+    "sanitized_log_sha256": "074dc14dcd49b9ca98e07d746297ab73a72f0ce33585d4da07ccd159bcd91c4a"
+  },
+  "renewal-owner-observation01": {
+    "receipt": "logs/renewal-owner-observation01.json",
+    "receipt_sha256": "87f4b01d974e5e78a0e1206e20b1874953a3b3e9c376d49aabc9481d79832e79",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/campaign.py",
+      "renewal-owner-observation01",
+      "--client",
+      "renewal-diagnostic01",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic01/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod",
+      "--journey",
+      "gui",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 25.57373571395874,
+    "sanitized_log": "logs/renewal-owner-observation01.log",
+    "sanitized_log_sha256": "fb75bf196da45fda63710c1eb3d19b7aa0bb2a9c9e9f4ccc52033d184573f392"
+  },
+  "renewal-owner-observation02-journey": {
+    "receipt": "logs/renewal-owner-observation02-journey.json",
+    "receipt_sha256": "65134e4d4b7dd5aa8c71ea20c0d0d516fe5ca4780ecde135b93335152fe677e7",
+    "command": [
+      "python3",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/renewal-owner-observation02-drivers/journey.py",
+      "--journey",
+      "gui",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic02/source/client/godot/dist/quod.x86_64",
+      "--backend-port",
+      "38611",
+      "--backend-ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-renewal-owner-observation02-server/backend-ca.pem",
+      "--control-port",
+      "46133",
+      "--network",
+      "XyuQVMQbEO1W8Kn_PLr6pvcmjV1hH2ZcYZvHchFNPh0",
+      "--evidence",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/renewal-owner-observation02",
+      "--private",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/renewal-owner-observation02",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 25.584174394607544,
+    "sanitized_log": "logs/renewal-owner-observation02-journey.log",
+    "sanitized_log_sha256": "e2d918d2abfb94b50d2b77f159d112056c36ec3f4247649a71bd95cde601be47"
+  },
+  "renewal-owner-observation02-server-log": {
+    "receipt": "logs/renewal-owner-observation02-server-log.json",
+    "receipt_sha256": "a05cb1ec5de2f23c8784d8067c48d0843963b7241f7100d70e115cd3f5ffe4b9",
+    "command": [
+      "cat",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-renewal-owner-observation02-server/server-raw.log"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.0019664764404296875,
+    "sanitized_log": "logs/renewal-owner-observation02-server-log.log",
+    "sanitized_log_sha256": "c90532cb6ff61290429375162051c8be39c3525c5659189cc4dfac4094403ebb"
+  },
+  "renewal-owner-observation02": {
+    "receipt": "logs/renewal-owner-observation02.json",
+    "receipt_sha256": "c7d00ae7f9a319fdd52503e59ceecdefc5f3afcc3b11d149f246471bb633625e",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/campaign.py",
+      "renewal-owner-observation02",
+      "--client",
+      "renewal-diagnostic02",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic02/source/client/godot/dist/quod.x86_64",
+      "--stage",
+      "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+      "--profile",
+      "prod",
+      "--journey",
+      "gui",
+      "--controllers"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 43.71047067642212,
+    "sanitized_log": "logs/renewal-owner-observation02.log",
+    "sanitized_log_sha256": "cb483ebbc43ac69f40b1eeee6c0a88b3dd69688cc4fc3a36f8bdf8968d1ff66e"
+  },
+  "runtime-abi-final01": {
+    "receipt": "logs/runtime-abi-final01.json",
+    "receipt_sha256": "680d4f4cbca50875e19a7a0f81527617abb1483c0abed66fa8708fb8dd3acb11",
+    "command": [
+      "readelf",
+      "-d",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-service"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.019775390625,
+    "sanitized_log": "logs/runtime-abi-final01.log",
+    "sanitized_log_sha256": "b6235ccd838e20d1c2c4dfd2222cfe571bd4dffed1220f79c5977835a9b1f72e"
+  },
+  "runtime-build01": {
+    "receipt": "logs/runtime-build01.json",
+    "receipt_sha256": "b9dccbff6c3f9c6c7c805b9063824666669a8709019bc91bf87eb3fab6ac1e7d",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/build-runtime.py",
+      "build"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 73.57473111152649,
+    "sanitized_log": "logs/runtime-build01.log",
+    "sanitized_log_sha256": "a1090a9ff28d67af6e6a1dc33e1a8f298085e608bbfc4b9000d392203984a808"
+  },
+  "runtime-build02": {
+    "receipt": "logs/runtime-build02.json",
+    "receipt_sha256": "84515528ca6970650f79a7c00d58b0e9e4545f01308888ca351162f3e4d7dc70",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/build-runtime.py",
+      "build",
+      "--label",
+      "compatible02"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 92.19767308235168,
+    "sanitized_log": "logs/runtime-build02.log",
+    "sanitized_log_sha256": "21ec43ab148c47af832412026720a5c781f705fdf04535dc6222bd51e6a513b4"
+  },
+  "runtime-configure01": {
+    "receipt": "logs/runtime-configure01.json",
+    "receipt_sha256": "40dd4db668309900d3442d6d0fe784f8491e3faf0f9f0dbdfa5f0b1f9e7f36c0",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/build-runtime.py",
+      "configure"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 11.964093923568726,
+    "sanitized_log": "logs/runtime-configure01.log",
+    "sanitized_log_sha256": "99268ca7c294900057ddc905fd05d455b25bffcbe3aa16acf52b93943239fbb1"
+  },
+  "runtime-configure02": {
+    "receipt": "logs/runtime-configure02.json",
+    "receipt_sha256": "f8f30f52fcffcc091fe8d38a14ecbba04bb179f940e32242af6fc87549fcd46c",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/build-runtime.py",
+      "configure",
+      "--label",
+      "compatible02"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 10.955374002456665,
+    "sanitized_log": "logs/runtime-configure02.log",
+    "sanitized_log_sha256": "f66022d9c6716a50b78146825dd7d5b6de661c17e654082c436d720c4f299fb4"
+  },
+  "runtime-install02": {
+    "receipt": "logs/runtime-install02.json",
+    "receipt_sha256": "c8a76c4c50814b6b9219285d9dbe48944af3379e7cc562bdbdc2c78093a3c673",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/build-runtime.py",
+      "install",
+      "--label",
+      "compatible02"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 1.4679441452026367,
+    "sanitized_log": "logs/runtime-install02.log",
+    "sanitized_log_sha256": "d7f149108e5b9ceb5eccaac6bea8f9190649d2db95aa4546030cf48d3af67a8c"
+  },
+  "runtime-native-dependency-inputs": {
+    "receipt": "logs/runtime-native-dependency-inputs.json",
+    "receipt_sha256": "e3ccc4c64a3ddb225f1c357314b91edfd9c60daec7b9198eea20453a6dbf155d",
+    "command": [
+      "ninja",
+      "-C",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-build",
+      "-t",
+      "deps"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 0.11521506309509277,
+    "sanitized_log": "logs/runtime-native-dependency-inputs.log",
+    "sanitized_log_sha256": "35f0494f2ba3a2a529a87f182b58ea3b2e8843c1248d2cf6e419d0e3250ee117"
+  },
+  "runtime-retain-observed-inputs": {
+    "receipt": "logs/runtime-retain-observed-inputs.json",
+    "receipt_sha256": "7ec3cd0adaaab6e3ce6d99319b023451541bc6cbf2f41d184b5de32d36181f8b",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/retain-runtime-inputs.py",
+      "--owned-client-pid",
+      "845550"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 17.890624284744263,
+    "sanitized_log": "logs/runtime-retain-observed-inputs.log",
+    "sanitized_log_sha256": "2f7492fcae505ac483516e821694bd016393cf7373612f70c1a8ded579b4c668"
+  },
+  "scene-final03": {
+    "receipt": "logs/scene-final03.json",
+    "receipt_sha256": "a0ae4ba7cc0ce59bea2b8bdffb9b711cf81425690a96f86d3f90a45af5254471",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/input-campaign.py",
+      "scene-final03",
+      "--engine",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+      "--desktop",
+      "--phase",
+      "scene"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 2.8307549953460693,
+    "sanitized_log": "logs/scene-final03.log",
+    "sanitized_log_sha256": "afaf4b9f81178d3279048d98572f95f9caab96735ae9c8fa5d512945a296c12a"
+  },
+  "shutdown-connect-diagnostic01": {
+    "receipt": "logs/shutdown-connect-diagnostic01.json",
+    "receipt_sha256": "1cfa23c1b4a0d99849fde37dd5141aaf762b2d26f72a9fd92197990402787588",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/shutdown-connect.py",
+      "shutdown-connect-diagnostic01",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-shutdown-diagnostic01/source/client/godot/dist/quod.x86_64",
+      "--diagnostic"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 3.131643295288086,
+    "sanitized_log": "logs/shutdown-connect-diagnostic01.log",
+    "sanitized_log_sha256": "d76f3fc80b6a7c7b4959f0c6f33852b225ca73f46c84c78342699a071cec8e98"
+  },
+  "shutdown-connect-final03": {
+    "receipt": "logs/shutdown-connect-final03.json",
+    "receipt_sha256": "a3efc4536683a7dcd3cbd85c911008c75accb1f08660c316d05d209b062478de",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/shutdown-connect.py",
+      "shutdown-connect-final03",
+      "--export",
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 2.574341058731079,
+    "sanitized_log": "logs/shutdown-connect-final03.log",
+    "sanitized_log_sha256": "c6035ac0621cb64f693e0f89174f03f148b3e126c665ddd8fdf667cc6c2d8a39"
+  },
+  "vive-private-probe01": {
+    "receipt": "logs/vive-private-probe01.json",
+    "receipt_sha256": "4a6f9238246f03c54279f440f4f48b6e3c1225e961834f54016ec7ed73653af1",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/hardware-probe.py"
+    ],
+    "true_child_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 1.0176362991333008,
+    "sanitized_log": "logs/vive-private-probe01.log",
+    "sanitized_log_sha256": "72505e33a7069726bf88c74707a952d4e7d2a45c9082b0f6d2a36dcc67853037"
+  },
+  "vive-private-probe02": {
+    "receipt": "logs/vive-private-probe02.json",
+    "receipt_sha256": "78cca80cb52dad3cebe4c8627429be2267c181c227cb4178109e6639a840245c",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/hardware-probe.py",
+      "vive-private-probe02",
+      "--diagnose"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 1.8751580715179443,
+    "sanitized_log": "logs/vive-private-probe02.log",
+    "sanitized_log_sha256": "a066af043d89f9ee249fafbf6716866115ef38d46b0ea2cc2aa44ea3e57d95be"
+  },
+  "vive-private-probe03": {
+    "receipt": "logs/vive-private-probe03.json",
+    "receipt_sha256": "0c7d8de0eb949c42d4fed97c124dfc950ba834d177d1cbaa916b033eaf27eb47",
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-r2-20261029/hardware-probe.py",
+      "vive-private-probe03",
+      "--runtime-prefix",
+      "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+      "--debug-interfaces"
+    ],
+    "true_child_exit": 0,
+    "timed_out": false,
+    "elapsed_seconds": 3.8870365619659424,
+    "sanitized_log": "logs/vive-private-probe03.log",
+    "sanitized_log_sha256": "a38e1c96a0fbd83eefd34e58ae09d8b4db1b657e26018ceb5c30daa2ff052290"
+  }
+}

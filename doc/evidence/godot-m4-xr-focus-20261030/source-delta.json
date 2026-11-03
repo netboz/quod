@@ -1,0 +1,100 @@
+{
+  "rows": {
+    "client/godot/Main.cs": {
+      "before": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/inputs/Main.before.cs",
+        "sha256": "e9c010f71a9c1369fd5b451fe1d7fa275948089b3a96e69fe6d8f21b543fec1e"
+      },
+      "after": {
+        "sha256": "4313f84b16c5e066bf97653191222368a88b9528208ff374518ed9c0e081841f"
+      },
+      "added_lines": 1,
+      "removed_lines": 2
+    },
+    "client/godot/OpenXRInput.cs": {
+      "before": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/inputs/OpenXRInput.before.cs",
+        "sha256": "751fc56b6af5fb2fa6530a8e911210114c1e0d4e8c916ab5abf736f40b020cd7"
+      },
+      "after": {
+        "sha256": "ea6b2d22209103beed5946f57a98dbe93d1e8bc000bcb0f3c3718090f724ae1b"
+      },
+      "added_lines": 6,
+      "removed_lines": 7
+    },
+    "client/godot/README.md": {
+      "before": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/inputs/README.before.md",
+        "sha256": "cc5aeadc2b96b7b2527fd01b28963d029b7a5cb156ad8913a91c2f7773197ad0"
+      },
+      "after": {
+        "sha256": "e11e3b83463627286819e5921586bc80c15d7ebb210c2a820dd3400d832f622d"
+      },
+      "added_lines": 7,
+      "removed_lines": 2
+    },
+    "client/godot/tests/ControllerChecks.cs": {
+      "before": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/inputs/ControllerChecks.before.cs",
+        "sha256": "da1feb3238f31483eda36457efcd141aef5c0c88f9366de4f75c37e1a14ea2f0"
+      },
+      "after": {
+        "sha256": "e8b04ef80f7bbf7b737656ccfc8beba40ed4b748e5417e1e51a385ec62fd2f47"
+      },
+      "added_lines": 51,
+      "removed_lines": 14
+    },
+    "client/godot/tests/ControllerLiveChecks.cs": {
+      "before": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-xr-focus-baseline02/source/client/godot/tests/ControllerLiveChecks.cs",
+        "sha256": "fef0775336ece8b21682e44739fcf6c5bb58bdb27672ce5a7ed910160186683a"
+      },
+      "after": {
+        "sha256": "ccd5ac0b7fca888ec9c5eeb8986f27d0168b524ecdb2c686c25f099561a3fb32"
+      },
+      "added_lines": 2,
+      "removed_lines": 2
+    },
+    "client/godot/tests/PhysicsChecks.cs": {
+      "before": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-xr-focus-baseline02/source/client/godot/tests/PhysicsChecks.cs",
+        "sha256": "bdc96962614f68e4eb315d7d7a0ddfabe1fd2bebfa133f5b89b0428d871154f1"
+      },
+      "after": {
+        "sha256": "76102f6c4682398805e3aef2f0e64d5bfb6897e7c425c543c8ed7cafb0789d28"
+      },
+      "added_lines": 1,
+      "removed_lines": 1
+    },
+    "client/godot/tests/SpaceChecks.cs": {
+      "before": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/inputs/SpaceChecks.before.cs",
+        "sha256": "91b12e1b35cd57bc2beefae2b69c38633f4c487a3d5390de888d5af4e2ec7f26"
+      },
+      "after": {
+        "sha256": "91b12e1b35cd57bc2beefae2b69c38633f4c487a3d5390de888d5af4e2ec7f26"
+      },
+      "added_lines": 0,
+      "removed_lines": 0
+    }
+  },
+  "production_delta": {
+    "files": 2,
+    "added": 7,
+    "removed": 9
+  },
+  "test_delta": {
+    "files": 3,
+    "added": 54,
+    "removed": 17
+  },
+  "documentation_delta": {
+    "files": 1,
+    "added": 7,
+    "removed": 2
+  },
+  "SpaceChecks_fixture": "candidate02 y160 reverted; exact original y300 restored; both guard failures retained",
+  "unchanged_core189": true,
+  "unchanged_server1432": true,
+  "diagnostic_binding_limit": "frozen old PhysicalChecks reads removed applicationFocused; no new diagnostic composition or current physical claim"
+}

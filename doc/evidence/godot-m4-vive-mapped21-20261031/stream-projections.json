@@ -1,0 +1,130 @@
+{
+  "server-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product21/server-stdout.raw",
+    "raw_sha256": "c11bf4d71be33cc5faab8c6a2adbf15e3aae4aa74b2551aabc792e1cd4830d73",
+    "raw_bytes": 129,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461537,
+      129,
+      1793406464831662150,
+      1793406845248124413
+    ],
+    "public_sha256": "8b5e5d610f279cfdabcafa96d1bead97434772838ff3996bd50ea37899667f3b",
+    "lines": 1,
+    "restricted_lines": 1
+  },
+  "server-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product21/server-stderr.raw",
+    "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_bytes": 0,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461538,
+      0,
+      1793406454781412474,
+      1793406845249160529
+    ],
+    "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines": 0,
+    "restricted_lines": 0
+  },
+  "runtime-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product21/runtime-stdout.raw",
+    "raw_sha256": "040798aaf10a3f12af98f7b83e351d3a46ed6c7950e2a3051761b62d34d64499",
+    "raw_bytes": 112,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461612,
+      112,
+      1793406845010118488,
+      1793406845249160529
+    ],
+    "public_sha256": "4ab5fe90add609bf059de29e388d077d9df140a4b19a2fafb11f227934f2f3d0",
+    "lines": 1,
+    "restricted_lines": 1
+  },
+  "runtime-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product21/runtime-stderr.raw",
+    "raw_sha256": "b55bbc2797262e82e22a8ef9b8ff7aa9eef7a93ab0517436786fd03112d930c1",
+    "raw_bytes": 11153,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461613,
+      11153,
+      1793406845068470291,
+      1793406845249547516
+    ],
+    "public_sha256": "647d2032f3006511e6ee5a094513a1c0156f18c07cb1efe0e2be42c7513a104c",
+    "lines": 246,
+    "restricted_lines": 246
+  },
+  "client-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product21/client-stdout.raw",
+    "raw_sha256": "39bd52f21235439bd2a30ef76c964a12945fe23b1393159e398539ff0ebed687",
+    "raw_bytes": 122854,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461627,
+      122854,
+      1793406844196098222,
+      1793406845249772611
+    ],
+    "public_sha256": "c10116dc12b5a3e3631a9650d285e2e0c44f2d1d630982d2217e91cdc384fe41",
+    "lines": 95,
+    "restricted_lines": 82
+  },
+  "client-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product21/client-stderr.raw",
+    "raw_sha256": "0027c1732303695bdacfc0e428ac83a04986ac99d3a969df1187d17d6c33becd",
+    "raw_bytes": 5847,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461628,
+      5847,
+      1793406843937091773,
+      1793406845250685047
+    ],
+    "public_sha256": "1634a04082e83f2cd900b5620e10bf96f05cbcfc2fb9341ea90c0d0db7264424",
+    "lines": 154,
+    "restricted_lines": 79
+  },
+  "physical-wrapper-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-vive-product21-run/stdout.raw",
+    "raw_sha256": "54f30dd9fa6bef43d56652f3a4177bad274bdbbdde6cb1271810b2ed14af4ad7",
+    "raw_bytes": 8634,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461523,
+      8634,
+      1793406845702691401,
+      1793406845805138281
+    ],
+    "public_sha256": "16d4114608c77acbf2a13886387c5228ec026f003b335f459f372ed22e5e9576",
+    "lines": 91,
+    "restricted_lines": 1
+  },
+  "physical-wrapper-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-vive-product21-run/stderr.raw",
+    "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_bytes": 0,
+    "raw_mode": "0600",
+    "raw_stat_key": [
+      2050,
+      4461524,
+      0,
+      1793406453367377347,
+      1793406845806142467
+    ],
+    "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines": 0,
+    "restricted_lines": 0
+  }
+}

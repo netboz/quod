@@ -1,0 +1,1178 @@
+{
+  "label": "native-vive-product01",
+  "started_utc": "2026-10-29T18:30:56Z",
+  "diagnostic": true,
+  "hardware": true,
+  "synthetic_input": false,
+  "driver_inputs": {
+    "PhysicalChecks.cs": "f06f52ce6d927791d6995c62b9e25346c00522dfd1886f9ee15d75e1057a32a6",
+    "build.py": "7fa203569ca2462b86b624b5c5d27eae16937e5701432c9d3a66784b802f26f4",
+    "environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+    "godot_m3b_fixture.erl": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+    "godot_m3b_physics_fixture.erl": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+    "manual_run.py": "08df30b590f09ffdc24f8aa4fc7b1a0a61637adb14d0f1c653c565c9e08dc89f",
+    "physical.py": "5f7a44acf56609ad2cfa638ae8b57f2f7b452532f479992883329912f0f723ca",
+    "run.py": "860a082e115d37d86b18b0f588412bbbbff63f65757aa63e9acd358cf8e573eb",
+    "serve.py": "f4cebe56f7939c887333d2fa357dc5df1a2c79cd42f56a3b8cc9bc43305eb96c",
+    "doc/evidence/godot-m4-r2-20261029/private_vive.py": "e85993e8196ffbf2f4d2e0cd318c36a158be4c0de54b11391c7bacdc9594593c",
+    "doc/evidence/godot-m4-vr-20261029/vive_display.py": "987d616c5425003e74bd261c1a9de346c4d734ff69e72201c687eb59a79bed76"
+  },
+  "client_manifest": {
+    "path": "doc/evidence/godot-m4-vive-physical-20261029/inputs/client-physical01-manifest.json",
+    "sha256": "4e8b66b552988d2e9044baba2928d9796d7c8cc620a91725634884db08b544ad"
+  },
+  "engine_sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+  "payload": {
+    "data_Quod_linuxbsd_x86_64/BouncyCastle.Cryptography.dll": {
+      "sha256": "ef92fc661e8d7ba8ec4d39a7cdfcdba41f14cb327f0d24fe79d0b5bb428899b5",
+      "bytes": 5155728
+    },
+    "data_Quod_linuxbsd_x86_64/GodotSharp.dll": {
+      "sha256": "2afe2686aacfefac36da6601b59aeb05e560f06e4970cd5036100acd2ca4249d",
+      "bytes": 5928960
+    },
+    "data_Quod_linuxbsd_x86_64/Microsoft.CSharp.dll": {
+      "sha256": "97a53bfcb115cc6d1e21113834d3aa19367bc65b38e5e5035f101348693afcf5",
+      "bytes": 796456
+    },
+    "data_Quod_linuxbsd_x86_64/Microsoft.VisualBasic.Core.dll": {
+      "sha256": "05ecd6e7b7259db9a1c8cdf0f6913096f7c0c693b48a1cf03aa728ace93c584e",
+      "bytes": 1166120
+    },
+    "data_Quod_linuxbsd_x86_64/Microsoft.VisualBasic.dll": {
+      "sha256": "eddab17dc146592312ee34c0e19e079504d77274c5cb8b1e338d32e77f9f0b2d",
+      "bytes": 17232
+    },
+    "data_Quod_linuxbsd_x86_64/Microsoft.Win32.Primitives.dll": {
+      "sha256": "5cbfa551ec9f3fe950c5cd56f7e4fe5ece9059b069e5fc8a8c8a4f0f496107ef",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/Microsoft.Win32.Registry.dll": {
+      "sha256": "8ec13543088372f231e02db3dbf32e83f65ae1dd645113b43774c86aeeeda3f5",
+      "bytes": 34600
+    },
+    "data_Quod_linuxbsd_x86_64/Quod.deps.json": {
+      "sha256": "6d3a91984fdc81ccd0b137bd7e9801dbe415d708f5b3179c4156aea0683c20b6",
+      "bytes": 29019
+    },
+    "data_Quod_linuxbsd_x86_64/Quod.dll": {
+      "sha256": "19bc339c1f7ed57c3717bcec4ae40341b6226dde1b65fc5f943e232526b4a05d",
+      "bytes": 701952
+    },
+    "data_Quod_linuxbsd_x86_64/Quod.pdb": {
+      "sha256": "819a6801323f67f6df09be00f4dd0cb3b2e3ecddeabc41d95b89500cf58f8384",
+      "bytes": 188984
+    },
+    "data_Quod_linuxbsd_x86_64/Quod.runtimeconfig.json": {
+      "sha256": "542c92af19efa01d5f899547dda634acddfdd16ff03970f25584a81ebd3f4a3d",
+      "bytes": 360
+    },
+    "data_Quod_linuxbsd_x86_64/System.AppContext.dll": {
+      "sha256": "6dd78a4f44728ca5d441091fddfb8fefa6d710f4b663fd1cd75831e40b6b055d",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Buffers.dll": {
+      "sha256": "6417e59418f6dc6b7b35dd095c2914e746f017335991022bc8835a2f1866a131",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Collections.Concurrent.dll": {
+      "sha256": "d5b3117fe23618b0b366724c63a9faf558b5f7d1d4e5f8c933f920c4038ed31e",
+      "bytes": 228136
+    },
+    "data_Quod_linuxbsd_x86_64/System.Collections.Immutable.dll": {
+      "sha256": "8c8ddc0f0de5b22cd4b11ae86b3b5791754d61868f76c64b05e5a3cfdafcd3ce",
+      "bytes": 984360
+    },
+    "data_Quod_linuxbsd_x86_64/System.Collections.NonGeneric.dll": {
+      "sha256": "efdf694fef2e2b7508a1f807f6ed9381daf90c1f601b001d616a3ab8086a6494",
+      "bytes": 92968
+    },
+    "data_Quod_linuxbsd_x86_64/System.Collections.Specialized.dll": {
+      "sha256": "f0b89c879d6afcaeaf9e82f25c47553ed80e61f2de2269c909d4d7dcd6f61999",
+      "bytes": 93008
+    },
+    "data_Quod_linuxbsd_x86_64/System.Collections.dll": {
+      "sha256": "ff0b05dd9578d11089c52e0ab8a35765e9be49dce9bc849b4e0574815f3fac8e",
+      "bytes": 289064
+    },
+    "data_Quod_linuxbsd_x86_64/System.ComponentModel.Annotations.dll": {
+      "sha256": "d1d07c9844f5487f775d31fd88b5ae112c6339ee62459c61ac28e7438aaaa952",
+      "bytes": 191272
+    },
+    "data_Quod_linuxbsd_x86_64/System.ComponentModel.DataAnnotations.dll": {
+      "sha256": "ef76542454c23e8dd078c9449178c82c3fddff5d21da002744662625d2683e28",
+      "bytes": 16680
+    },
+    "data_Quod_linuxbsd_x86_64/System.ComponentModel.EventBasedAsync.dll": {
+      "sha256": "3273718d2e46a1a43ba51597f1484f8141e1d029e5adf7ecf88593ed52adb7d3",
+      "bytes": 36136
+    },
+    "data_Quod_linuxbsd_x86_64/System.ComponentModel.Primitives.dll": {
+      "sha256": "9e5973eaa2671813a50c40e7d99e10e6f4f5bd927ee591d506dc40729c0b2d62",
+      "bytes": 70992
+    },
+    "data_Quod_linuxbsd_x86_64/System.ComponentModel.TypeConverter.dll": {
+      "sha256": "2dac19c80351c8b6988577a4c033d2adbdfb4760773754c4834848250488c506",
+      "bytes": 760144
+    },
+    "data_Quod_linuxbsd_x86_64/System.ComponentModel.dll": {
+      "sha256": "7785198f700fd053ee35b7c298db0dfdd8aefbc6e32cb44034775329aa7148df",
+      "bytes": 17192
+    },
+    "data_Quod_linuxbsd_x86_64/System.Configuration.dll": {
+      "sha256": "5086800774ce17c65c417e9a3fcb9aa5820d04a94e286009e31b5c8b702765b8",
+      "bytes": 19240
+    },
+    "data_Quod_linuxbsd_x86_64/System.Console.dll": {
+      "sha256": "30c185a09e4fd99069af832f40dc087bd3569f5497af8baf921aa4dbbba56984",
+      "bytes": 198952
+    },
+    "data_Quod_linuxbsd_x86_64/System.Core.dll": {
+      "sha256": "0110db8612d4f29c87937da411ab29c4b340811ccf46787c577ecd245ea2118c",
+      "bytes": 23336
+    },
+    "data_Quod_linuxbsd_x86_64/System.Data.Common.dll": {
+      "sha256": "2c447bc8f9288889382b15e208fc342343986bd9f51bd52130410e9e5650edc8",
+      "bytes": 2802984
+    },
+    "data_Quod_linuxbsd_x86_64/System.Data.DataSetExtensions.dll": {
+      "sha256": "fc657d9490e5a3505698bf0888be50ba933751d6ead853352ce01023c6716d95",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Data.dll": {
+      "sha256": "00cd74a3dfd69ae8a90a7bb34c3a4f1946931ed4b556fc4e8faf44ff6d81f9bd",
+      "bytes": 25424
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.Contracts.dll": {
+      "sha256": "dd12b503bf96733a7391d2efefdf142750886134c205402bc9d5a43d9e020f2e",
+      "bytes": 16168
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.Debug.dll": {
+      "sha256": "1e2aeaa9ee0f240c219bba9000d9071788fef6b05f27b6e239433327d32f0bcb",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.DiagnosticSource.dll": {
+      "sha256": "4b6ee5a5f7fad00b9c9221105b94c683058d31ed45339ac306158a1211850436",
+      "bytes": 498000
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.FileVersionInfo.dll": {
+      "sha256": "812a61e8f33d615469b06211595dfaa5ff4bd2d3ac9519ed50ebd3c2935d4f08",
+      "bytes": 43304
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.Process.dll": {
+      "sha256": "973c1bc1159c04ac215517c95d24e2790ffea186e384cb3ed3d5e0d22979f1b4",
+      "bytes": 274768
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.StackTrace.dll": {
+      "sha256": "ef2b214ead155daf232b0d710b690038c2be0988f35821fb35ea3aba58d5b26d",
+      "bytes": 35152
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.TextWriterTraceListener.dll": {
+      "sha256": "dd1233fadf0992e64223dffbd082ef43841718015a47eadc72f6170e2e2e86ea",
+      "bytes": 59176
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.Tools.dll": {
+      "sha256": "a78fca2d76cbe71f8080fc530656d191f340ed81a7b6ffd0b2765658b01deda5",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.TraceSource.dll": {
+      "sha256": "8dbdd83d3991630181539eb630d6ce3dc63eb15ac812a6c403987650eb3e2f6e",
+      "bytes": 131368
+    },
+    "data_Quod_linuxbsd_x86_64/System.Diagnostics.Tracing.dll": {
+      "sha256": "6b6ec2ad08a3a7244814f705227a8e8169fce45f5afe30700cd2bc394c82a783",
+      "bytes": 16168
+    },
+    "data_Quod_linuxbsd_x86_64/System.Drawing.Primitives.dll": {
+      "sha256": "a6d1b7589c4665b086e2ee01908eb079562a0273b289cce9cee9b82c19025f58",
+      "bytes": 123688
+    },
+    "data_Quod_linuxbsd_x86_64/System.Drawing.dll": {
+      "sha256": "69bb06c026c43fc6a887acaf612ff4227c7f4fe5b549b875580ea0811710f444",
+      "bytes": 20304
+    },
+    "data_Quod_linuxbsd_x86_64/System.Dynamic.Runtime.dll": {
+      "sha256": "14954f261adb86f30292900d263ef74041a8760068b42dbb507818ac64d0c454",
+      "bytes": 16168
+    },
+    "data_Quod_linuxbsd_x86_64/System.Formats.Asn1.dll": {
+      "sha256": "fd364b4e7417a703d9f900b98203ef458ad7061433b738640315e0ac376596e6",
+      "bytes": 224552
+    },
+    "data_Quod_linuxbsd_x86_64/System.Formats.Tar.dll": {
+      "sha256": "8cf1e228df01856e28f5a67212387c57623fd1991e528be6636b46ac9bba9b77",
+      "bytes": 276776
+    },
+    "data_Quod_linuxbsd_x86_64/System.Globalization.Calendars.dll": {
+      "sha256": "2c7d90eb45372764e659afe13a837ae0a54c57d2acd27b562762b1bab19d0960",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Globalization.Extensions.dll": {
+      "sha256": "9746d9dfdc879b8e4e62d2890504e27d535549612fd2f06836f76b16344bfeda",
+      "bytes": 15184
+    },
+    "data_Quod_linuxbsd_x86_64/System.Globalization.dll": {
+      "sha256": "e1cd2225ce9f55b62fff49811d8b9bb778e300d5e8c2667ce9a001663027796e",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.Compression.Brotli.dll": {
+      "sha256": "e9164c332d35e4fbc9c983b5a79fac55834fcd107fcc69c474ef488eaaa3d655",
+      "bytes": 73512
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.Compression.FileSystem.dll": {
+      "sha256": "9767a046d9f544298f80d3b4dc98d32f5840749280aaec174f25a1bde3f659a9",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.Compression.ZipFile.dll": {
+      "sha256": "4dc7768a7dfd770149df88e346975a155ebb0816dfe0bea9282e8076ad8f4c23",
+      "bytes": 98640
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.Compression.dll": {
+      "sha256": "00fc0309e170f7fa5b14e6a9be4ffb3dc1d1c2c492bdc7fcf4236e998013c5e4",
+      "bytes": 416552
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.FileSystem.AccessControl.dll": {
+      "sha256": "2a72f7af70168035b28dc87b5a987f7ddee851fde5db3c784956b9e5d4071a8d",
+      "bytes": 33576
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.FileSystem.DriveInfo.dll": {
+      "sha256": "91eb3d717517f1387cfef62bc832dbb76db66eab1e62deab908837b5ce6ab824",
+      "bytes": 86352
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.FileSystem.Primitives.dll": {
+      "sha256": "9f4d2179595c4b1097698a71a1ab52f7b26f05baca2b348c92c6bcad2f6f97b1",
+      "bytes": 15184
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.FileSystem.Watcher.dll": {
+      "sha256": "294506d875aa2778d61af9d3aab0207231539a4a04e08a00413f7c01738bd823",
+      "bytes": 101672
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.FileSystem.dll": {
+      "sha256": "739691aa3a6defe83930d2a48173a64d52d19bd64f25cdd9ede35f546be7571f",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.IsolatedStorage.dll": {
+      "sha256": "5bd8b8a4d6b12e9cec63f5a256a3e5e295c330a3d7358ba4215704dbb9f82c38",
+      "bytes": 76584
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.MemoryMappedFiles.dll": {
+      "sha256": "4e66d0ca8edd6e459762e6b9a142641a7f4070583a3db1d63d0472879716d2c5",
+      "bytes": 84264
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.Pipelines.dll": {
+      "sha256": "1721d366ae1e2b525e0dc6c24a6262ed560dd968d7fdcda740e26d93c0619674",
+      "bytes": 181032
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.Pipes.AccessControl.dll": {
+      "sha256": "0ece9ba6a4b82366a41a4f5d66ea78fc9858f723dfcd8a0fd69d34f310448dfb",
+      "bytes": 24872
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.Pipes.dll": {
+      "sha256": "7a5570703ec9a431c6ff8fcb0c77a9b74e2af3b7c43d1efc430bb48f5400a536",
+      "bytes": 127272
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.UnmanagedMemoryStream.dll": {
+      "sha256": "a9ed5854b76fbed6179c2d9767729a2f8742b250b5ed1aefe141d570e597ab53",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.IO.dll": {
+      "sha256": "9f5282371d7826ba62545364b1d9d90085aeb03dd3babfc295b14678536c4236",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Linq.AsyncEnumerable.dll": {
+      "sha256": "a47cbda2710e8d8bc794bd5fe1e7f3675a5487124a650a3195f0b604c1659ba0",
+      "bytes": 1328936
+    },
+    "data_Quod_linuxbsd_x86_64/System.Linq.Expressions.dll": {
+      "sha256": "d8345995a8f5af5cb11cf39aa318ac98e21ce258d54d2acb6b4bda73693b3c1e",
+      "bytes": 3724112
+    },
+    "data_Quod_linuxbsd_x86_64/System.Linq.Parallel.dll": {
+      "sha256": "4e336d780129712a4b257db3ab5d65e160535e92c3cad9e4f647339b9ad50138",
+      "bytes": 775976
+    },
+    "data_Quod_linuxbsd_x86_64/System.Linq.Queryable.dll": {
+      "sha256": "28b8814c4396c394fb1febcd56e2402ee6facac1460fdd953f932d3d8ab78cc3",
+      "bytes": 178984
+    },
+    "data_Quod_linuxbsd_x86_64/System.Linq.dll": {
+      "sha256": "a0c910f6b9eb2468e9a8dfa07dd59c7fd609b3098e57d96fb8c74e89fe1aeee0",
+      "bytes": 696656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Memory.dll": {
+      "sha256": "c1ec113101642ec2e3b2421115d14de02897049eac7307490c5c9ab70af0f36a",
+      "bytes": 152360
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Http.Json.dll": {
+      "sha256": "267e50e2aeb70cb1f98d0930ff731933fc7ecb78c13092aef9a99677b5e42b1d",
+      "bytes": 120144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Http.dll": {
+      "sha256": "e8beeb63db39e7d540aa711c701860c5ddb8826f2bfff62af2abfa74eaa7a055",
+      "bytes": 1726248
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.HttpListener.dll": {
+      "sha256": "cefc8fa7aa314652e34667e00932593e2034d788f7554e319e4b585b46d72928",
+      "bytes": 291664
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Mail.dll": {
+      "sha256": "6b48ecabba2375287d528c7a7cefc32f81c45da718772f63788675cc44065db1",
+      "bytes": 481616
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.NameResolution.dll": {
+      "sha256": "85cceda5f5af651b0c64e15a066bd58373be8b7748ac315aeb39bd59afe662bc",
+      "bytes": 97576
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.NetworkInformation.dll": {
+      "sha256": "75dc8406f57d71ef2cbaaa66c67b1081129197cc1f942009f7b3ae5a670f7466",
+      "bytes": 172328
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Ping.dll": {
+      "sha256": "c6cca25f07589b5b7cad34127068135cf2a2c16ef795f875e213b0d168c15f4b",
+      "bytes": 105296
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Primitives.dll": {
+      "sha256": "83fac648e328b2e32bfe41dfd698145209b89932f08f4f6d128a78045ce32ba6",
+      "bytes": 214864
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Quic.dll": {
+      "sha256": "2f84fafbc261236d86393d707382888bde50c0f49abe65db8fc20d2b9ee7eeb4",
+      "bytes": 354088
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Requests.dll": {
+      "sha256": "65976d61d5d676bbdb98b14c77b19dc11be8e3ee209c805f73f42c160252dfb0",
+      "bytes": 367952
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Security.dll": {
+      "sha256": "f26e72b283df1689f1df471bbb57626115042c3922c3b6d18a288cb93f45512f",
+      "bytes": 828712
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.ServerSentEvents.dll": {
+      "sha256": "d279689551b3ad5fd09af99cda9ac8778171b3876d9c2f23dbc5d185485b4cd3",
+      "bytes": 71976
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.ServicePoint.dll": {
+      "sha256": "d5e0e16a3cdd33a31181c86376e604cd9c903ddf9afa9fd627fb6d0bcac13bcf",
+      "bytes": 15184
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.Sockets.dll": {
+      "sha256": "e4ccca6427f9bd3c38f46e30a90c4e66463c9a6165c9da40b099f03eb814b0fb",
+      "bytes": 603432
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.WebClient.dll": {
+      "sha256": "e0c7f39cdc6e6e4b6b272c03b5634751cf851efe85c2683cc6a92ddec7ad1336",
+      "bytes": 156968
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.WebHeaderCollection.dll": {
+      "sha256": "72f56ae7ca2f106f333b3b2c6fd08f4a8dd1afd1456bab31fd24f1f2cc847ca3",
+      "bytes": 55080
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.WebProxy.dll": {
+      "sha256": "12f985e1b5d05e5a1b6c911f118196884bb4034bf9a1ed1865c829cf7933c369",
+      "bytes": 33064
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.WebSockets.Client.dll": {
+      "sha256": "f0ae347894788710aec8b5a03bb42a00ccc1520dfb42e34350cbbe7d5d619235",
+      "bytes": 90920
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.WebSockets.dll": {
+      "sha256": "e5886cb1604159f990dfbf0f4ed1606f9f2607226288c56abe86447509c7eac5",
+      "bytes": 237392
+    },
+    "data_Quod_linuxbsd_x86_64/System.Net.dll": {
+      "sha256": "ac8b7facb325a0df7d23cab7ee8232e76abcc269382caf7a93b6558885c68877",
+      "bytes": 17192
+    },
+    "data_Quod_linuxbsd_x86_64/System.Numerics.Vectors.dll": {
+      "sha256": "a530b7505c54e6bd48d8ba6f4d4828ab9821e6748e4728ee09b620e3518a912a",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Numerics.dll": {
+      "sha256": "1e2330ed932fac7b4dec0e5fb7c5e832a5bef292c3a038474aa911c8e9fe0bc5",
+      "bytes": 15184
+    },
+    "data_Quod_linuxbsd_x86_64/System.ObjectModel.dll": {
+      "sha256": "105caabc2e3559738c686a2f7384c105ca4c98c0c1e8108294a15c5d5f011d9f",
+      "bytes": 69416
+    },
+    "data_Quod_linuxbsd_x86_64/System.Private.CoreLib.dll": {
+      "sha256": "26304a2985357b9ee277f273667fcd9c892edae3ee6eba76f739033e95eb39b3",
+      "bytes": 15576872
+    },
+    "data_Quod_linuxbsd_x86_64/System.Private.DataContractSerialization.dll": {
+      "sha256": "b1cd35e0f5d42fb57e36793429ea627cd3d2f275b11ab560248e9ca0607cbe05",
+      "bytes": 2071336
+    },
+    "data_Quod_linuxbsd_x86_64/System.Private.Uri.dll": {
+      "sha256": "dce56b911dec93cfaeaa759fb069714d397663ead3a8cac855f66bd72098aff1",
+      "bytes": 245544
+    },
+    "data_Quod_linuxbsd_x86_64/System.Private.Xml.Linq.dll": {
+      "sha256": "dc9fe6577572f71bad36520652fa7a185f36040dc8b4c3f471711c6a76cbc1a2",
+      "bytes": 388904
+    },
+    "data_Quod_linuxbsd_x86_64/System.Private.Xml.dll": {
+      "sha256": "61702d155227bfd6317170cce55dcdbfea69ba129e9b173ee2cadd1f5b5cde74",
+      "bytes": 7902544
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.DispatchProxy.dll": {
+      "sha256": "9dcce37ea2461915d6a6898296c97083ac0de012d279df2443617ef7b1e5cc1e",
+      "bytes": 67368
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.Emit.ILGeneration.dll": {
+      "sha256": "7cb9c3d071d13c99434c859d09513f180c244473bcba9f944d0d02c3d5e553a9",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.Emit.Lightweight.dll": {
+      "sha256": "5deb353aab6f52dc6696752330656e50d1b37e3037950b9c2ecebc59344c9fc0",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.Emit.dll": {
+      "sha256": "e2971d8e858ed8a49cac9d588185f34ad3f78f5052b67397f44f85076a9e82ac",
+      "bytes": 302928
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.Extensions.dll": {
+      "sha256": "f52d1476a670ad22db3005f3dc4fb934dc25778431e5350872478dee1547131f",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.Metadata.dll": {
+      "sha256": "3316bd0c5a36335cac98cd8747919444e3316452466c0448ecbcd2ea89ca5437",
+      "bytes": 1148240
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.Primitives.dll": {
+      "sha256": "315440cb2b82bf3af9abc683ac3bf8b82767ed87dc3f5e5475c6b01af44b9325",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.TypeExtensions.dll": {
+      "sha256": "9667e5ee7ec895bf2943157f980ad848ede86e490eff80e87157ccef78d9eec1",
+      "bytes": 32552
+    },
+    "data_Quod_linuxbsd_x86_64/System.Reflection.dll": {
+      "sha256": "8e92c92a4dd0e2710381bcec62f58c7e93a51ba753142876f1c97edfd7310d87",
+      "bytes": 16208
+    },
+    "data_Quod_linuxbsd_x86_64/System.Resources.Reader.dll": {
+      "sha256": "78bc2de89ab76cede1a93f1801678fc4c360c02f48b8788d59876c0f7cd7f4b3",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Resources.ResourceManager.dll": {
+      "sha256": "9f716dbafd1eb4276bd62c1cb94b9a4497fbb18e2a3a6e75aaf5562a4e63331e",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Resources.Writer.dll": {
+      "sha256": "11fbac0f4af99a2511534f050216df6c1e377dbbe33a88eed526fec55547eeb9",
+      "bytes": 42280
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.CompilerServices.Unsafe.dll": {
+      "sha256": "b9e1d28ab1fce0daf257f37a2e8ca013724f007219d2e11e211e00e66716dfdb",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.CompilerServices.VisualC.dll": {
+      "sha256": "780f24c435eb621f7c85bf0473b14a204241d27d4b943ac9e6dfdf103feff6b9",
+      "bytes": 18728
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Extensions.dll": {
+      "sha256": "97880257a98e4edbf4ef634cdd3a691d4a4956250424b9366613cd7d7b766ec5",
+      "bytes": 17704
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Handles.dll": {
+      "sha256": "3781ef2645961cf3fe1c004ccd8538365932ae9a18ae17994887ff34e1c7b2bb",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.InteropServices.JavaScript.dll": {
+      "sha256": "034dd556644586ddaf9af0ca6497a4d89e4109b92d87aa3bb345b2aa4e99e5fe",
+      "bytes": 39760
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.InteropServices.RuntimeInformation.dll": {
+      "sha256": "0b676e573f05f95fb99248552ab21e379d2ab969cc91ce898125d3a208b536dc",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.InteropServices.dll": {
+      "sha256": "82286a808b40f176a758a1ad0faeadcf170d92a90043aca046160c90e5d54c74",
+      "bytes": 102696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Intrinsics.dll": {
+      "sha256": "96f5e7ed6f59ae9076cabfaf7c94c7e213c6b219f0deee1b013abb16d0028f26",
+      "bytes": 17192
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Loader.dll": {
+      "sha256": "20bb43ccadc7d94801a150a8d5caaf74584f5c4709a02eb0c618a426b04e0f6c",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Numerics.dll": {
+      "sha256": "15c7d5bd5f5a5dae5bc836f32fb732a2c75c1fbae7523ebc2f33914d9951256c",
+      "bytes": 343336
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Serialization.Formatters.dll": {
+      "sha256": "4c28fd31b302007f9d5c12b2c95edf3c602eb800c9e3a9bf769902df4a3a9399",
+      "bytes": 116048
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Serialization.Json.dll": {
+      "sha256": "2ad79d215ff13034b5b93df35cbf02f768d7fc6affad3ca9e868c3dc109411a1",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Serialization.Primitives.dll": {
+      "sha256": "07d4c45dff08f1f785253f2f20f8100b43dee51a22a9913428b97db162204ea6",
+      "bytes": 28968
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Serialization.Xml.dll": {
+      "sha256": "31dba4287f061744842ff9ea164309787fc75fa42223540a442f69613df5fb67",
+      "bytes": 16680
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.Serialization.dll": {
+      "sha256": "8923e7a18e412b157d0528145a46bb8afd44d726afca4c66fc4ec74f0117c082",
+      "bytes": 16680
+    },
+    "data_Quod_linuxbsd_x86_64/System.Runtime.dll": {
+      "sha256": "417e7882e2a2689aafbf86bd6256db906357afa775f58e3c86a94a9f119cc3ef",
+      "bytes": 44840
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.AccessControl.dll": {
+      "sha256": "cf2306b9abba94aaf118d134015c888b53c7f5e2e79cf2912d984355d18257ca",
+      "bytes": 59728
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Claims.dll": {
+      "sha256": "453efd61e975a71e1f8c55233cbe84d9fb1d730d2e333e444880b6c54f85af0d",
+      "bytes": 92968
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.Algorithms.dll": {
+      "sha256": "b006bdb5d674bb1bcce2eeddd0579c759af505186cd6bfbe363cde52c95fda32",
+      "bytes": 17192
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.Cng.dll": {
+      "sha256": "c32d90051344b516d7e8bd6dfafb340423aecc6af5e36fec783b081e5aeb9cc5",
+      "bytes": 16168
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.Csp.dll": {
+      "sha256": "5ec5184cb28c364a64b02ad1b21598fd7c3b38604e436ded2d88f433980b0126",
+      "bytes": 16208
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.Encoding.dll": {
+      "sha256": "3b886128bed993d3314d17da2360bd542cb8d2f15c2743c95b4d480ac58fe153",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.OpenSsl.dll": {
+      "sha256": "e941697331d126eb78dd9bd7c908350ba08d4ac60cb6b9645de5887f3f3cc06a",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.Primitives.dll": {
+      "sha256": "c0e6d3112e1cc32b95d7388a98bfe82be73aab32d72dd0c1483b2decc8282e93",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.X509Certificates.dll": {
+      "sha256": "8b4347fc3ee1de3c9e41508cc20e19db917a1c76fafd488e935d40e32743e2a6",
+      "bytes": 16680
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Cryptography.dll": {
+      "sha256": "49c7a0f1657dc1da331fbe5dcca5fd13700c692514528380eaff4cf15ddc64a1",
+      "bytes": 2653992
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Principal.Windows.dll": {
+      "sha256": "b4f2cf5b003ae782cfcd2a0200c62066d91ae1820b5f316dce07f689fec1d137",
+      "bytes": 39208
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.Principal.dll": {
+      "sha256": "dc00a1eb6cf21e90b9348a957f4a15d0e6502ee0c69ae4d47d470c770d0045ce",
+      "bytes": 15184
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.SecureString.dll": {
+      "sha256": "120bcd756cb7d5fe8a3f4b041b904d60039684fbb77743d48876a54b0283f5af",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Security.dll": {
+      "sha256": "07b9d7238d70c6485d346db48f96549858d36b976c2b8f9e26c0677e994bb211",
+      "bytes": 18216
+    },
+    "data_Quod_linuxbsd_x86_64/System.ServiceModel.Web.dll": {
+      "sha256": "8405cd0a93554b7d46399b0717e225f68264e7781c7a2f2246501b8bc211a6c8",
+      "bytes": 16680
+    },
+    "data_Quod_linuxbsd_x86_64/System.ServiceProcess.dll": {
+      "sha256": "788aa2111b93079cec34c68bf4a8548cc5241d5ecbcf7d6662b447c7ded5b6d1",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Text.Encoding.CodePages.dll": {
+      "sha256": "37d1f9d9bbd47222623e9671dec54093c21b8da3f9307f88fd0c05b0e81ad75a",
+      "bytes": 852304
+    },
+    "data_Quod_linuxbsd_x86_64/System.Text.Encoding.Extensions.dll": {
+      "sha256": "695cdbbd45618531ba86378263bd9494afa05c61609a2892b2d9f89fb17a5d32",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Text.Encoding.dll": {
+      "sha256": "434d617c869368a5de8c99ea7bdb2f7ac2b3e2393ccfeeab5a018d07a7a1cc12",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Text.Encodings.Web.dll": {
+      "sha256": "ef22e097dccd6da7dd0f4cb053a3441a7f5dd2f0e47d2a856428c7356e089d9d",
+      "bytes": 113960
+    },
+    "data_Quod_linuxbsd_x86_64/System.Text.Json.dll": {
+      "sha256": "50724e46049548a8efdb3e56ddaf6efaf7c9acb510c3fb5581c10c85577189ea",
+      "bytes": 1882920
+    },
+    "data_Quod_linuxbsd_x86_64/System.Text.RegularExpressions.dll": {
+      "sha256": "258c27c22aeace5c0f6ba236c848bde98f891f1ef403f05da0f3f7dfdf9fa4d4",
+      "bytes": 1036584
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.AccessControl.dll": {
+      "sha256": "bc67fbaf499d156cfab13533dedae7111d332f89a9893533ac711d398b769770",
+      "bytes": 34600
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Channels.dll": {
+      "sha256": "12851a5c154305257f927ff6ec6a73323dc3bff77079fc06a49d91248222593e",
+      "bytes": 149288
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Overlapped.dll": {
+      "sha256": "9ce39c248b055340a10aeae9fc9acd65f23220c025605a1daf5657e76d8f861f",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Tasks.Dataflow.dll": {
+      "sha256": "2bbf794649310745609f6adf5f355b014e96064aa3bbedc964226d79eb10983c",
+      "bytes": 471376
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Tasks.Extensions.dll": {
+      "sha256": "63fa5d1d1bac873d234d4c84d20c097f70f74f7391651492453bc34e9d7e0111",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Tasks.Parallel.dll": {
+      "sha256": "cd506f66345b044a1313705dd08f31bb5593d3e8ada6da7100d5a1127fad71d2",
+      "bytes": 121680
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Tasks.dll": {
+      "sha256": "c378af98deaafe40e115bf0058a87cf27a45cb533bfcfb17f2ff9120ed74fa5b",
+      "bytes": 16680
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Thread.dll": {
+      "sha256": "62ce305385b7ddf6ad3925780435785c2a05d666d4ad325fa4aaf411a091bf2b",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.ThreadPool.dll": {
+      "sha256": "4d96518ec71bfa274eec5b8caf978ff754edef7c3da56e92cf729c6995d01e38",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.Timer.dll": {
+      "sha256": "6d5a9766dc5652719dd648cedf5f145ec0e0a2abbdca280b0fd53f72abb9fcdf",
+      "bytes": 15184
+    },
+    "data_Quod_linuxbsd_x86_64/System.Threading.dll": {
+      "sha256": "477cd5447cef676bf036307029196287ca58b6ee95dc64e3c759926cdd6f59c3",
+      "bytes": 74024
+    },
+    "data_Quod_linuxbsd_x86_64/System.Transactions.Local.dll": {
+      "sha256": "639ab89d129ae1e8056ebb7cc3fd862250b03d2270ddfae6ac0570a3b8c99c42",
+      "bytes": 357200
+    },
+    "data_Quod_linuxbsd_x86_64/System.Transactions.dll": {
+      "sha256": "4e4cafbc3e4981ef34fe5f7f938b0f209f3e7f0e61de115cae7251b0dd1929ea",
+      "bytes": 16680
+    },
+    "data_Quod_linuxbsd_x86_64/System.ValueTuple.dll": {
+      "sha256": "b2a92ea2b1325436624f38c57a67aeb6c5aa60a4c293e556535b896749eafa4a",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Web.HttpUtility.dll": {
+      "sha256": "9a6afb4be81174b359805ab10596aa29c3272f264872f8926141699e4c9c35af",
+      "bytes": 52520
+    },
+    "data_Quod_linuxbsd_x86_64/System.Web.dll": {
+      "sha256": "a43d1c705cdeb11f778395429a3302212e81a63416898bb3a9018b50038d4956",
+      "bytes": 15144
+    },
+    "data_Quod_linuxbsd_x86_64/System.Windows.dll": {
+      "sha256": "91f73b914443d9513fe5380c5f298a8614f0e4e764efe1192e1d77de9d40090a",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.Linq.dll": {
+      "sha256": "c046958f1801600b1cd18a3675b8ffd258cc53ae714f7bb9606f5114eaf58347",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.ReaderWriter.dll": {
+      "sha256": "6e296482fd53d1e298162b05ae04c9d98b1f4bb39c825790e0784647a5a49ee0",
+      "bytes": 21840
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.Serialization.dll": {
+      "sha256": "1e213f859bce5d881614bdb08da591f1fe6095227da3e828ad60b2cda68d381f",
+      "bytes": 16168
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.XDocument.dll": {
+      "sha256": "4cfeadbc2d6938ce25080b52558003d92d81242e0e9866495d8bd49a12968b71",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.XPath.XDocument.dll": {
+      "sha256": "577b9d8185d3d0a0946f430c4484da6842c0dbdcd9655a3b662d79be27eab8db",
+      "bytes": 17192
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.XPath.dll": {
+      "sha256": "4c0cc081a35c577937c2e85fbc1d6cbdc838e011cfda32b6cd73bb71426dc8d6",
+      "bytes": 15656
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.XmlDocument.dll": {
+      "sha256": "1c54b79229390937ac388266dc97280f75047c7c8be67af047803566bdd8ef91",
+      "bytes": 15696
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.XmlSerializer.dll": {
+      "sha256": "d93a042717ceacb7119dda214f6b72edcbbe7ae050279827148c747e78aad06b",
+      "bytes": 17704
+    },
+    "data_Quod_linuxbsd_x86_64/System.Xml.dll": {
+      "sha256": "67f1797c3c3ff39a76d7ba521f5ef5a652e707f597992ed81faea214d36348bb",
+      "bytes": 23336
+    },
+    "data_Quod_linuxbsd_x86_64/System.dll": {
+      "sha256": "a6e5c6c4d8ff0ca6fc55242c00939d0bda47e3ad3861a5a12e89e1c066904907",
+      "bytes": 50472
+    },
+    "data_Quod_linuxbsd_x86_64/WindowsBase.dll": {
+      "sha256": "12d5155648e135ac8b1ea2e03f1f4e6f0b1e0f5d38948a027b1622be637e1221",
+      "bytes": 16208
+    },
+    "data_Quod_linuxbsd_x86_64/createdump": {
+      "sha256": "59f538bbbe8c37e508e9cfdcb16c3381e043d3ebd837c8486497ec02de02c754",
+      "bytes": 110376
+    },
+    "data_Quod_linuxbsd_x86_64/libSystem.Globalization.Native.so": {
+      "sha256": "0dc43333f4ca1d2c382fb2831e364e7615725f061effb445e2c7ec54d0c57c84",
+      "bytes": 61104
+    },
+    "data_Quod_linuxbsd_x86_64/libSystem.IO.Compression.Native.so": {
+      "sha256": "bff84e37ec07b5518d53c75273cb4cb8acfad0382628ed7d33347eeab99dd1f6",
+      "bytes": 1025728
+    },
+    "data_Quod_linuxbsd_x86_64/libSystem.Native.so": {
+      "sha256": "a15a3c4e79f6186d716a08b269359a0e24b828b6df6f989459a6a04231743aac",
+      "bytes": 95272
+    },
+    "data_Quod_linuxbsd_x86_64/libSystem.Net.Security.Native.so": {
+      "sha256": "1ed7784c58f72f15e4fe8d029605aaceab6d4a9ad5127ff025f272e3c1213e62",
+      "bytes": 13464
+    },
+    "data_Quod_linuxbsd_x86_64/libSystem.Security.Cryptography.Native.OpenSsl.so": {
+      "sha256": "47d1d1095fddb359d03dcfd5a51d73a56f5c3cb32739ab288aba82fb67888ac1",
+      "bytes": 189504
+    },
+    "data_Quod_linuxbsd_x86_64/libclrgc.so": {
+      "sha256": "d122dee607b7cd4656a1540f71c6ba0e96cb42b2fc5c3538d64f7e9885f7d258",
+      "bytes": 938888
+    },
+    "data_Quod_linuxbsd_x86_64/libclrgcexp.so": {
+      "sha256": "779768dcc8c7f4be648b4b65dd158a8cadb563b6e5606820089ccf15c7295814",
+      "bytes": 1023536
+    },
+    "data_Quod_linuxbsd_x86_64/libclrjit.so": {
+      "sha256": "b1982215159bcb8eb0cb57afdccbc9e970411750bd530d1e62592f5ac397c398",
+      "bytes": 4750912
+    },
+    "data_Quod_linuxbsd_x86_64/libcoreclr.so": {
+      "sha256": "df5cfe7ba5abf7931f4836726f2fbb0d47dc32caa45d3c209ddf7ccd25c32f4c",
+      "bytes": 7110952
+    },
+    "data_Quod_linuxbsd_x86_64/libcoreclrtraceptprovider.so": {
+      "sha256": "8fc124b76a54a8f3c9ee941035ad1c716b99c845170331900984c069529660bc",
+      "bytes": 890904
+    },
+    "data_Quod_linuxbsd_x86_64/libhostfxr.so": {
+      "sha256": "2420322efa34abb54e37f27ec39060cf90e3bb135fae5f91c644aac1216d8f1d",
+      "bytes": 326952
+    },
+    "data_Quod_linuxbsd_x86_64/libhostpolicy.so": {
+      "sha256": "c5fdff4423791ce986f27c6ab16e195c993a937b38aaa64db15eaa1fce1728c2",
+      "bytes": 313480
+    },
+    "data_Quod_linuxbsd_x86_64/libmscordaccore.so": {
+      "sha256": "54554757342c4325ab0eb8147afd1eafec1913fae6b2739cde225387673bdd23",
+      "bytes": 2401968
+    },
+    "data_Quod_linuxbsd_x86_64/libmscordbi.so": {
+      "sha256": "6d90714c5ca42977be9025a15084d4f6bf071dfc2066093a856835e28be45505",
+      "bytes": 1634488
+    },
+    "data_Quod_linuxbsd_x86_64/mscorlib.dll": {
+      "sha256": "9202a746165bca489856331f898bfb0a14cbcf9342673d89355434a86d29a231",
+      "bytes": 59688
+    },
+    "data_Quod_linuxbsd_x86_64/netstandard.dll": {
+      "sha256": "ff49fd22c96d383744a104b03249befc1f27a9912dbc891c96fc8e7cc3bf10c2",
+      "bytes": 100648
+    },
+    "quod.pck": {
+      "sha256": "987acf8f07560a108498a7c58b9eb6f4d0859e3c10e8b047c9c866ed5d265808",
+      "bytes": 12632
+    },
+    "quod.x86_64": {
+      "sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+      "bytes": 98746600
+    },
+    "vive-LICENSE.txt": {
+      "sha256": "94a7dc0e03ff85adec75bcf6a60ae4fca29a4ffce34bfe554fd25189414bdc41",
+      "bytes": 1325
+    }
+  },
+  "reader_errors": [],
+  "manual_bound_seconds": 1800,
+  "normal_close_watchdog_seconds": 60,
+  "passed": false,
+  "commands": [],
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-physical-20261029/serve.py",
+    "native-vive-product01-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--qualified"
+  ],
+  "endpoint": {
+    "port": 43459,
+    "network": "7lF1vw66xBFkI3TiLNos2X40xOdoxumvfjrCLp6Cld0",
+    "control_port": 46707,
+    "ca": "/m1b/backend-ca.pem"
+  },
+  "runtime_command": [
+    "bwrap",
+    "--die-with-parent",
+    "--new-session",
+    "--ro-bind",
+    "/",
+    "/",
+    "--dev-bind",
+    "/dev",
+    "/dev",
+    "--bind",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01",
+    "--bind",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01/steam-config",
+    "/home/yan/.local/share/Steam/config",
+    "--chdir",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01",
+    "--",
+    "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-service"
+  ],
+  "runtime_manifest_sha256": "a6fe164702281f786bcc9c3a4e1951d8fedade04bd56570ce503c6f62ebee538",
+  "error": "Empty: ",
+  "runtime_exit": 0,
+  "server_exit": 0,
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "runtime-stdout": true,
+    "runtime-stderr": true
+  },
+  "display_rule": {
+    "authorization": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/inputs/display-exception-authorization.json",
+    "before": {
+      "monitors": [
+        {
+          "name": "DP-1",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60.0,
+          "x": 0,
+          "y": 0,
+          "scale": 1,
+          "transform": 0,
+          "disabled": false,
+          "dpmsStatus": true
+        },
+        {
+          "name": "DP-3",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60.0,
+          "x": 3840,
+          "y": 0,
+          "scale": 1,
+          "transform": 0,
+          "disabled": false,
+          "dpmsStatus": true
+        },
+        {
+          "name": "DP-2",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 59.939,
+          "x": 1920,
+          "y": 0,
+          "scale": 1,
+          "transform": 0,
+          "disabled": false,
+          "dpmsStatus": true
+        },
+        {
+          "name": "HDMI-A-1",
+          "width": 0,
+          "height": 0,
+          "refreshRate": 60.0,
+          "x": -1,
+          "y": -1,
+          "scale": 1,
+          "transform": 0,
+          "disabled": true,
+          "dpmsStatus": true
+        }
+      ],
+      "config_sha256": {
+        "/home/yan/.config/hypr/hyprland-gui.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/monitors.lua": "0f4fafe3b14015763465ef3121d001481947b5dac8ec3cd608967611c5380a57",
+        "/home/yan/.config/hypr/input.lua": "5d714fa1fbe888f467f6ce3c17f40aa7523756c61cd6a720902baa3f39a83a62",
+        "/home/yan/.config/hypr/functions.lua": "6638d2ac1c071ba977c0c76ecae49eb3662cefa674312b2ff3a0df6895d20916",
+        "/home/yan/.config/hypr/hyprland.lua": "293ecd081ae3c20294da2c22deb2f0a15172e0f8da3cc8af9b9854e8da5f4eb6",
+        "/home/yan/.config/hypr/gestures.lua": "ed7d0a731e6be0148fd53124f05776d54a5f252adb04dfb2555c1e6236a5ab0d",
+        "/home/yan/.config/hypr/custom.lua": "2e5eced1754b2a12b9fb1a137e5e8fbd96cc7580cbe94ab920fd9aada36958b1",
+        "/home/yan/.config/hypr/colors.lua": "aeb51a5245cb7dd39a07e601e4be97d6196555e1aa9b17a280e22453abbc899b",
+        "/home/yan/.config/hypr/workspaces.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/workspace.lua": "8eb367ae8d66cbb592e2ec7a72d7d7b2417f2d1c9bcbb58f9de7c4cdcab39e16",
+        "/home/yan/.config/hypr/conf/window.lua": "89cceef2dc930aa023537a7e535c9c3906ecfef043d572cb556edc3b2e1157df",
+        "/home/yan/.config/hypr/conf/layout.lua": "0dbf1f72642495c4b4d308fe4a623a1922e5dbb2fb9bedeea11943528fe5169d",
+        "/home/yan/.config/hypr/conf/environment.lua": "24663da210e2d96e782120af886aaa3e43bca068f29cb014872d5d1c1913dc8d",
+        "/home/yan/.config/hypr/conf/ml4w.lua": "8f2446d8921255496c51fb1ce6d3739c03e6a81a1713ea13701e3c35797ac8ff",
+        "/home/yan/.config/hypr/conf/misc.lua": "221edb278601f0ecf759539b8f0235e4d3c0c680b27f9170f83fea238f5919e7",
+        "/home/yan/.config/hypr/conf/windowrule.lua": "9c480060d544c3d2bdbe4fd7f1ab260950823ef59ac5750a76a94972241ae729",
+        "/home/yan/.config/hypr/conf/decoration.lua": "230c0ad53bf57b275f858033534c1166a68974925fedd61731eb2fc2c5d2d2e1",
+        "/home/yan/.config/hypr/conf/animation.lua": "7c7013641db396f7a726012bfcc5581c2af2d508be47abde8a2e7a60d3bdc3dc",
+        "/home/yan/.config/hypr/conf/keybinding.lua": "fcfeb7f130b222cebcabf6e49554dc58f622a865cc21bab93a3d082c0ed1dc1e",
+        "/home/yan/.config/hypr/conf/monitor.lua": "fd0bcd13001640c584d7650d969e996ecb1411309fc4fb2b041f40e851db5995",
+        "/home/yan/.config/hypr/conf/autostart.lua": "b4f85adaae3171e9792bc23de64fef31cb3aae30517fe3c8635986d037fdc68b",
+        "/home/yan/.config/hypr/conf/monitors/2560x1440.lua": "55f854e8be54d6facbdfa038ceee19ef392f8931a7792cd84aaade834bbcfc83",
+        "/home/yan/.config/hypr/conf/monitors/1920x1200.lua": "f8813fdcb6fb822616e1242ee6d91cb8d2f08bcd45f07ce1f3f975ee8a7a2e64",
+        "/home/yan/.config/hypr/conf/monitors/highres.lua": "f55b69ddb9cc8d27af14a35b8c813f6d9be109ade91f8de48f574a6abff985b6",
+        "/home/yan/.config/hypr/conf/monitors/3440x1440.lua": "9626e607dce82fef936ec3726441876f37b8eafe598df0a3be57fac26c63c7fd",
+        "/home/yan/.config/hypr/conf/monitors/default-125.lua": "25853788944c9a8d6fcab42d5c577365796a7cb5fa0d78d38d953949a8a4818d",
+        "/home/yan/.config/hypr/conf/monitors/1440x1080.lua": "94983e605e7cfc594f73fc38bb73f6805441c7b770f7a076709931ec003963bd",
+        "/home/yan/.config/hypr/conf/monitors/1366x768.lua": "3956bcf5b11b211c3af0c5ee787d3a66fa9dab8973b51aa80ef29304f9ed34e2",
+        "/home/yan/.config/hypr/conf/monitors/2560x1440@120x125.lua": "3a2f5fbbacca1095d33712aa5dc1ab693ca1b292ff0d2ee5937e57db04857c01",
+        "/home/yan/.config/hypr/conf/monitors/2560x1440@120.lua": "dcff65e39bdf39502976c74fcc0876b38a04cd4c614d973a4545f558d6f7a2f8",
+        "/home/yan/.config/hypr/conf/monitors/default.lua": "a86ea999c5e13285ae3872d544b0da8b1f7630a58ebd463f37b4610758d190e1",
+        "/home/yan/.config/hypr/conf/monitors/1920x1080.lua": "10560efc40655e4d0b7b4dd024bbdde8cc936a4b29c6b98b368e2199f0c91af5",
+        "/home/yan/.config/hypr/conf/monitors/1600x900.lua": "7b312804d533102023bd6ab432c66feff405853c7ccfbcad8080745e47ad9fd7",
+        "/home/yan/.config/hypr/conf/monitors/preferred.lua": "ca74b6981bd4c92872cfe95b6e4e39d072d2fcf49a49d79e39fb8b0364848134",
+        "/home/yan/.config/hypr/conf/windows/border-2-reverse.lua": "a41723cdb91093823b1220a0d74265e74b0a10653d944081ef556ac3d8eccd94",
+        "/home/yan/.config/hypr/conf/windows/border-2.lua": "34776425300a76903488c5a225be0beb83372b5c7003e533d5e53539aafb046b",
+        "/home/yan/.config/hypr/conf/windows/border-1.lua": "85208dabaf20c75a9d09ae2503ab145ff5523205ad021daaad122d6fffe09acf",
+        "/home/yan/.config/hypr/conf/windows/no-border.lua": "c3c787aa38b4da52ee83eea1d76fc6e8c5a2a0f9bc57938988ff903d2f2b4d1f",
+        "/home/yan/.config/hypr/conf/windows/border-1-reverse.lua": "76bbf8b49bb3e29918caaa32c11ffb06dfe2b4e686fbd04a540c91e50eeaf807",
+        "/home/yan/.config/hypr/conf/windows/border-3.lua": "f2a1f1016ea817a40452441dc2dc1116684790655eda8d37a1077f1a03dc98fa",
+        "/home/yan/.config/hypr/conf/windows/border-3-reverse.lua": "4b0fb4667782589e4a4fba415df7e08e39961a8ab70baf5763881abfc7d34be2",
+        "/home/yan/.config/hypr/conf/windows/glass.lua": "f9c9db8b241fd415c5b822ec14e8513048f1d05c34acc81d084437efd2f6df55",
+        "/home/yan/.config/hypr/conf/windows/transparent.lua": "abb65ff56423dc00b744ba676aa6fc80af5fa87f2fbccdbc70ed1f424bbba619",
+        "/home/yan/.config/hypr/conf/windows/border-4.lua": "de49dd20995c6ce9c162d5feac0e991302b25829aff484db6bbd53f9161df9bd",
+        "/home/yan/.config/hypr/conf/windows/gamemode.lua": "774b3df699080513dd6caaf1b880bedfe1e0c43aeb0d57ee44d59080bfc837d6",
+        "/home/yan/.config/hypr/conf/windows/default.lua": "182ae719793dac80036bd4261f0278e939b9fa2c373764aae8983ae1f3cdb2b3",
+        "/home/yan/.config/hypr/conf/windows/border-4-reverse.lua": "ac38a8fab590848d7209bd8cde9156aa6d03eb14d9e20aa95d2663ff152883c3",
+        "/home/yan/.config/hypr/conf/windows/no-border-more-gaps.lua": "75be28fedc360ae69833b3d288950068e02c4ced1d0fd1527defc6d4fcb6255c",
+        "/home/yan/.config/hypr/conf/decorations/rounding-more-blur.lua": "4af8609ee6a96f237133ccea4e8ae0d531f44e1a92fca6b8122e7d48731e8f36",
+        "/home/yan/.config/hypr/conf/decorations/no-rounding-more-blur.lua": "50d0b01b0ef4dea22c856298c3c1a276c31427159fb175a5c0d59086cd88d212",
+        "/home/yan/.config/hypr/conf/decorations/rounding-all-blur-no-shadows.lua": "021e8b0fe807d4d0ae020f57d5e65c527a7f253918b9978511f7d915ff286c7a",
+        "/home/yan/.config/hypr/conf/decorations/no-blur.lua": "e40e39a6b43909604aaf4e168a9bdb8c96d281be0c4f90e79df656451d2b1dbf",
+        "/home/yan/.config/hypr/conf/decorations/rounding.lua": "22a901bcd3a324a77683242270c679345110524ad2989ccf91e9a2086b7cc40c",
+        "/home/yan/.config/hypr/conf/decorations/no-rounding.lua": "52e48ebda3dd3051c11c5cfdf56ad97fe4f9a5eac0bb30463dd4ae141d0186ac",
+        "/home/yan/.config/hypr/conf/decorations/gamemode.lua": "c2ffe373c071f453273ca8600b245e3fb6c615d50b9576608567b1191284b714",
+        "/home/yan/.config/hypr/conf/decorations/blur.lua": "6a2110954867627bab35ef37bb33cc35e1cf2a7f3f19ebf95dc969d3ea9b7f53",
+        "/home/yan/.config/hypr/conf/decorations/default.lua": "ea159ff78e0144a50ab534cbd17fca1717418328db3e9998fcd1f3eb01045ea1",
+        "/home/yan/.config/hypr/conf/decorations/rounding-all-blur.lua": "c547e3941f9783e4975aeef5fa6918fdbf6c1697f7b77a35829063a1e8e98d80",
+        "/home/yan/.config/hypr/conf/animations/standard.lua": "4b8614391ccddb4e20bef6b1cec523b44e298aa620858be3ac958ce6b1e7bf49",
+        "/home/yan/.config/hypr/conf/animations/animations-classic.lua": "2816c3b83db74d342db4e34f10792417d1e64c317dca1c7adb9c4df5af75526e",
+        "/home/yan/.config/hypr/conf/animations/disabled.lua": "0138594903155e50ee457c0267f3718c49dfeed059972cdafc001a1611e46fb8",
+        "/home/yan/.config/hypr/conf/animations/animations-end4.lua": "13e12702d5c254cbabea329fbd628e512fc09250d7a390008f3c53b11f48cfd1",
+        "/home/yan/.config/hypr/conf/animations/animations-smooth.lua": "42fe639d576434d2ea54522eef23d2cc2993e7c7056df2ac9b581514831c3d39",
+        "/home/yan/.config/hypr/conf/animations/animations-high.lua": "a29de7f6a2b15dd1686065e5e5520352848ab35b48c8ca83376801f8478274fc",
+        "/home/yan/.config/hypr/conf/animations/animations-fast.lua": "95c90ad4f4ef406ce598f8207c37aad31e43b1a9c5684c45e2731b0f7ae82d24",
+        "/home/yan/.config/hypr/conf/animations/animations-moving.lua": "613733fdad0465a941211765eb176797498c881c0e2833e8a50a4463d9b3687a",
+        "/home/yan/.config/hypr/conf/animations/animations-dynamic.lua": "464176b2d800da9f952748b2012bc4f2b594f50ef9a5d39c728de71d4e1083f1",
+        "/home/yan/.config/hypr/conf/animations/default.lua": "3ae00711a89ea404c27b54de35063561e559800aaf356d1fa663dde6c69c6085",
+        "/home/yan/.config/hypr/conf/layouts/laptop.lua": "63652a2cfa2370004b86b88ef16b94c686a2b143cf6ad436c065c8c19d6ca8d3",
+        "/home/yan/.config/hypr/conf/layouts/default.lua": "6b82a44ddf7c43af5cbcbe7eab2fbf91bfedafd7519a9a3310b5d91783278206",
+        "/home/yan/.config/hypr/conf/windowrules/default.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/environments/kvm.lua": "1c799bd268e59f417916b59a9087c6d6f612aab306df76518b5da7ebdb468c7c",
+        "/home/yan/.config/hypr/conf/environments/nvidia.lua": "2ed5ac395aca9a0fc9385e5c157c6aa54f1b0d4b3c721fa54d9e5c8d3fb2ed14",
+        "/home/yan/.config/hypr/conf/environments/default.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/workspaces/default.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/keybindings/default.lua": "1c4371ac0e4c370fa40ef01a36cc2b4ac19ab1ec60af78cd8600064645466ea1"
+      }
+    },
+    "enable": {
+      "command": [
+        "hyprctl",
+        "eval",
+        "hl.monitor({output=\"HDMI-A-1\", disabled=false})"
+      ],
+      "child_exit": 0,
+      "stdout": "ok\n",
+      "stderr": ""
+    },
+    "restore": {
+      "command": [
+        "hyprctl",
+        "eval",
+        "hl.monitor({output=\"HDMI-A-1\", disabled=true})"
+      ],
+      "child_exit": 0,
+      "stdout": "ok\n",
+      "stderr": ""
+    },
+    "after": {
+      "monitors": [
+        {
+          "name": "DP-1",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60.0,
+          "x": 0,
+          "y": 0,
+          "scale": 1,
+          "transform": 0,
+          "disabled": false,
+          "dpmsStatus": true
+        },
+        {
+          "name": "DP-3",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60.0,
+          "x": 3840,
+          "y": 0,
+          "scale": 1,
+          "transform": 0,
+          "disabled": false,
+          "dpmsStatus": true
+        },
+        {
+          "name": "DP-2",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 59.939,
+          "x": 1920,
+          "y": 0,
+          "scale": 1,
+          "transform": 0,
+          "disabled": false,
+          "dpmsStatus": true
+        },
+        {
+          "name": "HDMI-A-1",
+          "width": 0,
+          "height": 0,
+          "refreshRate": 60.0,
+          "x": -1,
+          "y": -1,
+          "scale": 1,
+          "transform": 0,
+          "disabled": true,
+          "dpmsStatus": true
+        }
+      ],
+      "config_sha256": {
+        "/home/yan/.config/hypr/hyprland-gui.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/monitors.lua": "0f4fafe3b14015763465ef3121d001481947b5dac8ec3cd608967611c5380a57",
+        "/home/yan/.config/hypr/input.lua": "5d714fa1fbe888f467f6ce3c17f40aa7523756c61cd6a720902baa3f39a83a62",
+        "/home/yan/.config/hypr/functions.lua": "6638d2ac1c071ba977c0c76ecae49eb3662cefa674312b2ff3a0df6895d20916",
+        "/home/yan/.config/hypr/hyprland.lua": "293ecd081ae3c20294da2c22deb2f0a15172e0f8da3cc8af9b9854e8da5f4eb6",
+        "/home/yan/.config/hypr/gestures.lua": "ed7d0a731e6be0148fd53124f05776d54a5f252adb04dfb2555c1e6236a5ab0d",
+        "/home/yan/.config/hypr/custom.lua": "2e5eced1754b2a12b9fb1a137e5e8fbd96cc7580cbe94ab920fd9aada36958b1",
+        "/home/yan/.config/hypr/colors.lua": "aeb51a5245cb7dd39a07e601e4be97d6196555e1aa9b17a280e22453abbc899b",
+        "/home/yan/.config/hypr/workspaces.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/workspace.lua": "8eb367ae8d66cbb592e2ec7a72d7d7b2417f2d1c9bcbb58f9de7c4cdcab39e16",
+        "/home/yan/.config/hypr/conf/window.lua": "89cceef2dc930aa023537a7e535c9c3906ecfef043d572cb556edc3b2e1157df",
+        "/home/yan/.config/hypr/conf/layout.lua": "0dbf1f72642495c4b4d308fe4a623a1922e5dbb2fb9bedeea11943528fe5169d",
+        "/home/yan/.config/hypr/conf/environment.lua": "24663da210e2d96e782120af886aaa3e43bca068f29cb014872d5d1c1913dc8d",
+        "/home/yan/.config/hypr/conf/ml4w.lua": "8f2446d8921255496c51fb1ce6d3739c03e6a81a1713ea13701e3c35797ac8ff",
+        "/home/yan/.config/hypr/conf/misc.lua": "221edb278601f0ecf759539b8f0235e4d3c0c680b27f9170f83fea238f5919e7",
+        "/home/yan/.config/hypr/conf/windowrule.lua": "9c480060d544c3d2bdbe4fd7f1ab260950823ef59ac5750a76a94972241ae729",
+        "/home/yan/.config/hypr/conf/decoration.lua": "230c0ad53bf57b275f858033534c1166a68974925fedd61731eb2fc2c5d2d2e1",
+        "/home/yan/.config/hypr/conf/animation.lua": "7c7013641db396f7a726012bfcc5581c2af2d508be47abde8a2e7a60d3bdc3dc",
+        "/home/yan/.config/hypr/conf/keybinding.lua": "fcfeb7f130b222cebcabf6e49554dc58f622a865cc21bab93a3d082c0ed1dc1e",
+        "/home/yan/.config/hypr/conf/monitor.lua": "fd0bcd13001640c584d7650d969e996ecb1411309fc4fb2b041f40e851db5995",
+        "/home/yan/.config/hypr/conf/autostart.lua": "b4f85adaae3171e9792bc23de64fef31cb3aae30517fe3c8635986d037fdc68b",
+        "/home/yan/.config/hypr/conf/monitors/2560x1440.lua": "55f854e8be54d6facbdfa038ceee19ef392f8931a7792cd84aaade834bbcfc83",
+        "/home/yan/.config/hypr/conf/monitors/1920x1200.lua": "f8813fdcb6fb822616e1242ee6d91cb8d2f08bcd45f07ce1f3f975ee8a7a2e64",
+        "/home/yan/.config/hypr/conf/monitors/highres.lua": "f55b69ddb9cc8d27af14a35b8c813f6d9be109ade91f8de48f574a6abff985b6",
+        "/home/yan/.config/hypr/conf/monitors/3440x1440.lua": "9626e607dce82fef936ec3726441876f37b8eafe598df0a3be57fac26c63c7fd",
+        "/home/yan/.config/hypr/conf/monitors/default-125.lua": "25853788944c9a8d6fcab42d5c577365796a7cb5fa0d78d38d953949a8a4818d",
+        "/home/yan/.config/hypr/conf/monitors/1440x1080.lua": "94983e605e7cfc594f73fc38bb73f6805441c7b770f7a076709931ec003963bd",
+        "/home/yan/.config/hypr/conf/monitors/1366x768.lua": "3956bcf5b11b211c3af0c5ee787d3a66fa9dab8973b51aa80ef29304f9ed34e2",
+        "/home/yan/.config/hypr/conf/monitors/2560x1440@120x125.lua": "3a2f5fbbacca1095d33712aa5dc1ab693ca1b292ff0d2ee5937e57db04857c01",
+        "/home/yan/.config/hypr/conf/monitors/2560x1440@120.lua": "dcff65e39bdf39502976c74fcc0876b38a04cd4c614d973a4545f558d6f7a2f8",
+        "/home/yan/.config/hypr/conf/monitors/default.lua": "a86ea999c5e13285ae3872d544b0da8b1f7630a58ebd463f37b4610758d190e1",
+        "/home/yan/.config/hypr/conf/monitors/1920x1080.lua": "10560efc40655e4d0b7b4dd024bbdde8cc936a4b29c6b98b368e2199f0c91af5",
+        "/home/yan/.config/hypr/conf/monitors/1600x900.lua": "7b312804d533102023bd6ab432c66feff405853c7ccfbcad8080745e47ad9fd7",
+        "/home/yan/.config/hypr/conf/monitors/preferred.lua": "ca74b6981bd4c92872cfe95b6e4e39d072d2fcf49a49d79e39fb8b0364848134",
+        "/home/yan/.config/hypr/conf/windows/border-2-reverse.lua": "a41723cdb91093823b1220a0d74265e74b0a10653d944081ef556ac3d8eccd94",
+        "/home/yan/.config/hypr/conf/windows/border-2.lua": "34776425300a76903488c5a225be0beb83372b5c7003e533d5e53539aafb046b",
+        "/home/yan/.config/hypr/conf/windows/border-1.lua": "85208dabaf20c75a9d09ae2503ab145ff5523205ad021daaad122d6fffe09acf",
+        "/home/yan/.config/hypr/conf/windows/no-border.lua": "c3c787aa38b4da52ee83eea1d76fc6e8c5a2a0f9bc57938988ff903d2f2b4d1f",
+        "/home/yan/.config/hypr/conf/windows/border-1-reverse.lua": "76bbf8b49bb3e29918caaa32c11ffb06dfe2b4e686fbd04a540c91e50eeaf807",
+        "/home/yan/.config/hypr/conf/windows/border-3.lua": "f2a1f1016ea817a40452441dc2dc1116684790655eda8d37a1077f1a03dc98fa",
+        "/home/yan/.config/hypr/conf/windows/border-3-reverse.lua": "4b0fb4667782589e4a4fba415df7e08e39961a8ab70baf5763881abfc7d34be2",
+        "/home/yan/.config/hypr/conf/windows/glass.lua": "f9c9db8b241fd415c5b822ec14e8513048f1d05c34acc81d084437efd2f6df55",
+        "/home/yan/.config/hypr/conf/windows/transparent.lua": "abb65ff56423dc00b744ba676aa6fc80af5fa87f2fbccdbc70ed1f424bbba619",
+        "/home/yan/.config/hypr/conf/windows/border-4.lua": "de49dd20995c6ce9c162d5feac0e991302b25829aff484db6bbd53f9161df9bd",
+        "/home/yan/.config/hypr/conf/windows/gamemode.lua": "774b3df699080513dd6caaf1b880bedfe1e0c43aeb0d57ee44d59080bfc837d6",
+        "/home/yan/.config/hypr/conf/windows/default.lua": "182ae719793dac80036bd4261f0278e939b9fa2c373764aae8983ae1f3cdb2b3",
+        "/home/yan/.config/hypr/conf/windows/border-4-reverse.lua": "ac38a8fab590848d7209bd8cde9156aa6d03eb14d9e20aa95d2663ff152883c3",
+        "/home/yan/.config/hypr/conf/windows/no-border-more-gaps.lua": "75be28fedc360ae69833b3d288950068e02c4ced1d0fd1527defc6d4fcb6255c",
+        "/home/yan/.config/hypr/conf/decorations/rounding-more-blur.lua": "4af8609ee6a96f237133ccea4e8ae0d531f44e1a92fca6b8122e7d48731e8f36",
+        "/home/yan/.config/hypr/conf/decorations/no-rounding-more-blur.lua": "50d0b01b0ef4dea22c856298c3c1a276c31427159fb175a5c0d59086cd88d212",
+        "/home/yan/.config/hypr/conf/decorations/rounding-all-blur-no-shadows.lua": "021e8b0fe807d4d0ae020f57d5e65c527a7f253918b9978511f7d915ff286c7a",
+        "/home/yan/.config/hypr/conf/decorations/no-blur.lua": "e40e39a6b43909604aaf4e168a9bdb8c96d281be0c4f90e79df656451d2b1dbf",
+        "/home/yan/.config/hypr/conf/decorations/rounding.lua": "22a901bcd3a324a77683242270c679345110524ad2989ccf91e9a2086b7cc40c",
+        "/home/yan/.config/hypr/conf/decorations/no-rounding.lua": "52e48ebda3dd3051c11c5cfdf56ad97fe4f9a5eac0bb30463dd4ae141d0186ac",
+        "/home/yan/.config/hypr/conf/decorations/gamemode.lua": "c2ffe373c071f453273ca8600b245e3fb6c615d50b9576608567b1191284b714",
+        "/home/yan/.config/hypr/conf/decorations/blur.lua": "6a2110954867627bab35ef37bb33cc35e1cf2a7f3f19ebf95dc969d3ea9b7f53",
+        "/home/yan/.config/hypr/conf/decorations/default.lua": "ea159ff78e0144a50ab534cbd17fca1717418328db3e9998fcd1f3eb01045ea1",
+        "/home/yan/.config/hypr/conf/decorations/rounding-all-blur.lua": "c547e3941f9783e4975aeef5fa6918fdbf6c1697f7b77a35829063a1e8e98d80",
+        "/home/yan/.config/hypr/conf/animations/standard.lua": "4b8614391ccddb4e20bef6b1cec523b44e298aa620858be3ac958ce6b1e7bf49",
+        "/home/yan/.config/hypr/conf/animations/animations-classic.lua": "2816c3b83db74d342db4e34f10792417d1e64c317dca1c7adb9c4df5af75526e",
+        "/home/yan/.config/hypr/conf/animations/disabled.lua": "0138594903155e50ee457c0267f3718c49dfeed059972cdafc001a1611e46fb8",
+        "/home/yan/.config/hypr/conf/animations/animations-end4.lua": "13e12702d5c254cbabea329fbd628e512fc09250d7a390008f3c53b11f48cfd1",
+        "/home/yan/.config/hypr/conf/animations/animations-smooth.lua": "42fe639d576434d2ea54522eef23d2cc2993e7c7056df2ac9b581514831c3d39",
+        "/home/yan/.config/hypr/conf/animations/animations-high.lua": "a29de7f6a2b15dd1686065e5e5520352848ab35b48c8ca83376801f8478274fc",
+        "/home/yan/.config/hypr/conf/animations/animations-fast.lua": "95c90ad4f4ef406ce598f8207c37aad31e43b1a9c5684c45e2731b0f7ae82d24",
+        "/home/yan/.config/hypr/conf/animations/animations-moving.lua": "613733fdad0465a941211765eb176797498c881c0e2833e8a50a4463d9b3687a",
+        "/home/yan/.config/hypr/conf/animations/animations-dynamic.lua": "464176b2d800da9f952748b2012bc4f2b594f50ef9a5d39c728de71d4e1083f1",
+        "/home/yan/.config/hypr/conf/animations/default.lua": "3ae00711a89ea404c27b54de35063561e559800aaf356d1fa663dde6c69c6085",
+        "/home/yan/.config/hypr/conf/layouts/laptop.lua": "63652a2cfa2370004b86b88ef16b94c686a2b143cf6ad436c065c8c19d6ca8d3",
+        "/home/yan/.config/hypr/conf/layouts/default.lua": "6b82a44ddf7c43af5cbcbe7eab2fbf91bfedafd7519a9a3310b5d91783278206",
+        "/home/yan/.config/hypr/conf/windowrules/default.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/environments/kvm.lua": "1c799bd268e59f417916b59a9087c6d6f612aab306df76518b5da7ebdb468c7c",
+        "/home/yan/.config/hypr/conf/environments/nvidia.lua": "2ed5ac395aca9a0fc9385e5c157c6aa54f1b0d4b3c721fa54d9e5c8d3fb2ed14",
+        "/home/yan/.config/hypr/conf/environments/default.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/workspaces/default.lua": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/home/yan/.config/hypr/conf/keybindings/default.lua": "1c4371ac0e4c370fa40ef01a36cc2b4ac19ab1ec60af78cd8600064645466ea1"
+      }
+    },
+    "desktop_unchanged": true,
+    "config_unchanged": true
+  },
+  "original_calibration_unchanged": true,
+  "runtime_processes_after": [],
+  "product_finished": false,
+  "streams": {
+    "server-stdout": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01/server-stdout.raw",
+      "sha256": "b415bf033932709285db7d27e5fd75767b3cfb59638122572173b93771e4b56e",
+      "bytes": 129,
+      "sanitized_sha256": "b415bf033932709285db7d27e5fd75767b3cfb59638122572173b93771e4b56e"
+    },
+    "server-stderr": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sanitized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "runtime-stdout": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01/runtime-stdout.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sanitized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "runtime-stderr": {
+      "raw": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product01/runtime-stderr.raw",
+      "sha256": "8e5be20d627d64ceb5f32264375c5ed03c5eb83a51da446e510babfcf4f2f4e1",
+      "bytes": 9276,
+      "sanitized_sha256": "68e1d89251a5e11e5ae9c92038f54784cfdd883db7dbf50707d5406417a6e945"
+    }
+  },
+  "diagnostics": []
+}

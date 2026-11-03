@@ -1,0 +1,51 @@
+{
+  "command": [
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final01/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/input-final01/identity"
+  ],
+  "desktop": true,
+  "physical_acceptance": false,
+  "driver_hashes": {
+    "input-campaign.py": "feaccff51b3b61cf9405e3bbff912a22cfc9fd24a9afcf8bd33c58c0f25867c0",
+    "desktop_input.py": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26"
+  },
+  "native_input": [
+    {
+      "command": [
+        "hyprctl",
+        "dispatch",
+        "hl.dsp.cursor.move({x=2548,y=642})"
+      ],
+      "child_exit": 0,
+      "stdout": "ok\n",
+      "stderr": "",
+      "owned_pid": 869960,
+      "before_pid": 869960,
+      "after_pid": 869960
+    },
+    {
+      "command": [
+        "ydotool",
+        "click",
+        "0xC0"
+      ],
+      "child_exit": 0,
+      "stdout": "c0 110\n",
+      "stderr": "",
+      "owned_pid": 869960,
+      "before_pid": 869960,
+      "after_pid": 869960
+    }
+  ],
+  "watchdog_seconds": 60,
+  "passed": true,
+  "client_exit": 0,
+  "output_eof": true,
+  "reader_errors": [],
+  "completion_marker": true
+}

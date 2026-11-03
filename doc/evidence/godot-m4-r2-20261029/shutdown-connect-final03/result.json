@@ -1,0 +1,61 @@
+{
+  "passed": true,
+  "physical_acceptance": false,
+  "fault": "TLS challenge reply deliberately withheld; no domain reply generated",
+  "native_input": [
+    {
+      "command": [
+        "hyprctl",
+        "dispatch",
+        "hl.dsp.window.close({window=\"address:0x5571667028b0\"})"
+      ],
+      "child_exit": 0,
+      "stdout": "ok\n",
+      "stderr": "",
+      "owned_pid": 936081,
+      "before_pid": 936081,
+      "after_pid": 936081,
+      "target_geometry": {
+        "address": "0x5571667028b0",
+        "at": [
+          1968,
+          292
+        ],
+        "size": [
+          1850,
+          496
+        ]
+      }
+    }
+  ],
+  "watchdog_seconds": 60,
+  "driver_inputs": {
+    "shutdown-connect.py": "a62b264de170cb23d35c4f8dd02c7fce4f249375f634ff968e1685f7ee5b4a3a",
+    "desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"
+  },
+  "certificate_exit": 0,
+  "client_command": [
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/shutdown-connect-final03/identity",
+    "--node",
+    "https://localhost:43323",
+    "--ca",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/shutdown-connect-final03/tls-ca.pem"
+  ],
+  "diagnostic_export": false,
+  "challenge_request_observed": true,
+  "native_close_delivered": true,
+  "client_exit": 0,
+  "output_eof": true,
+  "output_errors": [],
+  "peer_saw_cancellation": true,
+  "managed_phases": [],
+  "peer_thread_released": true,
+  "peer_errors": [],
+  "elapsed_seconds": 2.214971744993818
+}

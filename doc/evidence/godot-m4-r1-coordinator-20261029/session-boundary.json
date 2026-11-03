@@ -1,0 +1,46 @@
+{
+  "coordinator": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46",
+  "worker": {
+    "sessionId": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+    "title": "Godot M4 controllers and OpenXR",
+    "status": "idle",
+    "lastActivity": 1793253237943,
+    "updatedAt": 1793253237737,
+    "provider": "openai-codex",
+    "model": "openai-codex:gpt-6.1-sol",
+    "createdBySessionId": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46",
+    "agentRole": "standard",
+    "waitingForInput": false
+  },
+  "inbox": {
+    "method": "Full list_queued_prompts(includePromptText=true, includeCompleted=true) inspected",
+    "consumeToolAvailable": false,
+    "consumptionClaimed": false,
+    "pendingOrExecuting": 0,
+    "rows": [
+      {
+        "id": "meta-1793243549400-g7zhtqr",
+        "status": "completed",
+        "createdAt": 1793243549401,
+        "claimedAt": 1793243549403,
+        "completedAt": 1793251186927
+      },
+      {
+        "id": "meta-1793249691540-51t7u1r",
+        "status": "completed",
+        "createdAt": 1793249691541,
+        "claimedAt": 1793251186930,
+        "completedAt": 1793251205465
+      },
+      {
+        "id": "meta-1793252132693-dekxlcb",
+        "status": "completed",
+        "createdAt": 1793252132693,
+        "claimedAt": 1793252132695,
+        "completedAt": 1793253237942
+      }
+    ]
+  },
+  "fullM4Accepted": false,
+  "implementationCorrectionPending": false
+}

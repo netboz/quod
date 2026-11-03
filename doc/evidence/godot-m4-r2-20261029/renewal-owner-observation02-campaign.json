@@ -1,0 +1,65 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/serve.py",
+    "renewal-owner-observation02-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--qualified"
+  ],
+  "client": "renewal-diagnostic02",
+  "passed": false,
+  "commands": [
+    {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/run.py",
+        "--timeout",
+        "900",
+        "renewal-owner-observation02-journey",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/renewal-owner-observation02-drivers/journey.py",
+        "--journey",
+        "gui",
+        "--export",
+        "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic02/source/client/godot/dist/quod.x86_64",
+        "--backend-port",
+        "38611",
+        "--backend-ca",
+        "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-renewal-owner-observation02-server/backend-ca.pem",
+        "--control-port",
+        "46133",
+        "--network",
+        "XyuQVMQbEO1W8Kn_PLr6pvcmjV1hH2ZcYZvHchFNPh0",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/renewal-owner-observation02",
+        "--private",
+        "/home/yan/.cache/quod-m4-r2-artifacts/private/renewal-owner-observation02",
+        "--controllers"
+      ],
+      "child_exit": 1
+    }
+  ],
+  "driver_inputs": {
+    "doc/evidence/godot-m4-r2-20261029/campaign.py": "3337d7dd9335879a729b77d191ceb564f43d4a94cc4803193fa48b950d40fd8a",
+    "doc/evidence/godot-m4-r2-20261029/observe-drivers.py": "b298a3cf41a7a000ddccb54a9daed793df32bff14a8996312ffc6f40936d0c05",
+    "doc/evidence/godot-m4-r2-20261029/shutdown_observation.py": "45f80c2feaed317bc16f2a312b9a80de5c79bf42db4b155ff4b5a1ac09dd2ad4",
+    "client/godot-tests/journey.py": "6169db3ff982e9f54d907217160aa9103ee1a71bf22ee54f5a11c6e1a2a7b1b5",
+    "client/godot-tests/local.py": "772c049f1755100b634d30019681217b1b320f842fc54582515750fafd2b6168",
+    "client/godot-tests/desktop_input.py": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26"
+  },
+  "retained_drivers": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/renewal-owner-observation02-drivers",
+  "endpoint": {
+    "port": 38611,
+    "network": "XyuQVMQbEO1W8Kn_PLr6pvcmjV1hH2ZcYZvHchFNPh0",
+    "control_port": 46133,
+    "ca": "/m1b/backend-ca.pem"
+  },
+  "failure": "Failed renewal-owner-observation02-journey",
+  "server_child_exit": 0,
+  "server_output_eof": true,
+  "reader_errors": []
+}

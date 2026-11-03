@@ -1,0 +1,22 @@
+{
+  "xr-focus-software-check-119-corrected02.json": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/xr-focus-software-check-119-corrected02.json",
+    "sha256": "7e1d107bfe160be899720693b5a8036907eb6561eac2e60c767aed9e43b062a2",
+    "scope": "independent parent read-only verification; no replay or source/inode mutation"
+  },
+  "xr-focus-seal-check-119.json": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/xr-focus-seal-check-119.json",
+    "sha256": "db929a585de5cea9af6a368568fe88b7f9bdcb4dd5b9d906c8494a533d26877b",
+    "scope": "independent parent read-only verification; no replay or source/inode mutation"
+  },
+  "runtime-cue-build-check-120-corrected.json": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/runtime-cue-build-check-120-corrected.json",
+    "sha256": "a9328d7ec27ce9abbbda8b9820e8a3d699ad92c5a48354cccb78965e1a1c9bf5",
+    "scope": "independent parent read-only verification; no replay or source/inode mutation"
+  },
+  "runtime-cue-pure-check-120.json": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/runtime-cue-pure-check-120.json",
+    "sha256": "7f8efbe4c4baa2ae12bd174bee9cd56e2c31aaff060271205e9af19cab8abb4d",
+    "scope": "independent parent read-only verification; no replay or source/inode mutation"
+  }
+}

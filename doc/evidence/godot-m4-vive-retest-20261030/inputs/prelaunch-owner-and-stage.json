@@ -1,0 +1,7 @@
+{
+  "chunk_id": "dfa210",
+  "wall_time_seconds": 0.107983832,
+  "exit_code": 0,
+  "original_token_count": 166,
+  "output": "{\"stage_passed\": true, \"stage\": \"/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration04\", \"authored_inputs\": 1432, \"compiled_entries\": 2059, \"release_entries\": 1453, \"shared_archive_paths\": 1007, \"resource_projections\": 8, \"probe_passed\": true, \"owner_stdout\": \"M4_SERVER_RESOURCE_OWNER {\\\"/work/_build/prod/lib/quod/priv\\\",\\n                          \\\"/work/_build/test/lib/quod/test/quod_lifecycle_single_path_tests.beam\\\",\\n                          \\\"/work/_build/prod/lib/quod/ebin/quod_client_view.beam\\\"}\\n\", \"owner_stderr\": \"\"}\n{\"case08_private_unused\": true, \"outer_wrapper_unused\": true}\n{\"host_ownership_exit\": 0, \"relevant\": []}\n"
+}

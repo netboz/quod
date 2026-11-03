@@ -1,0 +1,27 @@
+{
+  "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-workspace-cue-20261031/PhysicalChecks.cs": {
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/workspace-cue-binding01/PhysicalChecks.cs",
+    "sha256": "64ff6b2928532251a4022ef861ab091274ab650abcbb204b64ce0db063282721",
+    "mode": 420
+  },
+  "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-workspace-cue-20261031/ViveLookCue.cs": {
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/workspace-cue-binding01/ViveLookCue.cs",
+    "sha256": "55ebc8fdff066b8dad750744be51483b130ef5d0b1d1b3504ebdab5b76bf75c7",
+    "mode": 420
+  },
+  "/home/yan/src/quod_worktrees/pearl-stone/client/godot/Main.cs": {
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/workspace-cue-binding01/Main.cs",
+    "sha256": "f56b266071e92cf2609dd08546cf8fc3bdf7c4ff5b969da1d5dc59ec39bc51bb",
+    "mode": 420
+  },
+  "/home/yan/src/quod_worktrees/pearl-stone/client/godot/SpatialGui.cs": {
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/workspace-cue-binding01/SpatialGui.cs",
+    "sha256": "84a3f6085f1e6b2ad91106785595701c3a14fb56988f87f4383689c77fd791bc",
+    "mode": 420
+  },
+  "/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs": {
+    "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/workspace-cue-binding01/OpenXRInput.cs",
+    "sha256": "77392f47bfc8324732a58d6198acc76b520ab8245de39cc5689e898b4a981d37",
+    "mode": 420
+  }
+}

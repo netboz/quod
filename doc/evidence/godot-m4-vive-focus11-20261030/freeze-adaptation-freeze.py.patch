@@ -1,0 +1,138 @@
+--- prior-retest/freeze.py
++++ case10/freeze.py
+@@ -1,4 +1,4 @@
+-"""Freeze only the new case10 and offline observer evidence, referencing its sealed parent source graph."""
++"""Freeze only the failed case11 evidence, referencing its sealed parent source graph."""
+ import json,os,shutil,signal,subprocess,sys,tarfile,time
+ sys.dont_write_bytecode=True
+ from pathlib import Path,PurePosixPath
+@@ -7,9 +7,9 @@
+ sys.path.append(str(Path(__file__).resolve().parent.parent/'godot-m4-vive-physical-20261029'))
+ from environment import environment
+ root=Path.cwd();ev=Path(__file__).resolve().parent;run_id='01'
+-prior=TASK/'artifacts/quod-godot-m4-vive-retest-handoff-ca84d4f8-20261030-01'
+-boundary=TASK/'artifacts/quod-godot-m4-vive-retest10-handoff-ca84d4f8-20261030-01'
+-runs=TASK/'artifacts/vive-retest10-freeze-runs01'
++prior=TASK/'artifacts/quod-godot-m4-vive-retest10-handoff-ca84d4f8-20261030-01'
++boundary=TASK/'artifacts/quod-godot-m4-vive-focus11-handoff-ca84d4f8-20261030-01'
++runs=TASK/'artifacts/vive-focus11-freeze-runs01'
+ def load(p):return json.loads(Path(p).read_text())
+ def write(p,v):Path(p).write_text(json.dumps(v,indent=2)+'\n')
+ def git(*a):return subprocess.check_output(['git',*a],cwd=root)
+@@ -37,7 +37,7 @@
+   'stderr':{'path':str(runs/'stderr.log'),'sha256':raw(runs/'stderr.log')}}
+  write(runs/'result.json',result);print(json.dumps(result));raise SystemExit(0 if result['passed'] else 1)
+ os.umask(0o077);assert not boundary.exists();d=Digests();h=d.h
+-assert h(prior/'snapshot.json')=='560ee1a4b1be5c01bac72d35318b4c2f2a4199e107ba9cf9870a87a9599dbcc4'
++assert h(prior/'snapshot.json')=='cfbd8b0ee6fbabfa896992bfcabcd6ceafdee1dd17f066eac732dd93d4501c89'
+ parent=load(prior/'snapshot.json');old=load(prior/'source-manifest.json')
+ assert git('branch','--show-current').decode().strip()=='worktree/pearl-stone'
+ assert git('rev-parse','HEAD').decode().strip()=='293cf6115c0a6b18315eccdbb42cbca396f443d3'
+@@ -56,10 +56,10 @@
+ changed=sorted(n for n,r in old.items() if source.get(n)!=r);assert changed==[],changed
+ additions=sorted(set(source)-set(old));assert additions
+ published_server_inputs=server_artifacts(root,h)
+-assert all(n in published_server_inputs or n.startswith(('doc/evidence/godot-m4-vive-retest10-20261030/',
+- 'doc/evidence/godot-m4-r2-coordinator-20261029/','nimbalyst-local/handoffs/godot-m4-vive-retest10-',
+- 'doc/evidence/godot-m4-vive-retest-20261030/native-vive-product10/',
+- 'doc/evidence/godot-m4-vive-physical-20261029/logs/native-vive-product10-run')) for n in additions),additions
++assert all(n in published_server_inputs or n.startswith(('doc/evidence/godot-m4-vive-focus11-20261030/',
++ 'doc/evidence/godot-m4-r2-coordinator-20261029/','nimbalyst-local/handoffs/godot-m4-vive-focus11-',
++ 'doc/evidence/godot-m4-vive-retest-20261030/native-vive-product11/',
++ 'doc/evidence/godot-m4-vive-physical-20261029/logs/native-vive-product11-run')) for n in additions),additions
+ assert sum(n.startswith('.agents/') for n in untracked)==31
+ boundary.mkdir(mode=0o700);(boundary/'objects').mkdir(mode=0o700)
+ write(boundary/'source-manifest.json',source);write(boundary/'source-directory-modes.json',dirs);write(boundary/'source-symlink-modes.json',links)
+@@ -82,8 +82,8 @@
+  'exit1_means_actual_differences':True,'stderr':delta.stderr.decode(),'strip_components_for_apply':2,
+  'scope':'Actual binary no-index delta of all added paths; no prior source path changed.'})
+ write(boundary/'previous-boundary-reference.json',{'path':str(prior),'snapshot_sha256':h(prior/'snapshot.json'),
+- 'previous_full_source':str(TASK/'builds/vive-retest-source-reconstruction01'),
+- 'scope':'Sealed worker retest01 references the accepted65/base/HEAD/full-untracked graph recursively. This boundary retains actual unchanged HEAD patch, actual binary additive delta and full additions archive. No fresh whole-HEAD base-apply claim or extra3GB history copy.'})
++ 'previous_full_source':str(TASK/'builds/coordinator-retest10-source-reconstruction-86'),
++ 'scope':'Accepted case10 references the accepted65/base/HEAD/full-untracked graph recursively. This boundary retains actual unchanged HEAD patch, actual binary additive delta and full additions archive. No fresh whole-HEAD base-apply claim or extra3GB history copy.'})
+ stored={};groups={};origins={}
+ def keep(p):
+  digest=h(p)
+@@ -93,7 +93,7 @@
+   before=key(old_object);before_links=old_object.stat().st_nlink
+   assert not old_object.is_symlink() and old_object.stat().st_mode&0o222==0 and h(old_object)==digest
+   d.link(old_object,q,digest)
+-  stored[digest]={'method':'verified readonly sealed retest01 object; actual same-filesystem inode reuse','source':str(old_object),
++  stored[digest]={'method':'verified readonly accepted case10 object; actual same-filesystem inode reuse','source':str(old_object),
+    'before_stat':before,'before_links':before_links,'bytes':q.stat().st_size}
+  else:
+   shutil.copyfile(p,q);q.chmod(0o444);assert raw(q)==digest
+@@ -120,41 +120,34 @@
+   for name in files:
+    p=directory/name;n=str(p.relative_to(origin));rows[n]=row(p);paths[n]=str(p)
+  groups[label]=rows;origins[label]=paths
+-tree('case10-preexecution',TASK/'private/build-inputs/native-vive-product10')
+-tree('case10-executed-driver-inputs',TASK/'private/native-vive-product10/drivers')
+-tree('case10-wrapper-inputs',TASK/'private/runs/native-vive-product10-run/driver-inputs')
+-for name in ['case10-preflight01','case10-api01','case10-focus-source01','case10-sanitize01',
+- 'case10-focus-checks01','case10-focus-checks02','case10-provenance01','case10-result-verification01',
+- 'case10-result-verification02','case10-finalize-offline01','case10-deadline-checks01','case10-finalize-deadline01',
+- 'case10-freeze-preflight01']:
+- tree('metadata-'+name,TASK/'private/metadata-inputs'/name)
+-groups['primary-protocol-sources']={};origins['primary-protocol-sources']={}
+-for name in ['hyprland-efb509-event-manager.cpp','hyprland-efb509-compositor.cpp','hyprland-efb509-focus-state.cpp','hyprland-efb509-tree.json']:
+- for suffix in ['', '.receipt.json']:
+-  p=TASK/'downloads'/(name+suffix)
+-  groups['primary-protocol-sources'][name+suffix]=row(p);origins['primary-protocol-sources'][name+suffix]=str(p)
+-
++tree('case11-preexecution',TASK/'private/build-inputs/native-vive-product11')
++tree('case11-executed-driver-inputs',TASK/'private/native-vive-product11/drivers')
++tree('case11-wrapper-inputs',TASK/'private/runs/native-vive-product11-run/driver-inputs')
++tree('metadata-prepare01',TASK/'private/metadata-inputs/focus11-prepare01')
++for name in ['focus11-sanitize01','focus11-stdin-pipes01','focus11-stdin-pty01','focus11-api01','focus11-receipt-binding01']:
++ tree('metadata-'+name,TASK/'private/runs'/name/'driver-inputs')
++if (TASK/'private/metadata-inputs/focus11-freeze-preflight01').exists():
++ tree('metadata-freeze-preflight01',TASK/'private/metadata-inputs/focus11-freeze-preflight01')
+ tree('actual-freeze-driver-inputs',runs/'driver-inputs')
+-label='actual-case10-fixture-helper-input-output';groups[label]={};origins[label]={}
+-fixture=TASK/'private/quod-m4-live-native-vive-product10-server'
++label='actual-case11-fixture-helper-input-output';groups[label]={};origins[label]={}
++fixture=TASK/'private/quod-m4-live-native-vive-product11-server'
+ for p in sorted(fixture.iterdir()):
+  if p.is_file() and p.suffix in ['.erl','.beam']:
+   groups[label][p.name]=row(p);origins[label][p.name]=str(p)
+ assert groups[label]
+ groups['accepted-independent-prerequisite']={};origins['accepted-independent-prerequisite']={}
+-for name in ['reconnect-completion-check-79.json','case10-closure-check-84.json',
+- 'focus-offline-check-85.json','retest-artifact-check-85.json']:
++for name in ['retest10-final-verification-86.json']:
+  p=root/'_build/godot-m4-r2-coordinator-20261029'/name
+  groups['accepted-independent-prerequisite'][name]=row(p);origins['accepted-independent-prerequisite'][name]=str(p)
+ 
+ write(boundary/'object-groups.json',groups);write(boundary/'object-group-origins.json',origins);write(boundary/'object-storage.json',stored)
+ d.write(boundary/'pre-reconstruction-digests.json')
+ write(boundary/'input-output-classification.json',{'unchanged_supplied_inputs':93,'unchanged_exports':196,
+- 'source_delta':'New case10 metadata and receipts only. Exact unchanged physical09 driver receives a new separately authorized label; no production/observer/engine/runtime source or policy change.',
++ 'source_delta':'Failed case11 and bounded disposable stdin comparison receipts only. Exact physical09 driver and qualified focus helper unchanged; observer was never armed. No product/engine/runtime/policy change.',
+  'dependencies':'Accepted preparation65 payload/private engine/Monado and accepted restoration05/34app944module250priv preflight reused. No build or unchanged suite recount.',
+  'outputs':'Actual case10 helper sources/beams, preexecution copies and sanitized application/runtime/wrapper evidence. Private API/raw geometry/stores/keys/calibration/stacks stay in original restricted locations, bound by public sanitized receipts.',
+  'privacy':'No private stores, credentials, room coordinates or raw serial-bearing logs are added to snapshot objects.',
+- 'parent_scope':'Sealed worker retest01 snapshot references accepted65/base/HEAD/untracked graph. Independent root85 checks parent artifacts and actual worker materialization; root new source materialization remains pending after this freeze. No claim that pending root tree already exists.'})
++ 'parent_scope':'Accepted case10 snapshot and actual root86 full source are retained. Root86 independently verified complete content/modes and materialized full source. New complete reconstruction reuses that actual tree without stale pre-link keys or a3GB copy.'})
+ print(json.dumps({'source_entries':len(source),'source_additions':len(additions),'changed_previous_paths':changed,'groups':len(groups),'objects':len(stored)}),flush=True)
+ command=[sys.executable,str(ev/'verify_freeze.py'),str(boundary)]
+ assert subprocess.run(command,cwd=root,env=environment()).returncode==0
+@@ -166,7 +159,7 @@
+  else:assert p.is_symlink() and str(p.readlink())==r['target']
+ write(boundary/'qualification.json',load(ev/'qualification.json'));d.write(boundary/'freeze-used-digests.json')
+ artifacts={str(p.relative_to(boundary)):{'sha256':h(p),'bytes':p.stat().st_size} for p in boundary.rglob('*') if p.is_file()}
+-write(boundary/'snapshot.json',{'checkpoint':'QUO-65 corrected-payload physical case10','worker':'ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f',
++write(boundary/'snapshot.json',{'checkpoint':'QUO-65 failed control-channel case11','worker':'ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f',
+  'actual_model':'openai-codex:gpt-6.1-sol','launcher_effort':'max','backend_effective_effort':'unexposed',
+  'artifacts':artifacts,'previous_boundary':str(prior),'previous_snapshot_sha256':h(prior/'snapshot.json'),
+  'source_entries':len(source),'source_additions':len(additions),'changed_previous_paths':changed,
+@@ -180,6 +173,6 @@
+  'delta_sha256':raw(boundary/'delta.patch'),'additions_sha256':raw(boundary/'additions.tar'),
+  'source_entries':len(source),'source_additions':len(additions),'changed_previous_paths':changed,
+  'artifacts':len(artifacts),'objects':len(stored),'prior_readonly_objects_reused':sum(r['method'].startswith('verified') for r in stored.values()),
+- 'source_materialization':str(TASK/'builds/vive-retest10-source-reconstruction01'),
+- 'group_materialization':str(TASK/'builds/vive-retest10-group-reconstruction01'),
++ 'source_materialization':str(TASK/'builds/vive-focus11-source-reconstruction01'),
++ 'group_materialization':str(TASK/'builds/vive-focus11-group-reconstruction01'),
+  'cache_hits':d.hits,'new_hashes':d.new,'new_bytes_hashed':d.bytes}),flush=True)

@@ -1,0 +1,51 @@
+{
+  "method": "Read-only complete source metadata scan of actual failed reconstruction02 and byte hashes of every mismatching file",
+  "source_paths": 25434,
+  "mismatches": [
+    {
+      "path": "client/godot/OpenXRInput.cs",
+      "expected_mode": 420,
+      "actual_mode": 384,
+      "bytes_match": true,
+      "content_match": true
+    },
+    {
+      "path": "client/godot/README.md",
+      "expected_mode": 420,
+      "actual_mode": 384,
+      "bytes_match": true,
+      "content_match": true
+    },
+    {
+      "path": "client/godot/ScenePanel.cs",
+      "expected_mode": 420,
+      "actual_mode": 384,
+      "bytes_match": true,
+      "content_match": true
+    },
+    {
+      "path": "client/godot/tests/ControllerChecks.cs",
+      "expected_mode": 420,
+      "actual_mode": 384,
+      "bytes_match": true,
+      "content_match": true
+    },
+    {
+      "path": "client/godot/tests/ExportChecks.cs",
+      "expected_mode": 420,
+      "actual_mode": 384,
+      "bytes_match": true,
+      "content_match": true
+    }
+  ],
+  "snapshot_descriptor_created": false,
+  "original_failed_files_modified": false,
+  "failed_child_exit": 1,
+  "timeout": false,
+  "independent_objects_checked_before_source_failure": 1392,
+  "prior_readonly_inodes_reused": 1035,
+  "stderr_sha256": "d007374e526c971df03c4ad8ed355225237fedb5b1632cb0546fe104825a8545",
+  "stdout_sha256": "6e6963042792aac84b3fb9c07756ed87a73789570e83838f34703c6587fa3ab1",
+  "cause": "Delta apply recreates changed files under private umask077; new reconstruction must restore exact recorded modes after real apply, preserving failed02 unchanged.",
+  "product_tests_rerun": false
+}

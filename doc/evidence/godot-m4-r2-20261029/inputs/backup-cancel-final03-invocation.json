@@ -1,0 +1,51 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/backup-cancel-final03-drivers/local.py",
+    "--export",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+    "--phase",
+    "backup-cancel",
+    "--desktop",
+    "--evidence",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/backup-cancel-final03",
+    "--private",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/backup-cancel-final03"
+  ],
+  "driver_inputs": {
+    "local-campaign.py": {
+      "source_sha256": "bb39fce273d5960285b0a74c3bd8199289a9d77924f59300184e9bfae23299df",
+      "supplied_sha256": "bb39fce273d5960285b0a74c3bd8199289a9d77924f59300184e9bfae23299df",
+      "adaptation": null
+    },
+    "observe-drivers.py": {
+      "source_sha256": "d861d8933db13ccd8b3a3f4ed194bb99b16314047c69489d91ca420250eebb72",
+      "supplied_sha256": "d861d8933db13ccd8b3a3f4ed194bb99b16314047c69489d91ca420250eebb72",
+      "adaptation": null
+    },
+    "shutdown_observation.py": {
+      "source_sha256": "45f80c2feaed317bc16f2a312b9a80de5c79bf42db4b155ff4b5a1ac09dd2ad4",
+      "supplied_sha256": "45f80c2feaed317bc16f2a312b9a80de5c79bf42db4b155ff4b5a1ac09dd2ad4",
+      "adaptation": null
+    },
+    "local.py": {
+      "source_sha256": "19c7c9d1ca74657da52a12188f5575e6d9210eeb811a2a95a600819d7c48f489",
+      "supplied_sha256": "eff684034f7dcd5c3e4d3f73d085c0c19f99463d1e785c0794cd6be3cc6b1ac7",
+      "adaptation": {
+        "original_sha256": "19c7c9d1ca74657da52a12188f5575e6d9210eeb811a2a95a600819d7c48f489",
+        "supplied_sha256": "eff684034f7dcd5c3e4d3f73d085c0c19f99463d1e785c0794cd6be3cc6b1ac7",
+        "purpose": "Bounded argument-free observation before unchanged watchdogs; output-reader completion/error ownership; unchanged product assertions and authority",
+        "diff": "--- original/local.py\n+++ supplied/local.py\n@@ -11,6 +11,7 @@\n import threading\n import ctypes\n from desktop_input import deliver\n+from shutdown_observation import ShutdownObservation, allow_owned_trace\n \n p = argparse.ArgumentParser()\n p.add_argument('--export', type=Path, required=True)\n@@ -44,33 +45,32 @@\n         if ctypes.CDLL(None).prctl(0x59616d61,os.getppid(),0,0,0)!=0:os._exit(125)\n     child = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,preexec_fn=allow_owned_trace)\n     lines = queue.Queue()\n+    reader_errors=[]\n     def receive():\n-        for line in child.stdout: lines.put(line)\n-        lines.put(None)\n-    threading.Thread(target=receive, daemon=True).start()\n+        try:\n+            for line in child.stdout:lines.put(line)\n+        except Exception as error:reader_errors.append(type(error).__name__)\n+        finally:lines.put(None)\n+    reader=threading.Thread(target=receive);reader.start()\n+    observation=ShutdownObservation(child,a.private/(label+\"-shutdown-diagnostic\"))\n     killed = False; text = ''\n     with (a.evidence / (label + '.log')).open('x') as log:\n         while True:\n             try: line = lines.get(timeout=60)\n             except queue.Empty:\n-                diagnostic=a.evidence/(label+'-shutdown-stacks.log')\n-                probe_exit=None;probe_error=None\n-                try:\n-                    with diagnostic.open('x') as trace:\n-                        probe=subprocess.run(['gdb','-q','-batch','-p',str(child.pid),'-ex','set print frame-arguments none','-ex','set print entry-values no','-ex','thread apply all bt 16'],stdout=trace,stderr=subprocess.STDOUT,timeout=15)\n-                        probe_exit=probe.returncode\n-                except Exception as error:probe_error=str(error)\n-                finally:child.kill();child.wait()\n-                records.append({'command': command, 'child_exit': child.returncode, 'watchdog': True,'diagnostic':str(diagnostic),'diagnostic_exit':probe_exit,'diagnostic_error':probe_error}); raise RuntimeError('No progress before original watchdog')\n+                child.kill();child.wait();observation.finish();reader.join(timeout=5)\n+                records.append({'command':command,'child_exit':child.returncode,'watchdog':True,'shutdown_observation':observation.receipt})\n+                raise RuntimeError('No progress before original watchdog')\n             if line is None: break\n-            log.write(line); log.flush(); text += line; print(line.rstrip(), flush=True)\n+            log.write(line); log.flush(); text += line; print(line.rstrip(), flush=True);observation.observe(line)\n             try: deliver(line,child.pid,a.desktop,native_inputs)\n             except Exception:\n-                child.kill();child.wait();records.append({'phase':phase,'command':command,'child_exit':child.returncode,'passed':False,'native_input_failed':True});raise\n+                child.kill();child.wait();observation.finish();reader.join(timeout=5);records.append({'phase':phase,'command':command,'child_exit':child.returncode,'passed':False,'native_input_failed':True});raise\n             if line.startswith('M1B_CRASH_SEAM ') and kill: child.kill(); killed = True\n     child.wait()\n-    passed = child.returncode == (-9 if kill else 0) and 'ERROR:' not in text and (killed if kill else ('M1B_LOCAL_PASS' in text or phase == 'crash-recover' or (phase == 'menu' and 'M2_MENU_PASS' in text)))\n-    records.append({'phase': phase, 'case': label, 'command': command, 'child_exit': child.returncode, 'external_sigkill_at_observed_seam': killed, 'passed': passed})\n+    shutdown_observation=observation.finish();reader.join(timeout=5)\n+    passed = child.returncode == (-9 if kill else 0) and 'ERROR:' not in text and not reader.is_alive() and not reader_errors and (killed if kill else ('M1B_LOCAL_PASS' in text or phase == 'crash-recover' or (phase == 'menu' and 'M2_MENU_PASS' in text)))\n+    records.append({'phase': phase, 'case': label, 'command': command, 'child_exit': child.returncode, 'external_sigkill_at_observed_seam': killed, 'shutdown_observation':shutdown_observation, 'output_eof':not reader.is_alive(), 'reader_errors':reader_errors, 'passed': passed})\n     if not passed: raise RuntimeError('Exported phase failed: ' + phase)\n try:\n     if a.phase != 'crash': run(a.phase, a.private / 'identity')\n"
+      }
+    },
+    "desktop_input.py": {
+      "source_sha256": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf",
+      "supplied_sha256": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf",
+      "adaptation": null
+    }
+  },
+  "watchdog_seconds": 60,
+  "phase": "backup-cancel",
+  "physical_headset_acceptance": false,
+  "child_exit": 0
+}

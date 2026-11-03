@@ -1,0 +1,11 @@
+{
+  "classification": "generated Python import cache, preserved as an actual new inventory addition; not an authored production change or source qualification",
+  "path": "doc/evidence/godot-m4-vive-physical-20261029/__pycache__/publication.cpython-314.pyc",
+  "kind": "file",
+  "mode": 420,
+  "sha256": "e731153d7175aa95d4969d4e979b3552374be8fcb694380b7791bb50916848ad",
+  "bytes": 854,
+  "source": "doc/evidence/godot-m4-vive-physical-20261029/publication.py",
+  "source_sha256": "e0fc88f6a546095e76f7d85d58e991d3f670925cd695d2a74002819dd2ee50e5",
+  "disposition": "No deletion/rewrite; exact bytes/type/mode included in the new delta. Existing generic run.py imports this unchanged publication owner."
+}

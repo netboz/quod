@@ -1,0 +1,35 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-vr-20261029/build_display_inventory.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "start_utc": "2026-10-29T16:03:28Z",
+  "elapsed_seconds": 0.41642093658447266,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/display-inventory-build01/stdout.raw",
+      "sha256": "6c992e6deb5b16ed559bafe9b5c5c04a98a8affd71dd6e89480335050b97accf",
+      "bytes": 853
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/display-inventory-build01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/logs/display-inventory-build01-stdout.log",
+      "sha256": "6c992e6deb5b16ed559bafe9b5c5c04a98a8affd71dd6e89480335050b97accf",
+      "bytes": 853
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/logs/display-inventory-build01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

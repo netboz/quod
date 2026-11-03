@@ -1,0 +1,12 @@
+{
+  "scope": "Inspection preflight failure before any C# compiler/export or new native case",
+  "python_ast_parse": "passed before the API assertion",
+  "failure": "AssertionError: queried XRServer.IsCameraLockedToOrigin as a method and MeshInstance3D.GetAabb as a directly declared member",
+  "actual_pinned_members": ["P:Godot.XRServer.CameraLockedToOrigin", "M:Godot.VisualInstance3D.GetAabb"],
+  "disposition": "Use the actual generated property. GetAabb is inherited and its existing C# call remains valid. Correct the metadata assertion without weakening product checks.",
+  "preserved_prebuild_sources": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01",
+  "true_outer_exit": "not retained by the first inline orchestrator; Python AssertionError output is retained in the session; no campaign exit is inferred",
+  "csharp_build_executed": false,
+  "runtime_application_launched": false,
+  "production_inputs_changed": 0
+}

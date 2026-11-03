@@ -1,0 +1,23 @@
+{
+  "command": [
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-pre-grip01/source/client/godot/dist/quod.x86_64",
+    "--headless",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/input-pre-grip01/identity"
+  ],
+  "desktop": false,
+  "physical_acceptance": false,
+  "driver_hashes": {
+    "input-campaign.py": "feaccff51b3b61cf9405e3bbff912a22cfc9fd24a9afcf8bd33c58c0f25867c0",
+    "desktop_input.py": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26"
+  },
+  "native_input": [],
+  "watchdog_seconds": 60,
+  "passed": false,
+  "client_exit": 1,
+  "output_eof": true,
+  "reader_errors": [],
+  "completion_marker": false
+}

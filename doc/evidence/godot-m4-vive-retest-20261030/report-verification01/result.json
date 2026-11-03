@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-vive-retest-20261030/summarize.py"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.06265907899978629
+}

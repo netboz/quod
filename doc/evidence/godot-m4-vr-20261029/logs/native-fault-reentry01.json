@@ -1,0 +1,63 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-vr-20261029/fault_reentry.py",
+    "native-fault-reentry01",
+    "--client",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-private01/source/client/godot/dist/quod.x86_64"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "audit_inputs.py": "ccd743938b9a0d06affc82470767c6b1853a64ca0d21669a2a0bca9378afcf74",
+    "build_client.py": "5ec6b40f5e2d696a6fc9e0562f8372fe1a711f99c48a9fb13cf1f50b3e503ded",
+    "build_display_inventory.py": "77e2b604c1b95fbb339455f271a7b4414f48959f2681556fb64cf9d730d4ee3e",
+    "display-observer.gd": "1da93e85cbcbf87a3ddb761a6a8ae89c7a2664a87bdc362a264203550f23584a",
+    "display-observer.tscn": "9059abdf4122ecf166ac44b3b0e32aeda9632695c3142abefbaefbcdef7358da",
+    "display_inventory.c": "42db398423731c21e8a5c6417b68581864a3adf1f20ca954aa07e09a7f8dbc3b",
+    "display_rule_check.py": "a3f879b88dc1b1befab174c217dd1ebbf1aaf8676ab0632e7fad1704e95bbe6a",
+    "engine_build.py": "1953acc19730e44deef29a467bb01e8ee2f7f8a96d25f0d9b4727664d29be6e6",
+    "environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+    "extract_api.py": "5f2e61ad1aa08d9ac49ae249d962b25fd7fc5d7f1d3b26cc297de2d414abdd7c",
+    "fault_reentry.py": "e1732a610f06608655f8a3e2ca63d2e3a212addd56e24be6d99855562dc17033",
+    "fetch.py": "40a06718968318f050c7113d526a69508d886c121c3da7598e1087220a8b26dc",
+    "godot-4.7.2-openxr-lifetimes.patch": "06e06c0670bc1ebf3b25f6946bdbcbf48ab674d89e90a5d399a9dbca06e31fed",
+    "inventory.py": "508226ae0a1315800583f30577006b8fe2f5d0036b1bb05dde66e5019d5eb195",
+    "native_case.py": "b202d8c4f7e6f3e1f7a13087bff8c6d7a5b964f60df825d3add68d2f77484249",
+    "observe_display.py": "a722d2e9e0293fa3e9f50e6a0468072f5baa4992746cae2287f6fc9ae456e534",
+    "patch_engine.py": "50b6526d6d8410c92a8d4ecf04c15a2bd53aed14f743ebd311f245766c45137f",
+    "prepare_engine.py": "7344205f424ec972b4dbc6d0deb699b574f28344bb811e7add95bf29362217ca",
+    "prepare_source_baseline.py": "ea7ace88524ef45f65b3c3cabf481885dcd8b6d305aea13a89ea29c75e4b95d9",
+    "retain_toolchain.py": "335213d46ecd681a1ebe0899a9ce5bec39dd29bc3375dc08ff652594e1764f92",
+    "run.py": "860a082e115d37d86b18b0f588412bbbbff63f65757aa63e9acd358cf8e573eb",
+    "sanitize_provenance.py": "91e317cb485abfca30772741a75df96670fb817ebd398984f371194cfcdda8b3",
+    "vive_display.py": "987d616c5425003e74bd261c1a9de346c4d734ff69e72201c687eb59a79bed76"
+  },
+  "start_utc": "2026-10-29T16:59:18Z",
+  "elapsed_seconds": 14.671929836273193,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-fault-reentry01/stdout.raw",
+      "sha256": "3055ce5cf55407ca1ed53eaaf9a29b40d6a953afc81ef2516eb88f86828182ec",
+      "bytes": 4669
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-fault-reentry01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/logs/native-fault-reentry01-stdout.log",
+      "sha256": "3055ce5cf55407ca1ed53eaaf9a29b40d6a953afc81ef2516eb88f86828182ec",
+      "bytes": 4669
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/logs/native-fault-reentry01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

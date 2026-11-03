@@ -1,0 +1,70 @@
+using Godot;
+
+// Desktop and XR feed this same native Control tree. There is no spatial form
+// dispatcher: the ordinary buttons, editors, drafts and submission owners run.
+public partial class SpatialGui : TextureRect
+{
+    public SubViewport Surface { get; }=new() { Name="gui-viewport",Size=new(1200,800),TransparentBg=false,HandleInputLocally=true };
+    bool pressed;
+    bool inside;
+    Control? captured;
+    Vector2 point;
+    public int Captures { get; private set; }
+    public int Cancellations { get; private set; }
+    public bool NativePressed { get; private set; }
+    public event Action? NativeCaptureChanged;
+    public override void _Ready()
+    {
+        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);ExpandMode=ExpandModeEnum.IgnoreSize;StretchMode=StretchModeEnum.Scale;
+        FocusMode=FocusModeEnum.None;MouseFilter=MouseFilterEnum.Stop;AddChild(Surface);Texture=Surface.GetTexture();
+        Surface.RenderTargetUpdateMode=SubViewport.UpdateMode.Always;Resized+=ResizeSurface;ResizeSurface();
+    }
+    void ResizeSurface()=>Surface.Size=new(Math.Max(1,(int)Size.X),Math.Max(1,(int)Size.Y));
+    public override void _GuiInput(InputEvent input)
+    {
+        if(input is not InputEventMouse mouse)return;
+        if(pressed && !NativePressed){AcceptEvent();return;}
+        Move(mouse.Position);
+        if(input is InputEventMouseButton { ButtonIndex:MouseButton.Left } button) {
+            if(button.Pressed) { NativePressed=true;NativeCaptureChanged?.Invoke();Press(); }
+            else Release();
+        } else if(input is not InputEventMouseMotion)Surface.PushInput(input,true);
+        AcceptEvent();
+    }
+    public override void _Input(InputEvent input)
+    {
+        if(input is not InputEventKey key || key.WindowId!=GetWindow().GetWindowId())return;
+        Surface.PushInput(input,true);if(Surface.IsInputHandled())GetViewport().SetInputAsHandled();
+    }
+    public void Move(Vector2 position)
+    {
+        var previous=point;point=position;
+        bool next=new Rect2(Vector2.Zero,Surface.Size).HasPoint(point);
+        if(next&&!inside)Surface.NotifyMouseEntered();else if(!next&&inside)Surface.NotifyMouseExited();inside=next;
+        Surface.PushInput(new InputEventMouseMotion { Position=point,GlobalPosition=point,Relative=point-previous,ButtonMask=pressed ? MouseButtonMask.Left : 0 },true);
+    }
+    public void Leave() { if(inside){inside=false;Surface.NotifyMouseExited();} }
+    public void Press()
+    {
+        if(pressed)return;pressed=true;Captures++;
+        Surface.PushInput(new InputEventMouseButton { ButtonIndex=MouseButton.Left,Pressed=true,ButtonMask=MouseButtonMask.Left,Position=point,GlobalPosition=point },true);
+        captured=Surface.GuiGetHoveredControl();
+        if(captured!=null){captured.TreeExiting+=Cancel;captured.VisibilityChanged+=CaptureVisibility;}
+    }
+    public void Release()
+    {
+        if(!pressed)return;pressed=false;Captures--;bool wasNative=NativePressed;NativePressed=false;
+        if(captured!=null && IsInstanceValid(captured)){captured.TreeExiting-=Cancel;captured.VisibilityChanged-=CaptureVisibility;}captured=null;
+        Surface.PushInput(new InputEventMouseButton { ButtonIndex=MouseButton.Left,Pressed=false,Position=point,GlobalPosition=point },true);
+        if(wasNative)NativeCaptureChanged?.Invoke();
+    }
+    public void Cancel()
+    {
+        if(!pressed)return;
+        // Moving outside before native release clears BaseButton's inside
+        // state. Unlike a synthetic release at the old hit this cannot click.
+        Move(new(-10000,-10000));Release();Surface.GuiCancelDrag();Surface.GuiReleaseFocus();Cancellations++;
+    }
+    void CaptureVisibility() { if(captured==null || !captured.IsVisibleInTree())Cancel(); }
+    public override void _ExitTree()=>Cancel();
+}

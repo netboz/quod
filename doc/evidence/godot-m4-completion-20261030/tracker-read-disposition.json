@@ -1,0 +1,299 @@
+{
+  "route": {
+    "tool": "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+    "explicit_project": "/home/yan/src/quod",
+    "own_session": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f"
+  },
+  "operations": "Seven fresh radar/get pairs, then one session-link call. All actual original tool children0; no calls repeated by this script.",
+  "items": {
+    "QUO-65": {
+      "id": "tsk_01M5YNM08XZDSB9AERHSBMCPYZ",
+      "issueKey": "QUO-65",
+      "title": "M4 \u2014 Operate Godot spaces with desktop and OpenXR controls",
+      "status": "to-do",
+      "progress": 80,
+      "radar_and_get_nested_errors": false
+    },
+    "QUO-60": {
+      "id": "plan_1793104481306_y8rhic",
+      "issueKey": "QUO-60",
+      "title": "Godot client and core ontology consolidation",
+      "status": "in-development",
+      "progress": 67,
+      "radar_and_get_nested_errors": false
+    },
+    "QUO-59": {
+      "id": "task_1793016031614_ib7hoa",
+      "issueKey": "QUO-59",
+      "title": "Define ontology-owned XR controller descriptions and input mappings",
+      "status": "to-do",
+      "progress": null,
+      "radar_and_get_nested_errors": false
+    },
+    "QUO-27": {
+      "id": "task_1791574102924_2lfx69",
+      "issueKey": "QUO-27",
+      "title": "Qualify the optional native Godot client and resolve OpenXR shutdown failures",
+      "status": "to-do",
+      "progress": null,
+      "radar_and_get_nested_errors": false
+    },
+    "tsk_01M5PY8TEXKG858WBZJ1RHC6EW": {
+      "id": "tsk_01M5PY8TEXKG858WBZJ1RHC6EW",
+      "issueKey": null,
+      "title": "Stage 2 \u2014 Same-agent entry and space Eidolons",
+      "status": "to-do",
+      "progress": 50,
+      "radar_and_get_nested_errors": false
+    },
+    "QUO-62": {
+      "id": "tsk_01M5YNM08XX0HQEGRA6WN5J9S4",
+      "issueKey": "QUO-62",
+      "title": "M1 \u2014 Sign in and use the ontology-driven GUI in Godot",
+      "status": "to-do",
+      "progress": 100,
+      "radar_and_get_nested_errors": false
+    },
+    "QUO-64": {
+      "id": "tsk_01M5YNM08XYDABJXFR89HJV6YK",
+      "issueKey": "QUO-64",
+      "title": "M3 \u2014 Enter and reopen the same space with the same agent in Godot",
+      "status": "to-do",
+      "progress": 100,
+      "radar_and_get_nested_errors": false
+    }
+  },
+  "radar_shared_signals_reported": 0,
+  "radar_recent_threads_reported": 0,
+  "link_result": {
+    "action": "linked",
+    "linkedCount": 0,
+    "shared_attribution_proven": false
+  },
+  "publication_block": "Body/checklist/description automatic approval block preserved; no publication retry or bypass; no metadata correction.",
+  "stale_body_disposition": "Source and accepted evidence take precedence over historical checklist/unstarted wording; no full Stage2 credit.",
+  "private_original_receipts": {
+    "QUO-27-get.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-27-get.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-27-get.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-27-get.stdout",
+      "sha256": "f353759cbe3b1652ae24647f72677c77406a485208b3e4ec7e1cce06d1b951ef",
+      "bytes": 2631,
+      "mode": "0600"
+    },
+    "QUO-27-radar.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-27-radar.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-27-radar.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-27-radar.stdout",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286,
+      "mode": "0600"
+    },
+    "QUO-27.txt": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-27.txt",
+      "sha256": "518036e01c226c3a233351bdf5e2c9046aad0ad86e2a718fd999d4a981594f04",
+      "bytes": 2490,
+      "mode": "0600"
+    },
+    "QUO-59-get.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-59-get.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-59-get.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-59-get.stdout",
+      "sha256": "6e7da6d9353a4f68465715d38f7ce9654b9289018c6b8185f32b51f8d15953b2",
+      "bytes": 24543,
+      "mode": "0600"
+    },
+    "QUO-59-radar.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-59-radar.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-59-radar.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-59-radar.stdout",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286,
+      "mode": "0600"
+    },
+    "QUO-59.txt": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-59.txt",
+      "sha256": "3d780451a3eab8a65db1ce6fc7839d8e0b30c813ba4d915eb6f0561fcfa0b806",
+      "bytes": 24082,
+      "mode": "0600"
+    },
+    "QUO-60-get.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-60-get.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-60-get.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-60-get.stdout",
+      "sha256": "ceeba171ab06c0208f06cabf79ac1270ba57510b40a6edb4f8e311732dff7fb8",
+      "bytes": 56505,
+      "mode": "0600"
+    },
+    "QUO-60-radar.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-60-radar.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-60-radar.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-60-radar.stdout",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286,
+      "mode": "0600"
+    },
+    "QUO-60.txt": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-60.txt",
+      "sha256": "e69b7d4cfa3bcbe905f569fff1339eae8cf82249e1081c711c5af54132fcf122",
+      "bytes": 55990,
+      "mode": "0600"
+    },
+    "QUO-62-get.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-62-get.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-62-get.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-62-get.stdout",
+      "sha256": "09c3281f9434d0e38d7a218434b93b9eb658d5418ba412575825715dac6e654c",
+      "bytes": 23948,
+      "mode": "0600"
+    },
+    "QUO-62-radar.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-62-radar.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-62-radar.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-62-radar.stdout",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286,
+      "mode": "0600"
+    },
+    "QUO-62.txt": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-62.txt",
+      "sha256": "511f06a97534870945e97dc72848b19999445735791ecc9f65acc6e5be45f8be",
+      "bytes": 23434,
+      "mode": "0600"
+    },
+    "QUO-64-get.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-64-get.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-64-get.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-64-get.stdout",
+      "sha256": "bc0af19aa79ac87dcf3a44e0d0038414c8c81660fd4eb001be2c1049e3390b7c",
+      "bytes": 14557,
+      "mode": "0600"
+    },
+    "QUO-64-radar.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-64-radar.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-64-radar.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-64-radar.stdout",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286,
+      "mode": "0600"
+    },
+    "QUO-64.txt": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-64.txt",
+      "sha256": "966a27f905f59ad233ad57f48ca2b90ca167ddea4cf52d7ab8b61b81201d54fc",
+      "bytes": 14152,
+      "mode": "0600"
+    },
+    "QUO-65-get.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-65-get.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-65-get.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-65-get.stdout",
+      "sha256": "72c7d04a280f073d36a3f9d9908248f8d374fdbbf764b6f933f77a272ab5c150",
+      "bytes": 7159,
+      "mode": "0600"
+    },
+    "QUO-65-link.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-65-link.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-65-link.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-65-link.stdout",
+      "sha256": "97ff28950cea38656db16f3d43f7a3148025e2ddc9975de03f8377dcf4176b07",
+      "bytes": 503,
+      "mode": "0600"
+    },
+    "QUO-65-radar.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-65-radar.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "QUO-65-radar.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-65-radar.stdout",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286,
+      "mode": "0600"
+    },
+    "QUO-65.txt": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/QUO-65.txt",
+      "sha256": "1c8b4f370be391ecc94396cfdc37aa8b820f035dd4c476918e4b15ed6f36b544",
+      "bytes": 6848,
+      "mode": "0600"
+    },
+    "tsk_01M5PY8TEXKG858WBZJ1RHC6EW-get.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/tsk_01M5PY8TEXKG858WBZJ1RHC6EW-get.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "tsk_01M5PY8TEXKG858WBZJ1RHC6EW-get.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/tsk_01M5PY8TEXKG858WBZJ1RHC6EW-get.stdout",
+      "sha256": "2a238667b1c0bb6fe97ee538e80976aeed480e7ea91a2270bb8793a38a1602f6",
+      "bytes": 4507,
+      "mode": "0600"
+    },
+    "tsk_01M5PY8TEXKG858WBZJ1RHC6EW-radar.stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/tsk_01M5PY8TEXKG858WBZJ1RHC6EW-radar.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": "0600"
+    },
+    "tsk_01M5PY8TEXKG858WBZJ1RHC6EW-radar.stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/tsk_01M5PY8TEXKG858WBZJ1RHC6EW-radar.stdout",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286,
+      "mode": "0600"
+    },
+    "tsk_01M5PY8TEXKG858WBZJ1RHC6EW.txt": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/completion124-tracker01/tsk_01M5PY8TEXKG858WBZJ1RHC6EW.txt",
+      "sha256": "d0677c01e3710fb532b94ff0adb74c733e21333510ae38ee1fa8cf2ee5333c4c",
+      "bytes": 4224,
+      "mode": "0600"
+    }
+  }
+}

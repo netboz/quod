@@ -1,0 +1,193 @@
+{
+  "checkpoint": "QUO-65 diagnostic in-headset cue and case16 quiet interval/retirement",
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "actual_api_model": "openai-codex:gpt-6.1-sol",
+  "launcher_requested_and_returned_effort": "max",
+  "effective_backend_effort": "unexposed",
+  "branch": "worktree/pearl-stone",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "parent": "f716ddf5e578df957a5b18421a0727a32c634f87",
+  "protocol_retirement_passed": true,
+  "full_physical_qualification_passed": false,
+  "human_look_model_visibility": "FAILED: actual Yan says No controllers; exact look time unknown. Do not place inside/after the751s event interval or attribute cause.",
+  "new_protocol": "Root explicit meta1793383924548-hr9stjw: conditional in-headset cue, preagreed instructions; no card or live root LOOK NOW round trip.",
+  "prelaunch_full_batch_read": true,
+  "prelaunch_batch_count": 4,
+  "prefocus_full_batch_count": 5,
+  "ready_report_before_focus": "meta-1793384451139-wonpj77",
+  "loss_report": "meta-1793385323044-2m80995",
+  "closed_report": "meta-1793385434049-rrvknq9",
+  "client_runtime_server_driver_observer_and_wrappers_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "case_eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "runtime-stdout": true,
+    "runtime-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "wrapper_eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "focus_wrapper_eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "reader_errors": [],
+  "diagnostics": [],
+  "timeout_or_stack": false,
+  "helper_checks": 13,
+  "new_pure_cue_checks": 14,
+  "pure_checks_true_exit": 0,
+  "pure01_failure_retained": "NU1100 before assertions; separate02 changes only qualified local dependency feed",
+  "new_affected_source_only_build_commands": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "build_outer_exit": 0,
+  "unchanged_server_core_engine_runtime_suites_or_builds": 0,
+  "case_elapsed_seconds": 976.7478518486023,
+  "listener_elapsed_seconds": 909.1099512577057,
+  "original_bounds": {
+    "runtime_startup": 30,
+    "single_inventory": 5,
+    "participant": 1800,
+    "close": 60,
+    "wrapper": 2100
+  },
+  "original_listener_absolute_deadline": 31200.260644344,
+  "listener_result": {
+    "armed": true,
+    "runtime_started": false,
+    "focus_changed": false,
+    "subscription_count": 1,
+    "errors": [],
+    "instance_sha256": "fdb2f0232f78b8a23aa7c7f23adcfd476a7715e40e9eee04d8f1bbeeb20e29d7",
+    "rows": 9,
+    "event_messages": 6,
+    "unparsed_fragment": false,
+    "local_connection_closed": true,
+    "remote_eof_observed": false,
+    "snapshot_is_not_ordered_event_barrier": true,
+    "continuous_native_or_pixel_claim": false,
+    "successor_classifications": 1,
+    "successor_lookups": 0,
+    "successor_is_not_focus_initiator": true
+  },
+  "post_focus_owned_event": {
+    "kind": "transition",
+    "monotonic": 29489.433135162,
+    "utc": "2026-10-30T18:20:55.065914+00:00",
+    "owned": true
+  },
+  "first_later_loss": {
+    "kind": "transition",
+    "monotonic": 30240.440744284,
+    "utc": "2026-10-30T18:33:26.073708+00:00",
+    "owned": false
+  },
+  "received_owned_interval_seconds": 751.0076091219998,
+  "quiet_after_single_focus_until_first_loss": true,
+  "after_focus_node_utc": "2026-10-30T18:20:58.1047280+00:00",
+  "window_has_focus_after_focus_literal": false,
+  "after_focus_head_both_hands_high_models_visible": true,
+  "later_loss_node_utc": "2026-10-30T18:34:56.8043187+00:00",
+  "later_app_focus_false_native_focused_head_hands_high_models_hidden": true,
+  "actual_frame_cue_markers": [
+    "M4_VIVE_LOOK_CUE READY frame=2",
+    "M4_VIVE_LOOK_CUE WAITING frame=48528",
+    "M4_VIVE_LOOK_CUE READY frame=50920",
+    "M4_VIVE_LOOK_CUE WAITING frame=50951"
+  ],
+  "cue_scope": "State selection/withdrawal observed in actual frame callback; marker frame counts and separately received event UTC are not an atomic sample or raster/returned-status claim.",
+  "focus_scope": "Received owner notifications; no initiating actor/cause/persistent native focus or human look proof. One unknown/unbound recipient, zero lookups, no rearm or second worker focus.",
+  "raw_button_edges": "Actual native source edges retained; user action/origin/intent/product mapping or deliberate test success not inferred. No buttons were requested.",
+  "final_metrics": {
+    "Running": false,
+    "Subscriptions": 0,
+    "sources": 0,
+    "appearances": 0,
+    "MenuRedraws": 0,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 0,
+    "StopRequests": 0,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 2,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 2,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 0,
+      "LiveLeases": 0
+    }
+  },
+  "manual_instructions": [
+    "geometry",
+    "geometry",
+    "geometry",
+    "stop",
+    "finish"
+  ],
+  "post_ready_report_focus_attempts": 1,
+  "post_focus_reports_before_first_loss": 0,
+  "notifier_during_interval": false,
+  "ordinary_startup_focus_dispatches": 1,
+  "ordinary_owned_close_dispatches": 1,
+  "calibration_unchanged": true,
+  "hdmi_restored_disabled": true,
+  "other_displays_and_current_configs_unchanged": true,
+  "current_config_files": 76,
+  "new_api_private_reference": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product16/api-dump.raw",
+    "bytes": 795351016,
+    "driver_recorded_sha256": "5dfc64dc05c225b8d699e74fa3017a20f0e17a71c928ac330a5cbd347a1782a4",
+    "stat_key": [
+      2050,
+      1724280,
+      795351016,
+      1793385327561560441,
+      1793385328823495408
+    ],
+    "parsed": false,
+    "hashed_again": false,
+    "scope": "Actual completed driver hash receipt only; no counts/returned native status/pixel claim."
+  },
+  "explicit_recipient_bindings_empty": true,
+  "shared_physical_manual_publisher_observer_byte_unchanged": true,
+  "production_application_engine_runtime_changes": 0,
+  "new_supplied_inputs": 94,
+  "new_exported_files": 196,
+  "diagnostic_nondistributable": true,
+  "remaining": [
+    "Human controller visibility FAILED at unknown look time. No case17/refocus/product or focus-policy fix authorized; parent owns bounded consult and disposition.",
+    "No fullM4/QUO27/59/Stage2/Quest/historical desktop/cold-head resolution; root independent acceptance pending."
+  ],
+  "final_parent_human_report": {
+    "id": "meta-1793385555320-ed7znla",
+    "exact_observations": [
+      "No controllers. I'm fed that's now two days you are trying to get those shitty controllers working",
+      "and your client is just a shit to start"
+    ],
+    "look_time": "unknown",
+    "cause": "unestablished",
+    "neutral90_gesture_pixel_success": false,
+    "new_external_consult": "Root explicitly authorized ONE bounded read-only Fable consultation; worker launches none. Advice remains consultative."
+  }
+}

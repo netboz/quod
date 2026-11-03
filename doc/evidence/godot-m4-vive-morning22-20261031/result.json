@@ -1,0 +1,168 @@
+{
+  "case": "native-vive-product22",
+  "passed": false,
+  "actual_launch_exit": 2,
+  "preservation_passed": true,
+  "cause": "launch.py supplied --timeout 2100 to the unchanged wrapper, whose parser accepts only label and command; its existing watchdog is already 2100 seconds",
+  "preflight": {
+    "passed": true,
+    "case_label": "native-vive-product22",
+    "runtime_started": false,
+    "lease_requested": false,
+    "provider_true_child_exit": 0,
+    "provider_complete": true,
+    "hdmi_offer": true,
+    "connector828_offered": true,
+    "hdmi_restored_disabled": true,
+    "other_displays_unchanged": true,
+    "config_unchanged": true
+  },
+  "fixture_runtime_application_and_human_step": "UNRUN; argparse stopped before wrapper body/child launch",
+  "streams": "Actual combined PTY transcript retained; separate child streams/readers never created",
+  "new_invocation_or_source_correction": "UNRUN",
+  "accepted_parent_snapshot": "bf4b7235f3c9b923bbd7780a7a956540a5c18bedeb3e41870ad406eac82094f5",
+  "files": [
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/provider-stdout.raw",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/provider-stdout.raw",
+      "sha256": "b55252c9e08c72af18b107abf136be8e0dbe7ca9e4bc89473d1c228f1eacf3f4",
+      "bytes": 5697,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/display-inventory",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/display-inventory",
+      "sha256": "329b0cf3654c8b84a50efc7e7a28093366a6b4b1498715ddf260f969cb5772a7",
+      "bytes": 23200,
+      "full_mode": 33216
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/display-rule.json",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/display-rule.json",
+      "sha256": "a085134a1448d9e32f49a65fab527541c2cb86301d5b80cfd781071997cdb7aa",
+      "bytes": 21972,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/vive_display.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/vive_display.py",
+      "sha256": "987d616c5425003e74bd261c1a9de346c4d734ff69e72201c687eb59a79bed76",
+      "bytes": 2289,
+      "full_mode": 33188
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/driver-digest-adaptation.patch",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/driver-digest-adaptation.patch",
+      "sha256": "a6b352283f7b10b2ed30116e4adf403eef10b87e8a5d0871fe8d7b874bffbad7",
+      "bytes": 1271,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/display_inventory.c",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/display_inventory.c",
+      "sha256": "42db398423731c21e8a5c6417b68581864a3adf1f20ca954aa07e09a7f8dbc3b",
+      "bytes": 6569,
+      "full_mode": 33188
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/provider-stderr.raw",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/provider-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/preparation-private.json",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/preparation-private.json",
+      "sha256": "daa30fd99abe7045ae93a2428225589448966cc826428d0d447a5c4ef7aad809",
+      "bytes": 1049,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/unchanged-owners/godot-m4-vive-physical-20261029/environment.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/unchanged-owners/godot-m4-vive-physical-20261029/environment.py",
+      "sha256": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+      "bytes": 1178,
+      "full_mode": 33188
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/unchanged-owners/godot-m4-vive-physical-20261029/manual_run.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/unchanged-owners/godot-m4-vive-physical-20261029/manual_run.py",
+      "sha256": "2620ffe864b19135f1557e19280cec34fe18c19ac51f940379573da56b0e9639",
+      "bytes": 2715,
+      "full_mode": 33188
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/unchanged-owners/godot-m4-vive-physical-20261029/publication.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/unchanged-owners/godot-m4-vive-physical-20261029/publication.py",
+      "sha256": "e0fc88f6a546095e76f7d85d58e991d3f670925cd695d2a74002819dd2ee50e5",
+      "bytes": 274,
+      "full_mode": 33188
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/unchanged-owners/godot-m4-vive-retest-20261030/physical-morning.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/unchanged-owners/godot-m4-vive-retest-20261030/physical-morning.py",
+      "sha256": "c9c9e58dcbd23acfca093bfd274af455d1a3b2b3fa6de73506acee9484b52860",
+      "bytes": 18143,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/unchanged-owners/godot-m4-vive-retest-20261030/case_hashes.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/unchanged-owners/godot-m4-vive-retest-20261030/case_hashes.py",
+      "sha256": "711d85c0bb5cdc19683590f9ea869fe4487ef342d5a146052f1aa3516edcecbd",
+      "bytes": 352,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product22-preparation/unchanged-owners/godot-m4-vive-retest-20261030/physical09.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/preflight/unchanged-owners/godot-m4-vive-retest-20261030/physical09.py",
+      "sha256": "360b166bacb988cb972f53f1d78df15bca70baf95e4a7354c29094fc5cb053c0",
+      "bytes": 18152,
+      "full_mode": 33152
+    },
+    {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/launch.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/invocation/launch.py",
+      "sha256": "c92745e767e9eef8594391b747c205d91a47e46292bf0d32792836ccce040d56",
+      "bytes": 10484,
+      "full_mode": 33188
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-launch-inputs02/prepared.json",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/invocation/prepared.json",
+      "sha256": "bcdd55be554101e1d28652f7a3880444cf55331ebeaec26a7fb5e8549fcd4298",
+      "bytes": 7509,
+      "full_mode": 33152
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-launch-inputs02/prepare_live.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/invocation/prepare_live.py",
+      "sha256": "d7731f41bc20a8fda7991880b2cd9534975bf28b3349d7ba8bfd16a3a3035d2a",
+      "bytes": 6787,
+      "full_mode": 33188
+    },
+    {
+      "source": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-launch-inputs02/case_hashes.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/invocation/case_hashes.py",
+      "sha256": "711d85c0bb5cdc19683590f9ea869fe4487ef342d5a146052f1aa3516edcecbd",
+      "bytes": 352,
+      "full_mode": 33152
+    },
+    {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-morning22-20261031/execution-receipt.json",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/invocation/execution-receipt.json",
+      "sha256": "6751fb326fd98077439c0bbf23c094f774ba1f9d74bb5525aceef5d5244acd80",
+      "bytes": 1300,
+      "full_mode": 33188
+    },
+    {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-morning22-20261031/preserve.py",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/case22-failure01/invocation/preserve.py",
+      "sha256": "6766cb27fde3045faa4643df14f2b3b6ef3cb1cee589e68aada00560a5789901",
+      "bytes": 3696,
+      "full_mode": 33188
+    }
+  ],
+  "export_bytes_rehashed": 0,
+  "old_api_bytes_read": 0
+}

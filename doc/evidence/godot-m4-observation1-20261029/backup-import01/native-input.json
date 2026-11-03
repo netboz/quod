@@ -1,0 +1,146 @@
+[
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2893,y=580})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 1084006,
+    "before_pid": 1084006,
+    "after_pid": 1084006,
+    "target_geometry": {
+      "address": "0x5571668c1a40",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 1084006,
+    "before_pid": 1084006,
+    "after_pid": 1084006,
+    "target_geometry": {
+      "address": "0x5571668c1a40",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.window.close({window=\"address:0x5571668c1a40\"})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 1084006,
+    "before_pid": 1084006,
+    "after_pid": 1084006,
+    "target_geometry": {
+      "address": "0x5571668c1a40",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2893,y=580})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 1084006,
+    "before_pid": 1084006,
+    "after_pid": 1084006,
+    "target_geometry": {
+      "address": "0x5571668cfbf0",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 1084006,
+    "before_pid": 1084006,
+    "after_pid": 1084006,
+    "target_geometry": {
+      "address": "0x5571668cfbf0",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.window.close({window=\"address:0x5571668cfbf0\"})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 1084006,
+    "before_pid": 1084006,
+    "after_pid": 1084006,
+    "target_geometry": {
+      "address": "0x5571668cfbf0",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  }
+]

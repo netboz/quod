@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/qualify.py", line 29, in <module>
+    assert c['passed'] and len(c['checks'])==count
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

@@ -1,0 +1,170 @@
+[
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.focus({window=\"address:0x5571666ee280\"})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 927923,
+    "before_pid": 4014,
+    "after_pid": 927923,
+    "target_geometry": {
+      "address": "0x5571666ee280",
+      "at": [
+        1968,
+        1002
+      ],
+      "size": [
+        1850,
+        496
+      ]
+    }
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2966,y=508})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 927923,
+    "before_pid": 927923,
+    "after_pid": 927923,
+    "target_geometry": {
+      "address": "0x5571666ee280",
+      "at": [
+        1968,
+        292
+      ],
+      "size": [
+        1850,
+        496
+      ]
+    }
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 927923,
+    "before_pid": 927923,
+    "after_pid": 927923,
+    "target_geometry": {
+      "address": "0x5571666ee280",
+      "at": [
+        1968,
+        292
+      ],
+      "size": [
+        1850,
+        496
+      ]
+    }
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2901,y=554})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 929052,
+    "before_pid": 929052,
+    "after_pid": 929052,
+    "target_geometry": {
+      "address": "0x5571667d0600",
+      "at": [
+        2591,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 929052,
+    "before_pid": 929052,
+    "after_pid": 929052,
+    "target_geometry": {
+      "address": "0x5571667d0600",
+      "at": [
+        2591,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.focus({window=\"address:0x5571667d0600\"})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 929052,
+    "before_pid": 4014,
+    "after_pid": 929052,
+    "target_geometry": {
+      "address": "0x5571667d0600",
+      "at": [
+        2591,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.window.close({window=\"address:0x5571667d0600\"})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 929052,
+    "before_pid": 929052,
+    "after_pid": 929052,
+    "target_geometry": {
+      "address": "0x5571667d0600",
+      "at": [
+        2591,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  }
+]

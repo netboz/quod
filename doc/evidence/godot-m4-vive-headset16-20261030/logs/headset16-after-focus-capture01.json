@@ -1,0 +1,45 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-vive-headset16-20261030/capture.py",
+    "after-focus01"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "arm.py": "9d2c343b17e617cc362192401c0d0e1384643c16691b05c8306f1ce84ac0d5c4",
+    "capture.py": "15b17baccf686b4006f4d21bf8c75bd8401301886ce906534e30b1a9c9ddbcfa",
+    "freeze_hashes.py": "e9aadca43cd619f3d05cadc6e3fdd390df326d79056e7cb89a33f0330547b2b4",
+    "guard.py": "bf8fe7343f1bf2f56aef7377a5c64ae18debb3cbad496ac77568ec11af5ccb5b",
+    "prepare.py": "0c0d51214ff9f754a64051dba3e82410adaf347b72bd65f5d0069f42096747a7",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479"
+  },
+  "start_utc": "2026-10-30T18:21:02Z",
+  "elapsed_seconds": 0.064422607421875,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/headset16-after-focus-capture01/stdout.raw",
+      "sha256": "b673e1e4f71aa65c231333efe977341a02a756dbbfa5670fef4266d83a39bcbd",
+      "bytes": 2213
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/headset16-after-focus-capture01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-headset16-20261030/logs/headset16-after-focus-capture01-stdout.log",
+      "sha256": "b673e1e4f71aa65c231333efe977341a02a756dbbfa5670fef4266d83a39bcbd",
+      "bytes": 2213
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-headset16-20261030/logs/headset16-after-focus-capture01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

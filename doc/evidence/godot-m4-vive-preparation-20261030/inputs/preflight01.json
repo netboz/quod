@@ -1,0 +1,88 @@
+{
+  "label": "physical-preparation01",
+  "offline_build_only": true,
+  "files": {
+    "doc/evidence/godot-m4-vive-preparation-20261030/build.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-vive-preparation-20261030/build.py",
+      "sha256": "c5a1b11774df45746e5be3270b914dd1021bacbe5878b96bd70258578e088ad0",
+      "bytes": 7207,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-vive-preparation-20261030/cache.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-vive-preparation-20261030/cache.py",
+      "sha256": "e10353e00d18e4bc779a1bd969a0e94dc8e7233ef246b182f39eb15f8c03a8ba",
+      "bytes": 427,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-vive-preparation-20261030/preflight.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-vive-preparation-20261030/preflight.py",
+      "sha256": "a81278171eb6515d039279b43bbf8b61e1efc32b17f45ecdadaebb62fa4d96b6",
+      "bytes": 1822,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-vive-preparation-20261030/run_build.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-vive-preparation-20261030/run_build.py",
+      "sha256": "52ec752b432407f12252904cdc1b54dc3dc5185ebc5116331ddec7e29e50ec1a",
+      "bytes": 3426,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-presentation-20261030/build.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-presentation-20261030/build.py",
+      "sha256": "7e09edae7baaa3f1f238e0a941828146c91f79b997abff3341090dd3cae8011f",
+      "bytes": 5511,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-presentation-20261030/digests.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-presentation-20261030/digests.py",
+      "sha256": "4c356fa8d6501037fa77bde705af6fd1e916a76e2efb744f2dae96e57b0edd19",
+      "bytes": 3508,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-vive-physical-20261029/environment.py",
+      "sha256": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+      "bytes": 1178,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-vive-charged-20261029/PhysicalChecks.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-vive-charged-20261029/PhysicalChecks.cs",
+      "sha256": "dea82a9dec22e51de3ee67b9ccb18b5e6ca4b6f5c5aee000422c14acb2304898",
+      "bytes": 19201,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-vive-charged-20261029/inputs/client-physical04-manifest.json": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-vive-charged-20261029/inputs/client-physical04-manifest.json",
+      "sha256": "43eb6430a6a934f028183d7a3920d439c2269d9c4846bbd735018b532486d69b",
+      "bytes": 61919,
+      "mode": 384
+    },
+    "doc/evidence/godot-m4-presentation-20261030/inputs/client-presentation-final02-manifest.json": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/doc/evidence/godot-m4-presentation-20261030/inputs/client-presentation-final02-manifest.json",
+      "sha256": "7abf72a2c42027e889a8df268e1edbcdb2f90e3622bdf023e1e5c84824ae4ff2",
+      "bytes": 72095,
+      "mode": 384
+    },
+    "client/godot/tests/ExportChecks.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/client/godot/tests/ExportChecks.cs",
+      "sha256": "0e383dc8748f3713cf5677d8a9d49b3009f158b98ea0f4962960d92df83a3161",
+      "bytes": 20724,
+      "mode": 420
+    },
+    "client/native/tools/check.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/client/native/tools/check.py",
+      "sha256": "7565d31ea95498ad104b8abcba15b0225ed76cb1fbb5a141bd1a375c41dda92c",
+      "bytes": 1442,
+      "mode": 420
+    },
+    "client/godot-tools/run.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/physical-preparation01/client/godot-tools/run.py",
+      "sha256": "0d44ff8edf9d57388a0f425e47721d421f5a8d052732084e355a94813fe0c8fb",
+      "bytes": 4092,
+      "mode": 420
+    }
+  },
+  "data_free_bytes": 809618006016,
+  "compiled_application_inputs_copied": false,
+  "native_runtime_started": false,
+  "functional_application_started": false
+}

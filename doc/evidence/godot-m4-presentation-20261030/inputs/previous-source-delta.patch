@@ -1,0 +1,128 @@
+--- a/client/godot/OpenXRInput.cs
++++ b/client/godot/OpenXRInput.cs
+@@ -78,6 +78,7 @@
+     int selection=-1;
+     bool attached,active,lifecycleSubscribed,shuttingDown,applicationFocused=true,visible=true,disposed,pointingGui;
+     Transform3D? calibration;
++    Vector2I panelPixels;
+     string? controlIdentity;
+     Term? pressedSubject;
+     IControllerSource? pointerSource;
+@@ -124,6 +125,7 @@
+     {
+         if(attached || disposed)return;attached=true;
+         XRServer.Singleton.TrackerAdded+=TrackerAdded;XRServer.Singleton.TrackerRemoved+=TrackerRemoved;XRServer.Singleton.TrackerUpdated+=TrackerUpdated;Subscriptions+=3;
++        gui.Surface.SizeChanged+=ResizePanel;Subscriptions++;ResizePanel();
+         foreach(var name in XRServer.GetTrackers((int)XRServer.TrackerType.Controller).Keys)ReconcileSource(name.AsStringName());
+     }
+     void ReconcileSource(StringName name)
+@@ -160,6 +162,14 @@
+     public void ContextChanged() { ControlChanged();Router.ContextChanged(); }
+     public void InvalidateWorld() { Router.Cancel();calibration=null;pressedSubject=null; }
+     void PositionPanel()=>panel.Transform=scene.CameraPose*new Transform3D(Basis.Identity,new(0,0,-2));
++    void ResizePanel()
++    {
++        var mesh=(QuadMesh)panel.Mesh;var pixels=gui.Surface.Size;
++        if(pixels==panelPixels)return;
++        var size=new Vector2(mesh.Size.Y*pixels.X/pixels.Y,mesh.Size.Y);
++        Router.Cancel();gui.Cancel();panelPixels=pixels;
++        if(mesh.Size!=size)mesh.Size=size;
++    }
+     public override void _Process(double delta)
+     {
+         if(!active || xr==null)return;
+@@ -218,8 +228,9 @@
+     {
+         var ray=Ray(source);var inverse=panel.GlobalTransform.AffineInverse();var start=inverse*ray.Origin;var direction=inverse.Basis*ray.Direction;
+         if(!panel.Visible || Math.Abs(direction.Z)<0.000001f)return null;float distance=-start.Z/direction.Z;if(distance<0)return null;
+-        var point=start+direction*distance;if(Math.Abs(point.X)>0.75f || Math.Abs(point.Y)>0.5f)return null;
+-        return new Vector2((point.X/1.5f+0.5f)*gui.Surface.Size.X,(0.5f-point.Y)*gui.Surface.Size.Y);
++        var size=((QuadMesh)panel.Mesh).Size;
++        var point=start+direction*distance;if(Math.Abs(point.X)>size.X/2 || Math.Abs(point.Y)>size.Y/2)return null;
++        return new Vector2((point.X/size.X+0.5f)*gui.Surface.Size.X,(0.5f-point.Y/size.Y)*gui.Surface.Size.Y);
+     }
+     public void Hover(IControllerSource input,string context)
+     {
+@@ -283,6 +294,7 @@
+         if(disposed)return;active=false;Router.Cancel();gui.Cancel();CancelMenu();
+         if(attached) {
+             attached=false;XRServer.Singleton.TrackerAdded-=TrackerAdded;XRServer.Singleton.TrackerRemoved-=TrackerRemoved;XRServer.Singleton.TrackerUpdated-=TrackerUpdated;Subscriptions-=3;
++            gui.Surface.SizeChanged-=ResizePanel;Subscriptions--;
+             foreach(var name in sources.Keys.ToArray())RetireSource(name);
+         }
+         if(xr!=null && lifecycleSubscribed) {
+--- a/client/godot/ScenePanel.cs
++++ b/client/godot/ScenePanel.cs
+@@ -47,7 +47,9 @@
+     {
+         CustomMinimumSize = new(600, 360); SizeFlagsHorizontal = SizeFlags.ExpandFill; Stretch = true; MouseFilter = MouseFilterEnum.Stop; FocusMode = FocusModeEnum.All;
+         AddChild(viewport); viewport.AddChild(root); viewport.AddChild(camera);
+-        viewport.FindWorld3D().Environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = Colors.Black };
++        viewport.FindWorld3D().Environment = new Godot.Environment {
++            BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = Colors.Black,
++            AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = Colors.White, AmbientLightEnergy = 1 };
+         camera.Position = new(0, 0, 5);
+         FocusExited += ReleaseInput;
+     }
+--- a/client/godot/tests/ControllerChecks.cs
++++ b/client/godot/tests/ControllerChecks.cs
+@@ -32,7 +32,8 @@
+         ulong frame=0;
+         void Advance()=>adapter.Advance(++frame,true);
+         void Pose(XRControllerTracker t,Vector2 pixel) {
+-            var p=new Vector3((pixel.X/gui.Surface.Size.X-.5f)*1.5f,(.5f-pixel.Y/gui.Surface.Size.Y),1);
++            var size=((QuadMesh)adapter.GuiSurface.Mesh).Size;
++            var p=new Vector3((pixel.X/gui.Surface.Size.X-.5f)*size.X,(.5f-pixel.Y/gui.Surface.Size.Y)*size.Y,1);
+             t.SetPose("aim",new(Basis.Identity,p),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+         }
+         void Held(XRControllerTracker t,string name,bool down) { t.SetInput(name,down);Advance(); }
+@@ -118,6 +119,27 @@
+         button.Hide();gui.Surface.AddChild(removable);await Frame();Pose(left,removable.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);
+         Check(gui.Captures==1,"replacement native control receives one capture");removable.Free();Held(left,"trigger_press",false);
+         Check(gui.Captures==0 && clicked==beforeDisposal,"disposing a captured native control releases without click-through");button.Show();
++        var originalGuiSize=gui.Size;gui.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft);gui.Size=originalGuiSize;await Frame();
++        Pose(left,button.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);int beforeResize=clicked,meshChanges=0;
++        var quad=(QuadMesh)adapter.GuiSurface.Mesh;void GeometryChanged()=>meshChanges++;quad.Changed+=GeometryChanged;
++        gui.Size=new(800,800);await Frame();
++        Check(gui.Captures==0 && clicked==beforeResize && !button.ButtonPressed && meshChanges==1,"actual shared GUI resize cancels capture without click and updates one panel geometry");
++        Held(left,"trigger_press",false);Advance();Pose(left,button.GetGlobalRect().GetCenter());Held(left,"trigger_press",true);
++        meshChanges=0;gui.Size=new(1000,1000);await Frame();
++        Check(gui.Captures==0 && clicked==beforeResize && meshChanges==0,"equal-aspect pixel resize cancels capture without rebuilding unchanged geometry");
++        Held(left,"trigger_press",false);Advance();Pose(left,button.GetGlobalRect().GetCenter());Held(left,"trigger_press",true);
++        string resizeResources=System.Text.Json.JsonSerializer.Serialize(resources.Metrics);meshChanges=0;
++        for(int i=0;i<20;i++)gui.Surface.EmitSignal(Viewport.SignalName.SizeChanged);
++        Check(gui.Captures==1 && meshChanges==0 && System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==resizeResources,"unchanged size notices retain capture and perform zero mesh or model work");
++        Held(left,"trigger_press",false);Check(clicked==beforeResize+1,"resized panel ray activates the same native control exactly once after neutral");
++        gui.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);await Frame();
++        int edgeClicks=0;var edgeButton=new Button { Text="Actual panel edge",Position=new(gui.Surface.Size.X-250,100),Size=new(220,60) };
++        gui.Surface.AddChild(edgeButton);edgeButton.Pressed+=()=>edgeClicks++;await Frame();
++        Pose(left,edgeButton.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);Held(left,"trigger_press",false);
++        Check(edgeClicks==1 && gui.Captures==0,"ray uses rendered panel bounds beyond the former fixed half-width");
++        left.SetPose("aim",new(Basis.Identity,new(quad.Size.X*.51f,0,1)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();Held(left,"trigger_press",true);Held(left,"trigger_press",false);
++        Check(edgeClicks==1 && gui.Captures==0,"ray outside actual resized quad cannot activate a native GUI control");
++        quad.Changed-=GeometryChanged;edgeButton.Free();
+         int released=resources.Releases;var removed=new TaskCompletionSource();void Retired(){if(resources.Releases==released+1)removed.TrySetResult();}adapter.Changed+=Retired;
+         try { XRServer.RemoveTracker(left);await removed.Task.WaitAsync(TimeSpan.FromSeconds(5)); }finally { adapter.Changed-=Retired; }
+         Check(resources.Releases==released+1,"source removal releases its actual appearance lease");
+--- a/client/godot/tests/ExportChecks.cs
++++ b/client/godot/tests/ExportChecks.cs
+@@ -55,6 +55,7 @@
+             if (phase == "menu") { await NativeMenu(); return; }
+             if (phase == "scene") { await SceneAdapter(); return; }
+             if (phase == "controller-input") { await ControllerAdapter(); return; }
++            if (phase == "presentation") { await PresentationAdapter(); return; }
+             if (phase is "openxr" or "openxr-input") { await OpenXRRuntime(); return; }
+             if (phase == "shutdown-connect") { await CloseDuringConnect(); return; }
+             if (phase == "physics") { await PhysicsJourney(); return; }
+--- a/client/godot/README.md
++++ b/client/godot/README.md
+@@ -81,6 +81,9 @@
+ 
+ Desktop and XR point at the same native Control tree and exact-subject scene
+ picker. The display texture owns no focus; native buttons/editors retain it.
++The spatial panel preserves the shared GUI texture's aspect at its existing
++height; ray bounds use that same quad. Resizing cancels captures before rearming.
++The black scene supplies neutral ambient illumination for authored shaded models.
+ Focus/visibility loss, stale tracking, context changes and source withdrawal
+ cancel captures without activation and require neutral before rearming.
+ GUI capture and menus suppress travel. The current selected control association

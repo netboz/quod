@@ -1,0 +1,10 @@
+{
+  "owned_pid": 837284,
+  "mapped_runtime_paths": [
+    "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/GodotSharp/Api/Debug/GodotSharp.dll",
+    "/usr/share/dotnet/host/fxr/10.0.12/libhostfxr.so",
+    "/usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.12/libcoreclr.so",
+    "/usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.12/libhostpolicy.so"
+  ],
+  "no_memory_contents_read": true
+}

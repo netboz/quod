@@ -1,0 +1,11 @@
+{
+  "method": "Independent complete materialization, real Git binary patch, filesystem path-set/content/mode verification",
+  "workspace": "/home/yan/.cache/quod-m4-artifacts/quod-godot-m4-coordinator-ed9cd520-20261029-reconstruction01",
+  "outside_every_checkout": true,
+  "patch_child_exit": 0,
+  "exact_path_set": true,
+  "every_source_content_verified": true,
+  "full_recorded_modes_restored": true,
+  "entries": 23554,
+  "source_bytes": 2992387004
+}

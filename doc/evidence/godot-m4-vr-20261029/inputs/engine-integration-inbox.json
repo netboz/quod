@@ -1,0 +1,13 @@
+{
+  "consume_tool_available": false,
+  "list_only_not_consumed": true,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"sessionId\": \"ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f\",\n  \"count\": 1,\n  \"includeCompleted\": false,\n  \"prompts\": [\n    {\n      \"id\": \"meta-1793289124035-acol8jr\",\n      \"status\": \"executing\",\n      \"createdAt\": 1793289124036,\n      \"claimedAt\": 1793289124046,\n      \"completedAt\": null,\n      \"errorMessage\": null,\n      \"promptPreview\": \"Yan has authorized renewed Vive investigation and necessary private engine patching, and asks us to use /data. Read and execute nimbalyst-local/handoffs/godot-m4-vr-investigation-prompt.md in this same sole Sol/max session. New heavy storage is already verified at /data/quod-m4-vr-ca84d4f8-20261029;...\",\n      \"prompt\": \"Yan has authorized renewed Vive investigation and necessary private engine patching, and asks us to use /data. Read and execute nimbalyst-local/handoffs/godot-m4-vr-investigation-prompt.md in this same sole Sol/max session. New heavy storage is already verified at /data/quod-m4-vr-ca84d4f8-20261029; no large new home/tmp/worktree writes. The new user's explicit authority in that handoff supersedes the old no-engine-patch/hold state, preserves all other safeguards and keeps cleanup defects separate from display causality. Do not ask again for private patch permission if proved necessary. No more desktop observation1, external review, global changes, commit or M5. Return completion automatically.\"\n    }\n  ]\n}"
+      }
+    ],
+    "isError": false
+  }
+}

@@ -1,0 +1,134 @@
+[
+  {
+    "phase": "m3-fresh",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/identity",
+      "--node",
+      "https://127.0.0.1:38775",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 23.801202919996285,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-created",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/identity",
+      "--node",
+      "https://127.0.0.1:38775",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 19.937983746996906,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-entered",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/identity",
+      "--node",
+      "https://127.0.0.1:38775",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 37.45482228900073,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-left",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/identity",
+      "--node",
+      "https://127.0.0.1:38775",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 25.071274898997217,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-final",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/identity",
+      "--node",
+      "https://127.0.0.1:38775",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 24.52055179400486,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-negative-recovered",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/identity",
+      "--node",
+      "https://127.0.0.1:38775",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final06/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 20.059099543999764,
+    "godot_error_diagnostics": false,
+    "passed": true
+  }
+]

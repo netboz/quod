@@ -1,0 +1,18 @@
+{
+  "coordinator": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46",
+  "method": "Full list-only inspection after final validation; no consumption claim",
+  "rows": [
+    {
+      "id": "meta-1793253238067-xbb962n",
+      "status": "executing",
+      "disposition": "Full child completion result independently read and verified"
+    },
+    {
+      "id": "meta-1793253496178-1tf7j3p",
+      "status": "pending",
+      "disposition": "Previously scheduled status check fully read; final blocked decision satisfies its idle-result branch. No relaunch, test repetition or rescheduling."
+    }
+  ],
+  "newFindingsRequiringImplementation": false,
+  "noNewWakeupScheduled": true
+}

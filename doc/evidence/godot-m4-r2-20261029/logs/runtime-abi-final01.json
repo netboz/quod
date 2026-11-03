@@ -1,0 +1,17 @@
+{
+  "command": [
+    "readelf",
+    "-d",
+    "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-service"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T11:36:56Z",
+  "elapsed_seconds": 0.019775390625,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/runtime-abi-final01.log",
+  "raw_sha256": "b6235ccd838e20d1c2c4dfd2222cfe571bd4dffed1220f79c5977835a9b1f72e",
+  "sanitized_sha256": "b6235ccd838e20d1c2c4dfd2222cfe571bd4dffed1220f79c5977835a9b1f72e",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

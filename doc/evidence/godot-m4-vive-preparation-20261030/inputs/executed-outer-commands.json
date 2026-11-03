@@ -1,0 +1,32 @@
+{
+  "preflight": {
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-vive-preparation-20261030/preflight.py"
+    ],
+    "true_exit": 0
+  },
+  "build": {
+    "command": [
+      "python3",
+      "doc/evidence/godot-m4-vive-preparation-20261030/run_build.py"
+    ],
+    "true_tool_outer_exit": 0,
+    "build_driver_true_exit": 0,
+    "completion": true,
+    "timed_out": false
+  },
+  "corrected_verification": {
+    "command": [
+      "python3",
+      "client/native/tools/check.py",
+      "--evidence",
+      "doc/evidence/godot-m4-vive-preparation-20261030/verify-build02",
+      "--",
+      "python3",
+      "doc/evidence/godot-m4-vive-preparation-20261030/verify_build02.py"
+    ],
+    "true_outer_exit": 0,
+    "true_verifier_exit": 0
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "checks": [
+    "complete diagnostic delta is shared-layout label placement and actual workspace visibility only",
+    "qualified historical observer remains unchanged; cue selector is byte-identical to its prior21 pure checks",
+    "cue attaches to the actual existing shared scroll/VBox content owner, not an overlay or second form",
+    "fixed-height non-intercepting cue precedes the same controls and does not change height with held-trigger text",
+    "actual cue caller withholds READY for a hidden or not-yet-placed workspace in addition to window visibility",
+    "actual native-running/focus/head/canonical-model/neutral wiring is retained without a new policy threshold",
+    "desktop focus remains a literal geometry observation and never a persistent cue veto",
+    "the same frame owner changes cue text and retires its subscription and label",
+    "no new pose/input/domain/sample authority or repeated unchanged cue work",
+    "new source-only95-input diagnostic binds the exact accepted93 current inputs,196 exports and nondistributable scope",
+    "new build digest cache authenticates before exact-stat reuse",
+    "actual compiled dispatch and helpers equal the inspected caller; all93 current product inputs remain unchanged"
+  ],
+  "count": 12,
+  "pure_cue21": "unchanged selector identity reused; no rerun",
+  "historical_privacy_projection20": "same full geometry/publisher shapes; old source qualification reused without rerun",
+  "product_source_changes": 0,
+  "functional_application_started": false,
+  "native_runtime_started": false,
+  "live_queries": 0,
+  "API_bytes_read": 0
+}

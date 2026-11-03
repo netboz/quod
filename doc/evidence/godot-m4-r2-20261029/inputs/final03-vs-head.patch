@@ -1,0 +1,2523 @@
+--- HEAD/client/godot-tests/Program.cs
++++ final03/client/godot-tests/Program.cs
+@@ -52,7 +52,7 @@
+                 }
+             }
+             Check(verified == 100, "all 100 real production fixtures including Reset");
+-            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames();
++            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo);
+             Console.WriteLine("CORE_PASS checks=" + checks); return 0;
+         } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+     }
+@@ -74,6 +74,24 @@
+         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace("'/'(1,3)","0.5") + "]")), "floating scene dimensions refuse");
+         Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace(anchor,"<<\"wrong\">>") + "]")), "wrong depicted anchor refuses");
+         Reject(() => new Length(BigInteger.One << 2000,1).RenderMetres(), "unrenderable finite extent refuses explicitly");
++    }
++    static void Models(string repo)
++    {
++        string digest="bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94";
++        byte[] bytes=File.ReadAllBytes(Path.Combine(repo,"priv/explorer/assets/models",digest+".glb"));
++        Check(Convert.ToHexStringLower(SHA256.HashData(bytes))==digest,"controller bytes match authored class-selected digest");
++        var report=StaticGlb.Validate(bytes);
++        var asset=new ModelAsset(digest,"gltf2-static-v1",[-59,-70,-117,59,23,106],[1114152,665696,17551,17344,37,1,4194304]);
++        report.Admit(asset);Check(report.Costs.SequenceEqual(asset.Allowed) && report.Bounds.SequenceEqual(asset.Bounds),"portable GLB measurement agrees with existing verified Vive model metadata");
++        Reject(()=>report.Admit(asset with { Allowed=[1114151,665696,17551,17344,37,1,4194304] }),"each appearance enforces transfer allowance against reusable verification");
++        Reject(()=>report.Admit(asset with { Bounds=[-60,-70,-117,59,23,106] }),"verified model refuses mismatched declared bounds");
++        var corrupt=(byte[])bytes.Clone();corrupt[0]=0;Reject(()=>StaticGlb.Validate(corrupt),"invalid GLB is rejected before engine decode");
++        uint jsonLength=System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(12,4));
++        var document=System.Text.Json.Nodes.JsonNode.Parse(bytes.AsSpan(20,(int)jsonLength))!;document["images"]="malformed";
++        byte[] json=System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());int padded=(json.Length+3)/4*4;
++        var malformed=new byte[bytes.Length-(int)jsonLength+padded];bytes.AsSpan(0,20).CopyTo(malformed);malformed.AsSpan(20,padded).Fill(32);json.CopyTo(malformed,20);bytes.AsSpan(20+(int)jsonLength).CopyTo(malformed.AsSpan(20+padded));
++        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(malformed.AsSpan(8,4),(uint)malformed.Length);System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(malformed.AsSpan(12,4),(uint)padded);
++        Reject(()=>StaticGlb.Validate(malformed),"malformed optional GLB arrays refuse instead of becoming empty facilities");
+     }
+     static void WorldFrames()
+     {
+--- HEAD/client/godot-tests/desktop_input.py
++++ final03/client/godot-tests/desktop_input.py
+@@ -13,39 +13,55 @@
+     if not desktop:
+         raise RuntimeError('Unsupported native qualification input')
+     before = json.loads(subprocess.check_output(['hyprctl', '-j', 'activewindow']))
+-    commands = []
++    def owned_window(title):
++        windows=json.loads(subprocess.check_output(['hyprctl','-j','clients']))
++        owned=[w for w in windows if w.get('pid')==pid and w.get('mapped') and w.get('title')==title]
++        if len(owned)!=1:raise RuntimeError('Native input must name one exact owned visible window')
++        return owned[0]
++    def geometry(window):
++        return {k:window[k] for k in ('address','at','size')}
++    def run(command, require_focus=True, target=None):
++        nonlocal before
++        environment=dict(os.environ,YDOTOOL_SOCKET=str(Path('/run/user')/str(os.getuid())/'.ydotool_socket'))
++        child = subprocess.run(command, capture_output=True, text=True, timeout=5,env=environment)
++        after = json.loads(subprocess.check_output(['hyprctl', '-j', 'activewindow']))
++        records.append({'command': command, 'child_exit': child.returncode,
++            'stdout': child.stdout, 'stderr': child.stderr, 'owned_pid': pid,
++            'before_pid': before.get('pid'), 'after_pid': after.get('pid'), 'target_geometry':target})
++        if child.returncode or (require_focus and after.get('pid') != pid):
++            raise RuntimeError('Native qualification input lost its owned window')
++        before = after
+     if key_event:
+         if before.get('pid') != pid:
+-            commands.append(['hyprctl', 'dispatch', 'hl.dsp.focus({window="pid:' + str(pid) + '"})'])
++            run(['hyprctl', 'dispatch', 'hl.dsp.focus({window="pid:' + str(pid) + '"})'])
+         key=line.split()[1]
+-        if key in ('hold-w','release-w'):commands.append(['ydotool','key','17:1' if key=='hold-w' else '17:0'])
+-        elif key in ('space','Return','F24'):commands.append(['wtype', '-k', key])
++        if key in ('hold-w','release-w'):run(['ydotool','key','17:1' if key=='hold-w' else '17:0'])
++        elif key in ('space','Return','F24'):run(['wtype', '-k', key])
+         else:raise RuntimeError('Unsupported native key')
+     else:
+         payload=json.loads(line.split(' ',1)[1])
+-        windows=json.loads(subprocess.check_output(['hyprctl','-j','clients']))
+-        owned=[w for w in windows if w.get('pid')==pid and w.get('mapped') and w.get('title')==payload['title']]
+-        if len(owned)!=1:raise RuntimeError('Native input must name one exact owned visible window')
+-        window=owned[0]
++        window=owned_window(payload['title'])
+         address=window['address']
+         if before.get('address')!=address:
+-            commands.append(['hyprctl','dispatch','hl.dsp.focus({window="address:'+address+'"})'])
++            run(['hyprctl','dispatch','hl.dsp.focus({window="address:'+address+'"})'],target=geometry(window))
++        current=owned_window(payload['title'])
++        if current['address']!=address or current['size']!=window['size']:
++            raise RuntimeError('Native input target changed layout before dispatch')
++        window=current
+         if close_event:
+-            commands.append(['hyprctl','dispatch','hl.dsp.window.close({window="address:'+address+'"})'])
++            # Addressed close may legitimately retire its focused window.
++            # The campaign separately requires the real process exit and EOF.
++            run(['hyprctl','dispatch','hl.dsp.window.close({window="address:'+address+'"})'],False,geometry(window))
+         else:
+             x,y,width,height=(float(payload[k]) for k in ['x','y','width','height'])
+             if not (0<=x<width and 0<=y<height):raise RuntimeError('Native pointer lies outside its exact window')
+             screen_x=round(window['at'][0]+x*window['size'][0]/width)
+             screen_y=round(window['at'][1]+y*window['size'][1]/height)
+-            commands.append(['hyprctl','dispatch',f'hl.dsp.cursor.move({{x={screen_x},y={screen_y}}})'])
+-            commands.append(['ydotool','click','0xC0'])
+-    for command in commands:
+-        environment=dict(os.environ,YDOTOOL_SOCKET=str(Path('/run/user')/str(os.getuid())/'.ydotool_socket'))
+-        child = subprocess.run(command, capture_output=True, text=True, timeout=5,env=environment)
+-        after = json.loads(subprocess.check_output(['hyprctl', '-j', 'activewindow']))
+-        records.append({'command': command, 'child_exit': child.returncode,
+-            'stdout': child.stdout, 'stderr': child.stderr, 'owned_pid': pid,
+-            'before_pid': before.get('pid'), 'after_pid': after.get('pid')})
+-        if child.returncode or after.get('pid') != pid:
+-            raise RuntimeError('Native qualification input lost its owned window')
+-        before = after
++            run(['hyprctl','dispatch',f'hl.dsp.cursor.move({{x={screen_x},y={screen_y}}})'],target=geometry(window))
++            current=owned_window(payload['title'])
++            cursor=json.loads(subprocess.check_output(['hyprctl','-j','cursorpos']))
++            left,top=current['at'];width,height=current['size']
++            if geometry(current)!=geometry(window) or not (left<=cursor['x']<left+width and top<=cursor['y']<top+height) or abs(cursor['x']-screen_x)>1 or abs(cursor['y']-screen_y)>1:
++                records.append({'refused_before_click':True,'owned_pid':pid,'requested':[screen_x,screen_y],'actual_cursor':cursor,'target_geometry':geometry(current)})
++                raise RuntimeError('Native pointer did not remain inside its exact owned window')
++            run(['ydotool','click','0xC0'],target=geometry(current))
+--- HEAD/client/godot-tests/journey.py
++++ final03/client/godot-tests/journey.py
+@@ -27,6 +27,7 @@
+ p.add_argument('--evidence', type=Path, required=True)
+ p.add_argument('--private', type=Path, required=True)
+ p.add_argument('--desktop', action='store_true')
++p.add_argument('--controllers', action='store_true')
+ p.add_argument('--journey', choices=['gui', 'spaces', 'navigation'], default='gui')
+ a = p.parse_args()
+ a.evidence = a.evidence.resolve()
+@@ -128,9 +129,11 @@
+                     drops[flow]+=1; lose=True; instruction_drop_operations.append(instruction_drop_armed); instruction_drop_armed=None
+                 if flow == 'question' and response.status < 300 and faults['question_reply_lost'] == 0:
+                     faults['question_reply_lost'] += 1; lose = True
+-                reply = json.loads(content)
++                asset=self.path.startswith('/assets/')
++                reply = {} if asset else json.loads(content)
+                 records.append({'method': self.command, 'route': self.path, 'status': response.status, 'flow': flow, 'request_sha256': digest, 'reply_lost': lose,
+-                    'result': reply.get('result'), 'outcome_status': reply.get('status'), 'aggregate': reply.get('aggregate')})
++                    'result': reply.get('result'), 'outcome_status': reply.get('status'), 'aggregate': reply.get('aggregate'),
++                    **({'asset_bytes':len(content),'asset_sha256':hashlib.sha256(content).hexdigest()} if asset else {})})
+             if lose:
+                 with socket.create_connection(('127.0.0.1', a.control_port), timeout=10) as owner:
+                     owner.sendall(json.dumps({'request': encoded}).encode() + b'\n')
+@@ -219,6 +222,9 @@
+ try:
+     phases={'gui':('fresh','reset','final'),'spaces':('m2-fresh','m2-final'),
+             'navigation':('m3-fresh','m3-created','m3-entered','m3-left','m3-final','m3-negative-recovered')}[a.journey]
++    if a.controllers:
++        if a.journey!='gui':raise ValueError('Controller integration extends the existing GUI journey')
++        phases=('fresh','reset','m4-live','final')
+     for phase in phases:
+         env = dict(os.environ, M1B_PHASE=phase, M1B_NETWORK=a.network,
+                    M1B_ORIGINAL=str(a.private / 'original.json'), M1B_RESULT=str(a.evidence / 'export-result.json'),
+@@ -226,6 +232,7 @@
+                    M1B_CORPUS=str((Path.cwd() / 'client/test/fixtures/native-contract/contracts.json').resolve()),
+                    M1B_ACCOUNT_BACKUP=str(a.private / 'account-backup.json'),
+                    XDG_DATA_HOME=str(a.private / 'data'), XDG_CONFIG_HOME=str(a.private / 'config'), DOTNET_ROOT=str(a.private / 'no-installed-runtime'))
++        if a.controllers:env['M4_REPAIR']='1'
+         if a.journey == 'spaces' and a.desktop:
+             env['M2_SCREENSHOT'] = str((a.evidence / 'space-ui.png').resolve())
+         if a.journey=='navigation':
+--- HEAD/client/godot-tests/local.py
++++ final03/client/godot-tests/local.py
+@@ -9,6 +9,7 @@
+ import shutil
+ import subprocess
+ import threading
++import ctypes
+ from desktop_input import deliver
+ 
+ p = argparse.ArgumentParser()
+@@ -37,7 +38,11 @@
+     env.update(extra or {})
+     display = ['--display-driver', 'wayland'] if a.desktop else ['--headless']
+     command = [str(a.export)] + display + ['--', '--qualification', '--profile', str(profile), '--node', a.node, '--ca', a.ca]
+-    child = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
++    def allow_owned_trace():
++        # Only this qualification process and its descendants may inspect the
++        # owned child if the unchanged watchdog detects a real shutdown hang.
++        if ctypes.CDLL(None).prctl(0x59616d61,os.getppid(),0,0,0)!=0:os._exit(125)
++    child = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,preexec_fn=allow_owned_trace)
+     lines = queue.Queue()
+     def receive():
+         for line in child.stdout: lines.put(line)
+@@ -48,7 +53,15 @@
+         while True:
+             try: line = lines.get(timeout=60)
+             except queue.Empty:
+-                child.kill(); child.wait(); records.append({'command': command, 'child_exit': child.returncode, 'watchdog': True}); raise RuntimeError('No progress before original watchdog')
++                diagnostic=a.evidence/(label+'-shutdown-stacks.log')
++                probe_exit=None;probe_error=None
++                try:
++                    with diagnostic.open('x') as trace:
++                        probe=subprocess.run(['gdb','-q','-batch','-p',str(child.pid),'-ex','set print frame-arguments none','-ex','set print entry-values no','-ex','thread apply all bt 16'],stdout=trace,stderr=subprocess.STDOUT,timeout=15)
++                        probe_exit=probe.returncode
++                except Exception as error:probe_error=str(error)
++                finally:child.kill();child.wait()
++                records.append({'command': command, 'child_exit': child.returncode, 'watchdog': True,'diagnostic':str(diagnostic),'diagnostic_exit':probe_exit,'diagnostic_error':probe_error}); raise RuntimeError('No progress before original watchdog')
+             if line is None: break
+             log.write(line); log.flush(); text += line; print(line.rstrip(), flush=True)
+             try: deliver(line,child.pid,a.desktop,native_inputs)
+--- HEAD/client/godot-tools/run.py
++++ final03/client/godot-tools/run.py
+@@ -4,6 +4,7 @@
+ import hashlib
+ import json
+ import os
++import shutil
+ from pathlib import Path
+ import subprocess
+ import urllib.request
+@@ -18,6 +19,7 @@
+ parser.add_argument('--bootstrap', action='store_true')
+ parser.add_argument('--build', action='store_true')
+ parser.add_argument('--export', action='store_true')
++parser.add_argument('--xr', action='store_true', help='Enable the installed OpenXR runtime using the Vulkan mobile renderer')
+ parser.add_argument('arguments', nargs=argparse.REMAINDER)
+ args = parser.parse_args()
+ artifacts = json.loads((repo / 'doc/evidence/godot-m0-20261027/inputs/godot-artifacts.json').read_text())
+@@ -66,6 +68,9 @@
+ if args.export:
+     (project / 'dist').mkdir(exist_ok=True)
+     run_engine([str(engine), '--headless', '--path', str(project), '--export-release', 'Linux', str(project / 'dist/quod.x86_64')])
++    for notice in sorted((project/'assets').glob('*LICENSE*')):
++        shutil.copy2(notice,project/'dist'/notice.name)
+ elif args.arguments:
+     arguments = args.arguments[1:] if args.arguments[0] == '--' else args.arguments
+-    run_engine([str(engine), '--path', str(project), *arguments])
++    xr_arguments = ['--xr-mode','on','--rendering-method','mobile','--rendering-driver','vulkan'] if args.xr else []
++    run_engine([str(engine), '--path', str(project), *xr_arguments,*arguments])
+--- HEAD/client/godot/Core/Controllers.cs
++++ final03/client/godot/Core/Controllers.cs
+@@ -0,0 +1,273 @@
++using System.Numerics;
++using System.Text.RegularExpressions;
++
++namespace Quod.Client;
++
++public sealed record ModelAsset(string Digest, string Profile, long[] Bounds, long[] Allowed)
++{
++    public string Identity => Digest + ":" + Profile + ":" + string.Join(',', Bounds) + ":" + string.Join(',', Allowed);
++}
++public sealed record ControllerComponent(string Name, string Id, string Type, string[] Features);
++public sealed record ControllerProfile(string Class, string[] Names, ControllerComponent[] Components, ModelAsset Model);
++public sealed record ControllerBinding(string Id, string Role, string Component, string Gesture, string? Modifier, string? Sector, float Threshold, float Fraction);
++public sealed record ControllerMapping(BigInteger Revision, string Digest, Dictionary<string,string> Roles, ControllerBinding[] Bindings, ControllerProfile[] Profiles)
++{
++    static string Atom(Term t) => t.Kind == "atom" ? t.Name : throw new FormatException("Expected controller atom.");
++    static T[] Unique<T>(IEnumerable<T> values, Func<T,string> key)
++    { var rows=values.ToArray(); if(rows.Select(key).Distinct().Count()!=rows.Length) throw new FormatException("Duplicate controller description."); return rows; }
++    static float Permille(Term t) => t.Integer>0 && t.Integer<1000 ? (float)t.Integer/1000 : throw new FormatException("Invalid gesture threshold.");
++    public static ControllerMapping? Decode(Term value)
++    {
++        value.Ground(); var v=value.Require("controller_view",3); var revision=v[0].Integer;
++        if(revision<0 || v[1].Kind!="binary" || v[1].Bytes.Length!=32) throw new FormatException("Invalid mapping revision/digest.");
++        if(v[2].Kind=="atom" && v[2].Name=="invalid_settings") return null;
++        var m=v[2].Require("mapping",4); if(m[0].Integer!=1) throw new FormatException("Unsupported controller contract.");
++        var roles=Unique(m[1].Items.Select(row=> {
++            var a=row.Require("role",2); string role=Atom(a[0]),hand=Atom(a[1].Require("hand",1)[0]);
++            if(role is not ("navigation" or "menu") || hand is not ("left" or "right" or "none")) throw new FormatException("Unsupported controller role.");
++            return KeyValuePair.Create(role,hand);
++        }),r=>r.Key).ToDictionary();
++        if(roles.Count!=2) throw new FormatException("Incomplete controller roles.");
++        var bindings=Unique(m[2].Items.Select(row=> {
++            var b=row.Require("bind",5); string id=Atom(b[0]),role=Atom(b[1]),component=Atom(b[2]);
++            if(role is not ("any" or "navigation" or "menu") || component is not ("trigger" or "grip" or "pad")) throw new FormatException("Unknown binding role/component.");
++            string kind=b[3].Name; string? modifier=null,sector=null; float threshold=0,fraction=0;
++            string lane=id is "select" or "menu" ? "local" : "control";
++            var output=b[4].Require(lane,1)[0];
++            if(id=="teleport") { fraction=Permille(output.Require("teleport",1)[0]); }
++            else if(Atom(output)!=id) throw new FormatException("Unknown controller output.");
++            switch(id) {
++                case "select": if(Atom(b[3])!="press_release") throw new FormatException("Invalid selection gesture."); break;
++                case "menu": threshold=Permille(b[3].Require("radial",1)[0]); break;
++                case "drive": modifier=Atom(b[3].Require("axes_while",1)[0]); if(role=="any") throw new FormatException("Ambiguous continuous travel."); break;
++                case "snap": case "teleport":
++                    var s=b[3].Require("sector",3); sector=Atom(s[0]); threshold=Permille(s[1]); modifier=Atom(s[2]);
++                    if(sector!=(id=="snap" ? "horizontal" : "forward")) throw new FormatException("Unknown direction sector."); break;
++                default: throw new FormatException("Unknown controller binding.");
++            }
++            if((id!="select" && component!="pad") || (modifier!=null && modifier is not ("grip" or "trigger"))) throw new FormatException("Invalid gesture component.");
++            return new ControllerBinding(id,role,component,kind,modifier,sector,threshold,fraction);
++        }),b=>b.Id);
++        if(!bindings.Any(b=>b.Id=="select")) throw new FormatException("No selection binding.");
++        var profiles=Unique(m[3].Items.Select(row=> {
++            var p=row.Require("profile",2); var c=p[1].Require("controller",4);
++            var names=Unique(c[0].Items.Select(n=>n.TextValue),n=>n);
++            if(names.Length==0 || names.Any(string.IsNullOrEmpty)) throw new FormatException("Missing input profile.");
++            var components=Unique(c[1].Items.Select(row=> {
++                var a=row.Require("component",4); string name=Atom(a[0]),type=Atom(a[2]);
++                var features=Unique(a[3].Items.Select(Atom),n=>n);
++                if(name is not ("trigger" or "grip" or "pad") || type is not ("trigger" or "squeeze" or "touchpad") ||
++                    features.Any(f=>f is not ("press" or "value" or "touch" or "axes2"))) throw new FormatException("Unknown controller facility.");
++                return new ControllerComponent(name,a[1].TextValue,type,features);
++            }),c=>c.Name);
++            if(!c[2].Items.Select(Atom).SequenceEqual(new[]{"target_ray","grip"})) throw new FormatException("Unsupported controller poses.");
++            var a=c[3].Require("tracked_model",2); if(Atom(a[0])!="grip") throw new FormatException("Unsupported model attachment.");
++            var asset=a[1].Require("asset",4); string digest=asset[0].TextValue,format=asset[1].TextValue;
++            var bounds=asset[2].Require("bounds",6).Select(t=>checked((long)t.Integer)).ToArray();
++            var allowed=asset[3].Require("resources",7).Select(t=>checked((long)t.Integer)).ToArray();
++            if(!Regex.IsMatch(digest,"^[a-f0-9]{64}$") || format!="gltf2-static-v1" || allowed.Any(n=>n<=0) || Enumerable.Range(0,3).Any(i=>bounds[i]>=bounds[i+3])) throw new FormatException("Invalid model admission.");
++            return new ControllerProfile(Atom(p[0]),names,components,new(digest,format,bounds,allowed));
++        }),p=>p.Class);
++        if(profiles.Length==0) throw new FormatException("Missing controller descriptions.");
++        return new(revision,Identity.Encode(v[1].Bytes),roles,bindings,profiles);
++    }
++}
++
++// The source is the runtime's live tracker, not a replicated hardware inventory.
++public interface IControllerSource
++{
++    string Hand { get; }
++    string[] Profiles { get; }
++    string Layout { get; }
++    bool Current(ulong frame);
++    ComponentSample? Read(string componentId);
++}
++public sealed record ComponentSample(string Type, string[] Features, bool Pressed, Vector2 Axes)
++{
++    public bool Neutral => !Pressed && Axes.Length()<0.01f;
++}
++public interface IControllerConsumer
++{
++    bool Blocked { get; }
++    void Appearance(IControllerSource source, ControllerProfile? profile);
++    void Remove(IControllerSource source);
++    void Hover(IControllerSource source, string context);
++    void Hide(IControllerSource source);
++    void Press(IControllerSource source);
++    void Release(IControllerSource source);
++    void Cancel(IControllerSource source);
++    bool OpenMenu(IControllerSource source,Vector2 axes,float threshold);
++    void MoveMenu(Vector2 axes,float threshold);
++    void CommitMenu();
++    void CancelMenu();
++    void Drive(IControllerSource source,Vector2 axes);
++    void Stop();
++    void Snap(IControllerSource source,int direction);
++    void Teleport(IControllerSource source,float fraction);
++}
++
++// One source-scoped edge/capture owner interprets the signed arbitration v1.
++// Cancellation never releases a click, chooses a body or changes permissions.
++public sealed class ControllerInput(IControllerConsumer consumer) : IDisposable
++{
++    sealed class Gesture(ControllerBinding binding,ControllerComponent component,ControllerComponent? modifier)
++    {
++        public ControllerBinding Binding=binding;
++        public ControllerComponent Component=component;
++        public ControllerComponent? Modifier=modifier;
++        public bool Armed,Down,ModifierDown;
++    }
++    sealed class Source(IControllerSource source,string id)
++    {
++        public IControllerSource Input=source;
++        public string Id=id,Layout="",Hand="",Reason="";
++        public bool Tracked;
++        public ulong LastFrame;
++        public ControllerProfile? Profile;
++        public Gesture[] Gestures=[];
++    }
++    readonly Dictionary<IControllerSource,Source> sources=[];
++    readonly Dictionary<string,Source> choices=[];
++    ControllerMapping? mapping;
++    Source? pointer,menu,travel;
++    bool blocked,disposed;
++    int nextId;
++    public event Action? Changed;
++    public int Count=>sources.Count;
++    public string? MenuOwner=>menu?.Id;
++    public object Status=>new { available=mapping!=null,revision=mapping?.Revision.ToString(),digest=mapping?.Digest, choices=choices.ToDictionary(p=>p.Key,p=>p.Value.Id), sources=sources.Values.Select(s=>new {
++        id=s.Id,hand=s.Input.Hand,profile=s.Profile?.Class??"unsupported",tracked=s.Tracked,bindings=s.Gestures.Select(g=>g.Binding.Id).ToArray(),reason=s.Reason }).ToArray() };
++    public (string Id,string Hand,string Profile,bool Tracked,string Reason)[] SourceChoices=>sources.Values.Select(s=>(s.Id,s.Input.Hand,s.Profile?.Class??"unsupported",s.Tracked,s.Reason)).ToArray();
++    public string? Choice(string role)=>choices.GetValueOrDefault(role)?.Id;
++    public string Description=>(mapping==null ? "Controller settings unavailable; use account operations for an offered repair." : "Saved mapping revision "+mapping.Revision+".")+string.Concat(SourceChoices.Select(s=>"\nSource "+s.Id+": "+s.Hand+", "+s.Profile+", "+(s.Tracked ? "tracked" : "tracking unavailable")+". "+s.Reason));
++    public void Add(IControllerSource input)
++    { if(disposed || sources.ContainsKey(input))return; sources.Add(input,new(input,(++nextId).ToString())); Resolve(); }
++    public void Remove(IControllerSource input)
++    {
++        if(!sources.Remove(input,out var s))return; Cancel(s); consumer.Hide(input); consumer.Remove(input);
++        foreach(var role in choices.Where(p=>p.Value==s).Select(p=>p.Key).ToArray())choices.Remove(role); Resolve();
++    }
++    public void Install(ControllerMapping? next)
++    {
++        if(disposed)return;
++        if(mapping?.Digest==next?.Digest) { bool revision=mapping?.Revision!=next?.Revision;mapping=next;if(revision)Changed?.Invoke();return; }
++        Cancel(); mapping=next; choices.Clear(); Resolve();
++    }
++    public void SourceChanged() { if(!disposed)Resolve(); }
++    Source? Role(string role)
++    {
++        if(choices.TryGetValue(role,out var selected))return selected;
++        if(mapping?.Roles[role]=="none")return null;
++        var matches=sources.Values.Where(s=>s.Input.Hand==mapping?.Roles[role]).ToArray(); return matches.Length==1 ? matches[0] : null;
++    }
++    public bool Choose(string role,string id)
++    {
++        if(mapping==null || !mapping.Roles.ContainsKey(role))return false;
++        if(id=="")choices.Remove(role);
++        else {
++            var s=sources.Values.SingleOrDefault(s=>s.Id==id); if(s==null || Role(role=="menu" ? "navigation" : "menu")==s)return false;
++            choices[role]=s;
++        }
++        Cancel(); Resolve(); return true;
++    }
++    void Resolve()
++    {
++        foreach(var s in sources.Values.Where(s=>s.Hand!=s.Input.Hand))
++            foreach(var role in choices.Where(p=>p.Value==s).Select(p=>p.Key).ToArray())choices.Remove(role);
++        var navigation=mapping==null ? null : Role("navigation"); var menuSource=mapping==null ? null : Role("menu");
++        foreach(var s in sources.Values) {
++            bool changed=s.Hand!=s.Input.Hand || s.Layout!=s.Input.Layout;
++            s.Hand=s.Input.Hand; s.Layout=s.Input.Layout;
++            var profiles=mapping?.Profiles.Where(p=>p.Names.Intersect(s.Input.Profiles).Any()).ToArray()??[];
++            s.Profile=profiles.Length==1 ? profiles[0] : null;
++            consumer.Appearance(s.Input,s.Profile);
++            s.Reason=s.Profile==null ? "No unambiguous supported profile/components." : "";
++            var next=new List<Gesture>();
++            foreach(var b in mapping?.Bindings??[]) {
++                if(s.Profile==null)break;
++                var role=b.Role=="any" ? s : b.Role=="navigation" ? navigation : menuSource;
++                if(b.Role!="any" && navigation!=null && navigation==menuSource && role==s) { s.Reason="Movement/menu need distinct sources."; continue; }
++                if(role!=s) { if(role==null && s.Hand==mapping!.Roles[b.Role])s.Reason="Ambiguous role: choose a source for this session."; continue; }
++                var c=s.Profile.Components.SingleOrDefault(c=>c.Name==b.Component); var modifier=s.Profile.Components.SingleOrDefault(c=>c.Name==b.Modifier);
++                bool Usable(ControllerComponent? d) => d!=null && s.Input.Read(d.Id) is ComponentSample actual && actual.Type==d.Type && d.Features.All(actual.Features.Contains);
++                if(!Usable(c) || (b.Modifier!=null && !Usable(modifier))) { s.Reason="Binding requires unavailable named components."; continue; }
++                next.Add(new(b,c!,modifier));
++            }
++            bool same=!changed && s.Gestures.Length==next.Count && s.Gestures.Zip(next).All(p=>p.First.Binding==p.Second.Binding && p.First.Component.Id==p.Second.Component.Id && p.First.Modifier?.Id==p.Second.Modifier?.Id);
++            if(!same) { Cancel(s); s.Gestures=next.ToArray(); }
++        }
++        Changed?.Invoke();
++    }
++    void StopTravel()
++    {
++        if(travel!=null) { consumer.Stop(); travel=null; }
++        foreach(var g in sources.Values.SelectMany(s=>s.Gestures).Where(g=>g.Binding.Id is "drive" or "snap" or "teleport"))g.Armed=false;
++    }
++    void Cancel(Source s)
++    {
++        if(pointer==s) { consumer.Cancel(s.Input); pointer=null; }
++        if(menu==s) { consumer.CancelMenu(); menu=null; }
++        if(travel==s) { consumer.Stop(); travel=null; }
++        foreach(var g in s.Gestures) { g.Armed=false;g.Down=false; }
++    }
++    public void Cancel() { foreach(var s in sources.Values)Cancel(s); }
++    public void CancelMenu()
++    { if(menu==null)return; var s=menu; menu=null;consumer.CancelMenu();foreach(var g in s.Gestures.Where(g=>g.Binding.Id is "menu" or "select"))g.Armed=false; }
++    public void MenuSelected()
++    { if(menu==null)return;foreach(var g in menu.Gestures.Where(g=>g.Binding.Id=="menu"))g.Armed=false;menu=null; }
++    public void ContextChanged()
++    { bool next=consumer.Blocked; if(next&&!blocked)StopTravel();blocked=next; }
++    public void Frame(ulong frame,bool active)
++    {
++        if(disposed)return;
++        if(sources.Values.Any(s=>s.Hand!=s.Input.Hand || s.Layout!=s.Input.Layout))Resolve();
++        ContextChanged();
++        var edges=new List<(Source S,Gesture G,ComponentSample C,ComponentSample? M,bool Down,bool Up)>();
++        foreach(var s in sources.Values) {
++            bool current=active && mapping!=null && frame>s.LastFrame && s.Input.Current(frame);
++            s.LastFrame=Math.Max(s.LastFrame,frame);
++            if(!current) { Cancel(s);consumer.Hide(s.Input);if(s.Tracked){s.Tracked=false;Changed?.Invoke();}continue; }
++            if(!s.Tracked){s.Tracked=true;Changed?.Invoke();}
++            if(s.Gestures.Any(g=>g.Binding.Id=="select") && (pointer==null || pointer==s))consumer.Hover(s.Input,menu!=null ? "menu" : consumer.Blocked ? "gui" : "world");
++            else consumer.Hide(s.Input);
++            foreach(var g in s.Gestures) {
++                var c=s.Input.Read(g.Component.Id);var m=g.Modifier==null ? null : s.Input.Read(g.Modifier.Id);
++                if(c==null || !float.IsFinite(c.Axes.X+c.Axes.Y) || (g.Modifier!=null && m==null)) { Cancel(s);continue; }
++                bool down=c.Pressed&&!g.Down,up=!c.Pressed&&g.Down,wasDown=g.Down;
++                g.Down=c.Pressed;
++                if(!g.Armed) { g.Armed=c.Neutral && (m?.Neutral??true);g.ModifierDown=m?.Pressed??false;continue; }
++                if(wasDown && m!=null && g.ModifierDown!=m.Pressed) { g.Armed=false; if(travel==s){consumer.Stop();travel=null;} }
++                g.ModifierDown=m?.Pressed??false;
++                if(g.Armed)edges.Add((s,g,c,m,down,up));
++            }
++        }
++        // Capture/menu edges precede every travel contribution, independent of
++        // tracker enumeration order. A GUI opening can suppress travel now.
++        foreach(var e in edges.Where(e=>e.G.Binding.Id is "select" or "menu")) {
++            var (s,g,c,m,down,up)=e;
++            if(!g.Armed)continue;
++            if(g.Binding.Id=="select") {
++                if(down && pointer==null && (menu==null || menu==s)) { StopTravel();pointer=s;consumer.Press(s.Input);ContextChanged(); }
++                if(up && pointer==s) { pointer=null;consumer.Release(s.Input);ContextChanged(); }
++            } else {
++                if(consumer.Blocked || (pointer!=null && !(pointer==s && menu==s))) { g.Armed=false;continue; }
++                if(down && menu==null && consumer.OpenMenu(s.Input,c.Axes,g.Binding.Threshold)) { StopTravel();menu=s; }
++                if(menu==s) { consumer.MoveMenu(c.Axes,g.Binding.Threshold);if(up){menu=null;consumer.CommitMenu();ContextChanged();} }
++            }
++        }
++        foreach(var e in edges.Where(e=>e.G.Binding.Id is not ("select" or "menu"))) {
++            var (s,g,c,m,down,up)=e;
++            if(!g.Armed)continue;
++            if(consumer.Blocked || menu!=null || pointer!=null) { g.Armed=false;if(travel==s){consumer.Stop();travel=null;}continue; }
++            if(g.Binding.Id=="drive") {
++                var axes=m!.Pressed ? c.Axes : Vector2.Zero;
++                if(axes!=Vector2.Zero){travel=s;consumer.Drive(s.Input,axes);}
++                else if(travel==s){consumer.Stop();travel=null;}
++            } else if(down && !m!.Pressed) {
++                if(g.Binding.Sector=="horizontal" && Math.Abs(c.Axes.X)>g.Binding.Threshold && Math.Abs(c.Axes.X)>Math.Abs(c.Axes.Y))consumer.Snap(s.Input,Math.Sign(c.Axes.X));
++                else if(g.Binding.Sector=="forward" && c.Axes.Y < -g.Binding.Threshold && Math.Abs(c.Axes.Y)>=Math.Abs(c.Axes.X))consumer.Teleport(s.Input,g.Binding.Fraction);
++            }
++        }
++    }
++    public void Dispose() { if(disposed)return;foreach(var s in sources.Keys.ToArray())Remove(s);disposed=true;mapping=null;choices.Clear();Changed=null; }
++}
+--- HEAD/client/godot/Core/PhysicsInput.cs
++++ final03/client/godot/Core/PhysicsInput.cs
+@@ -3,7 +3,7 @@
+ 
+ namespace Quod.Client;
+ 
+-// The desktop adapter submits leased desired input through the existing signed
++// Input adapters submit leased desired input through the existing signed
+ // control lane. It owns no body state, collision decisions or durable journal.
+ [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+ public sealed class PhysicsInput(SignedSession session,Actor principal) : IDisposable
+@@ -11,6 +11,7 @@
+     WorldProjection? world;
+     string? identity;
+     ulong sequence;
++    ulong? discreteSequence;
+     double[] desired=[0,0,0];
+     double lease;
+     bool busy,uncertain,disposed;
+@@ -21,10 +22,13 @@
+     public void Present(WorldProjection projection)
+     {
+         string? next=projection.Controlled==null ? null : projection.Control+"\n"+projection.Sample!.Fence;
+-        if(next!=identity) { Withdraw(); identity=next; sequence=0; uncertain=false; lease=0; }
++        if(next!=identity) { Withdraw(); identity=next; sequence=0; uncertain=false; discreteSequence=null; lease=0; }
+         world=projection;
+         if(projection.Sample?.ControlState?["sequence"] is System.Text.Json.Nodes.JsonValue value && ulong.TryParse(value.GetValue<string>(),out ulong accepted))
++        {
+             sequence=Math.Max(sequence,accepted);
++            if(discreteSequence is ulong pending && accepted>=pending && projection.Sample.ControlState?["pending"]?.GetValue<bool>()==false)discreteSequence=null;
++        }
+     }
+     public void Withdraw()
+     { incarnation++; world=null; desired=[0,0,0]; desiredVersion++; cancellation?.Cancel(); busy=false; }
+@@ -32,16 +36,33 @@
+     {
+         if(!double.IsFinite(x+y+z)) throw new FormatException("Invalid input direction.");
+         if(world?.Controlled?.Grounded==true) y=0;
+-        double length=Math.Max(1,Math.Sqrt(x*x+y*y+z*z)); desired=[x/length,y/length,z/length]; desiredVersion++; lease=0; Start();
++        double length=Math.Max(1,Math.Sqrt(x*x+y*y+z*z)); double[] next=[x/length,y/length,z/length];
++        if(desired.SequenceEqual(next))return;
++        desired=next; desiredVersion++; lease=0; Start();
++    }
++    public bool Snap(int direction)=>world?.Controlled?.Snap is BigInteger angle && direction!=0 && Discrete(Term.Call("snap",Term.Number((angle*Math.Sign(direction)).ToString(CultureInfo.InvariantCulture))));
++    public bool Teleport(double x,double z,double fraction)
++    {
++        if(world?.Controlled is not { Grounded:true,TeleportReach:BigInteger reach } binding || !double.IsFinite(x+z+fraction) || fraction<=0 || fraction>=1)return false;
++        double length=Math.Sqrt(x*x+z*z);if(length<=0)return false;
++        var sample=world.Sample!;var body=sample.Bodies[(binding.Body,binding.Revision)];
++        double[] position=[body.Position[0]+x/length*(double)reach/1000*fraction,body.Position[1],body.Position[2]+z/length*(double)reach/1000*fraction];
++        if(position.Any(p=>!double.IsFinite(p)))throw new FormatException("Invalid teleport coordinates.");
++        return Discrete(Term.Call("teleport",Term.Call("vector",position.Select((p,i)=>Term.Number((sample.Origin[i]+new BigInteger(Math.Truncate(p*1000))).ToString(CultureInfo.InvariantCulture))).ToArray())));
++    }
++    bool Discrete(Term input)
++    {
++        if(disposed || busy || uncertain || discreteSequence!=null || world?.Controlled is not ControlBinding binding)return false;
++        desired=[0,0,0];desiredVersion++;busy=true;var next=Send(binding,input);Completion=Completion.IsCompleted ? next : Task.WhenAll(Completion,next);return true;
+     }
+     public void Tick(double delta)
+     { if(desired.Any(v=>v!=0)) { lease-=delta; if(lease<=0) Start(); } }
+     void Start()
+     {
+-        if(disposed || busy || uncertain || world?.Controlled is not ControlBinding binding) return;
++        if(disposed || busy || uncertain || discreteSequence!=null || world?.Controlled is not ControlBinding binding) return;
+         busy=true; var next=Send(binding); Completion=Completion.IsCompleted ? next : Task.WhenAll(Completion,next);
+     }
+-    async Task Send(ControlBinding binding)
++    async Task Send(ControlBinding binding,Term? discrete=null)
+     {
+         long expected=incarnation; string? selected=identity;
+         try {
+@@ -50,7 +71,8 @@
+                 var sample=world!.Sample!; ulong current=checked(++sequence);
+                 string Number(double component)=>new BigInteger(Math.Truncate((double)binding.Speed*component)).ToString(CultureInfo.InvariantCulture);
+                 var velocity=Term.Call("vector",desired.Select(v=>Term.Number(Number(v))).ToArray());
+-                var input=Term.Call("drive",velocity,Term.Call("angular",Term.Number("0"),Term.Number("0"),Term.Number("0")));
++                var input=discrete??Term.Call("drive",velocity,Term.Call("angular",Term.Number("0"),Term.Number("0"),Term.Number("0")));
++                if(discrete!=null)discreteSequence=current;
+                 var frame=Term.Call("control_frame",sample.Frame,Term.Binary(Identity.Decode(sample.Registration)));
+                 var goal=Term.Call("physics_control_input",sample.Frame.Args[0].Args[2],frame,Term.Number(binding.Epoch.ToString(CultureInfo.InvariantCulture)),Term.Number(current.ToString(CultureInfo.InvariantCulture)),input,Term.Variable("Queued"));
+                 var target=Actor.FromTerm(sample.Frame.Args[1]);
+@@ -58,8 +80,9 @@
+                 cancellation?.Dispose(); cancellation=new(); var running=cancellation;
+                 lease=binding.Lease/2000.0;
+                 var reply=await session.SendAt("/api/goals/control",signed.Body,signed.Deadline,running.Token);
+-                if(!Json.Committed(reply)) throw new InvalidOperationException("Control was refused.");
+-                if(sent==desiredVersion) break;
++                if(reply["result"]?.ToString()=="fail") { discreteSequence=null;Suspended?.Invoke("Control was refused.");break; }
++                if(!Json.Committed(reply)) throw new InvalidOperationException("Control outcome unavailable.");
++                if(discrete!=null || sent==desiredVersion) break;
+             }
+         } catch(Exception error) {
+             if(!disposed && expected==incarnation && selected==identity) {
+--- HEAD/client/godot/Core/StaticGlb.cs
++++ final03/client/godot/Core/StaticGlb.cs
+@@ -0,0 +1,166 @@
++using System.Buffers.Binary;
++using System.Text.Json.Nodes;
++
++namespace Quod.Client;
++
++// The existing gltf2-static-v1 profile at the clean engine boundary. Immutable
++// measurements are reusable; each authorized appearance checks its own limits.
++public sealed record StaticGlb(long[] Costs,long[] Bounds)
++{
++    static void Require(bool valid,string reason) { if(!valid)throw new FormatException("GLB profile: "+reason); }
++    static JsonArray Rows(JsonNode? value)=>value==null ? [] : value as JsonArray??throw new FormatException("GLB profile: expected array");
++    static long Integer(JsonNode? value,long fallback=-1)
++    { long n=value==null ? fallback : value.GetValue<long>();Require(n>=0,"invalid integer");return n; }
++    static JsonNode Index(JsonArray rows,JsonNode? index)
++    { long n=Integer(index);Require(n<rows.Count,"invalid reference");return rows[(int)n]??throw new FormatException("Null GLB row."); }
++    static double[] Vector(JsonNode? value,int count,double[] fallback)
++    {
++        if(value==null)return fallback;
++        var result=value.AsArray().Select(v=>v!.GetValue<double>()).ToArray();
++        Require(result.Length==count && result.All(double.IsFinite),"invalid transform");return result;
++    }
++    static void NoExtensions(JsonNode? node)
++    {
++        if(node is JsonObject obj) { Require(obj["extensions"]==null,"extensions are unsupported");foreach(var pair in obj)NoExtensions(pair.Value); }
++        else if(node is JsonArray array)foreach(var child in array)NoExtensions(child);
++    }
++    static readonly string[] CostNames=["transfer bytes","geometry bytes","vertices","triangles","nodes","materials","image pixels"];
++    public void Admit(ModelAsset asset)
++    {
++        Require(asset.Profile=="gltf2-static-v1" && asset.Allowed.Length==7,"unsupported model profile");
++        for(int i=0;i<Costs.Length;i++)Require(Costs[i]<=asset.Allowed[i],$"{CostNames[i]} exceeded: {Costs[i]} > {asset.Allowed[i]}");
++        Require(Bounds.SequenceEqual(asset.Bounds),"declared bounds differ from verified geometry");
++    }
++    public static StaticGlb Validate(byte[] bytes)
++    {
++        uint U(int at)=>BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(at,4));
++        Require(bytes.Length>=20 && U(0)==0x46546c67 && U(4)==2 && U(8)==bytes.Length,"invalid header");
++        JsonNode? doc=null;byte[]? bin=null;int at=12;
++        while(at<bytes.Length) {
++            Require(at<=bytes.Length-8,"truncated chunk");uint length=U(at),type=U(at+4);at+=8;
++            Require(length%4==0 && length<=bytes.Length-at,"invalid chunk length");
++            if(type==0x4e4f534a && doc==null && bin==null)doc=JsonNode.Parse(bytes.AsSpan(at,(int)length));
++            else if(type==0x004e4942 && doc!=null && bin==null)bin=bytes.AsSpan(at,(int)length).ToArray();
++            else Require(false,"unexpected chunk");at+=(int)length;
++        }
++        Require(doc!=null && bin!=null,"JSON and BIN are required");var d=doc!;var data=bin!;
++        Require(d["asset"]?["version"]?.ToString()=="2.0" && d["asset"]?["minVersion"]==null,"unsupported version");
++        Require(Rows(d["extensionsUsed"]).Count==0 && Rows(d["extensionsRequired"]).Count==0 &&
++            d["animations"]==null && d["skins"]==null && d["cameras"]==null,"unsupported scene features");NoExtensions(d);
++        var scenes=Rows(d["scenes"]);var buffers=Rows(d["buffers"]);
++        Require(scenes.Count==1 && Integer(d["scene"])==0 && buffers.Count==1 && buffers[0]?["uri"]==null,"one local scene/buffer required");
++        long bufferLength=Integer(buffers[0]?["byteLength"]);Require(bufferLength<=data.Length && data.Length-bufferLength<4,"invalid buffer length");
++        var views=Rows(d["bufferViews"]);var accessors=Rows(d["accessors"]);var nodes=Rows(d["nodes"]);var meshes=Rows(d["meshes"]);
++        var materials=Rows(d["materials"]);var images=Rows(d["images"]);var textures=Rows(d["textures"]);var samplers=Rows(d["samplers"]);
++        long Offset(JsonNode n)=>Integer(n["byteOffset"],0);
++        int Width(JsonNode? n)=>n?.GetValue<int>() switch {5120 or 5121=>1,5122 or 5123=>2,5125 or 5126=>4,_=>0};
++        int Components(JsonNode? n)=>n?.ToString() switch {"SCALAR"=>1,"VEC2"=>2,"VEC3"=>3,"VEC4" or "MAT2"=>4,"MAT3"=>9,"MAT4"=>16,_=>0};
++        foreach(var part in views)Require(part!=null && Integer(part["buffer"])==0 && part["byteStride"]==null && checked(Offset(part)+Integer(part["byteLength"]))<=bufferLength,"invalid/interleaved buffer view");
++        foreach(var row in accessors) {
++            var a=row!;Require(a["sparse"]==null && a["bufferView"]!=null,"sparse/unbound accessor");var part=Index(views,a["bufferView"]);
++            int width=Width(a["componentType"]),components=Components(a["type"]);long count=Integer(a["count"]),offset=Offset(a);
++            Require(width>0 && components>0 && (Offset(part)+offset)%width==0 && checked(offset+checked(width*components*count))<=Integer(part["byteLength"]),"invalid accessor range");
++        }
++        foreach(var sampler in samplers)foreach(string field in new[]{"wrapS","wrapT"})Require(sampler?[field]==null || sampler[field]!.GetValue<int>() is 33071 or 33648 or 10497,"unsupported sampler");
++        foreach(var texture in textures) { _=Index(images,texture?["source"]);if(texture?["sampler"]!=null)_=Index(samplers,texture["sampler"]); }
++        foreach(var material in materials)foreach(var slot in new[]{material?["pbrMetallicRoughness"]?["baseColorTexture"],material?["pbrMetallicRoughness"]?["metallicRoughnessTexture"],material?["normalTexture"],material?["occlusionTexture"],material?["emissiveTexture"]})
++            if(slot!=null) { _=Index(textures,slot["index"]);Require(Integer(slot["texCoord"],0)==0,"only UV0 supported"); }
++        long pixels=0;
++        foreach(var image in images) {
++            Require(image?["uri"]==null && image?["mimeType"]?.ToString() is "image/png" or "image/jpeg","external/unsupported image");
++            var part=Index(views,image!["bufferView"]);pixels=checked(pixels+ImagePixels(data.AsSpan(checked((int)Offset(part)),checked((int)Integer(part["byteLength"]))),image["mimeType"]!.ToString()));
++        }
++        var usedViews=new HashSet<int>();var statistics=new List<(long Vertices,long Triangles,double[] Low,double[] High)>();
++        double[] Low()=>[double.PositiveInfinity,double.PositiveInfinity,double.PositiveInfinity];
++        double[] High()=>[double.NegativeInfinity,double.NegativeInfinity,double.NegativeInfinity];
++        foreach(var mesh in meshes) {
++            var primitives=Rows(mesh?["primitives"]);Require(primitives.Count>0 && mesh?["weights"]==null,"unsupported mesh");
++            long vertices=0,triangles=0;var low=Low();var high=High();
++            foreach(var primitive in primitives) {
++                var p=primitive!;Require(Integer(p["mode"],4)==4 && p["targets"]==null,"only static triangles supported");
++                var attrs=p["attributes"] as JsonObject;Require(attrs!=null && attrs["POSITION"]!=null && attrs.All(a=>a.Key is "POSITION" or "NORMAL" or "TANGENT" or "TEXCOORD_0" or "COLOR_0"),"unsupported attributes");
++                var position=Index(accessors,attrs!["POSITION"]);long count=Integer(position["count"]);
++                Require(count>0 && position["type"]?.ToString()=="VEC3" && Integer(position["componentType"])==5126 && position["normalized"]?.GetValue<bool>()!=true,"positions must be float VEC3");
++                var part=Index(views,position["bufferView"]);long offset=Offset(part)+Offset(position);var min=Low();var max=High();
++                for(long i=0;i<count;i++)for(int axis=0;axis<3;axis++) {
++                    float f=BinaryPrimitives.ReadSingleLittleEndian(data.AsSpan(checked((int)(offset+i*12+axis*4)),4));Require(float.IsFinite(f),"nonfinite vertex");
++                    min[axis]=Math.Min(min[axis],f);max[axis]=Math.Max(max[axis],f);
++                }
++                foreach(var pair in new[]{("min",min),("max",max)}) {
++                    var expected=Vector(position[pair.Item1],3,[]);Require(expected.Length==3 && expected.Select((n,i)=>(float)n==pair.Item2[i]).All(b=>b),"position bounds mismatch");
++                }
++                for(int axis=0;axis<3;axis++){low[axis]=Math.Min(low[axis],min[axis]);high[axis]=Math.Max(high[axis],max[axis]);}
++                foreach(var attribute in attrs) {
++                    var a=Index(accessors,attribute.Value);Require(Integer(a["count"])==count,"attribute count mismatch");
++                    string kind=attribute.Key,type=a["type"]!.ToString();long component=Integer(a["componentType"]);bool normalized=a["normalized"]?.GetValue<bool>()==true;
++                    bool shape=kind switch {"POSITION" or "NORMAL"=>type=="VEC3","TANGENT"=>type=="VEC4","TEXCOORD_0"=>type=="VEC2",_=>type is "VEC3" or "VEC4"};
++                    bool scalar=component==5126 ? !normalized : normalized && (kind is "NORMAL" or "TANGENT" ? component is 5120 or 5122 : kind!="POSITION" && component is 5121 or 5123);
++                    Require(shape && scalar,"invalid vertex attribute");usedViews.Add(checked((int)Integer(a["bufferView"])));
++                }
++                long indexCount=count;
++                if(p["indices"]!=null) {
++                    var indices=Index(accessors,p["indices"]);int width=Width(indices["componentType"]);
++                    Require(indices["type"]?.ToString()=="SCALAR" && indices["normalized"]?.GetValue<bool>()!=true && Integer(indices["componentType"]) is 5121 or 5123 or 5125,"invalid triangle indices");
++                    indexCount=Integer(indices["count"]);var view=Index(views,indices["bufferView"]);long start=Offset(view)+Offset(indices);
++                    for(long i=0;i<indexCount;i++) {
++                        int index=checked((int)(start+i*width));uint vertex=width==1 ? data[index] : width==2 ? BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(index,2)) : BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(index,4));
++                        Require(vertex<count,"triangle index exceeds vertices");
++                    }
++                    usedViews.Add(checked((int)Integer(indices["bufferView"])));
++                }
++                Require(indexCount%3==0,"incomplete triangles");if(p["material"]!=null)_=Index(materials,p["material"]);
++                vertices=checked(vertices+count);triangles=checked(triangles+indexCount/3);
++            }
++            statistics.Add((vertices,triangles,low,high));
++        }
++        var seen=new HashSet<int>();var usedMeshes=new HashSet<int>();var minimum=Low();var maximum=High();long vertexTotal=0,triangleTotal=0;
++        double[] identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
++        void Visit(JsonNode? index,double[] parent) {
++            int id=checked((int)Integer(index));var node=Index(nodes,index);Require(seen.Add(id),"cyclic/reused node");
++            Require(node["camera"]==null && node["skin"]==null && node["weights"]==null,"unsupported node");
++            var matrix=Vector(node["matrix"],16,[]);var translation=Vector(node["translation"],3,[0,0,0]);var rotation=Vector(node["rotation"],4,[0,0,0,1]);var scale=Vector(node["scale"],3,[1,1,1]);
++            Require(Math.Abs(rotation.Sum(n=>n*n)-1)<0.001,"invalid quaternion");
++            if(matrix.Length!=0)Require(node["translation"]==null && node["rotation"]==null && node["scale"]==null && matrix[3]==0 && matrix[7]==0 && matrix[11]==0 && matrix[15]==1,"invalid affine transform");
++            else {
++                var x=rotation[0];var y=rotation[1];var z=rotation[2];var w=rotation[3];
++                matrix=[(1-2*(y*y+z*z))*scale[0],2*(x*y+z*w)*scale[0],2*(x*z-y*w)*scale[0],0,
++                    2*(x*y-z*w)*scale[1],(1-2*(x*x+z*z))*scale[1],2*(y*z+x*w)*scale[1],0,
++                    2*(x*z+y*w)*scale[2],2*(y*z-x*w)*scale[2],(1-2*(x*x+y*y))*scale[2],0,translation[0],translation[1],translation[2],1];
++            }
++            var transform=new double[16];for(int c=0;c<4;c++)for(int row=0;row<4;row++)for(int k=0;k<4;k++)transform[c*4+row]+=parent[k*4+row]*matrix[c*4+k];
++            if(node["mesh"]!=null) {
++                int mesh=checked((int)Integer(node["mesh"]));Require(mesh<statistics.Count,"invalid mesh reference");usedMeshes.Add(mesh);var stat=statistics[mesh];
++                vertexTotal=checked(vertexTotal+stat.Vertices);triangleTotal=checked(triangleTotal+stat.Triangles);
++                foreach(double x in new[]{stat.Low[0],stat.High[0]})foreach(double y in new[]{stat.Low[1],stat.High[1]})foreach(double z in new[]{stat.Low[2],stat.High[2]})for(int axis=0;axis<3;axis++) {
++                    double n=transform[axis]*x+transform[axis+4]*y+transform[axis+8]*z+transform[axis+12];Require(double.IsFinite(n),"nonfinite bounds");minimum[axis]=Math.Min(minimum[axis],n);maximum[axis]=Math.Max(maximum[axis],n);
++                }
++            }
++            foreach(var child in Rows(node["children"]))Visit(child,transform);
++        }
++        foreach(var node in Rows(scenes[0]?["nodes"]))Visit(node,identity);
++        Require(seen.Count==nodes.Count && usedMeshes.Count==meshes.Count && minimum.All(double.IsFinite),"unselected/empty scene content");
++        long geometry=usedViews.Aggregate(0L,(sum,i)=>checked(sum+Integer(views[i]?["byteLength"])));
++        long Bound(double metres,bool upper) {
++            double mm=metres*1000,nearest=Math.Floor(mm+0.5),ulp=metres==0 ? 0 : Math.Pow(2,Math.Floor(Math.Log2(Math.Abs(metres)))-23);
++            if(Math.Abs(mm-nearest)<=Math.Min(0.25,Math.Max(0.0001,4*ulp*1000)))mm=nearest;
++            return checked((long)(upper ? Math.Ceiling(mm) : Math.Floor(mm)));
++        }
++        var bounds=minimum.Select(n=>Bound(n,false)).Concat(maximum.Select(n=>Bound(n,true))).ToArray();
++        for(int axis=0;axis<3;axis++)if(bounds[axis]==bounds[axis+3]){bounds[axis]--;bounds[axis+3]++;}
++        return new([bytes.Length,geometry,vertexTotal,triangleTotal,nodes.Count,materials.Count,pixels],bounds);
++    }
++    static long ImagePixels(ReadOnlySpan<byte> bytes,string mime)
++    {
++        if(mime=="image/png") {
++            Require(bytes.Length>=24 && BinaryPrimitives.ReadUInt64BigEndian(bytes)==0x89504e470d0a1a0a && BinaryPrimitives.ReadUInt32BigEndian(bytes[12..])==0x49484452,"invalid PNG");
++            uint width=BinaryPrimitives.ReadUInt32BigEndian(bytes[16..]),height=BinaryPrimitives.ReadUInt32BigEndian(bytes[20..]);Require(width>0 && height>0,"empty image");return checked((long)width*height);
++        }
++        Require(bytes.Length>=4 && bytes[0]==255 && bytes[1]==216,"invalid JPEG");int at=2;
++        while(at<=bytes.Length-4) {
++            Require(bytes[at++]==255,"invalid JPEG segment");int marker=bytes[at++];while(marker==255 && at<bytes.Length)marker=bytes[at++];
++            Require(at<=bytes.Length-2,"truncated JPEG");int length=BinaryPrimitives.ReadUInt16BigEndian(bytes[at..]);Require(length>=2 && at<=bytes.Length-length,"invalid JPEG length");
++            if(marker is 0xc0 or 0xc1 or 0xc2 or 0xc3) { Require(length>=7,"invalid JPEG frame");int h=BinaryPrimitives.ReadUInt16BigEndian(bytes[(at+3)..]),w=BinaryPrimitives.ReadUInt16BigEndian(bytes[(at+5)..]);Require(w>0 && h>0,"empty image");return checked((long)w*h); }at+=length;
++        }
++        throw new FormatException("JPEG dimensions unavailable.");
++    }
++}
+--- HEAD/client/godot/Core/Transport.cs
++++ final03/client/godot/Core/Transport.cs
+@@ -61,6 +61,18 @@
+         return socket;
+     }
+     public Uri SocketUri => new UriBuilder(origin) { Scheme = "wss", Path = "/api/views" }.Uri;
++    public async Task<byte[]> Model(string digest,long allowance,CancellationToken cancellation)
++    {
++        if(!System.Text.RegularExpressions.Regex.IsMatch(digest,"^[a-f0-9]{64}$") || allowance<=0)throw new FormatException("Invalid asset request.");
++        using var response=await client.GetAsync("/assets/models/"+digest+".glb",HttpCompletionOption.ResponseHeadersRead,cancellation);
++        response.EnsureSuccessStatusCode();
++        if(response.Content.Headers.ContentLength is long length && length>allowance)throw new FormatException("Model transfer bytes exceeded.");
++        using var stream=await response.Content.ReadAsStreamAsync(cancellation);using var output=new MemoryStream();var buffer=new byte[16384];
++        for(int count;(count=await stream.ReadAsync(buffer,cancellation))>0;) {
++            if(output.Length+count>allowance)throw new FormatException("Model transfer bytes exceeded.");output.Write(buffer,0,count);
++        }
++        byte[] bytes=output.ToArray();if(Convert.ToHexStringLower(SHA256.HashData(bytes))!=digest)throw new FormatException("Model digest mismatch.");return bytes;
++    }
+     public async Task<JsonNode> Send(string route, JsonObject? body, CancellationToken cancellation, HttpMethod? method = null)
+     {
+         using var request = new HttpRequestMessage(method ?? (body == null ? HttpMethod.Get : HttpMethod.Post), route);
+--- HEAD/client/godot/Core/World.cs
++++ final03/client/godot/Core/World.cs
+@@ -75,7 +75,8 @@
+     }
+ }
+ 
+-public sealed record ControlBinding(ulong Epoch,ulong Body,ulong Revision,BigInteger Speed,ulong Lease,bool Grounded,Term Viewpoint)
++public sealed record ControlBinding(ulong Epoch,ulong Body,ulong Revision,BigInteger Speed,ulong Lease,bool Grounded,Term Viewpoint,
++    BigInteger? Snap=null,BigInteger? TeleportReach=null)
+ {
+     public static ControlBinding? Decode(Term control,Actor? principal,PhysicsSample sample)
+     {
+@@ -89,7 +90,18 @@
+         if(view[2].Kind!="atom" || view[2].Name!="view_only") throw new FormatException("Unsupported desktop tracking mapping.");
+         BigInteger speed=motion[1].Integer; ulong lease=checked((ulong)motion[3].Integer);
+         if (speed<=0 || lease==0 || (motion[0].Name!="free" && motion[0].Name!="grounded")) throw new FormatException("Unsupported desktop motion profile.");
+-        return new(epoch,id,revision,speed,lease,motion[0].Name=="grounded",view[1]);
++        var capabilities=new Dictionary<string,Term>();
++        foreach(var capability in motion[5].Items) {
++            if(!capabilities.TryAdd(capability.Name,capability)) throw new FormatException("Duplicate movement ability.");
++            switch(capability.Name) {
++                case "snap": case "jump": if(capability.Require(capability.Name,1)[0].Integer<=0) throw new FormatException("Invalid movement ability."); break;
++                case "teleport": var t=capability.Require("teleport",3); if(t[0].Integer<=0 || t[1].Integer<0 || t[2].Integer<1 || t[2].Integer>1000) throw new FormatException("Invalid teleport ability."); break;
++                case "reposition": if(capability.Kind!="atom") throw new FormatException("Invalid reposition ability."); break;
++                default: throw new FormatException("Unsupported movement ability.");
++            }
++        }
++        BigInteger? Ability(string name)=>capabilities.TryGetValue(name,out var term) ? term.Args[0].Integer : null;
++        return new(epoch,id,revision,speed,lease,motion[0].Name=="grounded",view[1],Ability("snap"),Ability("teleport"));
+     }
+ }
+ 
+--- HEAD/client/godot/Main.cs
++++ final03/client/godot/Main.cs
+@@ -24,6 +24,13 @@
+     WorldProjection? projection;
+     long worldIncarnation;
+     PhysicsInput? controls;
++    OpenXRInput xr=null!;
++    RenderModels models=null!;
++    SpatialGui gui=null!;
++    VBoxContainer? localControllers;
++    Label? localControllerStatus;
++    readonly Dictionary<string,OptionButton> sourceChoices=[];
++    string sourceSchema="";
+     Task worldChanges=Task.CompletedTask;
+     CancellationTokenSource? action;
+     Task activeAction = Task.CompletedTask;
+@@ -49,8 +56,9 @@
+     public override void _Ready()
+     {
+         GetTree().AutoAcceptQuit = false;
++        gui=new() { Name="shared-gui" };AddChild(gui);
+         var margin = new MarginContainer { OffsetLeft = 28, OffsetTop = 22, AnchorRight = 1, AnchorBottom = 1, OffsetRight = -28, OffsetBottom = -22 };
+-        AddChild(margin);
++        gui.Surface.AddChild(margin);
+         var scroll = new ScrollContainer { FollowFocus = true }; margin.AddChild(scroll);
+         var root = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill }; scroll.AddChild(root);
+         root.AddChild(new Label { Text = "Quod", ThemeTypeVariation = "HeaderLarge" }); root.AddChild(identityLabel);
+@@ -60,9 +68,24 @@
+         Add(address, "connect", "Connect", Connect); Add(address, "disconnect", "Disconnect", () => { Disconnect(); return Task.CompletedTask; });
+         root.AddChild(status); root.AddChild(location); root.AddChild(controllers);
+         scene = new() { Name = "space-scene" }; root.AddChild(scene);
++        models=new(async (asset,cancellation)=> {
++            var consumer=session??throw new InvalidOperationException("Connect before requesting controller resources.");
++            using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
++            ulong until=consumer.Deadline;if(until<=SignedSession.Now)throw new TimeoutException("Asset deadline expired.");
++            deadline.CancelAfter(TimeSpan.FromMilliseconds(until-SignedSession.Now));
++            return await consumer.Transport.Model(asset.Digest,asset.Allowed[0],deadline.Token);
++        });
++        xr=new() { Name="openxr-input" };scene.Viewport.AddChild(xr);
++        xr.Configure(scene,gui,models,()=>controls,()=>GuiOpen || gui.NativePressed,()=>new[]{"open-gui","create-operations","location-operations","inspect","local-controllers","stop-xr"}.Select(name=> {
++            var button=buttons[name];return(button.Text,(Func<bool>)(()=>!button.Disabled),(Action)(()=>button.EmitSignal(BaseButton.SignalName.Pressed)));
++        }).ToArray());
++        xr.Changed+=UpdateControllerStatus;
++        gui.NativeCaptureChanged+=()=>{if(gui.NativePressed){xr.Router.Cancel();scene.ReleaseInput();}xr.ContextChanged();};
++        GetWindow().VisibilityChanged+=()=>xr.Visibility(GetWindow().Visible);
+         scene.Drive += (direction,_) => controls?.Drive(direction.X,direction.Y,direction.Z);
+         scene.Selected += exact => {
+             if (accounts?.Human == null || session == null) return;
++            OverlayChanging();
+             if (operations == null) { operations = new() { Name = "operations" }; body.AddChild(operations); operations.Changed += Notify; }
+             operations.OpenSubject(session, accounts, Actor.FromTerm(exact), exact);
+         };
+@@ -75,6 +98,9 @@
+         Add(actions, "create-operations", "Create / operations", OpenStorage);
+         Add(actions, "location-operations", "Current space operations", OpenLocation);
+         Add(actions, "inspect", "Source / inspection", OpenTools);
++        Add(actions,"local-controllers","Connected controllers",()=>{OpenControllers();return Task.CompletedTask;});
++        Add(actions,"start-xr","Start OpenXR",()=>{xr.Start();return Task.CompletedTask;});
++        Add(actions,"stop-xr","Stop OpenXR",()=>{xr.StopSession();return Task.CompletedTask;});
+         root.AddChild(body);
+         endpoint.TextChanged += _ => SettingsChanged(); ca.TextChanged += _ => SettingsChanged();
+         try {
+@@ -201,11 +227,10 @@
+         var preferences = new SignedView(consumer, human, human, "controller_preferences", SignedSession.ViewGoal(human,
+             Term.Call("controller_preferences_view", Term.Parse(human.InstanceText.TrimEnd('.')), Term.Variable("View")))); views.Add(preferences);
+         preferences.Projection += message => {
+-            var value = Term.Parse(Quod.Client.Json.S(message, "value")); value.Ground(); var args = value.Require("controller_view", 3);
+-            controllers.Text = "Available local input: keyboard, mouse. Controller mapping revision " + args[0] + ". " +
+-                (args[2].Name == "invalid_settings" ? "Stored settings are invalid; use the offered repair operation." : "Hardware tracking and XR qualification remain separate."); Notify();
++            var value=Term.Parse(Json.S(message,"value"));var mapping=ControllerMapping.Decode(value);xr.Install(mapping);
++            controllers.Text="Keyboard/mouse available. "+(mapping==null ? "Stored controller settings are invalid; use the offered Reset operation." : "Controller mapping revision "+mapping.Revision+".");Notify();
+         };
+-        preferences.Withdrawn += reason => { controllers.Text = "Controller mapping unavailable: " + reason; Notify(); };
++        preferences.Withdrawn += reason => { xr.Install(null);controllers.Text = "Controller mapping unavailable: " + reason; Notify(); };
+         _ = preferences.Start();
+         questions?.Dispose(); questions = new(consumer, accounts, store!, body, Notify); questions.Start();
+         await OpenGui();
+@@ -215,7 +240,7 @@
+         worldIncarnation++;
+         var completion = worldView?.Completion ?? Task.CompletedTask; worldView?.Dispose(); worldView=null;
+         retiredWorld = retiredWorld.IsCompleted ? completion : Task.WhenAll(retiredWorld,completion);
+-        projection=null; controls?.Withdraw(); worldAccepted=false; scene?.Withdraw();
++        projection=null; controls?.Withdraw(); worldAccepted=false; xr?.InvalidateWorld();scene?.Withdraw();
+     }
+     void OpenWorld(SignedSession consumer,Actor human,Actor? space)
+     {
+@@ -264,10 +289,13 @@
+         catch (Exception error) { if (!disposed && !closing) { WithdrawWorld(error.Message); Notify(); } }
+     }
+     void WithdrawWorld(string reason)
+-    { projection=null; controls?.Withdraw(); scene.Withdraw(); worldAccepted=false; status.Text="Space unavailable: " + reason; UpdateButtons(); }
+-    public override void _Process(double delta) => controls?.Tick(delta);
++    { projection=null; controls?.Withdraw();xr.InvalidateWorld(); scene.Withdraw(); worldAccepted=false; status.Text="Space unavailable: " + reason; UpdateButtons(); }
++    bool GuiOpen=>operations?.Visible==true || backupDialog!=null || (localControllers?.Visible??false) || body.GetChildren().Any(n=>n is Control { Visible:true } && n is SourcePanel or QuestionPanel);
++    void OverlayChanging() { gui.Cancel();xr.Router.Cancel();scene.ReleaseInput(); }
++    public override void _Process(double delta) { xr.ContextChanged();scene.NavigationBlocked=GuiOpen || xr.Running;controls?.Tick(delta); }
+     Task OpenGui()
+     {
++        OverlayChanging();
+         RequireSession(); if (accounts!.Human == null) throw new InvalidOperationException("No human account reference.");
+         if (operations != null) { operations.Show(); operations.Open(session!, accounts); return Task.CompletedTask; }
+         operations = new() { Name = "operations" }; body.AddChild(operations); operations.Changed += Notify;
+@@ -275,6 +303,7 @@
+     }
+     Task OpenStorage()
+     {
++        OverlayChanging();
+         RequireSession();
+         if (accounts!.Setup == null) throw new InvalidOperationException("Complete account setup first.");
+         if (operations == null) { operations = new() { Name = "operations" }; body.AddChild(operations); operations.Changed += Notify; }
+@@ -282,6 +311,7 @@
+     }
+     Task OpenLocation()
+     {
++        OverlayChanging();
+         RequireSession(); var space = navigationAvailable ? navigation?.Space : null;
+         if (space==null) throw new InvalidOperationException("Current location is unavailable or unplaced.");
+         if (operations == null) { operations=new() { Name="operations" }; body.AddChild(operations); operations.Changed+=Notify; }
+@@ -289,6 +319,7 @@
+     }
+     Task OpenTools()
+     {
++        OverlayChanging();
+         RequireSession(); if (accounts!.Human == null) throw new InvalidOperationException("No account.");
+         var tools = new SourcePanel { Name = "source-tools" }; body.AddChild(tools); tools.Open(session!, accounts); return Task.CompletedTask;
+     }
+@@ -297,8 +328,10 @@
+     void CloseSession()
+     {
+         incarnation++;
++        xr?.Install(null);xr?.StopSession();gui?.Cancel();
+         RetireWorld(); navigation=null; navigationAvailable=false;
+         var completions = views.Select(v => v.Completion ?? Task.CompletedTask).ToList();
++        if(xr!=null)completions.Add(xr.Completion);
+         completions.Add(retiredWorld);
+         completions.Add(worldChanges);
+         if(controls!=null) { controls.Dispose(); completions.Add(controls.Completion); controls=null; }
+@@ -317,7 +350,7 @@
+             finally { closing?.Dispose(); }
+         }
+         ViewsDisposed = ViewsDisposed.IsCompleted ? Finish() : Task.WhenAll(ViewsDisposed, Finish());
+-        accounts = null; worldAccepted = false; location.Text = controllers.Text = "";
++        accounts = null; worldAccepted = false; location.Text = controllers.Text = "";localControllers=null;localControllerStatus=null;sourceChoices.Clear();sourceSchema="";
+         scene?.Withdraw();
+     }
+     public void Disconnect()
+@@ -334,8 +367,8 @@
+     public override void _Notification(int what)
+     {
+         if (what == NotificationWMCloseRequest) _ = CloseApplication();
+-        if (what == NotificationApplicationFocusOut) GetViewport()?.GuiReleaseFocus();
+-        if (what == NotificationApplicationFocusOut) scene?.ReleaseInput();
++        if (what == NotificationApplicationFocusOut) { GetViewport()?.GuiReleaseFocus();scene?.ReleaseInput();gui?.Cancel();xr?.Focus(false); }
++        if (what == NotificationApplicationFocusIn)xr?.Focus(true);
+     }
+     void UpdateButtons()
+     {
+@@ -355,19 +388,25 @@
+         buttons["create-operations"].Disabled |= accounts?.Setup == null;
+         buttons["location-operations"].Disabled |= accounts?.Setup == null || !navigationAvailable || navigation?.Space == null || !worldAccepted;
+         buttons["inspect"].Disabled |= accounts?.Human == null;
+-    }
+-    void Notify() { if (!disposed && IsInsideTree()) EmitSignal(SignalName.Changed); }
++        buttons["local-controllers"].Disabled|=accounts?.Human==null;
++        buttons["start-xr"].Disabled|=accounts?.Human==null || xr.Running;
++        buttons["stop-xr"].Disabled|=!xr.Running;
++        xr.RefreshMenu();
++    }
++    void Notify() { xr?.ContextChanged();if (!disposed && IsInsideTree()) EmitSignal(SignalName.Changed); }
+     public string Inspect() => JsonSerializer.Serialize(new { state, busy, public_key = key?.PublicText,
+         network = session?.Network, human = accounts?.Human, setup = accounts?.Setup?.ToString(),
+         pending = store?.Snapshot?.Pending.Count, world_accepted = worldAccepted, live_sockets = SignedView.LiveSockets, ignored_projections = SignedView.IgnoredProjections, question_receiver_ready = questions?.Ready,
+         current_location = navigationAvailable ? navigation?.Location.ToString() : null, assignment_revision = navigationAvailable ? navigation?.Revision.ToString() : null,
+         physical_selection = projection?.Selection, physical_tick = projection?.Sample?.Tick, scene_count = scene?.Count,
+-        operation_available = operations?.Available, operation_status = operations?.StatusText, status = status.Text });
++        operation_available = operations?.Available, operation_status = operations?.StatusText, status = status.Text,
++        controller_status=xr?.Router?.Status,controller_metrics=xr?.Metrics });
+     internal LocalStore ActiveStore => store ?? throw new InvalidOperationException("No active store.");
+     internal SignedSession ActiveSession => session ?? throw new InvalidOperationException("No active session.");
+     internal Accounts ActiveAccounts => accounts ?? throw new InvalidOperationException("No active account.");
+     void BackupDialog(bool export)
+     {
++        OverlayChanging();
+         if (backupDialog != null && IsInstanceValid(backupDialog) && !backupDialog.IsQueuedForDeletion()) { backupDialog.GrabFocus(); return; }
+         var cancelled = new CancellationTokenSource();
+         var dialog = new Window { Name = "backup-dialog", Title = export ? "Export encrypted backup" : "Import encrypted backup", Size = new(620, 250), Transient = true, Exclusive = true };
+@@ -408,11 +447,13 @@
+     }
+     void ReleaseIdentity()
+     { if (released) return; released = true; key?.Dispose(); store?.Dispose(); }
+-    internal async Task CloseApplication()
++    internal async Task CloseApplication(int exitCode=0)
+     {
+         if (closing) return; closing = true; action?.Cancel(); backupCancellation?.Cancel(); backupDialog?.QueueFree(); CloseSession();
+-        await Task.WhenAll(ViewsDisposed, activeAction, backupWork);
+-        disposed = true; ReleaseIdentity(); GetTree().Quit();
++        await Task.WhenAll(ViewsDisposed, activeAction, backupWork,xr.Completion);
++        models.Dispose();await models.Completion;
++        bool xrStopped=await xr.Shutdown(SignedSession.Now+5000);
++        disposed = true; ReleaseIdentity(); GetTree().Quit(xrStopped ? exitCode : 1);
+     }
+     public override void _ExitTree()
+     {
+@@ -421,4 +462,42 @@
+         // work finishes or the process closes it. Never release it under I/O.
+         if (ViewsDisposed.IsCompleted && activeAction.IsCompleted && backupWork.IsCompleted) ReleaseIdentity();
+     }
++    void OpenControllers()
++    {
++        OverlayChanging();
++        if(localControllers!=null){localControllers.Show();UpdateControllerStatus();return;}
++        localControllers=new() { Name="local-controllers-panel" };body.AddChild(localControllers);
++        localControllerStatus=new() { AutowrapMode=TextServer.AutowrapMode.WordSmart };localControllers.AddChild(localControllerStatus);
++        foreach(string role in new[]{"navigation","menu"}) {
++            localControllers.AddChild(new Label { Text=role=="navigation" ? "Movement source for this session" : "Menu source for this session" });
++            var choice=new OptionButton();localControllers.AddChild(choice);sourceChoices.Add(role,choice);
++            choice.ItemSelected+=index=> {
++                string id=choice.GetItemMetadata((int)index).AsString();
++                if(!xr.Router.Choose(role,id))localControllerStatus.Text="Movement and menu require distinct sources.";
++            };
++        }
++        var row=Row(localControllers);var settings=new Button { Text="Edit saved bindings" };row.AddChild(settings);settings.Pressed+=()=>activeAction=Run(OpenGui);
++        var close=new Button { Text="Close" };row.AddChild(close);close.Pressed+=()=>{localControllers.Hide();Notify();};
++        sourceSchema="";UpdateControllerStatus();
++    }
++    void UpdateControllerStatus()
++    {
++        controllers.Text="Keyboard/mouse available. "+xr.Status+"\n"+xr.Router.Description;
++        if(localControllerStatus!=null) {
++            localControllerStatus.Text=xr.Status+"\n"+xr.Router.Description;
++            var sources=xr.Router.SourceChoices;string schema=string.Join(',',sources.Select(s=>s.Id));
++            foreach(var choice in sourceChoices.Values) {
++                if(schema!=sourceSchema || choice.ItemCount==0) {
++                    choice.Clear();choice.AddItem("Use saved hand preference");choice.SetItemMetadata(0,"");
++                    foreach(var source in sources){choice.AddItem(source.Id+": "+source.Hand+" "+source.Profile);choice.SetItemMetadata(choice.ItemCount-1,source.Id);}
++                } else for(int i=0;i<sources.Length;i++)choice.SetItemText(i+1,sources[i].Id+": "+sources[i].Hand+" "+sources[i].Profile);
++            }
++            foreach(var (role,choice) in sourceChoices) {
++                string? selected=xr.Router.Choice(role);
++                choice.Select(selected==null ? 0 : Array.FindIndex(sources,s=>s.Id==selected)+1);
++            }
++            sourceSchema=schema;
++        }
++        UpdateButtons();Notify();
++    }
+ }
+--- HEAD/client/godot/OpenXRInput.cs
++++ final03/client/godot/OpenXRInput.cs
+@@ -0,0 +1,333 @@
++using Godot;
++using Quod.Client;
++using NumericsVector2=System.Numerics.Vector2;
++using System.Runtime.InteropServices;
++
++// Godot owns tracker/action observations and the OpenXR session. This adapter
++// owns their scene lifetime and feeds the ordinary GUI, picking and sender.
++public partial class OpenXRInput : Node3D,IControllerConsumer
++{
++    public sealed class Source : IControllerSource,IDisposable
++    {
++        public XRControllerTracker Tracker { get; }
++        public Node3D Aim { get; }=new() { Name="source-ray" };
++        public Node3D Grip { get; }=new() { Name="source-grip" };
++        public MeshInstance3D Pointer { get; }=new() { Visible=false };
++        bool Alive=>!disposed && IsInstanceValid(Tracker);
++        public string Hand=>!Alive ? "none" : Tracker.Hand switch { XRPositionalTracker.TrackerHand.Left=>"left",XRPositionalTracker.TrackerHand.Right=>"right",_=>"none" };
++        public string[] Profiles=>Alive && Tracker.Profile=="/interaction_profiles/htc/vive_controller" ? ["htc-vive"] : [];
++        static readonly (string Id,string Type,string Press,string? Value,string? Touch,string? Axes)[] Components=[
++            ("xr-standard-trigger","trigger","trigger_press","trigger_value",null,null),
++            ("xr-standard-squeeze","squeeze","squeeze_press",null,null,null),
++            ("xr-standard-touchpad","touchpad","pad_press",null,"pad_touch","pad_axes")];
++        public string Layout=>(Alive ? Tracker.Profile : "unavailable")+":"+Hand+":"+string.Join(',',Components.Select(c=>c.Id+":"+string.Join(',',Read(c.Id)?.Features??[])));
++        bool disposed;
++        public Source(XRControllerTracker tracker,Node3D parent)
++        {
++            Tracker=tracker;parent.AddChild(Aim);parent.AddChild(Grip);
++            var line=new ImmediateMesh();line.SurfaceBegin(Mesh.PrimitiveType.Lines);line.SurfaceAddVertex(Vector3.Zero);line.SurfaceAddVertex(new(0,0,-2));line.SurfaceEnd();
++            Pointer.Mesh=line;Pointer.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoColor=Colors.Gold };Aim.AddChild(Pointer);
++        }
++        // Godot translates the authored OpenXR grip_pose action to tracker pose grip.
++        public bool Current(ulong frame)=>Alive && XRServer.GetTracker(Tracker.Name)?.GetInstanceId()==Tracker.GetInstanceId() && Tracker.HasPose("aim") && Tracker.HasPose("grip") &&
++            Tracker.GetPose("aim").HasTrackingData && Tracker.GetPose("grip").HasTrackingData &&
++            Tracker.GetPose("aim").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None && Tracker.GetPose("grip").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
++        public void UpdatePose()
++        { if(!Alive)return;if(Tracker.HasPose("aim"))Aim.Transform=Tracker.GetPose("aim").GetAdjustedTransform();if(Tracker.HasPose("grip"))Grip.Transform=Tracker.GetPose("grip").GetAdjustedTransform(); }
++        public ComponentSample? Read(string id)
++        {
++            if(!Alive || Profiles.Length==0)return null;
++            var component=Components.SingleOrDefault(c=>c.Id==id);if(component.Id==null)return null;
++            var press=Tracker.GetInput(component.Press);if(press.VariantType!=Variant.Type.Bool)return null;
++            var features=new List<string>{"press"};var axes=Vector2.Zero;
++            if(component.Value!=null && Tracker.GetInput(component.Value).VariantType==Variant.Type.Float)features.Add("value");
++            if(component.Touch!=null && Tracker.GetInput(component.Touch).VariantType==Variant.Type.Bool)features.Add("touch");
++            if(component.Axes!=null && Tracker.GetInput(component.Axes).VariantType==Variant.Type.Vector2) { features.Add("axes2");axes=Tracker.GetInput(component.Axes).AsVector2(); }
++            // OpenXR +Y is up; the portable touchpad contract uses forward=-Y.
++            return new(component.Type,features.ToArray(),press.AsBool(),new(axes.X,-axes.Y));
++        }
++        public void Dispose()
++        { if(disposed)return;disposed=true;Aim.GetParent()?.RemoveChild(Aim);Grip.GetParent()?.RemoveChild(Grip);Aim.Free();Grip.Free(); }
++    }
++    sealed class Visual
++    {
++        public ControllerProfile? Profile;
++        public string? Asset;
++        public RenderModels.Lease? Lease;
++        public Node3D? Model;
++        public long Incarnation;
++        public Task Loading=Task.CompletedTask;
++    }
++    readonly Dictionary<StringName,Source> sources=[];
++    readonly Dictionary<IControllerSource,Visual> visuals=[];
++    readonly List<Task> loading=[];
++    readonly XROrigin3D origin=new() { Name="xr-origin" };
++    readonly XRCamera3D camera=new() { Name="xr-camera" };
++    readonly MeshInstance3D panel=new() { Name="shared-gui-surface",Mesh=new QuadMesh { Size=new(1.5f,1) } };
++    readonly OpenXRApiExtension api=new();
++    OpenXRInterface? xr;
++    ScenePanel scene=null!;
++    SpatialGui gui=null!;
++    RenderModels models=null!;
++    Func<PhysicsInput?> controls=null!;
++    Func<bool> blocked=null!;
++    Func<(string Text,Func<bool> Enabled,Action Activate)[]> menuEntries=null!;
++    PanelContainer? menuPanel;
++    Button[] menuButtons=[];
++    Func<bool>[] menuEnabled=[];
++    int selection=-1;
++    bool attached,active,lifecycleSubscribed,shuttingDown,applicationFocused=true,visible=true,disposed,pointingGui;
++    Transform3D? calibration;
++    string? controlIdentity;
++    Term? pressedSubject;
++    IControllerSource? pointerSource;
++    public ControllerInput Router { get; private set; }=null!;
++    public bool Running=>active;
++    public int MenuRedraws { get; private set; }
++    public int LateCallbacks { get; private set; }
++    public int Subscriptions { get; private set; }
++    public int DriveRequests { get; private set; }
++    public int StopRequests { get; private set; }
++    public int SnapRequests { get; private set; }
++    public int TeleportRequests { get; private set; }
++    public string Status { get; private set; }="OpenXR is stopped.";
++    public event Action? Changed;
++    public Task Completion=>Task.WhenAll(loading);
++    public object Metrics=>new { Running,Subscriptions,sources=sources.Count,appearances=visuals.Count,MenuRedraws,LateCallbacks,captures=gui.Captures,DriveRequests,StopRequests,SnapRequests,TeleportRequests,resources=models.Metrics };
++    internal MeshInstance3D GuiSurface=>panel;
++    internal Source[] Sources=>sources.Values.ToArray();
++    public bool Blocked=>blocked();
++    public void Configure(ScenePanel scene,SpatialGui gui,RenderModels models,Func<PhysicsInput?> controls,Func<bool> blocked,Func<(string,Func<bool>,Action)[]> menuEntries)
++    {
++        this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.menuEntries=menuEntries;
++        AddChild(origin);origin.AddChild(camera);AddChild(panel);
++        panel.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=gui.Surface.GetTexture(),CullMode=BaseMaterial3D.CullModeEnum.Disabled };
++        panel.Visible=false;Router=new(this);Router.Changed+=()=>Changed?.Invoke();
++    }
++    public bool Start()
++    {
++        if(disposed || shuttingDown || active)return active;
++        xr=XRServer.FindInterface("OpenXR") as OpenXRInterface;
++        if(xr==null || (!xr.IsInitialized() && !xr.Initialize())) { Status="OpenXR unavailable. Launch with --xr-mode on and a supported installed runtime.";Changed?.Invoke();return false; }
++        xr.SessionFocussed+=Focused;xr.SessionVisible+=Unfocused;xr.SessionSynchronized+=Unfocused;xr.SessionStopping+=Stopping;
++        xr.SessionLossPending+=Stopping;xr.InstanceExiting+=Stopping;xr.PoseRecentered+=Recentered;Subscriptions+=7;
++        lifecycleSubscribed=true;xr.SetActionSetActive("quod_inputs",true);
++        AttachSources();active=true;calibration=null;
++        scene.ReleaseInput();scene.PresentXR(true);
++        gui.Surface.GuiEmbedSubwindows=true;
++        camera.Current=true;panel.Visible=true;PositionPanel();
++        Status="OpenXR active; input requires current focused tracking and signed settings.";Changed?.Invoke();return true;
++    }
++    // Shared with injected XRServer tracker qualification. No alternate input
++    // interpretation or application action path is selected here.
++    internal void AttachSources()
++    {
++        if(attached || disposed)return;attached=true;
++        XRServer.Singleton.TrackerAdded+=TrackerAdded;XRServer.Singleton.TrackerRemoved+=TrackerRemoved;XRServer.Singleton.TrackerUpdated+=TrackerUpdated;Subscriptions+=3;
++        foreach(var name in XRServer.GetTrackers((int)XRServer.TrackerType.Controller).Keys)ReconcileSource(name.AsStringName());
++    }
++    void ReconcileSource(StringName name)
++    {
++        if(!attached || disposed) { LateCallbacks++;return; }
++        var tracker=XRServer.GetTracker(name) as XRControllerTracker;
++        if(tracker!=null && (tracker.Type&XRServer.TrackerType.Controller)==0)tracker=null;
++        if(sources.TryGetValue(name,out var current) && tracker!=null && IsInstanceValid(current.Tracker) && current.Tracker.GetInstanceId()==tracker.GetInstanceId()) { Router.SourceChanged();return; }
++        RetireSource(name);if(tracker==null)return;
++        var source=new Source(tracker,origin);sources.Add(name,source);Router.Add(source);
++        tracker.ProfileChanged+=ProfileChanged;Subscriptions++;
++    }
++    // The engine emits removal before erasing its registry. Observe the
++    // installed result after that callback, with Current fencing dispatch now.
++    void TrackerAdded(StringName name,long type)=>Callable.From(()=>ReconcileSource(name)).CallDeferred();
++    void TrackerRemoved(StringName name,long type)=>Callable.From(()=>ReconcileSource(name)).CallDeferred();
++    void TrackerUpdated(StringName name,long type)=>Callable.From(()=>ReconcileSource(name)).CallDeferred();
++    void ProfileChanged(string profile)=>Router.SourceChanged();
++    void RetireSource(StringName name)
++    {
++        if(!sources.Remove(name,out var source))return;
++        if(IsInstanceValid(source.Tracker))source.Tracker.ProfileChanged-=ProfileChanged;
++        Subscriptions--;Router.Remove(source);
++    }
++    void Focused() { Status="OpenXR focused; release controls before use.";Changed?.Invoke(); }
++    void Unfocused() { Router.Cancel();gui.Cancel();HideVisuals();Status="OpenXR input paused: session has no focus.";Changed?.Invoke(); }
++    void Stopping() { Unfocused();Status="OpenXR runtime stopped this session.";Changed?.Invoke(); }
++    void Recentered() { Router.Cancel();calibration=null; }
++    public void Focus(bool focused)
++    { applicationFocused=focused;if(!focused){Router.Cancel();gui.Cancel();HideVisuals();} }
++    public void Visibility(bool next) { visible=next;if(!next){Router.Cancel();gui.Cancel();HideVisuals();} }
++    public void Install(ControllerMapping? mapping)=>Router.Install(mapping);
++    void ControlChanged() { if(controlIdentity!=scene.ControlIdentity) { InvalidateWorld();controlIdentity=scene.ControlIdentity; } }
++    public void ContextChanged() { ControlChanged();Router.ContextChanged(); }
++    public void InvalidateWorld() { Router.Cancel();calibration=null;pressedSubject=null; }
++    void PositionPanel()=>panel.Transform=scene.CameraPose*new Transform3D(Basis.Identity,new(0,0,-2));
++    public override void _Process(double delta)
++    {
++        if(!active || xr==null)return;
++        bool focused=applicationFocused && xr.GetSessionState()==OpenXRInterface.SessionState.Focused && api.IsRunning();
++        var head=XRServer.GetTracker("head") as XRPositionalTracker;
++        bool tracked=head?.HasPose("default")==true && head.GetPose("default").HasTrackingData &&
++            head.GetPose("default").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
++        ControlChanged();
++        if(tracked && calibration==null) {
++            var pose=head!.GetPose("default").Transform;var forward=-pose.Basis.Z;
++            var inverse=new Basis(Vector3.Up,-Mathf.Atan2(-forward.X,-forward.Z));
++            calibration=new(inverse,-(inverse*pose.Origin));
++        }
++        long time=api.GetPredictedDisplayTime();Advance(time>0 ? (ulong)time : 0,focused && tracked);
++    }
++    internal void Advance(ulong frame,bool interactive)
++    {
++        ControlChanged();
++        origin.Transform=scene.CameraPose*(calibration??Transform3D.Identity);
++        interactive&=applicationFocused && visible;
++        foreach(var source in sources.Values)source.UpdatePose();
++        Router.Frame(frame,interactive);
++        foreach(var (source,visual) in visuals)if(visual.Model!=null)visual.Model.Visible=interactive && visual.Profile!=null && source.Current(frame);
++    }
++    void HideVisuals() { foreach(var visual in visuals.Values)if(visual.Model!=null)visual.Model.Visible=false; }
++    public void Appearance(IControllerSource input,ControllerProfile? profile)
++    {
++        if(!visuals.TryGetValue(input,out var visual)) { visual=new();visuals.Add(input,visual); }
++        visual.Profile=profile;
++        if(profile==null) { if(visual.Model!=null)visual.Model.Visible=false;return; }
++        if(visual.Asset==profile.Model.Identity)return;
++        loading.RemoveAll(task=>task.IsCompleted);
++        visual.Incarnation++;if(visual.Model!=null){models.ReleaseInstance(visual.Model);visual.Model=null;}visual.Lease?.Dispose();
++        visual.Asset=profile.Model.Identity;visual.Lease=models.Acquire(profile.Model);long expected=visual.Incarnation;
++        async Task Load()
++        {
++            try {
++                var node=await visual.Lease.Instantiate();if(node==null)return;
++                if(disposed || !visuals.ContainsKey(input) || visual.Incarnation!=expected) { models.ReleaseInstance(node);return; }
++                visual.Model=node;node.Visible=false;((Source)input).Grip.AddChild(node);
++            } catch(OperationCanceledException) { }
++            catch(Exception error) { if(!disposed && visual.Incarnation==expected){Status="Controller appearance unavailable: "+error.Message;Changed?.Invoke();} }
++        }
++        visual.Loading=Load();loading.Add(visual.Loading);
++    }
++    public void Remove(IControllerSource input)
++    {
++        if(visuals.Remove(input,out var visual)) {
++            visual.Incarnation++;visual.Lease?.Dispose();if(visual.Model!=null)models.ReleaseInstance(visual.Model);
++        }
++        ((Source)input).Dispose();
++    }
++    (Vector3 Origin,Vector3 Direction) Ray(IControllerSource input)
++    { var pose=((Source)input).Aim.GlobalTransform;return(pose.Origin,-pose.Basis.Z.Normalized()); }
++    Vector2? GuiPoint(IControllerSource source)
++    {
++        var ray=Ray(source);var inverse=panel.GlobalTransform.AffineInverse();var start=inverse*ray.Origin;var direction=inverse.Basis*ray.Direction;
++        if(!panel.Visible || Math.Abs(direction.Z)<0.000001f)return null;float distance=-start.Z/direction.Z;if(distance<0)return null;
++        var point=start+direction*distance;if(Math.Abs(point.X)>0.75f || Math.Abs(point.Y)>0.5f)return null;
++        return new Vector2((point.X/1.5f+0.5f)*gui.Surface.Size.X,(0.5f-point.Y)*gui.Surface.Size.Y);
++    }
++    public void Hover(IControllerSource input,string context)
++    {
++        if(pointerSource!=null && pointerSource!=input)return;
++        ((Source)input).Pointer.Visible=true;
++        if(GuiPoint(input) is Vector2 point)gui.Move(point);else if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000));else gui.Leave();
++    }
++    public void Hide(IControllerSource input)=>((Source)input).Pointer.Visible=false;
++    public void Press(IControllerSource input)
++    {
++        if(gui.NativePressed)return;
++        pointerSource=input;pressedSubject=null;
++        if(GuiPoint(input) is Vector2 point) { pointingGui=true;gui.Move(point);gui.Press(); }
++        else { pointingGui=false;if(!Blocked && Router.MenuOwner==null){var ray=Ray(input);pressedSubject=scene.PickRay(ray.Origin,ray.Direction);} }
++    }
++    public void Release(IControllerSource input)
++    {
++        if(pointerSource!=input)return;pointerSource=null;
++        if(pointingGui) { gui.Release();return; }
++        var before=pressedSubject;pressedSubject=null;
++        if(before!=null && !Blocked && Router.MenuOwner==null) { var ray=Ray(input);if(scene.PickRay(ray.Origin,ray.Direction)?.ToString()==before.ToString())scene.Select(before); }
++    }
++    public void Cancel(IControllerSource input)
++    { if(pointerSource!=input)return;pointerSource=null;pressedSubject=null;gui.Cancel(); }
++    public bool OpenMenu(IControllerSource input,NumericsVector2 axes,float threshold)
++    {
++        if(menuPanel!=null)return false;
++        var entries=menuEntries();if(entries.Length==0)return false;
++        menuEnabled=entries.Select(e=>e.Enabled).ToArray();
++        menuPanel=new() { Name="xr-menu",Position=new(280,100),Size=new(640,400) };gui.Surface.AddChild(menuPanel);
++        var column=new VBoxContainer();menuPanel.AddChild(column);
++        menuButtons=entries.Select(e=> {
++            var button=new Button { Text=e.Text,Disabled=!e.Enabled() };column.AddChild(button);
++            button.Pressed+=()=> { Router.MenuSelected();CancelMenu();if(e.Enabled())e.Activate(); };return button;
++        }).ToArray();selection=-1;MenuRedraws++;MoveMenu(axes,threshold);return true;
++    }
++    public void MoveMenu(NumericsVector2 axes,float threshold)
++    {
++        if(menuPanel==null)return;
++        int next=axes.Length()<threshold ? -1 : (int)Math.Floor(((Math.Atan2(axes.X,-axes.Y)+Math.PI*2+Math.PI/menuButtons.Length)%(Math.PI*2))/(Math.PI*2/menuButtons.Length));
++        if(next==selection)return;selection=next;MenuRedraws++;if(selection>=0)menuButtons[selection].GrabFocus();else gui.Surface.GuiReleaseFocus();
++    }
++    public void CommitMenu()
++    { var selected=selection>=0 && selection<menuButtons.Length ? menuButtons[selection] : null;if(selected?.Disabled==false)selected.EmitSignal(BaseButton.SignalName.Pressed);else CancelMenu(); }
++    public void RefreshMenu()
++    { for(int i=0;i<menuButtons.Length;i++)menuButtons[i].Disabled=!menuEnabled[i](); }
++    public void CancelMenu()
++    { if(menuPanel==null)return;menuPanel.GetParent()?.RemoveChild(menuPanel);menuPanel.QueueFree();menuPanel=null;menuButtons=[];menuEnabled=[];selection=-1; }
++    public void Drive(IControllerSource source,NumericsVector2 axes)
++    {
++        DriveRequests++;
++        var forward=-(scene.DomainBasis*camera.GetCameraTransform().Basis.Z);forward.Y=0;forward=forward.Normalized();var right=forward.Cross(Vector3.Up).Normalized();
++        var direction=forward*(-axes.Y)+right*axes.X;controls()?.Drive(direction.X,direction.Y,direction.Z);
++    }
++    public void Stop() { StopRequests++;controls()?.Drive(0,0,0); }
++    public void Snap(IControllerSource source,int direction) { SnapRequests++;controls()?.Snap(direction); }
++    public void Teleport(IControllerSource source,float fraction)
++    { TeleportRequests++;var direction=scene.DomainBasis*Ray(source).Direction;controls()?.Teleport(direction.X,direction.Z,fraction); }
++    public void StopSession()
++    {
++        if(disposed)return;active=false;Router.Cancel();gui.Cancel();CancelMenu();
++        if(attached) {
++            attached=false;XRServer.Singleton.TrackerAdded-=TrackerAdded;XRServer.Singleton.TrackerRemoved-=TrackerRemoved;XRServer.Singleton.TrackerUpdated-=TrackerUpdated;Subscriptions-=3;
++            foreach(var name in sources.Keys.ToArray())RetireSource(name);
++        }
++        if(xr!=null && lifecycleSubscribed) {
++            xr.SessionFocussed-=Focused;xr.SessionVisible-=Unfocused;xr.SessionSynchronized-=Unfocused;xr.SessionStopping-=Stopping;
++            xr.SessionLossPending-=Stopping;xr.InstanceExiting-=Stopping;xr.PoseRecentered-=Recentered;Subscriptions-=7;
++            lifecycleSubscribed=false;
++        }
++        // Godot owns one native session for the application. Uninitialize does
++        // not destroy that session, so it cannot be used as a restart boundary.
++        // Pause/reentry releases this consumer, retaining the engine's session.
++        // Its action set remains owned by that session; no samples dispatch
++        // once this consumer has released its sources and gesture owner.
++        scene.PresentXR(false);xr=null;
++        panel.Visible=false;gui.Surface.GuiEmbedSubwindows=false;calibration=null;Status="OpenXR stopped; local sources and captures released.";Changed?.Invoke();
++    }
++    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
++    delegate int RequestExitSession(ulong session);
++    internal async Task<bool> Shutdown(ulong deadline)
++    {
++        shuttingDown=true;StopSession();
++        var backend=XRServer.FindInterface("OpenXR") as OpenXRInterface;
++        if(backend?.IsInitialized()!=true)return true;
++        try {
++            if(api.IsRunning()) {
++                var stopped=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
++                void Stopped()=>stopped.TrySetResult();
++                backend.SessionStopping+=Stopped;Subscriptions++;
++                try {
++                    ulong address=api.GetInstanceProcAddr("xrRequestExitSession");
++                    if(address==0)throw new InvalidOperationException("OpenXR does not expose xrRequestExitSession.");
++                    var request=Marshal.GetDelegateForFunctionPointer<RequestExitSession>((nint)address);
++                    int result=request(api.GetSession());
++                    if(result<0)throw new InvalidOperationException("OpenXR exit request failed: "+api.GetErrorString(unchecked((ulong)(long)result)));
++                    if(deadline<=SignedSession.Now)throw new TimeoutException("OpenXR shutdown deadline expired.");
++                    await stopped.Task.WaitAsync(TimeSpan.FromMilliseconds(deadline-SignedSession.Now));
++                    // The engine emits stopping before completing xrEndSession.
++                    // Resume at its next processing boundary, never destroy its
++                    // native handles from inside that signal callback.
++                    await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
++                    if(api.IsRunning())throw new InvalidOperationException("OpenXR owner has not completed session stopping.");
++                } finally { backend.SessionStopping-=Stopped;Subscriptions--; }
++            }
++            backend.Uninitialize();return true;
++        } catch(Exception error) { Status="OpenXR shutdown unavailable: "+error.Message;GD.PushError(Status);Changed?.Invoke();return false; }
++    }
++    public override void _ExitTree()
++    { StopSession();disposed=true;Router?.Dispose();models?.Dispose();Changed=null;api.Dispose(); }
++}
+--- HEAD/client/godot/OperationsPanel.cs
++++ final03/client/godot/OperationsPanel.cs
+@@ -164,7 +164,9 @@
+         if (!same || FormPanel.Descriptor == null) FormPanel.Present(draft.Form, draft.Draft);
+         bool stale = draft.Revision != revision;
+         defaults.Text = stale ? "Adopt current fields, keeping draft" : "Use current fields and defaults";
+-        FormPanel.Lock(stale || busy || draft.Settled || accounts.Uncertain || offer.Availability == "unavailable");
++        // Discovery is a U read; the existing U-to-A instruction evaluates the
++        // executing actor's guard. Advisory availability cannot replace it.
++        FormPanel.Lock(stale || busy || draft.Settled || accounts.Uncertain);
+         status.Text = stale ? "The offered schema changed. Your draft is retained. Adopt current fields explicitly before submitting."
+             : accounts.Uncertain ? "Original work is unresolved. Check its outcome; do not submit again."
+             : draft.Settled ? "This draft was submitted. Choose current defaults explicitly for another operation." : "Current offered fields. Edits stay local until Submit.";
+@@ -187,7 +189,7 @@
+     async Task SubmitWork()
+     {
+         if (Current == null || !Available || busy || Draft(Current).Settled || accounts.Uncertain || !FormPanel.Validate() ||
+-            Draft(Current).Revision != Current.Revision.ToString() || Current.Availability == "unavailable") return;
++            Draft(Current).Revision != Current.Revision.ToString()) return;
+         var offered = Current; var buffer = Draft(offered); string goal = offered.Goal(FormPanel.Draft); long expected = generation;
+         LastOutcome=null;
+         var consumer = session; var owner = human; var selectedTarget = target;
+--- HEAD/client/godot/README.md
++++ final03/client/godot/README.md
+@@ -8,7 +8,7 @@
+ 
+ ```sh
+ python3 client/godot-tools/run.py --bootstrap --build
+-python3 client/godot-tools/run.py -- -- --profile /absolute/private/profile
++python3 client/godot-tools/run.py -- --profile /absolute/private/profile
+ python3 client/godot-tools/run.py --export
+ client/godot/dist/quod.x86_64 -- --profile /absolute/private/profile
+ ```
+@@ -64,7 +64,49 @@
+ An explicitly selected controlled body instead uses the signed native control
+ lane and authoritative viewpoint. Focus loss releases local input. No collision
+ or domain simulation runs in the client.
+-XR/hardware qualification remains separately reported. The legacy native viewer
++Start the installed desktop OpenXR runtime with the pinned Vulkan renderer:
++
++```sh
++python3 client/godot-tools/run.py --xr -- --profile /absolute/private/profile
++client/godot/dist/quod.x86_64 --xr-mode on --rendering-method mobile --rendering-driver vulkan -- --profile /absolute/private/profile
++```
++
++After connecting, **Start OpenXR** attaches the runtime's current controller
++trackers. The signed controller projection supplies descriptions, roles,
++bindings and appearance admission. Only the explicitly described Vive profile
++and named facilities are mapped. Unknown profiles, missing facilities and
++ambiguous roles remain visible and disabled. **Connected controllers** offers
++session-only source choices; saved preferences still use ordinary account forms.
++No source IDs or per-frame poses are written to an ontology.
++
++Desktop and XR point at the same native Control tree and exact-subject scene
++picker. The display texture owns no focus; native buttons/editors retain it.
++Focus/visibility loss, stale tracking, context changes and source withdrawal
++cancel captures without activation and require neutral before rearming.
++GUI capture and menus suppress travel. The current selected control association
++alone supplies movement abilities; the existing signed sender and native physics
++owner decide movement, snap, teleport path/support and collision. Tracking
++contracts other than the authored `view_only` contract remain unsupported.
++
++Controller appearances share digest-verified static GLB bytes and engine
++templates while retaining independent source nodes. Authorization withdrawal
++hides inert resources until source removal; unchanged reauthorization reuses
++them. The complete export includes the model's MIT notice. **Stop OpenXR**
++releases this consumer's sources, captures and render leases. Godot retains its
++native session for the application lifetime; application close requests session
++exit before uninitializing the engine interface. The scene owner releases the
++stretched mono layout for XR, keeps the hidden stereo viewport rendering, and
++restores the same mono viewport and desktop camera on pause. Failed exported
++qualification also closes through this owner and retains its failing exit code.
++
++Runtime discovery, injected engine tests and physical hardware observations are
++separate qualification levels. A compatible runtime ABI and access to the
++headset display are prerequisites independent of controller mapping. The pinned
++engine's retained teardown diagnostics and native/physical acceptance limits
++are recorded in the [M4-R2 evidence](../../doc/evidence/godot-m4-r2-20261029/README.md).
++Process exit alone does not prove native resource retirement. Quest and Android
++headset qualification are outside M4.
++The legacy native viewer
+ retains its uncovered asset/XR obligations until their replacement qualifies;
+ it is not a dependency of this client. The shared [QUO-62](nimbalyst://QUO-62)
+ and [M1b evidence](../../doc/evidence/godot-m1b-20261028/README.md) retain the M1
+--- HEAD/client/godot/RenderModels.cs
++++ final03/client/godot/RenderModels.cs
+@@ -0,0 +1,97 @@
++using Godot;
++using Quod.Client;
++
++// The scene's verified immutable templates. Actual occurrences have independent
++// nodes; authorization withdrawal hides them without shortening source lifetime.
++public sealed class RenderModels(Func<ModelAsset,CancellationToken,Task<byte[]>> fetch) : IDisposable
++{
++    sealed class Entry(ModelAsset asset)
++    {
++        public ModelAsset Asset=asset;
++        public int Users;
++        public bool Active=true;
++        public CancellationTokenSource Lifetime=new();
++        public Task Ready=Task.CompletedTask;
++        public Node3D? Template;
++        public StaticGlb? Verified;
++    }
++    public sealed class Lease : IDisposable
++    {
++        readonly RenderModels owner;
++        readonly Entry entry;
++        readonly ModelAsset asset;
++        bool disposed;
++        private Lease(RenderModels owner,Entry entry,ModelAsset asset) { this.owner=owner;this.entry=entry;this.asset=asset; }
++        public async Task<Node3D?> Instantiate()
++        {
++            await entry.Ready;
++            if(disposed || !entry.Active)return null;
++            entry.Verified!.Admit(asset);
++            var node=(Node3D)entry.Template!.Duplicate();owner.InstancesCreated++;owner.NodesBuilt+=CountNodes(node);return node;
++        }
++        public void Dispose() { if(disposed)return;disposed=true;owner.Releases++;if(--entry.Users==0)owner.Retire(entry); }
++        internal static Lease Create(RenderModels owner,object entry,ModelAsset asset)=>new(owner,(Entry)entry,asset);
++    }
++    readonly Dictionary<string,Entry> entries=[];
++    readonly List<Task> pending=[];
++    bool disposed;
++    public int Acquisitions { get; private set; }
++    public int Releases { get; private set; }
++    public int Decodes { get; private set; }
++    public int InstancesCreated { get; private set; }
++    public int InstancesReleased { get; private set; }
++    public int NodesBuilt { get; private set; }
++    public int TexturesDecoded { get; private set; }
++    public int LiveTemplates=>entries.Count;
++    public int LiveLeases=>Acquisitions-Releases;
++    public Task Completion=>Task.WhenAll(pending.Select(async task=> {
++        try { await task; }catch(OperationCanceledException) { }catch(Exception) { /* Reported by the appearance consumer. Shutdown still releases its owner. */ }
++    }));
++    static int CountNodes(Node root)=>1+root.GetChildren().Sum(CountNodes);
++    public object Metrics=>new { Acquisitions,Releases,Decodes,InstancesCreated,InstancesReleased,NodesBuilt,TexturesDecoded,LiveTemplates,LiveLeases };
++    public Lease Acquire(ModelAsset asset)
++    {
++        ObjectDisposedException.ThrowIf(disposed,this);
++        pending.RemoveAll(task=>task.IsCompleted);
++        if(!entries.TryGetValue(asset.Digest,out var entry)) {
++            entry=new(asset);entries.Add(asset.Digest,entry);entry.Users=1;
++            entry.Ready=Load(entry);pending.Add(entry.Ready);
++        } else entry.Users++;
++        Acquisitions++;return Lease.Create(this,entry,asset);
++    }
++    async Task Load(Entry entry)
++    {
++        try {
++            byte[] bytes=await fetch(entry.Asset,entry.Lifetime.Token);
++            var verified=await Task.Run(()=>StaticGlb.Validate(bytes),entry.Lifetime.Token);verified.Admit(entry.Asset);
++            if(!entry.Active)return;
++            using var document=new GltfDocument();using var state=new GltfState();
++            if(document.AppendFromBuffer(bytes,"",state)!=Error.Ok)throw new FormatException("Verified model could not be decoded by Godot.");
++            var template=document.GenerateScene(state) as Node3D??throw new FormatException("Model has no scene root.");
++            // Imported names/metadata/scripts never supply Quod targets.
++            var textures=new HashSet<ulong>();
++            void Clean(Node node) {
++                node.SetScript(default);foreach(string key in node.GetMetaList())node.RemoveMeta(key);
++                if(node is MeshInstance3D mesh && mesh.Mesh!=null)for(int i=0;i<mesh.Mesh.GetSurfaceCount();i++) {
++                    var material=mesh.GetActiveMaterial(i);if(material==null)continue;
++                    foreach(var property in material.GetPropertyList()) {
++                        string name=property["name"].AsString();var value=material.Get(name);
++                        if(value.VariantType==Variant.Type.Object && value.AsGodotObject() is Texture2D texture)textures.Add(texture.GetInstanceId());
++                    }
++                }
++                foreach(var child in node.GetChildren())Clean(child);
++            }
++            try { Clean(template);entry.Template=template;entry.Verified=verified;Decodes++;NodesBuilt+=CountNodes(template);TexturesDecoded+=textures.Count; }
++            catch { template.Free();throw; }
++        } catch { if(entry.Active)Retire(entry);throw; }
++    }
++    public void ReleaseInstance(Node3D node)
++    { node.GetParent()?.RemoveChild(node);node.Free();InstancesReleased++; }
++    void Retire(Entry entry)
++    {
++        if(!entry.Active)return;entry.Active=false;entry.Lifetime.Cancel();entry.Template?.Free();entry.Template=null;
++        if(entries.GetValueOrDefault(entry.Asset.Digest)==entry)entries.Remove(entry.Asset.Digest);
++    }
++    public void Dispose()
++    { if(disposed)return;disposed=true;foreach(var entry in entries.Values.ToArray())Retire(entry); }
++}
+--- HEAD/client/godot/ScenePanel.cs
++++ final03/client/godot/ScenePanel.cs
+@@ -13,9 +13,32 @@
+     readonly Camera3D camera = new() { Name = "scene-camera", Current = true, Near = 0.05f, Far = 1000 };
+     WorldProjection? world;
+     bool looking;
++    Term? pressedSubject;
++    bool navigationBlocked;
+     readonly HashSet<Key> held = [];
+     public event Action<Vector3,Vector3>? Drive;
+     public bool Controlled { get; set; }
++    public bool NavigationBlocked { get=>navigationBlocked;set { if(value&&!navigationBlocked)ReleaseInput();navigationBlocked=value; } }
++    internal SubViewport Viewport=>viewport;
++    internal void PresentXR(bool active)
++    {
++        if(viewport.UseXR==active)return;
++        // The XR runtime owns stereo dimensions; desktop layout owns the
++        // stretched mono target. Release layout before changing that contract.
++        Stretch=false;
++        // Container visibility changes its child's update mode. Establish
++        // presentation first, then give the active XR renderer final ownership.
++        Visible=!active;
++        viewport.UseXR=active;
++        if(!active) { viewport.ViewCount=1;camera.Current=true;Stretch=true; }
++        viewport.RenderTargetUpdateMode=active ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.WhenVisible;
++    }
++    internal Node3D SceneRoot=>root;
++    internal Transform3D CameraPose=>camera.GlobalTransform;
++    internal Basis DomainBasis {
++        get { var basis=Basis.Identity;foreach(var frame in world?.ViewFrames??[])basis*=RotationBasis(frame.Transform!);return basis; }
++    }
++    internal string? ControlIdentity=>world?.Controlled==null ? null : world.Control+"\n"+world.Sample!.Fence;
+     public event Action<Term>? Selected;
+     public int Rebuilt { get; private set; }
+     public int Count => occurrences.Count;
+@@ -147,13 +170,23 @@
+         camera.Position = centre + new Vector3(0.7f, 0.5f, 0.9f).Normalized() * diameter;
+         camera.LookAt(centre); camera.Near = Math.Max(diameter / 10000, 0.00000001f); camera.Far = Math.Max(diameter * 10, camera.Near * 100);
+     }
+-    public Term? Pick(Vector2 point)
+-    {
++    public Term? Pick(Vector2 point)=>PickRay(camera.ProjectRayOrigin(point),camera.ProjectRayNormal(point),point);
++    public Term? PickRay(Vector3 origin,Vector3 direction,Vector2? screenPoint=null)
++    {
++        if(!origin.IsFinite() || !direction.IsFinite() || direction.LengthSquared()==0)return null;
++        direction=direction.Normalized();
+         Occurrence? hit = null; float nearest = float.PositiveInfinity;
+         foreach (var item in occurrences.Values.Where(o => o.Corners.Length > 0)) {
+             if (item.Mark.Kind == "wire_box") {
+                 foreach (var edge in Edges) {
+                     var a = item.Node.GlobalTransform * item.Corners[edge.A]; var b = item.Node.GlobalTransform * item.Corners[edge.B];
++                    if(screenPoint is not Vector2 point) {
++                        var closest=Geometry3D.GetClosestPointsBetweenSegments(origin,origin+direction*camera.Far,a,b);
++                        float distance=(closest[0]-origin).Dot(direction);
++                        float tolerance=distance*Mathf.Tan(Mathf.DegToRad(camera.Fov/2))*12/Math.Max(1,viewport.Size.Y);
++                        if(distance>0 && distance<nearest && closest[0].DistanceTo(closest[1])<=tolerance) { nearest=distance;hit=item; }
++                        continue;
++                    }
+                     if (camera.IsPositionBehind(a) || camera.IsPositionBehind(b)) continue;
+                     var start = camera.UnprojectPosition(a); var segment = camera.UnprojectPosition(b) - start;
+                     float fraction = segment.LengthSquared() == 0 ? 0 : Math.Clamp((point - start).Dot(segment) / segment.LengthSquared(), 0, 1);
+@@ -162,18 +195,18 @@
+                 }
+             } else {
+                 var inverse = item.Node.GlobalTransform.AffineInverse();
+-                var origin = inverse * camera.ProjectRayOrigin(point); var direction = inverse.Basis * camera.ProjectRayNormal(point);
++                var localOrigin = inverse * origin; var localDirection = inverse.Basis * direction;
+                 var size = item.Corners[7] - item.Corners[0];
+                 if (item.Mark.Kind=="sphere") {
+-                    float b=origin.Dot(direction),c=origin.LengthSquared()-size.X*size.X/4,disc=b*b-direction.LengthSquared()*c;
+-                    if (disc>=0) { float distance=(-b-Mathf.Sqrt(disc))/direction.LengthSquared();
++                    float b=localOrigin.Dot(localDirection),c=localOrigin.LengthSquared()-size.X*size.X/4,disc=b*b-localDirection.LengthSquared()*c;
++                    if (disc>=0) { float distance=(-b-Mathf.Sqrt(disc))/localDirection.LengthSquared();
+                         if (distance>=0 && distance<nearest) { nearest=distance; hit=item; } }
+                     continue;
+                 }
+                 float near = 0, far = float.PositiveInfinity;
+                 for (int axis = 0; axis < 3; axis++) {
+-                    if (Math.Abs(direction[axis]) < 1e-12f) { if (Math.Abs(origin[axis]) > size[axis] / 2) { far = -1; break; } }
+-                    else { float a = (-size[axis]/2-origin[axis])/direction[axis], b = (size[axis]/2-origin[axis])/direction[axis]; near = Math.Max(near,Math.Min(a,b)); far = Math.Min(far,Math.Max(a,b)); }
++                    if (Math.Abs(localDirection[axis]) < 1e-12f) { if (Math.Abs(localOrigin[axis]) > size[axis] / 2) { far = -1; break; } }
++                    else { float a = (-size[axis]/2-localOrigin[axis])/localDirection[axis], b = (size[axis]/2-localOrigin[axis])/localDirection[axis]; near = Math.Max(near,Math.Min(a,b)); far = Math.Min(far,Math.Max(a,b)); }
+                 }
+                 if (near <= far && near < nearest) { nearest = near; hit = item; }
+             }
+@@ -187,24 +220,23 @@
+     public Vector3[] WorldCorners(string id) => occurrences[id].Corners.Select(p => occurrences[id].Node.GlobalTransform * p).ToArray();
+     public Transform3D WorldPose(string id) => occurrences[id].Node.GlobalTransform;
+     public void ReleaseInput()
+-    { bool active = held.Count != 0; held.Clear(); looking=false; if (active && Controlled) Drive?.Invoke(Vector3.Zero,Vector3.Zero); }
++    { bool active = held.Count != 0; held.Clear(); looking=false;pressedSubject=null; if (active && Controlled) Drive?.Invoke(Vector3.Zero,Vector3.Zero); }
+     public override void _Process(double delta)
+     {
+-        if (Controlled || held.Count == 0) return;
++        if (Controlled || navigationBlocked || held.Count == 0) return;
+         var input = Direction(); camera.Position += camera.Basis * input * (float)delta * 3;
+     }
+     Vector3 Direction() => new((held.Contains(Key.D)?1:0)-(held.Contains(Key.A)?1:0),
+         (held.Contains(Key.E)?1:0)-(held.Contains(Key.Q)?1:0),(held.Contains(Key.S)?1:0)-(held.Contains(Key.W)?1:0));
+     Vector3 DomainDirection()
+     {
+-        var basis=Basis.Identity;
+-        foreach (var frame in world?.ViewFrames ?? []) basis*=RotationBasis(frame.Transform!);
+-        return basis*camera.Basis*Direction();
++        return DomainBasis*camera.Basis*Direction();
+     }
+     public override void _GuiInput(InputEvent @event)
+     {
+         if (@event is InputEventKey key && key.PhysicalKeycode is Key.W or Key.A or Key.S or Key.D or Key.Q or Key.E) {
+             if (key.Echo) return;
++            if(key.Pressed && navigationBlocked)return;
+             if (key.Pressed) held.Add(key.PhysicalKeycode); else held.Remove(key.PhysicalKeycode);
+             if (Controlled) Drive?.Invoke(DomainDirection(),Vector3.Zero); AcceptEvent();
+         }
+@@ -212,12 +244,15 @@
+         if (@event is InputEventMouseMotion motion && looking && !Controlled) {
+             camera.RotateY(-motion.Relative.X*.004f); camera.RotateObjectLocal(Vector3.Right,-motion.Relative.Y*.004f); AcceptEvent();
+         }
+-        if (@event is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left } click) {
++        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left } click) {
+             GrabFocus();
+             var scaled = click.Position * ((Vector2)viewport.Size / Size); var subject = Pick(scaled);
+-            if (subject != null) Selected?.Invoke(subject); AcceptEvent();
++            if(click.Pressed)pressedSubject=subject;
++            else { var before=pressedSubject;pressedSubject=null;if(before!=null && subject?.ToString()==before.ToString() && new Rect2(Vector2.Zero,Size).HasPoint(click.Position))Selected?.Invoke(before); }
++            AcceptEvent();
+         }
+     }
+     public void Withdraw()
+     { ReleaseInput(); Controlled=false; world=null; foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) { item.Node.GetParent()?.RemoveChild(item.Node); item.Node.QueueFree(); } occurrences.Clear(); }
++    internal void Select(Term subject)=>Selected?.Invoke(subject);
+ }
+--- HEAD/client/godot/SpatialGui.cs
++++ final03/client/godot/SpatialGui.cs
+@@ -0,0 +1,70 @@
++using Godot;
++
++// Desktop and XR feed this same native Control tree. There is no spatial form
++// dispatcher: the ordinary buttons, editors, drafts and submission owners run.
++public partial class SpatialGui : TextureRect
++{
++    public SubViewport Surface { get; }=new() { Name="gui-viewport",Size=new(1200,800),TransparentBg=false,HandleInputLocally=true };
++    bool pressed;
++    bool inside;
++    Control? captured;
++    Vector2 point;
++    public int Captures { get; private set; }
++    public int Cancellations { get; private set; }
++    public bool NativePressed { get; private set; }
++    public event Action? NativeCaptureChanged;
++    public override void _Ready()
++    {
++        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);ExpandMode=ExpandModeEnum.IgnoreSize;StretchMode=StretchModeEnum.Scale;
++        FocusMode=FocusModeEnum.None;MouseFilter=MouseFilterEnum.Stop;AddChild(Surface);Texture=Surface.GetTexture();
++        Surface.RenderTargetUpdateMode=SubViewport.UpdateMode.Always;Resized+=ResizeSurface;ResizeSurface();
++    }
++    void ResizeSurface()=>Surface.Size=new(Math.Max(1,(int)Size.X),Math.Max(1,(int)Size.Y));
++    public override void _GuiInput(InputEvent input)
++    {
++        if(input is not InputEventMouse mouse)return;
++        if(pressed && !NativePressed){AcceptEvent();return;}
++        Move(mouse.Position);
++        if(input is InputEventMouseButton { ButtonIndex:MouseButton.Left } button) {
++            if(button.Pressed) { NativePressed=true;NativeCaptureChanged?.Invoke();Press(); }
++            else Release();
++        } else if(input is not InputEventMouseMotion)Surface.PushInput(input,true);
++        AcceptEvent();
++    }
++    public override void _Input(InputEvent input)
++    {
++        if(input is not InputEventKey key || key.WindowId!=GetWindow().GetWindowId())return;
++        Surface.PushInput(input,true);if(Surface.IsInputHandled())GetViewport().SetInputAsHandled();
++    }
++    public void Move(Vector2 position)
++    {
++        var previous=point;point=position;
++        bool next=new Rect2(Vector2.Zero,Surface.Size).HasPoint(point);
++        if(next&&!inside)Surface.NotifyMouseEntered();else if(!next&&inside)Surface.NotifyMouseExited();inside=next;
++        Surface.PushInput(new InputEventMouseMotion { Position=point,GlobalPosition=point,Relative=point-previous,ButtonMask=pressed ? MouseButtonMask.Left : 0 },true);
++    }
++    public void Leave() { if(inside){inside=false;Surface.NotifyMouseExited();} }
++    public void Press()
++    {
++        if(pressed)return;pressed=true;Captures++;
++        Surface.PushInput(new InputEventMouseButton { ButtonIndex=MouseButton.Left,Pressed=true,ButtonMask=MouseButtonMask.Left,Position=point,GlobalPosition=point },true);
++        captured=Surface.GuiGetHoveredControl();
++        if(captured!=null){captured.TreeExiting+=Cancel;captured.VisibilityChanged+=CaptureVisibility;}
++    }
++    public void Release()
++    {
++        if(!pressed)return;pressed=false;Captures--;bool wasNative=NativePressed;NativePressed=false;
++        if(captured!=null && IsInstanceValid(captured)){captured.TreeExiting-=Cancel;captured.VisibilityChanged-=CaptureVisibility;}captured=null;
++        Surface.PushInput(new InputEventMouseButton { ButtonIndex=MouseButton.Left,Pressed=false,Position=point,GlobalPosition=point },true);
++        if(wasNative)NativeCaptureChanged?.Invoke();
++    }
++    public void Cancel()
++    {
++        if(!pressed)return;
++        // Moving outside before native release clears BaseButton's inside
++        // state. Unlike a synthetic release at the old hit this cannot click.
++        Move(new(-10000,-10000));Release();Surface.GuiCancelDrag();Surface.GuiReleaseFocus();Cancellations++;
++    }
++    void CaptureVisibility() { if(captured==null || !captured.IsVisibleInTree())Cancel(); }
++    public override void _ExitTree()=>Cancel();
++}
+--- HEAD/client/godot/assets/vive-LICENSE.txt
++++ final03/client/godot/assets/vive-LICENSE.txt
+@@ -0,0 +1,26 @@
++Vive wand: WebXR Input Profiles, packages/assets/profiles/htc-vive/none.glb
++Source: https://github.com/immersive-web/webxr-input-profiles
++SHA-256: bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94
++Unmodified model.
++
++MIT License
++
++Copyright (c) 2019 Amazon
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is furnished
++to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice (including the next
++paragraph) shall be included in all copies or substantial portions of the
++Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
++FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
++OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
++OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+--- HEAD/client/godot/project.godot
++++ final03/client/godot/project.godot
+@@ -11,3 +11,6 @@
+ [rendering]
+ renderer/rendering_method="gl_compatibility"
+ environment/defaults/default_clear_color=Color(0, 0, 0, 1)
++[xr]
++openxr/enabled=false
++openxr/default_action_map="res://xr_actions.tres"
+--- HEAD/client/godot/tests/ControllerChecks.cs
++++ final03/client/godot/tests/ControllerChecks.cs
+@@ -0,0 +1,133 @@
++using Godot;
++using Quod.Client;
++using File=System.IO.File;
++using Json=Quod.Client.Json;
++
++public partial class ExportChecks
++{
++    async Task ControllerAdapter()
++    {
++        // Frames are injected through real XRServer trackers. GUI events,
++        // scene nodes and GLB decode are the production engine consumers.
++        await Frame();
++        byte[] model=await File.ReadAllBytesAsync(Env("M4_MODEL"));
++        var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
++        var gui=(SpatialGui)app.FindChild("shared-gui",true,false);
++        var scene=(ScenePanel)app.FindChild("space-scene",true,false);
++        var adapter=new OpenXRInput();scene.Viewport.AddChild(adapter);
++        int fetched=0,clicked=0,menuActivated=0;bool overlay=false,menuEnabled=true;
++        using var resources=new RenderModels((asset,cancellation)=> { fetched++;return Task.FromResult(model); });
++        adapter.Configure(scene,gui,resources,()=>null,()=>overlay,()=>new[]{("Test existing menu consumer",(Func<bool>)(()=>menuEnabled),(Action)(()=>menuActivated++))});
++        adapter.GuiSurface.Visible=true;adapter.GuiSurface.Transform=Transform3D.Identity;
++        var button=new Button { Text="Controller capture qualification",Position=new(430,310),Size=new(300,80),MouseFilter=Control.MouseFilterEnum.Stop };
++        gui.Surface.AddChild(button);button.Pressed+=()=>clicked++;
++        XRControllerTracker Tracker(string name,XRPositionalTracker.TrackerHand hand) {
++            var t=new XRControllerTracker { Name=name,Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=hand };
++            t.SetInput("trigger_press",false);t.SetInput("trigger_value",0.0);t.SetInput("squeeze_press",false);t.SetInput("pad_press",false);t.SetInput("pad_touch",false);t.SetInput("pad_axes",Vector2.Zero);
++            t.SetPose("aim",new(Basis.Identity,new(0,0,1)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
++            t.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);XRServer.AddTracker(t);return t;
++        }
++        adapter.Install(mapping);adapter.AttachSources();
++        var left=Tracker("m4_left",XRPositionalTracker.TrackerHand.Left);var right=Tracker("m4_right",XRPositionalTracker.TrackerHand.Right);
++        ulong frame=0;
++        void Advance()=>adapter.Advance(++frame,true);
++        void Pose(XRControllerTracker t,Vector2 pixel) {
++            var p=new Vector3((pixel.X/gui.Surface.Size.X-.5f)*1.5f,(.5f-pixel.Y/gui.Surface.Size.Y),1);
++            t.SetPose("aim",new(Basis.Identity,p),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
++        }
++        void Held(XRControllerTracker t,string name,bool down) { t.SetInput(name,down);Advance(); }
++        await Frame();Pose(left,button.GetGlobalRect().GetCenter());Pose(right,button.GetGlobalRect().GetCenter());
++        left.SetInput("trigger_press",true);await adapter.Completion;Advance();Held(left,"trigger_press",false);
++        Check(clicked==0 && gui.Captures==0,"already-held source connection requires neutral before selection can arm");Advance();
++        Check(fetched==1 && resources.Decodes==1 && resources.LiveLeases==2 && resources.InstancesCreated==2,"two tracked sources share verified bytes/template with independent engine appearances");
++        Held(left,"trigger_press",true);
++        Console.WriteLine($"M4_CAPTURE captures={gui.Captures} clicks={clicked} mouse={gui.Surface.GetMousePosition()} hover={gui.Surface.GuiGetHoveredControl()?.Name} button={button.GetGlobalRect()} pressed={button.ButtonPressed} source={adapter.Sources[0].Aim.GlobalTransform} raw={left.GetPose("aim").Transform} panel={adapter.GuiSurface.GlobalTransform} size={gui.Surface.Size} disabled={gui.Surface.GuiDisableInput} local={gui.Surface.HandleInputLocally} visible={gui.Visible}");
++        Check(gui.Captures==1 && clicked==0,"mapped press acquires the real native GUI capture without activation");
++        string beforeNotice=System.Text.Json.JsonSerializer.Serialize(resources.Metrics);string sourceId=adapter.Router.SourceChoices.Single(s=>s.Hand=="left").Id;
++        XRServer.AddTracker(left);XRServer.Singleton.EmitSignal(XRServer.SignalName.TrackerRemoved,left.Name,(long)XRServer.TrackerType.Controller);await Frame();
++        Check(gui.Captures==1 && adapter.Router.SourceChoices.Single(s=>s.Hand=="left").Id==sourceId && System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==beforeNotice,"duplicate update and stale removal notices retain the actual registered source capture and render resources");
++        Held(right,"trigger_press",true);Check(gui.Captures==1,"second controller cannot steal an active GUI press");
++        Held(left,"trigger_press",false);Check(clicked==1 && gui.Captures==0,"mapped release activates the existing native button exactly once");
++        Held(right,"trigger_press",false);Check(clicked==1,"competing pointer release cannot activate a second click");
++        Held(left,"trigger_press",true);adapter.Focus(false);
++        Check(gui.Captures==0 && clicked==1 && !button.ButtonPressed,"no-frame focus loss cancels native capture without click");
++        adapter.Focus(true);Advance();Held(left,"trigger_press",false);Check(clicked==1,"held focus return requires release before rearming");
++        Advance();Held(left,"trigger_press",true);left.InvalidatePose("aim");Advance();Held(left,"trigger_press",false);
++        Check(clicked==1 && gui.Captures==0,"lost current ray cancels while an old engine transform remains");
++        Pose(left,button.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);left.InvalidatePose("grip");Advance();Held(left,"trigger_press",false);
++        Check(clicked==1,"lost grip pose cannot select through a retained ray");
++        left.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
++        Held(left,"trigger_press",true);adapter.Advance(frame,true);Held(left,"trigger_press",false);
++        Check(clicked==1,"duplicate stale frame cancels pending selection");
++        Advance();Held(left,"trigger_press",true);adapter.Visibility(false);adapter.Visibility(true);Held(left,"trigger_press",false);
++        Check(clicked==1,"visibility notification cancels without waiting for an XR frame");
++        Advance();Held(left,"trigger_press",true);adapter.Install(null);Held(left,"trigger_press",false);
++        var retained=System.Text.Json.JsonSerializer.Serialize(resources.Metrics);adapter.Install(mapping);await adapter.Completion;Advance();
++        Check(System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==retained && clicked==1,"authorization reinstallation retains inert source resources without acquisition/decode/node/texture work");
++        for(int i=0;i<20;i++){adapter.Install(mapping);Advance();}
++        Check(System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==retained,"unchanged mapping/frame repeats perform zero render-resource work");
++        Held(left,"trigger_press",true);adapter.InvalidateWorld();Held(left,"trigger_press",false);
++        Check(clicked==1 && gui.Captures==0,"control or world invalidation cancels the old gesture before another frame");Advance();
++        Held(left,"trigger_press",true);left.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();Held(left,"trigger_press",false);
++        Check(clicked==1 && gui.Captures==0,"changed handedness cancels a held source without committing");left.Hand=XRPositionalTracker.TrackerHand.Left;Advance();
++        Held(left,"trigger_press",true);adapter.Install(mapping with { Digest="changed-contract" });Held(left,"trigger_press",false);
++        Check(clicked==1 && gui.Captures==0,"mapping replacement cancels before release and retains the same appearance");adapter.Install(mapping);Advance();
++        Advance();Held(left,"trigger_press",true);button.Hide();Check(gui.Captures==0 && clicked==1,"hiding a pressed existing control cancels before replacement");Held(left,"trigger_press",false);button.Show();
++        right.Hand=XRPositionalTracker.TrackerHand.Left;Advance();int drives=adapter.DriveRequests;
++        left.SetInput("squeeze_press",true);left.SetInput("pad_axes",new Vector2(0,1));Advance();
++        Check(adapter.DriveRequests==drives,"ambiguous handedness does not select the first travel source");
++        var leftId=adapter.Router.SourceChoices.Single(s=>s.Id==adapter.Router.SourceChoices[0].Id).Id;
++        Check(adapter.Router.Choose("navigation",leftId),"explicit local role choice resolves an ambiguous session source");
++        left.SetInput("squeeze_press",false);left.SetInput("pad_axes",Vector2.Zero);Advance();
++        left.SetInput("squeeze_press",true);left.SetInput("pad_axes",new Vector2(0,1));Advance();
++        Check(adapter.DriveRequests>drives,"resolved source reaches the existing semantic travel consumer");
++        int stops=adapter.StopRequests;Advance();Check(adapter.StopRequests==stops,"an idle second source cannot cancel valid travel");
++        right.SetInput("trigger_press",true);Advance();Check(adapter.StopRequests==stops+1 && gui.Captures==1,"pointer capture suppresses other-source travel in that same frame");
++        right.SetInput("trigger_press",false);Advance();int after=adapter.DriveRequests;Advance();Check(adapter.DriveRequests==after,"travel stays disarmed until neutral after capture");
++        left.SetInput("squeeze_press",false);left.SetInput("pad_axes",Vector2.Zero);Advance();
++        right.Hand=XRPositionalTracker.TrackerHand.Right;Advance();
++        // Entry/status updates do not replace a mapping or cancel other input.
++        int beforeRedraw=adapter.MenuRedraws;
++        right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);int menuDraw=adapter.MenuRedraws;
++        for(int i=0;i<20;i++)Advance();Check(adapter.MenuRedraws==menuDraw && menuDraw>beforeRedraw,"unchanged radial selection does not redraw menu labels or textures");
++        var menu=gui.Surface.FindChild("xr-menu",true,false) as PanelContainer??throw new Exception("Expected native menu");await Frame();
++        var entry=menu.FindChildren("*","Button",true,false).OfType<Button>().Single();ulong entryId=entry.GetInstanceId();
++        menuEnabled=false;adapter.RefreshMenu();Check(entry.Disabled && entry.GetInstanceId()==entryId && adapter.MenuRedraws==menuDraw,"changed menu availability updates the existing native entry without rebuilding the menu");
++        menuEnabled=true;adapter.RefreshMenu();Check(!entry.Disabled && adapter.MenuRedraws==menuDraw,"returned menu availability preserves selection and native entry identity");Pose(right,entry.GetGlobalRect().GetCenter());
++        Held(right,"trigger_press",true);Held(right,"trigger_press",false);Held(right,"pad_press",false);
++        Check(menuActivated==1 && adapter.Router.MenuOwner==null,"trigger menu choice consumes its later pad release exactly once");
++        right.SetInput("pad_axes",Vector2.Zero);Advance();right.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();beforeRedraw=adapter.MenuRedraws;Held(right,"pad_press",true);
++        Check(adapter.MenuRedraws==beforeRedraw,"unknown handedness does not receive the default menu role");Held(right,"pad_press",false);
++        left.Profile="unsupported-profile";Advance();Pose(left,button.GetGlobalRect().GetCenter());Held(left,"trigger_press",true);Held(left,"trigger_press",false);
++        Check(gui.Captures==0,"unknown profile refuses selection without guessed components");
++        left.Profile="/interaction_profiles/htc/vive_controller";left.SetInput("pad_axes",default(Variant));Advance();drives=adapter.DriveRequests;
++        left.SetInput("squeeze_press",true);Advance();Check(adapter.DriveRequests==drives,"missing named axes refuse dependent mapping");
++        left.SetInput("pad_axes",Vector2.Zero);left.SetInput("squeeze_press",false);Advance();
++        Check(adapter.Router.SourceChoices.Length==2,"late component initialization keeps the existing source identity");
++        drives=adapter.DriveRequests;left.SetInput("squeeze_press",true);left.SetInput("pad_axes",new Vector2(0,1));Advance();
++        Check(adapter.DriveRequests>drives,"late named-component initialization rearms actual travel after neutral");left.SetInput("squeeze_press",false);left.SetInput("pad_axes",Vector2.Zero);Advance();
++        left.Hand=XRPositionalTracker.TrackerHand.Unknown;adapter.Install(mapping with { Digest="disabled-roles",Roles=new(){["navigation"]="none",["menu"]="none"} });Advance();
++        beforeRedraw=adapter.MenuRedraws;Held(left,"pad_press",true);Held(left,"pad_press",false);
++        Check(adapter.MenuRedraws==beforeRedraw,"disabled role never assigns an unknown-handed source");adapter.Install(mapping);left.Hand=XRPositionalTracker.TrackerHand.Left;Advance();
++        Pose(left,button.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);int beforeUnrelated=clicked;
++        right.Profile="unsupported-unrelated-profile";adapter.Install(mapping with { Revision=mapping.Revision+1 });button.Text="Live presentation status changed";Advance();
++        Check(gui.Captures==1,"unrelated source/status and same-digest revision updates retain the existing capture");Held(left,"trigger_press",false);
++        Check(clicked==beforeUnrelated+1,"retained capture releases exactly once after an unrelated update");
++        int beforeDisposal=clicked;
++        var removable=new Button { Text="Dispose during capture",Position=button.Position,Size=button.Size };
++        button.Hide();gui.Surface.AddChild(removable);await Frame();Pose(left,removable.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);
++        Check(gui.Captures==1,"replacement native control receives one capture");removable.Free();Held(left,"trigger_press",false);
++        Check(gui.Captures==0 && clicked==beforeDisposal,"disposing a captured native control releases without click-through");button.Show();
++        int released=resources.Releases;var removed=new TaskCompletionSource();void Retired(){if(resources.Releases==released+1)removed.TrySetResult();}adapter.Changed+=Retired;
++        try { XRServer.RemoveTracker(left);await removed.Task.WaitAsync(TimeSpan.FromSeconds(5)); }finally { adapter.Changed-=Retired; }
++        Check(resources.Releases==released+1,"source removal releases its actual appearance lease");
++        left.Profile="late-callback";Check(adapter.Router.Count==1,"late removed-source notifications cannot recreate input");
++        adapter.StopSession();await adapter.Completion;Check(adapter.Subscriptions==0 && adapter.Router.Count==0 && gui.Captures==0 && resources.LiveLeases==0 && resources.LiveTemplates==0,"stop releases every source observer capture and render lease");
++        XRServer.RemoveTracker(right);adapter.AttachSources();Check(adapter.Router.Count==0,"reentry has no inherited source or held gesture");adapter.StopSession();
++        var metrics=adapter.Metrics;adapter.GetParent().RemoveChild(adapter);adapter.Free();
++        if(DisplayServer.GetName()!="headless")await NativePress(button);
++        button.QueueFree();
++        await File.WriteAllTextAsync(Env("M1B_RESULT"),System.Text.Json.JsonSerializer.Serialize(new { passed=true,coverage="injected real XRServer/native GUI/render consumers; no physical headset claim",checks,metrics }));
++        Console.WriteLine("M4_CONTROLLER_PASS");Console.Out.Flush();await app.CloseApplication();
++    }
++}
+--- HEAD/client/godot/tests/ControllerLiveChecks.cs
++++ final03/client/godot/tests/ControllerLiveChecks.cs
+@@ -0,0 +1,76 @@
++using Godot;
++using Quod.Client;
++using System.Text.Json.Nodes;
++using File=System.IO.File;
++using Json=Quod.Client.Json;
++
++public partial class ExportChecks
++{
++    async Task ControllerLive(OperationsPanel operations)
++    {
++        var human=app.ActiveAccounts.Human!;var session=app.ActiveSession;
++        var adapter=(OpenXRInput)app.FindChild("openxr-input",true,false);
++        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
++        var views=(IEnumerable<SignedView>)typeof(Main).GetField("views",flags)!.GetValue(app)!;
++        var view=views.Single(v=>(string)typeof(SignedView).GetField("kind",flags)!.GetValue(v)! == "controller_preferences");
++        await Until(()=>State["controller_status"]?["available"]?.GetValue<bool>()==true);
++        var original=Json.Binding(await session.Read(human,"controller_preferences_view(me,View).",CancellationToken.None),"View");
++        var baseline=ControllerMapping.Decode(original)!;
++        Check(baseline.Profiles.Single().Model.Digest=="bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94","actual signed Prolog projection selects the pinned licensed controller appearance");
++        adapter.AttachSources();
++        var tracker=new XRControllerTracker { Name="m4_live_source",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
++        tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
++        tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
++        XRServer.AddTracker(tracker);await Frame();await adapter.Completion;adapter.Advance(1,true);
++        var resources=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
++        Check(resources["Decodes"]!.GetValue<int>()==1 && resources["LiveLeases"]!.GetValue<int>()==1,"real HTTPS asset bytes pass digest/profile/cost admission and instantiate in the production scene owner");
++        using var probe=new System.Net.Sockets.TcpClient();await probe.ConnectAsync("127.0.0.1",int.Parse(Env("M1B_CONTROL_PORT")));
++        using var stream=probe.GetStream();using var reader=new StreamReader(stream);
++        await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes("{\"measure\":true}\n"));
++        Check(JsonNode.Parse((await reader.ReadLineAsync())!)!["ready"]!.GetValue<bool>(),"production owner work probe is armed before mapping renewal");
++        async Task Renew()
++        {
++            var received=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);void Projection(JsonNode _)=>received.TrySetResult();view.Projection+=Projection;
++            try { await view.Renew();await received.Task.WaitAsync(TimeSpan.FromSeconds(30)); }finally { view.Projection-=Projection; }
++        }
++        for(int i=0;i<3;i++){await Renew();adapter.Advance((ulong)i+2,true);}
++        await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes("finish\n"));var work=JsonNode.Parse((await reader.ReadLineAsync())!)!;
++        Check(work["work"]!["calls"]!.AsArray().Count==0,"unchanged signed mapping renewals perform zero watched history/reader/install/write/sync calls");
++        var after=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
++        Check(after.ToJsonString()==resources.ToJsonString(),"unchanged signed mapping renewals perform zero acquisition/decode/node/texture/release work");
++        var revision=baseline.Revision+1;
++        // U owns source editing separately from the normal preference operation.
++        // This signed, revision-fenced edit creates only the disposable test's
++        // invalid row; repair below must use the real offered U-to-A action.
++        string invalid=$"transaction((controller_preferences_current(me,{baseline.Revision},Previous),retract(attribute(me,controller_preferences,preferences({baseline.Revision},Previous))),assertz(attribute(me,controller_preferences,preferences({revision},settings([],removed_binding_set,[])))))).";
++        using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(5));
++        var edited=await ExecuteComplete(session,app.ActiveStore,human,invalid,deadline.Token);
++        Check(Json.Committed(edited),"explicit owner source edit installs a revision-valid invalid preference row");
++        await Until(()=>State["controller_status"]?["available"]?.GetValue<bool>()==false && operations.Current?.Form.Submit.Name=="controller_restore" && operations.Available);
++        Check(view.Completion?.IsCompleted==false && adapter.Router.Count==1,"authorized invalid-settings state retains its original signed subscription and source consumer");
++        await Renew();Check(view.Completion?.IsCompleted==false,"ordinary invalid-state renewal retains the repair subscription");
++        operations.Defaults();
++        var repair=operations.Current!;
++        Console.WriteLine("M4_REPAIR_OFFER "+repair.Availability+" "+repair.Form.Submit+" "+repair.Revision);
++        Check(repair.Form.Submit.Name=="controller_restore" && repair.Form.Defaults.Count==0,"actual generic offered operation supplies explicit Reset with exact invalid-value/revision fence");
++        await operations.Submit();
++        if(operations.LastOutcome!=null && !Json.Terminal(operations.LastOutcome)) {
++            var pending=app.ActiveStore.Snapshot!.Pending.Single(p=>p.Flow=="instruction");
++            using var owner=new System.Net.Sockets.TcpClient();await owner.ConnectAsync("127.0.0.1",int.Parse(Env("M1B_CONTROL_PORT")));
++            using var channel=owner.GetStream();using var fence=new StreamReader(channel);
++            await channel.WriteAsync(System.Text.Encoding.UTF8.GetBytes(new JsonObject { ["request"]=pending.Request }.ToJsonString()+"\n"));
++            Check(JsonNode.Parse((await fence.ReadLineAsync())!)!["terminal"]!.GetValue<bool>(),"original repair instruction reaches its existing applied owner");await Press("resolve-original");await Until(()=>!operations.IsWorking);
++        }
++        Check(operations.LastOutcome!=null && Json.Committed(operations.LastOutcome),"explicit Reset submits through the ordinary governed U-to-A operation and commits once");
++        await Until(()=>State["controller_status"]?["available"]?.GetValue<bool>()==true && State["controller_status"]?["revision"]?.ToString()==(revision+1).ToString());
++        after=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
++        Check(after.ToJsonString()==resources.ToJsonString(),"real invalidation and Reset restore input without reacquiring/redecoding/rebuilding unchanged controller resources");
++        var repaired=ControllerMapping.Decode(Json.Binding(await session.Read(human,"controller_preferences_view(me,View).",deadline.Token),"View"))!;
++        Check(repaired.Revision==revision+1 && repaired.Digest==baseline.Digest,"committed repair advances preference revision while retaining exact shared-default mapping");
++        XRServer.RemoveTracker(tracker);tracker.Dispose();adapter.StopSession();await adapter.Completion;
++        Check(adapter.Subscriptions==0 && adapter.Router.Count==0,"real signed-consumer source removal releases all input subscriptions");
++        await File.WriteAllTextAsync(Env("M1B_RESULT")+".m4.json",System.Text.Json.JsonSerializer.Serialize(new { passed=true,checks,work,mapping=original.ToString(),repaired_revision=repaired.Revision.ToString(),metrics=adapter.Metrics,physical_acceptance=false }));
++        await Press("disconnect");await app.ViewsDisposed;Check(SignedView.LiveSockets==0,"account disconnect releases mapping GUI navigation and question subscriptions");
++        Console.WriteLine("M4_LIVE_PASS");Console.Out.Flush();await app.CloseApplication();
++    }
++}
+--- HEAD/client/godot/tests/ExportChecks.cs
++++ final03/client/godot/tests/ExportChecks.cs
+@@ -44,6 +44,7 @@
+         try {
+             var args = OS.GetCmdlineUserArgs(); profile = args[Array.IndexOf(args, "--profile") + 1];
+             app = application;
++            if(DisplayServer.GetName()=="headless")GetTree().Root.Size=new(1200,800);
+             app.Changed += () => {
+                 var state = State.AsObject(); state.Remove("setup"); state.Remove("human"); state.Remove("public_key"); state.Remove("network");
+                 Console.WriteLine("M1B_STATE " + state.ToJsonString()); Console.Out.Flush();
+@@ -53,6 +54,9 @@
+             string phase = Env("M1B_PHASE");
+             if (phase == "menu") { await NativeMenu(); return; }
+             if (phase == "scene") { await SceneAdapter(); return; }
++            if (phase == "controller-input") { await ControllerAdapter(); return; }
++            if (phase is "openxr" or "openxr-input") { await OpenXRRuntime(); return; }
++            if (phase == "shutdown-connect") { await CloseDuringConnect(); return; }
+             if (phase == "physics") { await PhysicsJourney(); return; }
+             bool fresh = phase is "fresh" or "questions" or "m2-fresh" or "m3-fresh";
+             if (phase == "tls") { await Tls(); return; }
+@@ -91,6 +95,7 @@
+             var offered = operations.Current ?? throw new Exception("No offered operation");
+             Check(offered.Name == "controller_settings", "actual offered controller-preference operation");
+             Check(offered.Form.Tree.Leaves.Count(c => c.Input) > 2, "generic typed offered inputs rendered");
++            if(phase=="m4-live") { await ControllerLive(operations);return; }
+             if (phase.StartsWith("m2-")) { await SpaceCreation(phase, original); return; }
+             if (phase == "closing") {
+                 await Press("inspect");
+@@ -106,7 +111,7 @@
+                 await Sources(original); await Questions(original);
+                 await Press("disconnect"); await app.ViewsDisposed;
+                 Check(SignedView.LiveSockets == 0, "source and deferred-question consumers dispose every socket");
+-                Console.WriteLine("M1B_TOOLS_PASS"); Console.Out.Flush(); GetTree().Quit(); return;
++                Console.WriteLine("M1B_TOOLS_PASS"); Console.Out.Flush(); await app.CloseApplication(); return;
+             }
+             if (phase == "input") {
+                 await Keyboard(operations, offered);
+@@ -116,7 +121,7 @@
+                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                     Check(GetViewport().GetTexture().GetImage().SavePng(screenshot) == Error.Ok, "actual exported GUI rendered to evidence image");
+                 }
+-                Console.WriteLine("M1B_INPUT_PASS"); Console.Out.Flush(); GetTree().Quit(); return;
++                Console.WriteLine("M1B_INPUT_PASS"); Console.Out.Flush(); await app.CloseApplication(); return;
+             }
+             if (phase is "fresh" or "reset") {
+                 if (phase == "fresh") {
+@@ -161,9 +166,9 @@
+                 Check(State["live_sockets"]!.GetValue<int>() == 0, "disposed view consumers release every socket");
+                 var report = new JsonObject { ["passed"] = true, ["phase"] = phase, ["checks"] = JsonSerializer.SerializeToNode(checks), ["original"] = original };
+                 await File.WriteAllTextAsync(Env("M1B_RESULT"), report.ToJsonString());
+-                Console.WriteLine("M1B_EXPORT_PASS"); Console.Out.Flush(); GetTree().Quit();
+-            }
+-        } catch (Exception error) { Console.Error.WriteLine(error.ToString()); Console.Error.WriteLine(app.Inspect()); Console.Error.Flush(); GetTree().Quit(1); }
++                Console.WriteLine("M1B_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
++            }
++        } catch (Exception error) { Console.Error.WriteLine(error.ToString()); Console.Error.WriteLine(app.Inspect()); Console.Error.Flush(); await app.CloseApplication(1); }
+     }
+ 
+     readonly HashSet<SignedView> tracedOperationViews = [];
+@@ -212,7 +217,8 @@
+         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+         await session.Authenticate(timeout.Token);
+         var instructions = Json.Binding(await session.Read(human, "personal_instructions(Instructions).", timeout.Token), "Instructions").Items;
+-        Check(instructions.Length == 2, "server retains exactly original Save and Reset associations");
++        int expected=Environment.GetEnvironmentVariable("M4_REPAIR")=="1" ? 3 : 2;
++        Check(instructions.Length == expected, "server retains exactly original Save and Reset associations plus any explicitly qualified repair");
+         foreach (var row in instructions) Check(Json.Committed(await session.ResolveInstruction(human, Identity.Encode(row.Require("instruction", 3)[0].Bytes), timeout.Token)), "original result recovered without originating journal");
+         using var stranger = Identity.Create();
+         using var strangerStore = new LocalStore(profile + "-stranger"); strangerStore.Create(stranger.Payload());
+--- HEAD/client/godot/tests/ExportLifecycle.cs
++++ final03/client/godot/tests/ExportLifecycle.cs
+@@ -10,6 +10,18 @@
+ 
+ public partial class ExportChecks
+ {
++    async Task CloseDuringConnect()
++    {
++        await Press("create-key");
++        ((Button)app.FindChild("connect",true,false)).EmitSignal(BaseButton.SignalName.Pressed);
++        await Until(()=>Busy);
++        Check(app.ActiveStore.Snapshot!.Pending.Count==0,"closing a pending sign-in has no durable domain submission");
++        await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { armed=true,checks }));
++        // The driver delivers this real window close only after its TLS peer
++        // observes the actual challenge request. It never supplies a reply.
++        Console.WriteLine("M4_PENDING_CONNECT");
++        Console.WriteLine("M2_NATIVE_CLOSE "+JsonSerializer.Serialize(new { title=GetWindow().Title }));Console.Out.Flush();
++    }
+     async Task Tls()
+     {
+         bool expected = Env("M1B_TLS_EXPECT") == "accept";
+@@ -22,7 +34,7 @@
+         try { await socket.ConnectAsync(transport.SocketUri, timeout.Token); websocket = true; }
+         catch (System.Net.WebSockets.WebSocketException) when (!expected) { }
+         Check(http == expected && websocket == expected, "actual exported HTTPS and WSS trust hostname and validity: " + Env("M1B_TLS_CASE"));
+-        Console.WriteLine("M1B_TLS_PASS"); Console.Out.Flush(); GetTree().Quit();
++        Console.WriteLine("M1B_TLS_PASS"); Console.Out.Flush(); await app.CloseApplication();
+     }
+     async Task Mouse(OperationsPanel operations, Offer offered)
+     {
+@@ -38,9 +50,13 @@
+         control.Toggled += Changed;
+         try {
+             var position = control.GetGlobalRect().GetCenter();
+-            GetViewport().PushInput(new InputEventMouseMotion { Position = position, GlobalPosition = position }, true);
+-            GetViewport().PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = true }, true);
+-            GetViewport().PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = false }, true);
++            if(DisplayServer.GetName()!="headless")NativeClick(control.GetWindow(),position);
++            else {
++                var viewport=control.GetViewport();
++                viewport.PushInput(new InputEventMouseMotion { Position = position, GlobalPosition = position }, true);
++                viewport.PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = true }, true);
++                viewport.PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = false }, true);
++            }
+             await toggled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+         } finally { control.Toggled -= Changed; }
+         Check(control.ButtonPressed != before && operations.FormPanel.Draft[role] == (!before ? "true" : "false"), "native mouse click edits offered boolean");
+@@ -296,7 +312,7 @@
+                 var after = store.Snapshot!;
+                 Check(after.Payload == before.Payload && JsonSerializer.Serialize(after.Accounts) == JsonSerializer.Serialize(before.Accounts) && JsonSerializer.Serialize(after.Pending) == JsonSerializer.Serialize(before.Pending), "SIGKILL recovery retains exact original key accounts pins and signed outbox");
+                 Check(after.Endpoint == Env("M1B_EXPECT_ENDPOINT"), "SIGKILL recovers atomic old or new store at selected boundary");
+-                GetTree().Quit(); return;
++                await app.CloseApplication(); return;
+             }
+             await File.WriteAllTextAsync(original, JsonSerializer.Serialize(store.Snapshot));
+             string boundary = phase[6..];
+@@ -375,6 +391,6 @@
+         if (State["network"] != null) await Press("disconnect"); else app.Disconnect();
+         await app.ViewsDisposed;
+         await File.WriteAllTextAsync(Env("M1B_RESULT"), JsonSerializer.Serialize(new { passed = true, phase, checks }));
+-        Console.WriteLine("M1B_LOCAL_PASS"); Console.Out.Flush(); GetTree().Quit();
++        Console.WriteLine("M1B_LOCAL_PASS"); Console.Out.Flush(); await app.CloseApplication();
+     }
+ }
+--- HEAD/client/godot/tests/NavigationChecks.cs
++++ final03/client/godot/tests/NavigationChecks.cs
+@@ -127,7 +127,7 @@
+         }
+         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,phase,checks,current_location=State["current_location"]?.ToString(),setup=app.ActiveAccounts.Setup!.ToString() }));
+         await Press("disconnect"); await app.ViewsDisposed;
+-        Console.WriteLine("M3_EXPORT_PASS "+phase); Console.Out.Flush(); GetTree().Quit();
++        Console.WriteLine("M3_EXPORT_PASS "+phase); Console.Out.Flush(); await app.CloseApplication();
+     }
+     async Task RecursiveScene(ScenePanel scene,Actor human,Term s0,Term s1,Term s2,Term leaf)
+     {
+--- HEAD/client/godot/tests/OpenXRChecks.cs
++++ final03/client/godot/tests/OpenXRChecks.cs
+@@ -0,0 +1,92 @@
++using Godot;
++using Quod.Client;
++using File=System.IO.File;
++
++public partial class ExportChecks
++{
++    async Task OpenXRRuntime()
++    {
++        var adapter=(OpenXRInput)app.FindChild("openxr-input",true,false);
++        var scene=(ScenePanel)app.FindChild("space-scene",true,false);
++        using var api=new OpenXRApiExtension();
++        var cycles=new List<object>();
++        var calibration=typeof(OpenXRInput).GetField("calibration",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
++        for(int cycle=1;cycle<=3;cycle++) {
++            Check(adapter.Start(),"installed OpenXR interface starts cycle "+cycle);
++            if(cycle==1 && Env("M1B_PHASE")=="openxr-input")await ObserveOpenXRControls(adapter);
++            long previous=0;int fresh=0,tracked=0,high=0;var samples=new List<long>();
++            int invalidStartupFrames=0;bool invalidHeadCalibration=false;
++            var sourceSamples=new Dictionary<OpenXRInput.Source,int>();bool sourcePosesAgree=true;
++            for(int i=0;i<90;i++) {
++                await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
++                long time=api.GetPredictedDisplayTime();if(time>previous){fresh++;previous=time;samples.Add(time);}
++                if(XRServer.GetTracker("head") is XRPositionalTracker head && head.HasPose("default") && head.GetPose("default").HasTrackingData && head.GetPose("default").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None) {
++                    tracked++;if(head.GetPose("default").TrackingConfidence==XRPose.TrackingConfidenceEnum.High)high++;
++                } else if(tracked==0) { invalidStartupFrames++;invalidHeadCalibration|=calibration.GetValue(adapter)!=null; }
++                foreach(var source in adapter.Sources.Where(s=>s.Current(0))) {
++                    sourceSamples[source]=sourceSamples.GetValueOrDefault(source)+1;
++                    sourcePosesAgree&=source.Aim.Transform.IsEqualApprox(source.Tracker.GetPose("aim").GetAdjustedTransform()) &&
++                        source.Grip.Transform.IsEqualApprox(source.Tracker.GetPose("grip").GetAdjustedTransform());
++                }
++            }
++            var xr=XRServer.FindInterface("OpenXR") as OpenXRInterface??throw new Exception("OpenXR interface disappeared");
++            long draws=scene.Viewport.GetRenderInfo(Viewport.RenderInfoType.Visible,Viewport.RenderInfo.DrawCallsInFrame);
++            var sourceTracking=adapter.Sources.Select(s=>new { name=s.Tracker.Name.ToString(),valid_frames=sourceSamples.GetValueOrDefault(s),
++                aim=s.Tracker.HasPose("aim") ? s.Tracker.GetPose("aim").TrackingConfidence.ToString() : "missing",
++                grip=s.Tracker.HasPose("grip") ? s.Tracker.GetPose("grip").TrackingConfidence.ToString() : "missing" }).ToArray();
++            await File.WriteAllTextAsync(Env("M1B_RESULT")+".cycle"+cycle+".json",System.Text.Json.JsonSerializer.Serialize(new {
++                cycle,fresh,tracked,high,invalidStartupFrames,invalidHeadCalibration,sourceTracking,sourcePosesAgree,draws,
++                update_mode=scene.Viewport.RenderTargetUpdateMode.ToString(),view_count=scene.Viewport.ViewCount,session_state=xr.GetSessionState().ToString(),can_render=api.CanRender() }));
++            if(invalidStartupFrames>0)Check(!invalidHeadCalibration,"startup without a valid native head pose cannot establish world calibration");
++            Check(fresh>0 && tracked>0 && api.GetViewCount()==2,"real runtime supplies fresh stereo head frames cycle "+cycle);
++            Check(scene.Viewport.ViewCount==2,"XR scene retains the runtime's stereo render layout cycle "+cycle);
++            Check(scene.Viewport.RenderTargetUpdateMode==SubViewport.UpdateMode.Always && draws>0,"hidden desktop container keeps the actual XR scene rendering cycle "+cycle);
++            if(sourceSamples.Count>0)Check(sourcePosesAgree,"adapter uses the native tracker aim and grip poses cycle "+cycle);
++            var profiles=adapter.Sources.Select(s=>new { name=s.Tracker.Name.ToString(),profile=s.Tracker.Profile,hand=s.Hand,components=s.Layout }).ToArray();
++            var system=xr.GetSystemInfo().ToDictionary(p=>p.Key.AsString(),p=>p.Value.ToString());
++            adapter.StopSession();await adapter.Completion;
++            Check(adapter.Subscriptions==0 && adapter.Router.Count==0,"OpenXR adapter stop releases every subscribed source cycle "+cycle);
++            Check(scene.Viewport.ViewCount==1 && scene.Viewport.GetCamera3D()==scene.FindChild("scene-camera",true,false),"XR stop restores the same desktop mono scene and camera cycle "+cycle);
++            cycles.Add(new { cycle,fresh,tracked,high,draws,profiles,sourceTracking,source_pose_agreement_qualified=sourceSamples.Count>0 && sourcePosesAgree,system,frame_times=samples,metrics=adapter.Metrics });
++            Console.WriteLine("M4_XR_CYCLE "+cycle);Console.Out.Flush();
++        }
++        await File.WriteAllTextAsync(Env("M1B_RESULT"),System.Text.Json.JsonSerializer.Serialize(new { passed=true,simulated=System.Environment.GetEnvironmentVariable("SIMULATED_ENABLE")=="1",checks,cycles }));
++        Console.WriteLine("M4_XR_PASS");Console.Out.Flush();await app.CloseApplication();
++    }
++    async Task ObserveOpenXRControls(OpenXRInput adapter)
++    {
++        Check(System.Environment.GetEnvironmentVariable("SIMULATED_ENABLE")!="1","wand observation requires a real runtime hardware source");
++        string[] components=["xr-standard-trigger","xr-standard-squeeze","xr-standard-touchpad"];
++        var previous=new Dictionary<(OpenXRInput.Source Source,string Component),bool>();
++        var neutral=new HashSet<(OpenXRInput.Source,string)>();var down=new HashSet<(OpenXRInput.Source,string)>();var completed=new HashSet<(OpenXRInput.Source,string)>();
++        var tracked=new HashSet<OpenXRInput.Source>();
++        var states=new Dictionary<string,int>();var edges=new List<object>();
++        var instruction=new Label { Text="XR INPUT OBSERVATION READY\nPress/release trigger, grip and touchpad on each wand.",Position=new(30,30),MouseFilter=Control.MouseFilterEnum.Ignore };
++        ((SpatialGui)app.FindChild("shared-gui",true,false)).Surface.AddChild(instruction);
++        long until=System.Diagnostics.Stopwatch.GetTimestamp()+60*System.Diagnostics.Stopwatch.Frequency;
++        Console.WriteLine("M4_XR_INPUT_READY");Console.Out.Flush();
++        while(System.Diagnostics.Stopwatch.GetTimestamp()<until) {
++            await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
++            string state=((OpenXRInterface)XRServer.FindInterface("OpenXR")).GetSessionState().ToString();states[state]=states.GetValueOrDefault(state)+1;
++            foreach(var source in adapter.Sources.Where(s=>s.Profiles.Contains("htc-vive"))) {
++                if(source.Current(0))tracked.Add(source);
++                foreach(string component in components) {
++                    var sample=source.Read(component);if(sample==null)continue;
++                    var key=(source,component);bool pressed=sample.Pressed;
++                    if(pressed!=previous.GetValueOrDefault(key))edges.Add(new { source=source.Tracker.Name.ToString(),component,pressed });
++                    if(!pressed)neutral.Add(key);
++                    if(pressed && neutral.Contains(key) && !previous.GetValueOrDefault(key))down.Add(key);
++                    if(!pressed && previous.GetValueOrDefault(key) && down.Contains(key))completed.Add(key);
++                    previous[key]=pressed;
++                }
++            }
++            if(completed.Select(k=>k.Item1).Distinct().Count(s=>components.All(c=>completed.Contains((s,c))))>=2)break;
++        }
++        instruction.QueueFree();
++        var observations=adapter.Sources.Select(s=>new { name=s.Tracker.Name.ToString(),profile=s.Tracker.Profile,hand=s.Hand,layout=s.Layout,tracked=tracked.Contains(s),aim=s.Tracker.HasPose("aim") ? s.Tracker.GetPose("aim").TrackingConfidence.ToString() : "missing",grip=s.Tracker.HasPose("grip") ? s.Tracker.GetPose("grip").TrackingConfidence.ToString() : "missing",released=components.Where(c=>completed.Contains((s,c))).ToArray() }).ToArray();
++        await File.WriteAllTextAsync(Env("M1B_RESULT")+".input.json",System.Text.Json.JsonSerializer.Serialize(new { observations,states,edges,coverage="actual runtime button/pose delivery; no signed mapping installed; no mapped gesture or headset-pixel claim" }));
++        Check(observations.Count(s=>s.tracked && s.released.Length==components.Length)>=2,"both actual Vive wands deliver tracked trigger grip and touchpad press/release");
++        Check(adapter.DriveRequests==0 && adapter.SnapRequests==0 && adapter.TeleportRequests==0,"hardware observations without signed settings cannot dispatch travel");
++        Console.WriteLine("M4_XR_INPUT_RECEIVED");Console.Out.Flush();
++    }
++}
+--- HEAD/client/godot/tests/PhysicsChecks.cs
++++ final03/client/godot/tests/PhysicsChecks.cs
+@@ -85,6 +85,7 @@
+         selected=Actor.FromTerm(Term.Parse(Json.S(metadata,"s2")));await view.Reopen();await Wait(()=>current!=null);Agreement();
+         selected=outer;await view.Reopen();await Wait(()=>current!=null);
+         Check(current!.Controlled!=null && scene.Controlled,"exact signed viewer owns the selected streamed control binding");
++        Check(!input.Snap(1) && !input.Teleport(0,-1,.5),"mapping cannot create absent authored snap or teleport abilities");
+         int rebuilt=scene.Rebuilt;string registration=current.Sample!.Registration,fence=current.Sample.Fence;
+         using(var probe=new System.Net.Sockets.TcpClient()) {
+             await probe.ConnectAsync("127.0.0.1",int.Parse(Env("M1B_CONTROL_PORT")),deadline.Token);
+@@ -109,6 +110,10 @@
+         input.Drive(1,0,0);input.Drive(0,0,0);await input.Completion;
+         await Wait(()=>ulong.TryParse(current?.Sample?.ControlState?["sequence"]?.GetValue<string>(),out var accepted) && accepted>=sequence+2);
+         Check(true,"a desired stop received during an in-flight drive is admitted next through the same signed serial lane");
++        input.Drive(1.0/3,0,-1.0/3);await input.Completion;
++        var encoded=await SpaceControl(new(){["input"]=true});receipts.Add(encoded);
++        Check(Json.S(encoded,"input")=="drive(vector(666,0,-666),angular(0,0,0))","actual signed sender preserves integer truncation at both positive and negative velocity boundaries");
++        input.Drive(0,0,0);await input.Completion;
+         // Exercise the production input adapter through an actual OS key event.
+         for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent())if(parent is ScrollContainer scroll)scroll.EnsureControlVisible(scene);
+         scene.GrabFocus();await Frame();Check(scene.HasFocus(),"desktop physics scene holds keyboard focus");var before=current!.Sample!.Bodies[(2,1)].Position.ToArray();
+@@ -116,6 +121,38 @@
+         await Wait(()=>current?.Sample?.Bodies.TryGetValue((2,1),out var body)==true && body.Position.Zip(before,(a,b)=>(a-b)*(a-b)).Sum()>.0025);
+         Console.WriteLine("M2_NATIVE_KEY release-w");Console.Out.Flush();await Frame();scene.ReleaseInput();await input.Completion;
+         Check(frames>0,"native desktop key input advances the server-controlled body through actual streamed frames");
++        await SpaceControl(new(){["abilities"]=true});await Wait(()=>current?.Controlled is { Snap:not null,TeleportReach:not null });
++        var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
++        var gui=(SpatialGui)app.FindChild("shared-gui",true,false);var mapped=new OpenXRInput();scene.Viewport.AddChild(mapped);
++        using var models=new RenderModels((asset,cancel)=>session.Transport.Model(asset.Digest,asset.Allowed[0],cancel));
++        mapped.Configure(scene,gui,models,()=>input,()=>false,()=>[]);mapped.Install(mapping);mapped.AttachSources();
++        var tracker=new XRControllerTracker { Name="m4_native_motion",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
++        tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
++        tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
++        XRServer.AddTracker(tracker);await Frame();await mapped.Completion;ulong mappedFrame=0;
++        void MappedFrame()=>mapped.Advance(++mappedFrame,true);
++        MappedFrame();
++        async Task Applied(Func<bool> gesture,string name) {
++            ulong prior=ulong.Parse(current!.Sample!.ControlState!["sequence"]!.GetValue<string>());
++            Check(gesture(),"authored "+name+" enters the existing signed serial input owner");
++            await input.Completion;var admitted=await SpaceControl(new(){["input"]=true});receipts.Add(admitted);
++            ulong admittedSequence=admitted["sequence"]!.GetValue<ulong>();
++            Check(admittedSequence>prior,"native owner admits a new monotone "+name+" sequence");
++            await Wait(()=>ulong.Parse(current!.Sample!.ControlState!["sequence"]!.GetValue<string>())==admittedSequence && current.Sample.ControlState["pending"]?.GetValue<bool>()==false);
++            receipts.Add(current!.Sample!.ControlState!.DeepClone());Agreement();
++        }
++        bool MappedPad(Vector2 axes,bool snap) {
++            tracker.SetInput("pad_axes",Vector2.Zero);tracker.SetInput("pad_press",false);MappedFrame();
++            int before=snap ? mapped.SnapRequests : mapped.TeleportRequests;
++            tracker.SetInput("pad_axes",axes);tracker.SetInput("pad_press",true);MappedFrame();
++            tracker.SetInput("pad_press",false);tracker.SetInput("pad_axes",Vector2.Zero);MappedFrame();
++            return (snap ? mapped.SnapRequests : mapped.TeleportRequests)==before+1;
++        }
++        await Applied(()=>MappedPad(new(1,0),true),"mapped snap");
++        await Applied(()=>MappedPad(new(0,1),false),"mapped teleport");
++        Check(true,"native feedback and rendered poses remain authoritative for mapped snap and teleport landing/path refusal");
++        XRServer.RemoveTracker(tracker);tracker.Dispose();mapped.StopSession();await mapped.Completion;
++        Check(mapped.Subscriptions==0 && models.LiveLeases==0,"mapped native movement consumer releases its trackers and real render leases");mapped.GetParent().RemoveChild(mapped);mapped.Free();
+         var baseline=await SpaceControl(new(){["sample"]=true});receipts.Add(baseline);
+         var independent=baseline["independent"]!.ToJsonString();
+         int oldWithdrawn=withdrawn;
+@@ -146,6 +183,6 @@
+         }
+         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new{passed=true,checks,receipts,frames,withdrawn}));
+         scene.Drive-=Drive;input.Dispose();testedInput=null;view.Dispose();independentView.Dispose();await Task.WhenAll(view.Completion!,independentView.Completion!);await input.Completion;scene.Withdraw();
+-        Console.WriteLine("M3_PHYSICS_PASS");Console.Out.Flush();GetTree().Quit();
++        Console.WriteLine("M3_PHYSICS_PASS");Console.Out.Flush();await app.CloseApplication();
+     }
+ }
+--- HEAD/client/godot/tests/SceneChecks.cs
++++ final03/client/godot/tests/SceneChecks.cs
+@@ -16,10 +16,12 @@
+         scene.Apply(normal); await Frame();
+         var corners = scene.WorldCorners("subject/shape");
+         Check(corners[0].IsEqualApprox(new(-50,-50,-50)) && corners[7].IsEqualApprox(new(50,50,50)), "default real-size wireframe spans minus50 to plus50 metres");
+-        var mesh=scene.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>().Single().Mesh;
++        var mesh=scene.SceneRoot.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>().Single().Mesh;
+         var surface=RenderingServer.MeshGetSurface(mesh.GetRid(),0);
+         Console.WriteLine($"M2_WIRE_SURFACE primitive={surface["primitive"]} vertices={surface["vertex_count"]} expected={(int)RenderingServer.PrimitiveType.Lines}");
+         Check(surface["primitive"].AsInt32()==(int)RenderingServer.PrimitiveType.Lines && surface["vertex_count"].AsInt32()==24,"actual engine wire surface contains twelve lines and no face primitives");
++        Check(scene.PickRay(new(0,0,200),Vector3.Forward)==null,"spatial ray cannot pick a wireframe face interior");
++        Check(scene.PickRay(new(0,-50,200),Vector3.Forward)?.ToString()==subject.ToString(),"spatial ray picks a wire edge through the same exact subject owner");
+         if(DisplayServer.GetName()!="headless") {
+             for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent()) if(parent is ScrollContainer scroll) scroll.EnsureControlVisible(scene);
+             await Frame(); await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
+@@ -51,6 +53,6 @@
+         Visit(scene); Check(!all.Any(n => n is CollisionObject3D), "exterior adapter creates no collision bodies or walls");
+         scene.Withdraw(); await Frame(); Check(scene.Count == 0 && scene.Pick(Vector2.Zero) == null, "withdrawal removes geometry and picking together");
+         await File.WriteAllTextAsync(Env("M1B_RESULT"), System.Text.Json.JsonSerializer.Serialize(new { passed=true, checks }));
+-        Console.WriteLine("M2_SCENE_PASS"); Console.Out.Flush(); GetTree().Quit();
++        Console.WriteLine("M2_SCENE_PASS"); Console.Out.Flush(); await app.CloseApplication();
+     }
+ }
+--- HEAD/client/godot/tests/SpaceChecks.cs
++++ final03/client/godot/tests/SpaceChecks.cs
+@@ -99,7 +99,7 @@
+         var button=new Button { Position=new(100,300),Size=new(300,40),Text="Native pointer probe" }; app.AddChild(button); await Frame();
+         var clicked=new TaskCompletionSource(); button.Pressed+=()=>clicked.TrySetResult(); NativeClick(button.GetGlobalRect().GetCenter());
+         await clicked.Task.WaitAsync(TimeSpan.FromSeconds(5)); Check(clicked.Task.IsCompletedSuccessfully,"real native pointer presses the offered control");
+-        Console.WriteLine("M2_MENU_PASS"); Console.Out.Flush(); GetTree().Quit();
++        Console.WriteLine("M2_MENU_PASS"); Console.Out.Flush(); await app.CloseApplication();
+     }
+     async Task CreationTarget(OperationsPanel panel, Actor target, string operation)
+     {
+@@ -317,7 +317,7 @@
+         Check(navigation.ToString()==s0.ToString(),"all creations leave the same A inside original parentless S0");
+         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,checks,original=first.Select(t=>t.ToString()).ToArray(),wire=wire.ToString(),rational=rational.ToString(),foreign=foreignSpace.ToString() }));
+         await Press("disconnect"); await app.ViewsDisposed; Check(SignedView.LiveSockets==0,"M2 view and operation consumers dispose all sockets");
+-        Console.WriteLine("M2_EXPORT_PASS"); Console.Out.Flush(); GetTree().Quit();
++        Console.WriteLine("M2_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
+     }
+ 
+     async Task SpaceRefusals(OperationsPanel panel,Actor human,Term s0,ScenePanel scene)
+--- HEAD/client/godot/xr_actions.tres
++++ final03/client/godot/xr_actions.tres
+@@ -0,0 +1,127 @@
++[gd_resource type="OpenXRActionMap" format=3]
++
++[sub_resource type="OpenXRAction" id="aim"]
++resource_name = "aim"
++localized_name = "aim"
++action_type = 3
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRAction" id="grip_pose"]
++resource_name = "grip_pose"
++localized_name = "grip pose"
++action_type = 3
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRAction" id="trigger_press"]
++resource_name = "trigger_press"
++localized_name = "trigger press"
++action_type = 0
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRAction" id="trigger_value"]
++resource_name = "trigger_value"
++localized_name = "trigger value"
++action_type = 1
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRAction" id="squeeze_press"]
++resource_name = "squeeze_press"
++localized_name = "squeeze press"
++action_type = 0
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRAction" id="pad_press"]
++resource_name = "pad_press"
++localized_name = "pad press"
++action_type = 0
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRAction" id="pad_touch"]
++resource_name = "pad_touch"
++localized_name = "pad touch"
++action_type = 0
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRAction" id="pad_axes"]
++resource_name = "pad_axes"
++localized_name = "pad axes"
++action_type = 2
++toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
++
++[sub_resource type="OpenXRActionSet" id="inputs"]
++resource_name = "quod_inputs"
++localized_name = "Controller observations"
++actions = [SubResource("aim"), SubResource("grip_pose"), SubResource("trigger_press"), SubResource("trigger_value"), SubResource("squeeze_press"), SubResource("pad_press"), SubResource("pad_touch"), SubResource("pad_axes")]
++
++[sub_resource type="OpenXRIPBinding" id="aim_left"]
++action = SubResource("aim")
++binding_path = "/user/hand/left/input/aim/pose"
++
++[sub_resource type="OpenXRIPBinding" id="aim_right"]
++action = SubResource("aim")
++binding_path = "/user/hand/right/input/aim/pose"
++
++[sub_resource type="OpenXRIPBinding" id="grip_pose_left"]
++action = SubResource("grip_pose")
++binding_path = "/user/hand/left/input/grip/pose"
++
++[sub_resource type="OpenXRIPBinding" id="grip_pose_right"]
++action = SubResource("grip_pose")
++binding_path = "/user/hand/right/input/grip/pose"
++
++[sub_resource type="OpenXRIPBinding" id="trigger_press_left"]
++action = SubResource("trigger_press")
++binding_path = "/user/hand/left/input/trigger/click"
++
++[sub_resource type="OpenXRIPBinding" id="trigger_press_right"]
++action = SubResource("trigger_press")
++binding_path = "/user/hand/right/input/trigger/click"
++
++[sub_resource type="OpenXRIPBinding" id="trigger_value_left"]
++action = SubResource("trigger_value")
++binding_path = "/user/hand/left/input/trigger/value"
++
++[sub_resource type="OpenXRIPBinding" id="trigger_value_right"]
++action = SubResource("trigger_value")
++binding_path = "/user/hand/right/input/trigger/value"
++
++[sub_resource type="OpenXRIPBinding" id="squeeze_press_left"]
++action = SubResource("squeeze_press")
++binding_path = "/user/hand/left/input/squeeze/click"
++
++[sub_resource type="OpenXRIPBinding" id="squeeze_press_right"]
++action = SubResource("squeeze_press")
++binding_path = "/user/hand/right/input/squeeze/click"
++
++[sub_resource type="OpenXRIPBinding" id="pad_press_left"]
++action = SubResource("pad_press")
++binding_path = "/user/hand/left/input/trackpad/click"
++
++[sub_resource type="OpenXRIPBinding" id="pad_press_right"]
++action = SubResource("pad_press")
++binding_path = "/user/hand/right/input/trackpad/click"
++
++[sub_resource type="OpenXRIPBinding" id="pad_touch_left"]
++action = SubResource("pad_touch")
++binding_path = "/user/hand/left/input/trackpad/touch"
++
++[sub_resource type="OpenXRIPBinding" id="pad_touch_right"]
++action = SubResource("pad_touch")
++binding_path = "/user/hand/right/input/trackpad/touch"
++
++[sub_resource type="OpenXRIPBinding" id="pad_axes_left"]
++action = SubResource("pad_axes")
++binding_path = "/user/hand/left/input/trackpad"
++
++[sub_resource type="OpenXRIPBinding" id="pad_axes_right"]
++action = SubResource("pad_axes")
++binding_path = "/user/hand/right/input/trackpad"
++
++[sub_resource type="OpenXRInteractionProfile" id="vive"]
++interaction_profile_path = "/interaction_profiles/htc/vive_controller"
++bindings = [SubResource("aim_left"), SubResource("aim_right"), SubResource("grip_pose_left"), SubResource("grip_pose_right"), SubResource("trigger_press_left"), SubResource("trigger_press_right"), SubResource("trigger_value_left"), SubResource("trigger_value_right"), SubResource("squeeze_press_left"), SubResource("squeeze_press_right"), SubResource("pad_press_left"), SubResource("pad_press_right"), SubResource("pad_touch_left"), SubResource("pad_touch_right"), SubResource("pad_axes_left"), SubResource("pad_axes_right")]
++
++[resource]
++action_sets = [SubResource("inputs")]
++interaction_profiles = [SubResource("vive")]
++

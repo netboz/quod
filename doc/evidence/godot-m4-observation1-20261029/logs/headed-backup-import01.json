@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-observation1-20261029/observe-once.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T15:01:33Z",
+  "elapsed_seconds": 41.26797389984131,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-observation1-artifacts/private/logs/headed-backup-import01.log",
+  "raw_sha256": "a6058cfef12f768bc8aab9171012c9f6ad0794ffd7cddc643d99f8c6f5c8d0d4",
+  "sanitized_sha256": "a6058cfef12f768bc8aab9171012c9f6ad0794ffd7cddc643d99f8c6f5c8d0d4",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

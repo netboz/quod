@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/finalize.py", line 31, in <module>
+    manifest=load(path);stage=Path(manifest['stage']);assert manifest['passed'] and not manifest['compiled_application_inputs_copied'] and not manifest['distributable']
+                                                                                                                                               ~~~~~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'distributable'

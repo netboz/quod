@@ -1,0 +1,206 @@
+WorkerThreadPool: 8 threads, 2 max low-priority.
+WARNING: xdg-toplevel-icon protocol not found! Cannot set window icon.
+     at: init (platform/linuxbsd/wayland/wayland_thread.cpp:5642)
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+TextServer: Added interface "Dummy"
+TextServer: Added interface "ICU / HarfBuzz / Graphite (Built-in)"
+SDL: Init OK!
+Accessibility: AccessKit driver loaded.
+Connecting to the default Wayland display.
+Output 24db83b0 scale 1
+Output 24db83b0 done.
+Output 24dc8840 scale 1
+Output 24dc8840 done.
+Output 24dba2f0 scale 1
+Output 24dba2f0 done.
+Loading cursor theme "Bibata-Modern-Ice" size 24.
+Detecting GPUs, set DRI_PRIME in the environment to override GPU detection logic.
+Only one GPU found, using default.
+Loaded EGL 1.5
+Accessibility: window 0 adapter created.
+Showing window 0
+Creating regular window of size (1200, 800)
+Window has no output associated, returning buffer scale of 1.
+libdecor frame on configure rect [P: (0, 0), S: (1200, 800)]
+VSYNC: manually throttling frames with swap delay 0.
+DBus 1.16.2 detected.
+FreeDesktopScreenSaver: Acquired screensaver inhibition cookie: 1572
+Using "default" pen tablet driver...
+Shader 'CanvasSdfShaderGLES3' SHA256: 0a4511caaa20d2c4660f0532afdd9727fbe7a7757f8023f2e9dced4b80ab688a
+Shader 'SkeletonShaderGLES3' SHA256: 3f7c28128935c2b97b93ef2e10f4bacfd6005c46e6c3439781c1627bfe72b4f5
+Shader 'ParticlesShaderGLES3' SHA256: b51401485374b1865015d9f96d445c703ba9db2c384ac372055b2dde50563dbc
+Shader 'ParticlesCopyShaderGLES3' SHA256: ba36533183f9bccd1f7156679e3b968aefe80ba35e599dcc7b9010f2c1ec12d0
+Shader 'CopyShaderGLES3' SHA256: c0a4fdd46ed2bc3d0d52d22e615766985a47dc19909a15b9c11dceff913974bd
+Shader 'CubemapFilterShaderGLES3' SHA256: 73399615a4d03e5b7cbd1505a5b4c50e2cfaa095b1360a54363e893602402b85
+Shader 'GlowShaderGLES3' SHA256: deaf01a137f2871658df6b7fddd29e5b14d1d2169e8f62b0e8027e8f4c47e858
+Shader 'PostShaderGLES3' SHA256: 0600ad916c12632b520ab7d7d08f36b1faa1ffce81c6730c45f72168ec484aad
+Shader 'FeedShaderGLES3' SHA256: 15259052a33ab81d49a8f6e8ff25eee6eae88f4eae7a397b8b65ce83ac8ca857
+Shader 'CanvasShaderGLES3' SHA256: c7ee33a741c4ef6cf9c52b367dab0c5f0c7d4bcc7eca77dc9fa0e8fe5af2d0be
+Shader 'CanvasOcclusionShaderGLES3' SHA256: 7f09b0d5ea6b3dc11b3131e3e0c593644ad69bc09a4b26b059f90cb7922ae4bc
+Shader 'SceneShaderGLES3' SHA256: aae848b3b51e7169d86b726692f26fac7429e85234a1d473261bf142a0cc54ee
+Shader 'SkyShaderGLES3' SHA256: d823d8be9cac74d022f82839003c4c89bf246746ef8963d4c267a26ec4fb2b09
+Shader 'TexBlitShaderGLES3' SHA256: becb8fbf6f3692597b3e35ad597a75cb0bbaa1d967e719790a761f3af5910cc9
+OpenGL API 3.3.0 NVIDIA 615.71.09 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4090
+PulseAudio 17.0.0 detected.
+PulseAudio: context other
+PulseAudio: context other
+PulseAudio: context other
+PulseAudio: context ready
+PulseAudio: Detecting channels for device: alsa_output.pci-0000_00_1f.3.analog-stereo
+PulseAudio: detected 2 output channels
+PulseAudio: audio buffer frames: 512 calculated output latency: 11ms
+
+Window entered output 24dba2f0.
+Resizing the window from (1200, 800) to (1200, 800) (fractional scale x1.000000).
+Keyboard focused window 0.
+Resizing the window from (1850, 496) to (1850, 496) (fractional scale x1.000000).
+libdecor frame on configure rect [P: (0, 0), S: (1850, 496)]
+TextServer: Primary interface set to: "ICU / HarfBuzz / Graphite (Built-in)".
+.NET: Initializing module...
+Found hostfxr: /home/yan/.cache/quod-m4-r1-artifacts/artifacts/quod-m4-client-diagnostic01/source/client/godot/dist/data_Quod_linuxbsd_x86_64/libhostfxr.so
+PASS real shared-domain view streams one leaf and one explicitly controlled body for three independent appearances
+PASS independent configured world has its own authorized active client view and intentionally empty contents
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS exact signed viewer owns the selected streamed control binding
+PASS mapping cannot create absent authored snap or teleport abilities
+PASS physical owner work observation precedes unchanged client renewals
+PASS unchanged live physical renewals have zero watched history/install/write/sync work
+PASS unchanged live physical renewals retain engine resources
+PASS unchanged live physical renewals preserve the world run structure and native incarnation while renewing delivery custody
+PASS a desired stop received during an in-flight drive is admitted next through the same signed serial lane
+PASS actual signed sender preserves integer truncation at both positive and negative velocity boundaries
+PASS desktop physics scene holds keyboard focus
+M2_NATIVE_KEY hold-w
+M2_NATIVE_KEY release-w
+PASS native desktop key input advances the server-controlled body through actual streamed frames
+PASS authored mapped snap enters the existing signed serial input owner
+PASS native owner admits a new monotone mapped snap sequence
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS authored mapped teleport enters the existing signed serial input owner
+PASS native owner admits a new monotone mapped teleport sequence
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS native feedback and rendered poses remain authoritative for mapped snap and teleport landing/path refusal
+PASS mapped native movement consumer releases its trackers and real render leases
+PASS real source geometry change updates every independent appearance through the retained view
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS a real nested body traverses its source frame and contacts the root-domain floor while client poses track that same native world
+PASS source and frame changes preserve the independent world's native identity and work
+PASS unavailable source withdraws affected presentation picking and control
+PASS source failure preserves the independent authorized client view and its exact native world
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS genuine committed repair preserves independent native identity and work
+PASS unavailable source withdraws affected presentation picking and control
+PASS source failure preserves the independent authorized client view and its exact native world
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS genuine committed repair preserves independent native identity and work
+PASS actual rendered position and orientation agree with the native sample through the selected nonidentity interior frame
+PASS actual desktop raster contains the authoritative shared-domain geometry
+PASS GPU raster of real shared-domain native body appearances retained
+M4_R1_VIEW_RETIRE world
+M4_R1_VIEW_RETIRED world
+M4_R1_VIEW_RETIRE world
+M4_R1_VIEW_RETIRED world
+M3_PHYSICS_PASS
+M4_R1_SHUTDOWN {"phase":"close-enter","tick":42535874747176,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"}]}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.","controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M4_R1_SHUTDOWN {"phase":"session-await","tick":42535897771924,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"}]}
+M4_R1_SHUTDOWN {"phase":"session-work-retired","tick":42535897813483,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"transport-dispose","tick":42535897868481,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"transport-retired","tick":42535897871857,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"close-await-owners","tick":42535897919648,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"}]}
+M4_R1_SHUTDOWN {"phase":"owners-retired","tick":42535898046240,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"models-dispose","tick":42535898055100,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"models-retired","tick":42535898180717,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"xr-shutdown","tick":42535898189518,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.","controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M4_R1_SHUTDOWN {"phase":"xr-retired","tick":42535900064406,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"identity-release","tick":42535900076490,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"identity-released","tick":42535900169853,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"quit-requested","tick":42535900212085,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"exit-tree-enter","tick":42535903246101,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"session-await","tick":42535903374972,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"}]}
+M4_R1_SHUTDOWN {"phase":"session-work-retired","tick":42535903402000,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"transport-dispose","tick":42535903416127,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"transport-retired","tick":42535903418285,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[]}
+M4_R1_SHUTDOWN {"phase":"exit-tree-return","tick":42535903431884,"thread":1,"context":"Godot.GodotSynchronizationContext","tasks":[{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"},{"id":1,"status":"RanToCompletion"}]}
+.NET: hostfxr initialized
+.NET: GodotPlugins initialized
+CORE API HASH: 0
+EDITOR API HASH: 0
+SceneTreeFTI: traversal method DEFAULT
+Loaded system CA certificates
+Loading resource: res://.godot/exported/133200997/export-3070c538c03ee49b7677ff960a3f5195-main.scn remapped: res://.godot/exported/133200997/export-3070c538c03ee49b7677ff960a3f5195-main.scn
+Loading resource: res://Main.cs remapped: res://Main.cs
+Completed load for: 'res://Main.cs' remapped 'res://Main.cs' at thread -1
+Completed load for: 'res://main.tscn' remapped 'res://.godot/exported/133200997/export-3070c538c03ee49b7677ff960a3f5195-main.scn' at thread -1
+window max size set to (32768, 32768)
+window minsize set to (64, 64)
+Loading resource: res://SpatialGui.cs remapped: res://SpatialGui.cs
+Completed load for: 'res://SpatialGui.cs' remapped 'res://SpatialGui.cs' at thread -1
+Loading resource: res://ScenePanel.cs remapped: res://ScenePanel.cs
+Completed load for: 'res://ScenePanel.cs' remapped 'res://ScenePanel.cs' at thread -1
+Loading resource: res://OpenXRInput.cs remapped: res://OpenXRInput.cs
+Completed load for: 'res://OpenXRInput.cs' remapped 'res://OpenXRInput.cs' at thread -1
+Loading resource: res://tests/ExportChecks.cs remapped: res://tests/ExportChecks.cs
+Completed load for: 'res://tests/ExportChecks.cs' remapped 'res://tests/ExportChecks.cs' at thread -1
+glTF: Total buffers: 1
+glTF: Total buffer views: 25
+glTF: Total accessors: 24
+glTF: Total images: 1
+Total materials: 1
+glTF: Parsing mesh: 0
+glTF: Parsing mesh: 1
+glTF: Parsing mesh: 2
+glTF: Parsing mesh: 3
+glTF: Parsing mesh: 4
+glTF: Parsing mesh: 5
+glTF: Total meshes: 6
+glTF: Converting spatial: Light
+glTF: Converting spatial: Camera
+glTF: Converting spatial: htc_vive_none
+glTF: Creating mesh for: controller
+glTF: Converting spatial: menu_pressed_max
+glTF: Converting spatial: menu_pressed_min
+glTF: Converting spatial: menu_pressed_value
+glTF: Creating mesh for: menu_button
+glTF: Converting spatial: xr_standard_squeeze_pressed_max
+glTF: Converting spatial: xr_standard_squeeze_pressed_min
+glTF: Converting spatial: xr_standard_squeeze_pressed_mirror_max
+glTF: Converting spatial: xr_standard_squeeze_pressed_mirror_min
+glTF: Converting spatial: xr_standard_squeeze_pressed_mirror_value
+glTF: Creating mesh for: right_squeeze
+glTF: Converting spatial: xr_standard_squeeze_pressed_value
+glTF: Creating mesh for: left_squeeze
+glTF: Converting spatial: xr_standard_touchpad_pressed_max
+glTF: Converting spatial: xr_standard_touchpad_pressed_min
+glTF: Converting spatial: xr_standard_touchpad_pressed_value
+glTF: Creating mesh for: touchpad
+glTF: Converting spatial: xr_standard_touchpad_xaxis_touched_max
+glTF: Converting spatial: xr_standard_touchpad_xaxis_touched_min
+glTF: Converting spatial: xr_standard_touchpad_xaxis_touched_value
+glTF: Converting spatial: xr_standard_touchpad_yaxis_touched_max
+glTF: Converting spatial: xr_standard_touchpad_yaxis_touched_min
+glTF: Converting spatial: xr_standard_touchpad_yaxis_touched_value
+glTF: Converting spatial: xr_standard_touchpad_axes_touched_value
+glTF: Converting spatial: xr_standard_touchpad_xaxis_pressed_max
+glTF: Converting spatial: xr_standard_touchpad_xaxis_pressed_min
+glTF: Converting spatial: xr_standard_touchpad_xaxis_pressed_value
+glTF: Converting spatial: xr_standard_touchpad_yaxis_pressed_max
+glTF: Converting spatial: xr_standard_touchpad_yaxis_pressed_min
+glTF: Converting spatial: xr_standard_touchpad_yaxis_pressed_value
+glTF: Converting spatial: xr_standard_trigger_pressed_max
+glTF: Converting spatial: xr_standard_trigger_pressed_min
+glTF: Converting spatial: xr_standard_trigger_pressed_value
+glTF: Creating mesh for: trigger
+Unloading: Disposing tracked instances...
+Unloading: Finished disposing tracked instances.
+XR: Clearing primary interface
+XR: Removed interface "Native mobile"
+XR: Removed interface "OpenXR"
+PulseAudio: context terminated
+Accessibility: window 0 adapter destroyed.
+Keyboard unfocused window 0.
+Destroyed window 0

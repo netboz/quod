@@ -1,0 +1,10 @@
+{
+  "command": [
+    "git",
+    "status",
+    "--porcelain=v1",
+    "-uall"
+  ],
+  "exit": 0,
+  "sha256": "6b63b84ad0d5907a22750641be283320266b4f99d7442745cee0a8f46f714f8b"
+}

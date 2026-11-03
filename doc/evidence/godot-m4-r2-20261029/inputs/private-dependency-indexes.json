@@ -1,0 +1,62 @@
+[
+  {
+    "url": "https://archive.archlinux.org/packages/l/libjxl/",
+    "sha256": "f309562f39e05674468ef096c65086fb1dd34b420161bf77ccb1382b1a1e79db",
+    "files": [
+      "libjxl-0.11.0-1-x86_64.pkg.tar.zst",
+      "libjxl-0.11.0-2-x86_64.pkg.tar.zst",
+      "libjxl-0.11.1-1-x86_64.pkg.tar.zst",
+      "libjxl-0.11.1-2-x86_64.pkg.tar.zst",
+      "libjxl-0.11.1-3-x86_64.pkg.tar.zst",
+      "libjxl-0.11.1-4-x86_64.pkg.tar.zst",
+      "libjxl-0.11.1-5-x86_64.pkg.tar.zst",
+      "libjxl-0.11.2-1-x86_64.pkg.tar.zst",
+      "libjxl-0.11.2-2-x86_64.pkg.tar.zst"
+    ]
+  },
+  {
+    "url": "https://archive.archlinux.org/packages/o/openexr/",
+    "sha256": "67f7b14c9045f0f76a5dd052cf69b508820ce35721ba5812ba09a2f880ee410e",
+    "files": [
+      "openexr-3.4.0-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.1-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.10-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.11-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.12-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.12-2-x86_64.pkg.tar.zst",
+      "openexr-3.4.12-3-x86_64.pkg.tar.zst",
+      "openexr-3.4.13-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.13-2-x86_64.pkg.tar.zst",
+      "openexr-3.4.13-3-x86_64.pkg.tar.zst",
+      "openexr-3.4.14-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.15-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.15-2-x86_64.pkg.tar.zst",
+      "openexr-3.4.2-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.3-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.4-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.5-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.6-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.7-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.7-2-x86_64.pkg.tar.zst",
+      "openexr-3.4.8-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.9-1-x86_64.pkg.tar.zst",
+      "openexr-3.4.9-2-x86_64.pkg.tar.zst"
+    ]
+  },
+  {
+    "url": "https://archive.archlinux.org/packages/p/protobuf/",
+    "sha256": "858d59d277bf3e010be86aca6dde75650394e582a66cdd85c7dcb0de329ae65f",
+    "files": [
+      "protobuf-35.1-1-x86_64.pkg.tar.zst",
+      "protobuf-35.1-2-x86_64.pkg.tar.zst"
+    ]
+  },
+  {
+    "url": "https://archive.archlinux.org/packages/a/abseil-cpp/",
+    "sha256": "92fd2d3885e1dc22bcfc03e259b552f875ee230fcd94d8fe63fa7f114b1c431b",
+    "files": [
+      "abseil-cpp-20260526.0-1-x86_64.pkg.tar.zst",
+      "abseil-cpp-20260526.0-2-x86_64.pkg.tar.zst"
+    ]
+  }
+]

@@ -1,0 +1,85 @@
+{
+  "label": "presentation-resize-diagnostic01",
+  "source_only": true,
+  "files": {
+    "doc/evidence/godot-m4-presentation-20261030/angular_size.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/doc/evidence/godot-m4-presentation-20261030/angular_size.py",
+      "sha256": "231ff36e859cc3dd241b6c2938ad6ba572ceea1187c7ae491c846d082cfd6359",
+      "bytes": 1318,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-presentation-20261030/application.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/doc/evidence/godot-m4-presentation-20261030/application.py",
+      "sha256": "b6ba8df50e9a963afbf84907f8a2b444d127b3a22eaafbcb52aa557d2306a8c5",
+      "bytes": 5942,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-presentation-20261030/build.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/doc/evidence/godot-m4-presentation-20261030/build.py",
+      "sha256": "7e09edae7baaa3f1f238e0a941828146c91f79b997abff3341090dd3cae8011f",
+      "bytes": 5511,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-presentation-20261030/digests.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/doc/evidence/godot-m4-presentation-20261030/digests.py",
+      "sha256": "78510fc431bb348b84fc579918defea7b67bed7df8a4b440bd9dec50a9630dac",
+      "bytes": 2695,
+      "mode": 420
+    },
+    "doc/evidence/godot-m4-presentation-20261030/preflight.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/doc/evidence/godot-m4-presentation-20261030/preflight.py",
+      "sha256": "a3991906bcddca067022ff41bd8a6e6ab7bb09e28c1c85b71c76e3b4f563c000",
+      "bytes": 1503,
+      "mode": 420
+    },
+    "client/godot/tests/PresentationChecks.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/godot/tests/PresentationChecks.cs",
+      "sha256": "d57398af99498dbf37249034cc34d077d511c89daae8bd210b98f6b5b84b01ec",
+      "bytes": 6713,
+      "mode": 420
+    },
+    "client/godot/tests/ExportChecks.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/godot/tests/ExportChecks.cs",
+      "sha256": "0e383dc8748f3713cf5677d8a9d49b3009f158b98ea0f4962960d92df83a3161",
+      "bytes": 20724,
+      "mode": 420
+    },
+    "client/godot/OpenXRInput.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/godot/OpenXRInput.cs",
+      "sha256": "751fc56b6af5fb2fa6530a8e911210114c1e0d4e8c916ab5abf736f40b020cd7",
+      "bytes": 23025,
+      "mode": 420
+    },
+    "client/godot/ScenePanel.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/godot/ScenePanel.cs",
+      "sha256": "6d387752f82451c23060b8fa05312bfab210e8eca34b7e9e7cf8ff0b4dc069e3",
+      "bytes": 17825,
+      "mode": 420
+    },
+    "client/godot/tests/ControllerChecks.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/godot/tests/ControllerChecks.cs",
+      "sha256": "dc3454f70db3c91c7b7d28131f8a117c5617a342161f3dc1dc31a2ffc377a922",
+      "bytes": 18588,
+      "mode": 420
+    },
+    "client/native/tools/check.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/native/tools/check.py",
+      "sha256": "7565d31ea95498ad104b8abcba15b0225ed76cb1fbb5a141bd1a375c41dda92c",
+      "bytes": 1442,
+      "mode": 420
+    },
+    "client/godot-tools/run.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/godot-tools/run.py",
+      "sha256": "0d44ff8edf9d57388a0f425e47721d421f5a8d052732084e355a94813fe0c8fb",
+      "bytes": 4092,
+      "mode": 420
+    },
+    "client/godot-tests/desktop_input.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/presentation-resize-diagnostic01/client/godot-tests/desktop_input.py",
+      "sha256": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf",
+      "bytes": 4237,
+      "mode": 420
+    }
+  },
+  "data_free_bytes": 812690534400
+}

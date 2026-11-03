@@ -1,0 +1,29 @@
+M4_PHYSICAL_STARTUP_WANDS 2
+PASS enabled action create-key
+PASS enabled action connect
+PASS physical fixture authenticates the exact owned network
+PASS enabled action register
+PASS physical fixture retains its original signed human
+PASS enabled action prepare
+PASS enabled action setup
+PASS physical fixture has no unknown original operation
+PASS signed projection selects the pinned admitted Vive appearance
+PASS enabled action start-xr
+M4_VIVE_GUI start-xr
+PASS ordinary signed-in Start OpenXR attaches the real owner
+M4_VIVE_RECORDED ready
+M4_VIVE_PRODUCT_READY
+M4_VIVE_FIRST_DRAW
+M4_VIVE_HEAD True:High
+M4_PHYSICAL_APPLICATION_READY
+M4_VIVE_POSE left missing/missing
+M4_VIVE_POSE right missing/missing
+M4_VIVE_RECORDED geometry
+PASS enabled action stop-xr
+M4_VIVE_GUI stop-xr
+PASS real adapter stop retires every source subscription and capture
+M4_VIVE_RECORDED stopped
+M4_VIVE_RECORDED finished
+M4_VIVE_PRODUCT_FINISHED
+M4_VIVE_RECORDED observer-retired
+<restricted private detail; sha256=8addc0b2cb15ca1dfae9ba7e7fead6a200c16527605931655d1a26fa97805ad0>

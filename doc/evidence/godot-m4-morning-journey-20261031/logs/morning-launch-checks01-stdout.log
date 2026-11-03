@@ -1,0 +1,16 @@
+PASS prepared invocation is offline with explicit PTY ownership required
+PASS prepared inputs and invocation remain task-private
+PASS invocation binds the exact selected diagnostic manifest
+PASS current product and removable diagnostic input/output sets are explicit
+PASS all existing absolute bounds are preserved
+PASS generated preflight and digest binding are exact before execution
+PASS future case label and private target are supplied fresh
+PASS future receipt cache cannot overwrite the closed case21 cache
+PASS preflight selects the new current payload rather than a historical cue
+PASS prepared current-provider preflight contains no readiness polling or retries
+PASS future provider snapshot retains the same approved HDMI exception and restoration owner
+PASS single supported live path keeps interactive stdin and both-device admission
+PASS a fresh preflight failure stops the launch without a fallback
+PASS retained server/runtime and accepted closure references are explicit
+PASS runtime content hashes are accepted references, not fabricated fresh cache hits
+{"passed": true, "checks": 15}

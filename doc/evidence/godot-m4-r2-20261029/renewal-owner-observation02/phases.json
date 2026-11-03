@@ -1,0 +1,36 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic02/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--resolution",
+      "1920x1080",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/renewal-owner-observation02/identity",
+      "--node",
+      "https://127.0.0.1:34805",
+      "--ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/renewal-owner-observation02/proxy-ca.pem"
+    ],
+    "child_exit": 1,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 24.877924638996774,
+    "godot_error_diagnostics": false,
+    "shutdown_observation": {
+      "owned_pid": 909123,
+      "after_completion_seconds": 2,
+      "capture_timeout_seconds": 5,
+      "arguments": false,
+      "memory_dump": false,
+      "armed": false,
+      "captured": false
+    },
+    "output_eof": true,
+    "reader_errors": [],
+    "passed": false
+  }
+]

@@ -1,0 +1,11 @@
+--- prior-retest/scope.py
++++ case10/scope.py
+@@ -3,7 +3,7 @@
+ from pathlib import Path
+ def server_artifacts(root,h):
+     ev=root/'doc/evidence/godot-m4-vive-physical-20261029';result=set()
+-    for number in ['10']:
++    for number in ['11']:
+         label='native-vive-product'+number+'-server'
+         receipt=ev/'inputs'/('server-'+label+'.json')
+         row=json.loads(receipt.read_text())

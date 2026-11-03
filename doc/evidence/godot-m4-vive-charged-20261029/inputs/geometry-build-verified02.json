@@ -1,0 +1,51 @@
+{
+  "passed": true,
+  "supplied_inputs": 92,
+  "unchanged_live_inputs": 91,
+  "actual_export_paths_and_sizes_checked": 196,
+  "actual_payload_byte_hashes_checked": {
+    "data_Quod_linuxbsd_x86_64/Quod.dll": {
+      "sha256": "e6a04fc55d8e757a364717161294de644da6466f00a8c421adfd1cc73478b9a2",
+      "bytes": 729600
+    },
+    "quod.pck": {
+      "sha256": "0871501a944a2334fef245a0dcedde0917085fdc6811aafd3f6db9a095c51352",
+      "bytes": 12632
+    },
+    "quod.x86_64": {
+      "sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+      "bytes": 98746600
+    }
+  },
+  "commands": [
+    {
+      "phase": "toolchain",
+      "true_child_exit": 0,
+      "diagnostic_failure": false
+    },
+    {
+      "phase": "bootstrap",
+      "true_child_exit": 0,
+      "diagnostic_failure": false
+    },
+    {
+      "phase": "restore-debug",
+      "true_child_exit": 0,
+      "diagnostic_failure": false
+    },
+    {
+      "phase": "restore-exportrelease",
+      "true_child_exit": 0,
+      "diagnostic_failure": false
+    },
+    {
+      "phase": "export",
+      "true_child_exit": 0,
+      "diagnostic_failure": false
+    }
+  ],
+  "pre_execution_helper_copies_checked": 8,
+  "full_output_hash_admission": "Build computed every export hash; the unchanged launch owner independently hashes every actual export before native invocation.",
+  "core189_and_server1432": "unchanged accepted evidence reused, not rerun",
+  "distributable": false
+}

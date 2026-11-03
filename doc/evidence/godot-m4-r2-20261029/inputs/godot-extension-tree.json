@@ -1,0 +1,1061 @@
+{
+  "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions?ref=4.7.2-stable",
+  "entries": [
+    {
+      "name": "SCsub",
+      "path": "modules/openxr/extensions/SCsub",
+      "sha": "18fc2af3a2ca70ee304081931cad6c9fdbec3c99",
+      "size": 850,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/SCsub?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/SCsub",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/18fc2af3a2ca70ee304081931cad6c9fdbec3c99",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/SCsub",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/SCsub?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/18fc2af3a2ca70ee304081931cad6c9fdbec3c99",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/SCsub"
+      }
+    },
+    {
+      "name": "openxr_android_thread_settings_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_android_thread_settings_extension.cpp",
+      "sha": "654027bf01ffb54c352924646ad36227e1b1b3b7",
+      "size": 6134,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_android_thread_settings_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_android_thread_settings_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/654027bf01ffb54c352924646ad36227e1b1b3b7",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_android_thread_settings_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_android_thread_settings_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/654027bf01ffb54c352924646ad36227e1b1b3b7",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_android_thread_settings_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_android_thread_settings_extension.h",
+      "path": "modules/openxr/extensions/openxr_android_thread_settings_extension.h",
+      "sha": "f05c40d6b1f97eda0c15fdc6e2f2dec1e83f7611",
+      "size": 3704,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_android_thread_settings_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_android_thread_settings_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/f05c40d6b1f97eda0c15fdc6e2f2dec1e83f7611",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_android_thread_settings_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_android_thread_settings_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/f05c40d6b1f97eda0c15fdc6e2f2dec1e83f7611",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_android_thread_settings_extension.h"
+      }
+    },
+    {
+      "name": "openxr_composition_layer_depth_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_composition_layer_depth_extension.cpp",
+      "sha": "9f0aad90e35a18ec6767bc2d51824e18424976d2",
+      "size": 3448,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_depth_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_depth_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/9f0aad90e35a18ec6767bc2d51824e18424976d2",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_depth_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_depth_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/9f0aad90e35a18ec6767bc2d51824e18424976d2",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_depth_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_composition_layer_depth_extension.h",
+      "path": "modules/openxr/extensions/openxr_composition_layer_depth_extension.h",
+      "sha": "82d88eac8c0245bc5e7a5038f4e6d95dacee34e3",
+      "size": 3062,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_depth_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_depth_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/82d88eac8c0245bc5e7a5038f4e6d95dacee34e3",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_depth_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_depth_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/82d88eac8c0245bc5e7a5038f4e6d95dacee34e3",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_depth_extension.h"
+      }
+    },
+    {
+      "name": "openxr_composition_layer_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_composition_layer_extension.cpp",
+      "sha": "6bcff216be0354ae495f3817067ea4186726c74c",
+      "size": 30559,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/6bcff216be0354ae495f3817067ea4186726c74c",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/6bcff216be0354ae495f3817067ea4186726c74c",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_composition_layer_extension.h",
+      "path": "modules/openxr/extensions/openxr_composition_layer_extension.h",
+      "sha": "22b12ae7d795309d79e509400f3c31f5664908d4",
+      "size": 12151,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/22b12ae7d795309d79e509400f3c31f5664908d4",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_composition_layer_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/22b12ae7d795309d79e509400f3c31f5664908d4",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_composition_layer_extension.h"
+      }
+    },
+    {
+      "name": "openxr_debug_utils_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_debug_utils_extension.cpp",
+      "sha": "de2f6a7873ecf3ca303529c797c9fbba242d70f1",
+      "size": 11579,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_debug_utils_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_debug_utils_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/de2f6a7873ecf3ca303529c797c9fbba242d70f1",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_debug_utils_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_debug_utils_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/de2f6a7873ecf3ca303529c797c9fbba242d70f1",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_debug_utils_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_debug_utils_extension.h",
+      "path": "modules/openxr/extensions/openxr_debug_utils_extension.h",
+      "sha": "248e51f09520a62a3581ca588027ec926b987537",
+      "size": 4544,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_debug_utils_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_debug_utils_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/248e51f09520a62a3581ca588027ec926b987537",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_debug_utils_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_debug_utils_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/248e51f09520a62a3581ca588027ec926b987537",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_debug_utils_extension.h"
+      }
+    },
+    {
+      "name": "openxr_dpad_binding_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_dpad_binding_extension.cpp",
+      "sha": "181ea6c3ce25e6eb98676b1cc715e003c13093d8",
+      "size": 11764,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_dpad_binding_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_dpad_binding_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/181ea6c3ce25e6eb98676b1cc715e003c13093d8",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_dpad_binding_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_dpad_binding_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/181ea6c3ce25e6eb98676b1cc715e003c13093d8",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_dpad_binding_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_dpad_binding_extension.h",
+      "path": "modules/openxr/extensions/openxr_dpad_binding_extension.h",
+      "sha": "c8b60f4affa3cde8691b66bf60f2def5b4c5ef0c",
+      "size": 4453,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_dpad_binding_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_dpad_binding_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/c8b60f4affa3cde8691b66bf60f2def5b4c5ef0c",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_dpad_binding_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_dpad_binding_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/c8b60f4affa3cde8691b66bf60f2def5b4c5ef0c",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_dpad_binding_extension.h"
+      }
+    },
+    {
+      "name": "openxr_extension_wrapper.cpp",
+      "path": "modules/openxr/extensions/openxr_extension_wrapper.cpp",
+      "sha": "3be637896521388f003c796ce0b7ebcffeaf71e7",
+      "size": 16312,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_extension_wrapper.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/3be637896521388f003c796ce0b7ebcffeaf71e7",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_extension_wrapper.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/3be637896521388f003c796ce0b7ebcffeaf71e7",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper.cpp"
+      }
+    },
+    {
+      "name": "openxr_extension_wrapper.h",
+      "path": "modules/openxr/extensions/openxr_extension_wrapper.h",
+      "sha": "3756934274d21328020e8a2e69dd068b47b4ecc3",
+      "size": 16320,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_extension_wrapper.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/3756934274d21328020e8a2e69dd068b47b4ecc3",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_extension_wrapper.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/3756934274d21328020e8a2e69dd068b47b4ecc3",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper.h"
+      }
+    },
+    {
+      "name": "openxr_extension_wrapper_extension.h",
+      "path": "modules/openxr/extensions/openxr_extension_wrapper_extension.h",
+      "sha": "40135c732b48c9e31114ece9153333ee20ede492",
+      "size": 2429,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_extension_wrapper_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/40135c732b48c9e31114ece9153333ee20ede492",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_extension_wrapper_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/40135c732b48c9e31114ece9153333ee20ede492",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_extension_wrapper_extension.h"
+      }
+    },
+    {
+      "name": "openxr_eye_gaze_interaction.cpp",
+      "path": "modules/openxr/extensions/openxr_eye_gaze_interaction.cpp",
+      "sha": "963adc2feec238f5de80b3edc8a601fd80f4f512",
+      "size": 6348,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_eye_gaze_interaction.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_eye_gaze_interaction.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/963adc2feec238f5de80b3edc8a601fd80f4f512",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_eye_gaze_interaction.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_eye_gaze_interaction.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/963adc2feec238f5de80b3edc8a601fd80f4f512",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_eye_gaze_interaction.cpp"
+      }
+    },
+    {
+      "name": "openxr_eye_gaze_interaction.h",
+      "path": "modules/openxr/extensions/openxr_eye_gaze_interaction.h",
+      "sha": "10b2d723fca6471ad997f86f7e224bde304ff42b",
+      "size": 3313,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_eye_gaze_interaction.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_eye_gaze_interaction.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/10b2d723fca6471ad997f86f7e224bde304ff42b",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_eye_gaze_interaction.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_eye_gaze_interaction.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/10b2d723fca6471ad997f86f7e224bde304ff42b",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_eye_gaze_interaction.h"
+      }
+    },
+    {
+      "name": "openxr_fb_display_refresh_rate_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.cpp",
+      "sha": "d1d8aa049dadd40813468735166aae991902acc3",
+      "size": 6161,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/d1d8aa049dadd40813468735166aae991902acc3",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/d1d8aa049dadd40813468735166aae991902acc3",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_fb_display_refresh_rate_extension.h",
+      "path": "modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.h",
+      "sha": "4c6b944268785018ba001aa880fd175cb61381de",
+      "size": 3850,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/4c6b944268785018ba001aa880fd175cb61381de",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/4c6b944268785018ba001aa880fd175cb61381de",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.h"
+      }
+    },
+    {
+      "name": "openxr_fb_foveation_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_fb_foveation_extension.cpp",
+      "sha": "d87a4fa346819f08710ad57d9ac50b32c14348c4",
+      "size": 13365,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_foveation_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_foveation_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/d87a4fa346819f08710ad57d9ac50b32c14348c4",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_fb_foveation_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_foveation_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/d87a4fa346819f08710ad57d9ac50b32c14348c4",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_foveation_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_fb_foveation_extension.h",
+      "path": "modules/openxr/extensions/openxr_fb_foveation_extension.h",
+      "sha": "88a56e02c3aa0ca866e8e7bec13c12ce19741b45",
+      "size": 5669,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_foveation_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_foveation_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/88a56e02c3aa0ca866e8e7bec13c12ce19741b45",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_fb_foveation_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_foveation_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/88a56e02c3aa0ca866e8e7bec13c12ce19741b45",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_foveation_extension.h"
+      }
+    },
+    {
+      "name": "openxr_fb_update_swapchain_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_fb_update_swapchain_extension.cpp",
+      "sha": "36c7d6bdeadc2fcf19113954ffb2879835ea40fe",
+      "size": 13990,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_update_swapchain_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_update_swapchain_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/36c7d6bdeadc2fcf19113954ffb2879835ea40fe",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_fb_update_swapchain_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_update_swapchain_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/36c7d6bdeadc2fcf19113954ffb2879835ea40fe",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_update_swapchain_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_fb_update_swapchain_extension.h",
+      "path": "modules/openxr/extensions/openxr_fb_update_swapchain_extension.h",
+      "sha": "95839da98c694e89b3b15148d783001b2e240202",
+      "size": 4796,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_update_swapchain_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_update_swapchain_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/95839da98c694e89b3b15148d783001b2e240202",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_fb_update_swapchain_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_fb_update_swapchain_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/95839da98c694e89b3b15148d783001b2e240202",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_fb_update_swapchain_extension.h"
+      }
+    },
+    {
+      "name": "openxr_frame_synthesis_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_frame_synthesis_extension.cpp",
+      "sha": "d67198a23841ba04e104d9288dc4e9c3f227ed62",
+      "size": 16728,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_frame_synthesis_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_frame_synthesis_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/d67198a23841ba04e104d9288dc4e9c3f227ed62",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_frame_synthesis_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_frame_synthesis_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/d67198a23841ba04e104d9288dc4e9c3f227ed62",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_frame_synthesis_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_frame_synthesis_extension.h",
+      "path": "modules/openxr/extensions/openxr_frame_synthesis_extension.h",
+      "sha": "170800aa6bd6409fc77b865b03e2e22365db02aa",
+      "size": 4541,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_frame_synthesis_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_frame_synthesis_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/170800aa6bd6409fc77b865b03e2e22365db02aa",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_frame_synthesis_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_frame_synthesis_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/170800aa6bd6409fc77b865b03e2e22365db02aa",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_frame_synthesis_extension.h"
+      }
+    },
+    {
+      "name": "openxr_future_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_future_extension.cpp",
+      "sha": "1e79dc049f6e393d6dc18bc9079e076ee9bdb1e6",
+      "size": 9453,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_future_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_future_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/1e79dc049f6e393d6dc18bc9079e076ee9bdb1e6",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_future_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_future_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/1e79dc049f6e393d6dc18bc9079e076ee9bdb1e6",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_future_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_future_extension.h",
+      "path": "modules/openxr/extensions/openxr_future_extension.h",
+      "sha": "cbb47d31b7095d82a358e7c55911dd86c2c9b7e8",
+      "size": 5071,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_future_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_future_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/cbb47d31b7095d82a358e7c55911dd86c2c9b7e8",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_future_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_future_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/cbb47d31b7095d82a358e7c55911dd86c2c9b7e8",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_future_extension.h"
+      }
+    },
+    {
+      "name": "openxr_hand_interaction_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_hand_interaction_extension.cpp",
+      "sha": "5f55f83772e316ac4f051d27b963d791b58b106b",
+      "size": 6919,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_interaction_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_interaction_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/5f55f83772e316ac4f051d27b963d791b58b106b",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_hand_interaction_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_interaction_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/5f55f83772e316ac4f051d27b963d791b58b106b",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_interaction_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_hand_interaction_extension.h",
+      "path": "modules/openxr/extensions/openxr_hand_interaction_extension.h",
+      "sha": "d3a1ab304aa918db8e686284659b68772510fa12",
+      "size": 3748,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_interaction_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_interaction_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/d3a1ab304aa918db8e686284659b68772510fa12",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_hand_interaction_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_interaction_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/d3a1ab304aa918db8e686284659b68772510fa12",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_interaction_extension.h"
+      }
+    },
+    {
+      "name": "openxr_hand_tracking_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_hand_tracking_extension.cpp",
+      "sha": "44729817d5e4fd09b73cb6a83484291d4ee40536",
+      "size": 21340,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_tracking_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_tracking_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/44729817d5e4fd09b73cb6a83484291d4ee40536",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_hand_tracking_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_tracking_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/44729817d5e4fd09b73cb6a83484291d4ee40536",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_tracking_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_hand_tracking_extension.h",
+      "path": "modules/openxr/extensions/openxr_hand_tracking_extension.h",
+      "sha": "3dd2e00f187de0e4055f4ea0bbfd540945e1c510",
+      "size": 5952,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_tracking_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_tracking_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/3dd2e00f187de0e4055f4ea0bbfd540945e1c510",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_hand_tracking_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_hand_tracking_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/3dd2e00f187de0e4055f4ea0bbfd540945e1c510",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_hand_tracking_extension.h"
+      }
+    },
+    {
+      "name": "openxr_htc_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_htc_controller_extension.cpp",
+      "sha": "341fcfd32ac203325587c33a57e86a32deb68973",
+      "size": 13637,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/341fcfd32ac203325587c33a57e86a32deb68973",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_htc_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/341fcfd32ac203325587c33a57e86a32deb68973",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_htc_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_htc_controller_extension.h",
+      "sha": "012bc36a1d8affd26571e5bd4a6958a76f3e7ab7",
+      "size": 3054,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/012bc36a1d8affd26571e5bd4a6958a76f3e7ab7",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_htc_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/012bc36a1d8affd26571e5bd4a6958a76f3e7ab7",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_controller_extension.h"
+      }
+    },
+    {
+      "name": "openxr_htc_vive_tracker_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_htc_vive_tracker_extension.cpp",
+      "sha": "3f856da7ec0ddfec6d44b60b950ded4155ab622e",
+      "size": 10835,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_vive_tracker_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_vive_tracker_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/3f856da7ec0ddfec6d44b60b950ded4155ab622e",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_htc_vive_tracker_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_vive_tracker_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/3f856da7ec0ddfec6d44b60b950ded4155ab622e",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_vive_tracker_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_htc_vive_tracker_extension.h",
+      "path": "modules/openxr/extensions/openxr_htc_vive_tracker_extension.h",
+      "sha": "d1495cc1901a6c08f5b2f866f4fd1351a80b5086",
+      "size": 2869,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_vive_tracker_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_vive_tracker_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/d1495cc1901a6c08f5b2f866f4fd1351a80b5086",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_htc_vive_tracker_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_htc_vive_tracker_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/d1495cc1901a6c08f5b2f866f4fd1351a80b5086",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_htc_vive_tracker_extension.h"
+      }
+    },
+    {
+      "name": "openxr_huawei_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_huawei_controller_extension.cpp",
+      "sha": "f29b2f38d8682853966b351ebdcb4b151d4540de",
+      "size": 6593,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_huawei_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_huawei_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/f29b2f38d8682853966b351ebdcb4b151d4540de",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_huawei_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_huawei_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/f29b2f38d8682853966b351ebdcb4b151d4540de",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_huawei_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_huawei_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_huawei_controller_extension.h",
+      "sha": "b498121ec56988861ec8e4ac1f4b1ba3575f3efc",
+      "size": 2741,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_huawei_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_huawei_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/b498121ec56988861ec8e4ac1f4b1ba3575f3efc",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_huawei_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_huawei_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/b498121ec56988861ec8e4ac1f4b1ba3575f3efc",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_huawei_controller_extension.h"
+      }
+    },
+    {
+      "name": "openxr_khr_generic_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_khr_generic_controller_extension.cpp",
+      "sha": "ad6efb777de43cd066230209cadb1991fe99cdcb",
+      "size": 6225,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_khr_generic_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_khr_generic_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/ad6efb777de43cd066230209cadb1991fe99cdcb",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_khr_generic_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_khr_generic_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/ad6efb777de43cd066230209cadb1991fe99cdcb",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_khr_generic_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_khr_generic_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_khr_generic_controller_extension.h",
+      "sha": "c49be89cc4b2edde02b4dc1619e33d17845821c1",
+      "size": 2706,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_khr_generic_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_khr_generic_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/c49be89cc4b2edde02b4dc1619e33d17845821c1",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_khr_generic_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_khr_generic_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/c49be89cc4b2edde02b4dc1619e33d17845821c1",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_khr_generic_controller_extension.h"
+      }
+    },
+    {
+      "name": "openxr_local_floor_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_local_floor_extension.cpp",
+      "sha": "91d7f1ea9422881a032f50ff65154ff00771a64b",
+      "size": 3072,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_local_floor_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_local_floor_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/91d7f1ea9422881a032f50ff65154ff00771a64b",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_local_floor_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_local_floor_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/91d7f1ea9422881a032f50ff65154ff00771a64b",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_local_floor_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_local_floor_extension.h",
+      "path": "modules/openxr/extensions/openxr_local_floor_extension.h",
+      "sha": "50b44bac0a110e50317aee94b123e4715260eb01",
+      "size": 2796,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_local_floor_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_local_floor_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/50b44bac0a110e50317aee94b123e4715260eb01",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_local_floor_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_local_floor_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/50b44bac0a110e50317aee94b123e4715260eb01",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_local_floor_extension.h"
+      }
+    },
+    {
+      "name": "openxr_meta_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_meta_controller_extension.cpp",
+      "sha": "9bc7a17baf6640758c37a4f158c04531d4322f49",
+      "size": 28907,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_meta_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_meta_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/9bc7a17baf6640758c37a4f158c04531d4322f49",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_meta_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_meta_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/9bc7a17baf6640758c37a4f158c04531d4322f49",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_meta_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_meta_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_meta_controller_extension.h",
+      "sha": "b38ccb248fa02c2979a7ea80ecfe5cbd64ad6755",
+      "size": 3042,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_meta_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_meta_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/b38ccb248fa02c2979a7ea80ecfe5cbd64ad6755",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_meta_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_meta_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/b38ccb248fa02c2979a7ea80ecfe5cbd64ad6755",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_meta_controller_extension.h"
+      }
+    },
+    {
+      "name": "openxr_ml2_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_ml2_controller_extension.cpp",
+      "sha": "b75dc3e02e7ccf819ee53f19c6a44d81a710a1e6",
+      "size": 6349,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_ml2_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_ml2_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/b75dc3e02e7ccf819ee53f19c6a44d81a710a1e6",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_ml2_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_ml2_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/b75dc3e02e7ccf819ee53f19c6a44d81a710a1e6",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_ml2_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_ml2_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_ml2_controller_extension.h",
+      "sha": "7d095bbed95d2679aab6701868296aaebbdbeed4",
+      "size": 2735,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_ml2_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_ml2_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/7d095bbed95d2679aab6701868296aaebbdbeed4",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_ml2_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_ml2_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/7d095bbed95d2679aab6701868296aaebbdbeed4",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_ml2_controller_extension.h"
+      }
+    },
+    {
+      "name": "openxr_mxink_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_mxink_extension.cpp",
+      "sha": "f54bf99fc3ba12336a944675779a9c2c74859b3c",
+      "size": 8632,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_mxink_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_mxink_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/f54bf99fc3ba12336a944675779a9c2c74859b3c",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_mxink_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_mxink_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/f54bf99fc3ba12336a944675779a9c2c74859b3c",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_mxink_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_mxink_extension.h",
+      "path": "modules/openxr/extensions/openxr_mxink_extension.h",
+      "sha": "51e931d70d9ee7315adb3d78cb1f3bc2843db537",
+      "size": 2719,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_mxink_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_mxink_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/51e931d70d9ee7315adb3d78cb1f3bc2843db537",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_mxink_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_mxink_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/51e931d70d9ee7315adb3d78cb1f3bc2843db537",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_mxink_extension.h"
+      }
+    },
+    {
+      "name": "openxr_palm_pose_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_palm_pose_extension.cpp",
+      "sha": "ab87caf689c85d79a02fe1266ff40f6472f74a80",
+      "size": 3048,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_palm_pose_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_palm_pose_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/ab87caf689c85d79a02fe1266ff40f6472f74a80",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_palm_pose_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_palm_pose_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/ab87caf689c85d79a02fe1266ff40f6472f74a80",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_palm_pose_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_palm_pose_extension.h",
+      "path": "modules/openxr/extensions/openxr_palm_pose_extension.h",
+      "sha": "43d5ab94138cc889b0d0e4ef2be9a8c6afff6ef9",
+      "size": 2784,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_palm_pose_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_palm_pose_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/43d5ab94138cc889b0d0e4ef2be9a8c6afff6ef9",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_palm_pose_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_palm_pose_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/43d5ab94138cc889b0d0e4ef2be9a8c6afff6ef9",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_palm_pose_extension.h"
+      }
+    },
+    {
+      "name": "openxr_performance_settings_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_performance_settings_extension.cpp",
+      "sha": "b2d2a0a6b729f0b96922e14d2c0d8a8eb28be159",
+      "size": 7770,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_performance_settings_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_performance_settings_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/b2d2a0a6b729f0b96922e14d2c0d8a8eb28be159",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_performance_settings_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_performance_settings_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/b2d2a0a6b729f0b96922e14d2c0d8a8eb28be159",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_performance_settings_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_performance_settings_extension.h",
+      "path": "modules/openxr/extensions/openxr_performance_settings_extension.h",
+      "sha": "6107bd4ad5fb6b252932b1c3ba5d2348380dbba3",
+      "size": 3545,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_performance_settings_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_performance_settings_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/6107bd4ad5fb6b252932b1c3ba5d2348380dbba3",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_performance_settings_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_performance_settings_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/6107bd4ad5fb6b252932b1c3ba5d2348380dbba3",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_performance_settings_extension.h"
+      }
+    },
+    {
+      "name": "openxr_pico_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_pico_controller_extension.cpp",
+      "sha": "6d64a38c74fec6dbcc4c75570aad388880d4e704",
+      "size": 17601,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_pico_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_pico_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/6d64a38c74fec6dbcc4c75570aad388880d4e704",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_pico_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_pico_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/6d64a38c74fec6dbcc4c75570aad388880d4e704",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_pico_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_pico_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_pico_controller_extension.h",
+      "sha": "d9a238261840a2c31ff9acaa9eed50d44de06db3",
+      "size": 2737,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_pico_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_pico_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/d9a238261840a2c31ff9acaa9eed50d44de06db3",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_pico_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_pico_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/d9a238261840a2c31ff9acaa9eed50d44de06db3",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_pico_controller_extension.h"
+      }
+    },
+    {
+      "name": "openxr_render_model_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_render_model_extension.cpp",
+      "sha": "91154d2b562c0cddb45c97e575e5ead509a20b06",
+      "size": 30417,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_render_model_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_render_model_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/91154d2b562c0cddb45c97e575e5ead509a20b06",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_render_model_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_render_model_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/91154d2b562c0cddb45c97e575e5ead509a20b06",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_render_model_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_render_model_extension.h",
+      "path": "modules/openxr/extensions/openxr_render_model_extension.h",
+      "sha": "35b147361c15c8d50433d45eae774ae524919806",
+      "size": 8979,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_render_model_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_render_model_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/35b147361c15c8d50433d45eae774ae524919806",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_render_model_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_render_model_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/35b147361c15c8d50433d45eae774ae524919806",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_render_model_extension.h"
+      }
+    },
+    {
+      "name": "openxr_user_presence_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_user_presence_extension.cpp",
+      "sha": "226ff0f31feace383c24d5079d3f59a0c489dc36",
+      "size": 4326,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_user_presence_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_user_presence_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/226ff0f31feace383c24d5079d3f59a0c489dc36",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_user_presence_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_user_presence_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/226ff0f31feace383c24d5079d3f59a0c489dc36",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_user_presence_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_user_presence_extension.h",
+      "path": "modules/openxr/extensions/openxr_user_presence_extension.h",
+      "sha": "bf7c408bb69bde75c91357b9ce25cda848c82f67",
+      "size": 3470,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_user_presence_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_user_presence_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/bf7c408bb69bde75c91357b9ce25cda848c82f67",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_user_presence_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_user_presence_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/bf7c408bb69bde75c91357b9ce25cda848c82f67",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_user_presence_extension.h"
+      }
+    },
+    {
+      "name": "openxr_valve_analog_threshold_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_valve_analog_threshold_extension.cpp",
+      "sha": "4f404603be503b6307f8d833e7947be8508a7504",
+      "size": 8562,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_analog_threshold_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_analog_threshold_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/4f404603be503b6307f8d833e7947be8508a7504",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_valve_analog_threshold_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_analog_threshold_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/4f404603be503b6307f8d833e7947be8508a7504",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_analog_threshold_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_valve_analog_threshold_extension.h",
+      "path": "modules/openxr/extensions/openxr_valve_analog_threshold_extension.h",
+      "sha": "1abffe84f73ea08aa2c1d3ba5220899953a4bac2",
+      "size": 3889,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_analog_threshold_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_analog_threshold_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/1abffe84f73ea08aa2c1d3ba5220899953a4bac2",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_valve_analog_threshold_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_analog_threshold_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/1abffe84f73ea08aa2c1d3ba5220899953a4bac2",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_analog_threshold_extension.h"
+      }
+    },
+    {
+      "name": "openxr_valve_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_valve_controller_extension.cpp",
+      "sha": "a41f1c5259cfc7c4cc9c89301485638d1bf83cde",
+      "size": 10746,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/a41f1c5259cfc7c4cc9c89301485638d1bf83cde",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_valve_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/a41f1c5259cfc7c4cc9c89301485638d1bf83cde",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_valve_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_valve_controller_extension.h",
+      "sha": "e9d1212942e4219e40a221dd43ced66c070f35d3",
+      "size": 2739,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/e9d1212942e4219e40a221dd43ced66c070f35d3",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_valve_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_valve_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/e9d1212942e4219e40a221dd43ced66c070f35d3",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_valve_controller_extension.h"
+      }
+    },
+    {
+      "name": "openxr_visibility_mask_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_visibility_mask_extension.cpp",
+      "sha": "ac3e4673f4efffcc9eb38acc98976251c21ecc00",
+      "size": 9826,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_visibility_mask_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_visibility_mask_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/ac3e4673f4efffcc9eb38acc98976251c21ecc00",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_visibility_mask_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_visibility_mask_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/ac3e4673f4efffcc9eb38acc98976251c21ecc00",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_visibility_mask_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_visibility_mask_extension.h",
+      "path": "modules/openxr/extensions/openxr_visibility_mask_extension.h",
+      "sha": "13167d0ca2279d4dd6cdbaaf420296253375fd12",
+      "size": 4251,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_visibility_mask_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_visibility_mask_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/13167d0ca2279d4dd6cdbaaf420296253375fd12",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_visibility_mask_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_visibility_mask_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/13167d0ca2279d4dd6cdbaaf420296253375fd12",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_visibility_mask_extension.h"
+      }
+    },
+    {
+      "name": "openxr_wmr_controller_extension.cpp",
+      "path": "modules/openxr/extensions/openxr_wmr_controller_extension.cpp",
+      "sha": "74e706d673b23e742d2f9f66ba8a284228caa3e3",
+      "size": 13239,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_wmr_controller_extension.cpp?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_wmr_controller_extension.cpp",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/74e706d673b23e742d2f9f66ba8a284228caa3e3",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_wmr_controller_extension.cpp",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_wmr_controller_extension.cpp?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/74e706d673b23e742d2f9f66ba8a284228caa3e3",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_wmr_controller_extension.cpp"
+      }
+    },
+    {
+      "name": "openxr_wmr_controller_extension.h",
+      "path": "modules/openxr/extensions/openxr_wmr_controller_extension.h",
+      "sha": "6cac5d28f81048024d6b76051901ac23e0dd9b04",
+      "size": 2896,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_wmr_controller_extension.h?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_wmr_controller_extension.h",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/6cac5d28f81048024d6b76051901ac23e0dd9b04",
+      "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/openxr_wmr_controller_extension.h",
+      "type": "file",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/openxr_wmr_controller_extension.h?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/blobs/6cac5d28f81048024d6b76051901ac23e0dd9b04",
+        "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/openxr_wmr_controller_extension.h"
+      }
+    },
+    {
+      "name": "platform",
+      "path": "modules/openxr/extensions/platform",
+      "sha": "6e161850095805a7b4942221edf53c793e48a125",
+      "size": 0,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/platform?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/tree/4.7.2-stable/modules/openxr/extensions/platform",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/trees/6e161850095805a7b4942221edf53c793e48a125",
+      "download_url": null,
+      "type": "dir",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/platform?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/trees/6e161850095805a7b4942221edf53c793e48a125",
+        "html": "https://github.com/godotengine/godot/tree/4.7.2-stable/modules/openxr/extensions/platform"
+      }
+    },
+    {
+      "name": "spatial_entities",
+      "path": "modules/openxr/extensions/spatial_entities",
+      "sha": "15c0a7e5e3c2f60eb8f4a3c4070beef145999bb7",
+      "size": 0,
+      "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities?ref=4.7.2-stable",
+      "html_url": "https://github.com/godotengine/godot/tree/4.7.2-stable/modules/openxr/extensions/spatial_entities",
+      "git_url": "https://api.github.com/repos/godotengine/godot/git/trees/15c0a7e5e3c2f60eb8f4a3c4070beef145999bb7",
+      "download_url": null,
+      "type": "dir",
+      "_links": {
+        "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities?ref=4.7.2-stable",
+        "git": "https://api.github.com/repos/godotengine/godot/git/trees/15c0a7e5e3c2f60eb8f4a3c4070beef145999bb7",
+        "html": "https://github.com/godotengine/godot/tree/4.7.2-stable/modules/openxr/extensions/spatial_entities"
+      }
+    }
+  ]
+}

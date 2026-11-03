@@ -1,0 +1,97 @@
+{
+  "inherited_files": {
+    "client/godot/Core/Controllers.cs": {
+      "before_sha256": "cd86b7e450279579ba3083b8c977567ae7aa23b4dcc3d6c35649ba7d21342158",
+      "after_sha256": "48ef99ae766c2ff1beefafd1fa7704a8b9b8fa791c6e47380a0c35dd07c54418",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/Controllers.cs.before",
+      "added": 1,
+      "removed": 1,
+      "purpose": "working form no longer blocks its own presentation recovery menu; pointer capture/travel fences retained"
+    },
+    "client/godot/FormPanel.cs": {
+      "before_sha256": "bad8228ab46193c2cec39ba02bf1fef495c5ef04f03a2eff8ad45d1baa535265",
+      "after_sha256": "098e6a3d087fca8f48f39323105dadd471fc0b270643c894d7d23d8c96a746da",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/FormPanel.cs.before",
+      "added": 7,
+      "removed": 1,
+      "purpose": "one shared native choice factory prevents overflow and press-open release selection; offered values unchanged"
+    },
+    "client/godot/OpenXRInput.cs": {
+      "before_sha256": "9d25b698af9bc6d8c16006cb338ee31fa0f805f7f1de751bd40e530e00f28dff",
+      "after_sha256": "d3fc51482e09c8387345761ceaa39cbf223a48aad802db1399c0a6ba64b9d954",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/OpenXRInput.cs.before",
+      "added": 4,
+      "removed": 1,
+      "purpose": "existing native pointer/popup/exclusive window owner blocks or cancels presentation menu without a click"
+    },
+    "client/godot/OperationsPanel.cs": {
+      "before_sha256": "3c3415ad175ddfb5ca7eea01f5f495760a14ab299e733a8d3446282b2a82238f",
+      "after_sha256": "3ee16fd49ee1374a56a56123a104d79f7f4b01c6cd55713b599ed6c793f1cd45",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/OperationsPanel.cs.before",
+      "added": 41,
+      "removed": 10,
+      "purpose": "long selector width/release-mode choices; concise context/outcomes, bounded explicit exact details and ordinary native scroll reveal of returned actions"
+    },
+    "client/godot/README.md": {
+      "before_sha256": "9ef0078f81e17c3841c67176bfb119b5be77398d9133cf5ef242830bae6ed233",
+      "after_sha256": "20a2918b028739950d3d385645a20a9fd1f42a78e068f89389103736752f9ac8",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/README.md.before",
+      "added": 16,
+      "removed": 2,
+      "purpose": "current selector and presentation-menu behavior"
+    },
+    "client/godot/tests/ControllerChecks.cs": {
+      "before_sha256": "e8b04ef80f7bbf7b737656ccfc8beba40ed4b748e5417e1e51a385ec62fd2f47",
+      "after_sha256": "39342251e90dc7cbd4abcae938a585f2770ed5f672fa0907cb0bde2522951832",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/ControllerChecks.cs.before",
+      "added": 23,
+      "removed": 0,
+      "purpose": "eight real-owner affected arbitration/lifecycle/resource obligations"
+    },
+    "client/godot/tests/SpaceChecks.cs": {
+      "before_sha256": "91b12e1b35cd57bc2beefae2b69c38633f4c487a3d5390de888d5af4e2ec7f26",
+      "after_sha256": "c01a54af82c55b75d48d56e38bba961634082ecd35ce87d560320d45887036be",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/SpaceChecks.cs.before",
+      "added": 1,
+      "removed": 1,
+      "purpose": "fixture lookup uses exact full target tooltip rather than presentation caption"
+    }
+  },
+  "production_delta": {
+    "client/godot/Core/Controllers.cs": {
+      "before_sha256": "cd86b7e450279579ba3083b8c977567ae7aa23b4dcc3d6c35649ba7d21342158",
+      "after_sha256": "48ef99ae766c2ff1beefafd1fa7704a8b9b8fa791c6e47380a0c35dd07c54418",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/Controllers.cs.before",
+      "added": 1,
+      "removed": 1,
+      "purpose": "working form no longer blocks its own presentation recovery menu; pointer capture/travel fences retained"
+    },
+    "client/godot/FormPanel.cs": {
+      "before_sha256": "bad8228ab46193c2cec39ba02bf1fef495c5ef04f03a2eff8ad45d1baa535265",
+      "after_sha256": "098e6a3d087fca8f48f39323105dadd471fc0b270643c894d7d23d8c96a746da",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/FormPanel.cs.before",
+      "added": 7,
+      "removed": 1,
+      "purpose": "one shared native choice factory prevents overflow and press-open release selection; offered values unchanged"
+    },
+    "client/godot/OpenXRInput.cs": {
+      "before_sha256": "9d25b698af9bc6d8c16006cb338ee31fa0f805f7f1de751bd40e530e00f28dff",
+      "after_sha256": "d3fc51482e09c8387345761ceaa39cbf223a48aad802db1399c0a6ba64b9d954",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/OpenXRInput.cs.before",
+      "added": 4,
+      "removed": 1,
+      "purpose": "existing native pointer/popup/exclusive window owner blocks or cancels presentation menu without a click"
+    },
+    "client/godot/OperationsPanel.cs": {
+      "before_sha256": "3c3415ad175ddfb5ca7eea01f5f495760a14ab299e733a8d3446282b2a82238f",
+      "after_sha256": "3ee16fd49ee1374a56a56123a104d79f7f4b01c6cd55713b599ed6c793f1cd45",
+      "before_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/OperationsPanel.cs.before",
+      "added": 41,
+      "removed": 10,
+      "purpose": "long selector width/release-mode choices; concise context/outcomes, bounded explicit exact details and ordinary native scroll reveal of returned actions"
+    }
+  },
+  "no_new_domain_owner": true,
+  "no_product_draft_policy_change": true,
+  "historical_build_override_purpose_note": "Early build metadata used one overbroad selector-purpose string for all seven files; exact per-file scope is recorded here. Original manifests are unchanged."
+}

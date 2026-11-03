@@ -1,0 +1,112 @@
+{
+  "server-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product14/server-stdout.raw",
+    "raw_sha256": "f790d50be517b716fa44eb7a14ca93753be4c9314a3078d7c45dbf6a02e948d2",
+    "raw_bytes": 129,
+    "raw_mode": "0600",
+    "public_sha256": "4864351abd1ca96825ad51bde01d88754561963e0067fa811ea60f7a84b1869d",
+    "lines": 1,
+    "restricted_lines": 1,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "server-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product14/server-stderr.raw",
+    "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_bytes": 0,
+    "raw_mode": "0600",
+    "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines": 0,
+    "restricted_lines": 0,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "runtime-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product14/runtime-stdout.raw",
+    "raw_sha256": "15f85ea9d9ca707dd943f7af7a9b5d8a37f1a71e182d55f2ad181b9779f2fb8e",
+    "raw_bytes": 114,
+    "raw_mode": "0600",
+    "public_sha256": "6cf6d5410e43a33d62a2943b7f5455d7c0c568e9e3a6b2e99f2abff1c3ab2236",
+    "lines": 1,
+    "restricted_lines": 1,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "runtime-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product14/runtime-stderr.raw",
+    "raw_sha256": "15f0541e21986c5bc7fadb48b3d9669e9a2a1389bb18a1aecd29073d5cacf154",
+    "raw_bytes": 11151,
+    "raw_mode": "0600",
+    "public_sha256": "630bdd4e961320c203c6ff831b64e36a49a2b0a779b0d05441d418ec9adc569a",
+    "lines": 246,
+    "restricted_lines": 246,
+    "raw_error_or_leak_lines": 1,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "client-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product14/client-stdout.raw",
+    "raw_sha256": "f23aacce13a01772ea822aa7e3d98c93abc8898d80d1383d07539f8eb8a64c3a",
+    "raw_bytes": 144304,
+    "raw_mode": "0600",
+    "public_sha256": "d253f9fc6578a65b9ab93be45a4ea8ec6c1e9c9ee92f42d6b07450d09fb27de3",
+    "lines": 1160,
+    "restricted_lines": 1147,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "client-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product14/client-stderr.raw",
+    "raw_sha256": "d5a46924f74b0a2dd12a598c5ceee620b066135cf091db0abd8b0141991b4ad4",
+    "raw_bytes": 2991,
+    "raw_mode": "0600",
+    "public_sha256": "022e94f2919552ff4f8ed3e496e6df172eb5da03e2ae0ed46f49e5a79d3fee90",
+    "lines": 92,
+    "restricted_lines": 79,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "physical-wrapper-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-vive-product14-run/stdout.raw",
+    "raw_sha256": "c0eef5346e60fbe8a85a41a1583de34fda829c792a9bd6328cbeeab737ba2b5b",
+    "raw_bytes": 5508,
+    "raw_mode": "0600",
+    "public_sha256": "69423ec2aa52586059b0f42754f9be8f7fb97d55515ce89b432e29cf40ba0e7d",
+    "lines": 29,
+    "restricted_lines": 1,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "physical-wrapper-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-vive-product14-run/stderr.raw",
+    "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_bytes": 0,
+    "raw_mode": "0600",
+    "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines": 0,
+    "restricted_lines": 0,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "focus-wrapper-stdout": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-vive-product14-focus-run/stdout.raw",
+    "raw_sha256": "785ee7a5fbd045ee0616f1854a6938e5ef22c95e73933a8a5322ab1ddfc1d56e",
+    "raw_bytes": 929,
+    "raw_mode": "0600",
+    "public_sha256": "7381e8a7284f9fab0360a518bfb25c644ac5d3578fbfbc34bdd46d479a3aef11",
+    "lines": 4,
+    "restricted_lines": 1,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  },
+  "focus-wrapper-stderr": {
+    "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/native-vive-product14-focus-run/stderr.raw",
+    "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_bytes": 0,
+    "raw_mode": "0600",
+    "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines": 0,
+    "restricted_lines": 0,
+    "raw_error_or_leak_lines": 0,
+    "method": "Every original line retained either as exact safe protocol/filtered row or explicit private-detail placeholder with original-line SHA; full originals remain private."
+  }
+}

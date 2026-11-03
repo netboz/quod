@@ -1,0 +1,203 @@
+{
+  "passed": true,
+  "scope": "offline diagnostic preparation only",
+  "diagnostic_manifest_sha256": "9073b314599bd64531792acd63cbcd2e21ef54b73a41b25cd041260a4433fb08",
+  "supplied_inputs": 94,
+  "unchanged_selected_product_inputs": 92,
+  "staged_original_input_override": [
+    "client/godot/tests/ExportChecks.cs"
+  ],
+  "new_diagnostic_helpers": [
+    "client/godot/tests/PhysicalChecks.cs",
+    "client/godot/tests/ViveLookCue.cs"
+  ],
+  "exports": 196,
+  "dll": {
+    "sha256": "8b4399840627133bce6b8ff9adeaec8b2c944386fd21f678e9c1759bd89028c9",
+    "bytes": 790528
+  },
+  "pck": {
+    "sha256": "1267200faae7edaf25bf22aa21165d4fc94a8caa1994c7d20bf45d8f923ca1b4",
+    "bytes": 12888
+  },
+  "template": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono",
+    "sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268"
+  },
+  "build_commands": [
+    {
+      "phase": "toolchain",
+      "true_child_exit": 0,
+      "result_sha256": "0fc18b93310d32cab557aef0f753f5e06a4af7976ac6d36810269625cd3821d4",
+      "full_log_sha256": "52a68be09a50b92ba0b529851cac0759263b2f9da773afcb0f2104d6d95631dc"
+    },
+    {
+      "phase": "bootstrap",
+      "true_child_exit": 0,
+      "result_sha256": "f47e1c7275a1694edb6ddf28c0e8f1f6a8c6fc2e181c7b54979adb673b59e033",
+      "full_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "phase": "restore-debug",
+      "true_child_exit": 0,
+      "result_sha256": "1138166bb2005c90f53879ab1de9089bbccae752a852d23dcf3099be924abc57",
+      "full_log_sha256": "856b7a11ea90a3f7cafeb87599309f44d380bfe5a6747e01db83513ad126dc2e"
+    },
+    {
+      "phase": "restore-exportrelease",
+      "true_child_exit": 0,
+      "result_sha256": "b38f74baa7872d99133d9ac4b03f7573a3e1f9ac8035a3f2bc8a3d027edbd7c7",
+      "full_log_sha256": "316b920c54e7ee6900d310aeb301dfcb2698664707d8c5f6a783466337209ece"
+    },
+    {
+      "phase": "export",
+      "true_child_exit": 0,
+      "result_sha256": "dac1104e7d6598800df8be26e0ec19aaad6682c1210f7eecdad5fbe0334bce5d",
+      "full_log_sha256": "57664f6cd24cb285d793c8df7c132a9bf3fa38da0b76e3400c9309b0832e3bda"
+    }
+  ],
+  "wrappers": {
+    "runtime-cue-build01": {
+      "true_child_exit": 0,
+      "receipt_sha256": "a097d5231ce3c20e7232d74cec6a5b004adcc1771f31d823f7bebb127bc55e42",
+      "stdout": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-build01-stdout.log",
+        "sha256": "1949977c26232fad06af7687da6c44bb305945a4a094625d60bf0836294281cf",
+        "bytes": 1127
+      },
+      "stderr": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-build01-stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    "runtime-cue-pure-prepare01": {
+      "true_child_exit": 0,
+      "receipt_sha256": "9245cbe687078708fcb3f782a04ff8296ede7eb4e3d16ae4d435038a6cfdbff4",
+      "stdout": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-pure-prepare01-stdout.log",
+        "sha256": "e3407278029bc85b6085c34220848390fd96d93d51ea26cc82117ad15a072555",
+        "bytes": 149
+      },
+      "stderr": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-pure-prepare01-stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    "runtime-cue-gates01": {
+      "true_child_exit": 0,
+      "receipt_sha256": "0b139ca74367f10591d9b0e33be621a065f6598b0e8a0b794c20964c560c36e6",
+      "stdout": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-gates01-stdout.log",
+        "sha256": "fa6916c899d3a7f2e3b3f933f250fb9d9cd5b5d4e957535fd931588d68c06b76",
+        "bytes": 1558
+      },
+      "stderr": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-gates01-stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    "runtime-cue-binding01": {
+      "true_child_exit": 0,
+      "receipt_sha256": "01539e6a1cddf0dc19e22d211cc4dbbcb4b22540ee36aa8a9d4ac58d64ae2fdb",
+      "stdout": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-binding01-stdout.log",
+        "sha256": "834d3f5063ff0556dd16deab4fd53842349d77322a232f3150b1128a9c9562d7",
+        "bytes": 1778
+      },
+      "stderr": {
+        "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/logs/runtime-cue-binding01-stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    }
+  },
+  "pure_cue_checks": 21,
+  "source_binding_privacy_checks": 20,
+  "pure_preexecution_inputs": {
+    "CueChecks.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/runtime-cue-gates01/CueChecks.cs",
+      "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/runtime-cue-gates01/CueChecks.cs",
+      "sha256": "36abe0cc14d43a0259ee3e04ce2acef700544ea6d811b21383ff039734b63149",
+      "bytes": 2235,
+      "mode": 420
+    },
+    "CueGateChecks.csproj": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/runtime-cue-gates01/CueGateChecks.csproj",
+      "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/runtime-cue-gates01/CueGateChecks.csproj",
+      "sha256": "38e201f047792df530db8c7d157c2b6b19d1ed2e4134dba5da5c59e97d3b0da2",
+      "bytes": 211,
+      "mode": 384
+    },
+    "NuGet.Config": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/runtime-cue-gates01/NuGet.Config",
+      "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/runtime-cue-gates01/NuGet.Config",
+      "sha256": "e7130597a002e14f3d5c711d6a185712faf61b376f1b62b4eb354c827dc62c33",
+      "bytes": 185,
+      "mode": 384
+    },
+    "ViveLookCue.cs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/runtime-cue-gates01/ViveLookCue.cs",
+      "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/runtime-cue-gates01/ViveLookCue.cs",
+      "sha256": "55ebc8fdff066b8dad750744be51483b130ef5d0b1d1b3504ebdab5b76bf75c7",
+      "bytes": 683,
+      "mode": 420
+    },
+    "global.json": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/runtime-cue-gates01/global.json",
+      "before_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/runtime-cue-gates01/global.json",
+      "sha256": "58cf5bad3915ebd7a3e327e9ad99ded232e9a4f03ff46917126a1df3019713a3",
+      "bytes": 55,
+      "mode": 420
+    }
+  },
+  "pure_test_outputs": {
+    "bin/Release/net10.0/CueGateChecks": {
+      "sha256": "dc078a3c7fcd699149bcca65725f38738beb31b3a5f65e967186e10a13c3e40e",
+      "bytes": 98312,
+      "mode": 493
+    },
+    "bin/Release/net10.0/CueGateChecks.deps.json": {
+      "sha256": "6af1016c2d2be1d5a5be3dd05ea1040ccf74d36706c3e2d04192aa5ce3aa1321",
+      "bytes": 411,
+      "mode": 384
+    },
+    "bin/Release/net10.0/CueGateChecks.dll": {
+      "sha256": "db98a9566752259d3855e900658a99446ce75a81fecdb5dd923159a313d41d6f",
+      "bytes": 9216,
+      "mode": 384
+    },
+    "bin/Release/net10.0/CueGateChecks.pdb": {
+      "sha256": "74c309738faa238047807d6ed09c941d3368d3ced31c78c85d2732f9261b7fd7",
+      "bytes": 11336,
+      "mode": 384
+    },
+    "bin/Release/net10.0/CueGateChecks.runtimeconfig.json": {
+      "sha256": "9950d4583cfc9a106857c0d5b8a75b53e8774852b57b80bc3823a74d44a4d87f",
+      "bytes": 330,
+      "mode": 384
+    }
+  },
+  "product_changes": false,
+  "compiled_application_inputs_copied": false,
+  "distributable": false,
+  "functional_application_executed": false,
+  "live_runtime_device_display_focus_socket_queries": 0,
+  "physical_case_started": false,
+  "api_bytes_read": 0,
+  "actual_native_cue_or_controller_visibility": "UNRUN",
+  "old_helpers_and_failures": "preserved historical; ordinary menu guarded failures remain FAILED/inconclusive; case16 No controllers remains FAILED with unknown look time/cause",
+  "startup_complaint": "OPEN",
+  "future_human_contact": "coordinator only; separate explicit authorization required before a fresh owned run",
+  "full_M4_accepted": false,
+  "commit_or_M5": false,
+  "digest_cache": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-runtime-cue-20261030/qualified-stat-digests.json",
+    "sha256": "5f6a7e1a0695768f1dcd30111cc42dd66b115698dbb2c3ef5bd7c531c058454b",
+    "hits": 382,
+    "new_files": 0,
+    "new_bytes": 0
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "baseline_build01": {
+    "true_exit": 1,
+    "seam": "pre-stage helper import",
+    "cause": "new hashes module name collided with an inherited wrapper import of hashes; no stage/build/app launched",
+    "correction": "import the existing presentation digest owner directly and append authenticated root104/new-build exact-stat caches; same algorithm, no old bytes recounted",
+    "subsequent_label": "xr-focus-baseline02"
+  },
+  "baseline_controller01": {
+    "true_exit": 1,
+    "seam": "pre-child source custody",
+    "cause": "copied presentation runner retained literal digests.py preexecution path after import was renamed to hashes",
+    "application_launched": false,
+    "correction": "capture actual hashes adapter plus unchanged shared digests owner before child launch",
+    "subsequent_label": "xr-focus-baseline-controller02"
+  },
+  "baseline_controller02": {
+    "true_exit": 1,
+    "client_exit": 1,
+    "eof": {
+      "stdout": true,
+      "stderr": true
+    },
+    "reader_errors": [],
+    "expected_failure": "runtime-interactive models remain visible after desktop focus loss without replaying a held press",
+    "earlier_obligations": "8 checks passed including immediate native capture cancellation without activation",
+    "product_source": "unchanged pre-correction Main/OpenXRInput; new regression assertions",
+    "subsequent_label": "xr-focus-final01",
+    "scope": "software-injected XRServer/native GUI/model owner; no native runtime or hardware claim"
+  },
+  "final_menu01": {
+    "wrapper_exit": 1,
+    "client_exit": -9,
+    "eof": {
+      "stdout": false,
+      "stderr": false
+    },
+    "seam": "owned native pointer guard before click",
+    "observed_requested_cursor": [
+      2218,
+      612
+    ],
+    "observed_actual_cursor": [
+      2218,
+      576
+    ],
+    "native_key_commands": "9 real guarded key deliveries exit0; menu obligations passed before pointer refusal",
+    "cause_limit": "actual cursor could not reach requested point; compositor initiation/constraint cause unproven; no XR product cause established",
+    "correction": "test-only native pointer probe y300 -> y160 in the same root Control tree; all exact PID/address/cursor/layout guards and click assertions retained",
+    "subsequent_label": "xr-focus-final02; no identical retry"
+  },
+  "final02_menu01": {
+    "wrapper_exit": 1,
+    "client_exit": -9,
+    "eof": {
+      "stdout": false,
+      "stderr": false
+    },
+    "seam": "native key guard lost exact owned focus during third menu open",
+    "native_key_exits": "first6 keys0/focus retained; third space0/post-active PID changed",
+    "cause_limit": "recipient/initiator unproven; this is not XR session policy evidence, native XR disabled",
+    "disposition": "retain candidate02/failure; revert only test probe placement to its original exact bytes, no more desktop menu retries. Final selected source is exactly candidate01 for all92 supplied inputs. Ordinary menu qualification remains FAILED/inconclusive under host input guards."
+  },
+  "binding01": {
+    "true_exit": 1,
+    "seam": "receipt-only presentation count assumption",
+    "cause": "presentation has5 Check entries plus10 successful Probe entries; verifier incorrectly expected15 entries in checks alone",
+    "correction": "count and require both actual producer obligation sets, failures empty; all source/output cache checks already passed. No build/test/runtime replay",
+    "subsequent_label": "xr-focus-binding02"
+  }
+}

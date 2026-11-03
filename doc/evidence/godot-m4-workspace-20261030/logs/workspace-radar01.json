@@ -1,0 +1,50 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "LD_LIBRARY_PATH",
+    "-u",
+    "LD_PRELOAD",
+    "node",
+    "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+    "/home/yan/src/quod",
+    "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+    "work_radar",
+    "{\"issueKey\":\"QUO-65\"}"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "application.py": "2785b7b47b7057364b9f87c22dc17a2d208b18680f611a3f8a0f27b3f87b59a1",
+    "build.py": "25eb8d177790099ac41307921f0dca1181a06cba4a9f15021bc1df3efeb320cd",
+    "hashes.py": "b99cbe09154606d33bc450ea5a70ae87176a3248a1646e0936f0ffe10395bc5e",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479"
+  },
+  "start_utc": "2026-10-30T21:58:32Z",
+  "elapsed_seconds": 0.3150331974029541,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/workspace-radar01/stdout.raw",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/workspace-radar01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-20261030/logs/workspace-radar01-stdout.log",
+      "sha256": "f49c8e6d0aea98c6fb66755ec1402a08da2cd787699aa59bbb9facedf091bcb2",
+      "bytes": 286
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-20261030/logs/workspace-radar01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

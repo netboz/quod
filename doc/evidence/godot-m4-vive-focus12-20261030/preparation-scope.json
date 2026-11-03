@@ -1,0 +1,11 @@
+{
+  "failed11_snapshot": "5e365156763eaefcd968fe7eaa1b3abc0f8044b0b5a203b534567e42dc592f9e",
+  "failed11_remains_failed": true,
+  "publication_fixtures_passed": 22,
+  "old_parser_budget_stdin_checks_repeated": false,
+  "first_manual_fixture_emitter_custody_limit": "Emitter source existed in transcript/worktree before execution; manual_run saved its own publisher inputs, not this out-of-folder emitter. Later metadata fixture saves exact emitter source. Do not upgrade that later copy to first-run preexecution custody.",
+  "qualified_focus_helper_changed": false,
+  "product_csharp_or_export_changed": false,
+  "diagnostic_nondistributable": true,
+  "source_delta": "Two inherited diagnostic publishers plus one pure shared redaction owner and new case12 metadata wrapper/capture/invocation/fixtures; raw and historical published evidence unchanged."
+}

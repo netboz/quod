@@ -1,0 +1,26 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/native-xr.py",
+    "native-vive02",
+    "--mode",
+    "hardware",
+    "--lighthouse",
+    "--compositor",
+    "wayland-lease",
+    "--runtime-prefix",
+    "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install",
+    "--export",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-development02/source/client/godot/dist/quod.x86_64"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T10:10:29Z",
+  "elapsed_seconds": 37.85636115074158,
+  "child_exit": 1,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/native-vive02.log",
+  "raw_sha256": "68e08d22221dc5aa97f05c2eecf330f25b59fa44c2164698b823bb6c035573be",
+  "sanitized_sha256": "68e08d22221dc5aa97f05c2eecf330f25b59fa44c2164698b823bb6c035573be",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

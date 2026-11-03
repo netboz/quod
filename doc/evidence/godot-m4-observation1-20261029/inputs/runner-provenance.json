@@ -1,0 +1,6 @@
+{
+  "base": "doc/evidence/godot-m4-r2-20261029/run.py",
+  "base_sha256": "d862a5487a6a3278464b87c8eed59e852341adbdd4d5ef37b5873439c5d39212",
+  "supplied_sha256": "1c6faee5fc220c01ab3c3c959fd600818620f47a8d8dd1a49d747ce7d7ffdbd9",
+  "delta": "Only task-private raw log directory changed; output/child/timeout semantics identical"
+}

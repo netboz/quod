@@ -1,0 +1,24 @@
+{
+  "checkpoint": "M4-R1 diagnostic handoff independently verified; full M4 acceptance held",
+  "automatedContinuationStopped": true,
+  "newWriterOrExperimentStarted": false,
+  "newWakeupScheduled": false,
+  "existingOneShotWakeup": "If a previously scheduled check is already queued, use this recorded blocker; do not relaunch, repeat tests or reschedule without new evidence/steering.",
+  "blockers": [
+    "Two historical process-exit stalls remain unresolved after bounded diagnosis; no captured stall supports a responsible-owner correction.",
+    "Installed Monado cannot start because its required OpenCV .so.413 dependencies are absent; native OpenXR teardown remains unqualified.",
+    "Physical original Vive/two-wand observations remain unrun."
+  ],
+  "QUO65": {
+    "status": "in-review",
+    "progress": 80,
+    "committed": false,
+    "fullM4Accepted": false
+  },
+  "parentProgress": 67,
+  "M5Launched": false,
+  "newClaudeOrModelSwitch": false,
+  "strongerModelNeedDemonstrated": false,
+  "implementationChangedByCoordinator": false,
+  "productTestsRerunByCoordinator": false
+}

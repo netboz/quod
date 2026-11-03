@@ -1,0 +1,36 @@
+{
+  "rows": [
+    {
+      "kind": "snapshot",
+      "monotonic": 21331.997721157,
+      "utc": "2026-10-30T15:09:48.937959+00:00",
+      "owned": false,
+      "ordered_event_barrier": false
+    },
+    {
+      "kind": "local_subscription_close",
+      "monotonic": 21397.987547703,
+      "utc": "2026-10-30T15:10:54.927886+00:00",
+      "incomplete_line": false
+    }
+  ],
+  "result": {
+    "armed": true,
+    "runtime_started": false,
+    "focus_changed": false,
+    "subscription_count": 1,
+    "errors": [],
+    "instance_sha256": "fdb2f0232f78b8a23aa7c7f23adcfd476a7715e40e9eee04d8f1bbeeb20e29d7",
+    "rows": 2,
+    "event_messages": 0,
+    "unparsed_fragment": false,
+    "local_connection_closed": true,
+    "remote_eof_observed": false,
+    "snapshot_is_not_ordered_event_barrier": true,
+    "continuous_native_or_pixel_claim": false,
+    "successor_classifications": 0,
+    "successor_lookups": 0,
+    "successor_is_not_focus_initiator": true
+  },
+  "scope": "Receive times/role/validity only; no initiating actor/cause/returned-native/pixel claim."
+}

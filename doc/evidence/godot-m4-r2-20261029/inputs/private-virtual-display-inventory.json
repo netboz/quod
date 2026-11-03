@@ -1,0 +1,6 @@
+{
+  "Xvfb": null,
+  "xdotool": null,
+  "action": "read-only availability check; no install or virtual display launch",
+  "user_display_changed": false
+}

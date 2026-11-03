@@ -1,0 +1,10 @@
+{
+  "client/native/tools/contracts.mjs": {
+    "before": "001cd4fd70deeedaf8e03781fa93427396c0d2e791d8cac17045da4fa5ecbcf6",
+    "after": "431451c553ed39c51fe69b3ccb0d4a67c7fa01d436dd0d23a63e7df8a50a1ec1"
+  },
+  "client/test/fixtures/native-contract/contracts.json": {
+    "before": "a9b2f39a4ffe23512b1bdc2c4339bec427b7bfe95507fb00a102d9a3ce375430",
+    "after": "6a89947f940329642729877977992961362b7653d69ef729f78e10a1cbeb77bf"
+  }
+}

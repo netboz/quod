@@ -11,3 +11,6 @@ project/assembly_name="Quod"
 [rendering]
 renderer/rendering_method="gl_compatibility"
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)
+[xr]
+openxr/enabled=false
+openxr/default_action_map="res://xr_actions.tres"

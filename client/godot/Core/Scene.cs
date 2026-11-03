@@ -41,7 +41,7 @@ public sealed record ScenePose(BigInteger[]? Transform, ulong? Body, ulong Revis
         return new(values, null, 0, false);
     }
 }
-public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, ScenePose Pose, string Colour, Term Label, Term? Subject, string Signature)
+public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, ScenePose Pose, string Colour, int Metallic, int Roughness, int Emission, Term Label, Term? Subject, string Signature)
 {
     public static SceneMark[] Decode(Term scene)
     {
@@ -66,6 +66,7 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
                 return Length.Decode(f[1], kind == "wire_box");
             }).ToArray();
             string colour = "#6A90D9";
+            int metallic=0,roughness=0,emission=0;
             if (kind == "group") {
                 if (a[4].Kind != "atom" || a[4].Name != "no_surface") throw new FormatException("Group has a surface.");
             } else {
@@ -73,6 +74,7 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
                 if (!System.Text.RegularExpressions.Regex.IsMatch(colour, "^#[0-9A-F]{6}$") ||
                     surface.Skip(1).Take(3).Any(v => v.Integer < 0 || v.Integer > 1000) || surface[4].Items.Length != 0)
                     throw new FormatException("Unsupported or invalid scene surface.");
+                metallic=(int)surface[1].Integer;roughness=(int)surface[2].Integer;emission=(int)surface[3].Integer;
             }
             var label = a[5];
             if (label.Kind != "atom" || label.Name != "unlabelled") {
@@ -83,10 +85,13 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
             if (a[6].Kind != "atom" || a[6].Name != "depicts_nothing") {
                 var depicts = a[6].Require("depicts", 3);
                 if (depicts[0].TextValue.Length == 0 || depicts[1].Kind != "binary" || depicts[1].Bytes.Length != 32) throw new FormatException("Missing exact depicted history.");
-                subject = Term.Call("entity_ref", depicts);
+                var local=depicts[2];
+                subject = (local.Name=="ontology_ref" && local.Args.Length==2 || local.Name is "class_ref" && local.Args.Length==3) &&
+                    local.Args[0].ToString()==depicts[0].ToString() && local.Args[1].ToString()==depicts[1].ToString()
+                    ? local : Term.Call("entity_ref", depicts);
             }
             if (transform.Body != null && subject == null) throw new FormatException("A body occurrence requires an exact subject.");
-            return new SceneMark(id, kind, sizes, parent, transform, colour, label, subject, term.ToString());
+            return new SceneMark(id, kind, sizes, parent, transform, colour, metallic, roughness, emission, label, subject, term.ToString());
         }).ToArray();
     }
 }

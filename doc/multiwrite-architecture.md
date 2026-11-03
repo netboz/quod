@@ -178,6 +178,26 @@ encoding and VM-headroom checks; current proof admission policy does not
 re-admit that history. Its existing owner, custody, cancellation and deadline
 mechanisms remain responsible for worker lifetime.
 
+## Predicate definition removal
+
+A sealed `abolish(Name/Arity)` retains its exact clause retractions, followed by
+`{abolish,{Name,Arity}}` in the same material diff. Retractions preserve the
+existing fact-reaction events; the final operation removes the interpreted
+definition, including an already-empty definition. Retracting the last clause
+alone keeps that definition. No separate registry or persistence path is used.
+
+Definition removal carries the predicate's ordinary OCC read and write
+reservation, including when it has no clauses. Committed policy, immutable
+manifest and committee guards treat it as a mutation of that exact predicate.
+The existing reducer and MVCC publication apply and notify it; history recovery
+uses the same operation without re-executing the goal or historical reactions.
+Absent definitions produce no applied removal or new MVCC mutation.
+
+Existing operation encodings are unchanged. The new operation requires compatible
+validators/readers before deployment; older runtimes reject it. This code change
+authorizes no deployment, history rewrite or user-store migration. Predicate
+deletion/recreation presentation identity remains outside this contract.
+
 ## Exact terminal outcome reads
 
 `committed_operation_outcome(Bytes, Status)` reads the current scope's exact

@@ -10,6 +10,18 @@ using File = System.IO.File;
 
 public partial class ExportChecks
 {
+    async Task CloseDuringConnect()
+    {
+        await Press("create-key");
+        ((Button)app.FindChild("connect",true,false)).EmitSignal(BaseButton.SignalName.Pressed);
+        await Until(()=>Busy);
+        Check(app.ActiveStore.Snapshot!.Pending.Count==0,"closing a pending sign-in has no durable domain submission");
+        await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { armed=true,checks }));
+        // The driver delivers this real window close only after its TLS peer
+        // observes the actual challenge request. It never supplies a reply.
+        Console.WriteLine("M4_PENDING_CONNECT");
+        Console.WriteLine("M2_NATIVE_CLOSE "+JsonSerializer.Serialize(new { title=GetWindow().Title }));Console.Out.Flush();
+    }
     async Task Tls()
     {
         bool expected = Env("M1B_TLS_EXPECT") == "accept";
@@ -22,7 +34,7 @@ public partial class ExportChecks
         try { await socket.ConnectAsync(transport.SocketUri, timeout.Token); websocket = true; }
         catch (System.Net.WebSockets.WebSocketException) when (!expected) { }
         Check(http == expected && websocket == expected, "actual exported HTTPS and WSS trust hostname and validity: " + Env("M1B_TLS_CASE"));
-        Console.WriteLine("M1B_TLS_PASS"); Console.Out.Flush(); GetTree().Quit();
+        Console.WriteLine("M1B_TLS_PASS"); Console.Out.Flush(); await app.CloseApplication();
     }
     async Task Mouse(OperationsPanel operations, Offer offered)
     {
@@ -38,9 +50,13 @@ public partial class ExportChecks
         control.Toggled += Changed;
         try {
             var position = control.GetGlobalRect().GetCenter();
-            GetViewport().PushInput(new InputEventMouseMotion { Position = position, GlobalPosition = position }, true);
-            GetViewport().PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = true }, true);
-            GetViewport().PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = false }, true);
+            if(DisplayServer.GetName()!="headless")NativeClick(control.GetWindow(),position);
+            else {
+                var viewport=control.GetViewport();
+                viewport.PushInput(new InputEventMouseMotion { Position = position, GlobalPosition = position }, true);
+                viewport.PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = true }, true);
+                viewport.PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = false }, true);
+            }
             await toggled.Task.WaitAsync(TimeSpan.FromSeconds(5));
         } finally { control.Toggled -= Changed; }
         Check(control.ButtonPressed != before && operations.FormPanel.Draft[role] == (!before ? "true" : "false"), "native mouse click edits offered boolean");
@@ -109,47 +125,44 @@ public partial class ExportChecks
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         await session.Authenticate(timeout.Token);
         var accounts = new Accounts(session, store); await accounts.Discover(timeout.Token);
-        var source = new SourcePanel(); app.AddChild(source); source.Open(session, accounts);
-        source.Changed += () => app.EmitSignal(Main.SignalName.Changed);
-        var target = accounts.Catalogue.Single(x => x.Namespace == "quod:gui");
-        source.Inspect(target, true);
-        await Until(() => source.Content.Length > 0 || source.Status.StartsWith("Source unavailable"));
-        Check(source.Content.Contains("gui_"), "real exported source tools assemble complete authorized cursor");
-        string content = source.Content;
-        var traffic = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
-        await Renew(source);
-        var renewedTraffic = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
-        Check(source.Content == content && traffic["cursor_opens"]!.ToString() == renewedTraffic["cursor_opens"]!.ToString(), "unchanged real authorization renewal retains complete snapshot with zero new source cursors");
-        await Transition(new() { ["source_access"] = "deny" });
-        await Until(() => source.Content.Length == 0 && source.Status.StartsWith("Source withdrawn"));
-        Check(source.Content.Length == 0, "revoked source grant withdraws exported content");
-        await Transition(new() { ["source_access"] = "restore" });
-        source.Inspect(target, true); await Until(() => source.Content.Length > 0);
-        Check(source.Content == content, "explicit reopen restores exact authorized source");
-        source.Inspect(human, true); await Until(() => source.Content.Length > 0 && source.Content != content);
-        var beforeUpdate = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
-        Check(Json.Committed(await ExecuteComplete(session, store, human, "assertz(m1b_source_changed(1)).", timeout.Token)), "source update commits through its actual owner");
-        await Until(() => source.Content.Contains("m1b_source_changed(1)"));
-        var afterUpdate = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
-        Check(Json.U(afterUpdate, "cursor_opens") == Json.U(beforeUpdate, "cursor_opens") + 1, "real source update invalidates and reads exactly one replacement cursor");
-        source.Inspect(target with { Anchor = Identity.Encode(new byte[32]) }, true);
-        await Until(() => source.Status.StartsWith("Source withdrawn"));
-        Check(source.Content.Length == 0, "denied source never becomes a valid empty snapshot");
-        source.Inspect(target, true); source.DisposeView();
-        await source.Completion;
-        Check(source.Content.Length == 0, "cancelled opening reader cannot publish after disposal");
-        source.QueueFree();
+        var panel=new EidolonPanel();app.AddChild(panel);panel.Changed+=()=>app.EmitSignal(Main.SignalName.Changed);
+        var target=accounts.Catalogue.Single(x=>x.Namespace=="quod:gui");
+        async Task Inspect(Actor chosen){panel.Open(session,accounts,store,chosen.Ontology);await Until(()=>panel.Available);panel.Choose(panel.Offered.Single(e=>e.Purpose.Name=="prolog"));}
+        await Inspect(target);var source=(SourcePanel)panel.FindChild("source-tools",true,false);
+        await Until(()=>source.Content.Length>0);
+        Check(source.Content.Contains("gui_"),"real exported source tools assemble complete authorized cursor");
+        string content=source.Content;
+        var traffic=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
+        await Renew(panel,"representation");
+        var renewedTraffic=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
+        Check(source.Content==content && traffic["cursor_opens"]!.ToString()==renewedTraffic["cursor_opens"]!.ToString(),"unchanged real authorization renewal retains complete snapshot with zero new source cursors");
+        await Transition(new(){["source_access"]="deny"});await Until(()=>source.Content.Length==0);
+        Check(!source.CanEdit,"revoked source grant withdraws exported content and edit authority");
+        await Transition(new(){["source_access"]="restore"});await Inspect(target);await Until(()=>source.Content.Length>0);
+        Check(source.Content==content,"explicit reopen restores exact authorized source");
+        await Inspect(human);await Until(()=>source.Content.Length>0 && source.Content!=content);
+        var beforeUpdate=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
+        Check(Json.Committed(await ExecuteComplete(session,store,human,"assertz(m1b_source_changed(1)).",timeout.Token)),"source update commits through its actual owner");
+        await Until(()=>source.Content.Contains("m1b_source_changed(1)"));
+        var afterUpdate=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
+        Check(Json.U(afterUpdate,"cursor_opens")==Json.U(beforeUpdate,"cursor_opens")+1,"real source update invalidates and reads exactly one replacement cursor");
+        panel.Open(session,accounts,store,(target with {Anchor=Identity.Encode(new byte[32])}).Ontology);
+        await Until(()=>panel.StatusText.StartsWith("Unavailable"));
+        Check(source.Content.Length==0,"denied source never becomes a valid empty snapshot");
+        panel.Open(session,accounts,store,target.Ontology);panel.DisposeView();await panel.Completion;
+        Check(source.Content.Length==0,"cancelled opening reader cannot publish after disposal");panel.QueueFree();
     }
-    static async Task Renew(Node consumer)
+
+    static async Task Renew(Node consumer,string fieldName="view")
     {
         // Exercise the existing signed renewal path without waiting for its
         // protocol timer. No projection or authority is fabricated here.
-        var field = consumer.GetType().GetField("view", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var field = consumer.GetType().GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         var view = (SignedView)field.GetValue(consumer)!;
         var projected = new TaskCompletionSource(); void Project(JsonNode _) => projected.TrySetResult();
         view.Projection += Project;
         try {
-            await (Task)typeof(SignedView).GetMethod("Open", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(view, null)!;
+            await view.Renew();
             await projected.Task.WaitAsync(TimeSpan.FromSeconds(10));
         } finally { view.Projection -= Project; }
     }
@@ -296,7 +309,7 @@ public partial class ExportChecks
                 var after = store.Snapshot!;
                 Check(after.Payload == before.Payload && JsonSerializer.Serialize(after.Accounts) == JsonSerializer.Serialize(before.Accounts) && JsonSerializer.Serialize(after.Pending) == JsonSerializer.Serialize(before.Pending), "SIGKILL recovery retains exact original key accounts pins and signed outbox");
                 Check(after.Endpoint == Env("M1B_EXPECT_ENDPOINT"), "SIGKILL recovers atomic old or new store at selected boundary");
-                GetTree().Quit(); return;
+                await app.CloseApplication(); return;
             }
             await File.WriteAllTextAsync(original, JsonSerializer.Serialize(store.Snapshot));
             string boundary = phase[6..];
@@ -375,6 +388,6 @@ public partial class ExportChecks
         if (State["network"] != null) await Press("disconnect"); else app.Disconnect();
         await app.ViewsDisposed;
         await File.WriteAllTextAsync(Env("M1B_RESULT"), JsonSerializer.Serialize(new { passed = true, phase, checks }));
-        Console.WriteLine("M1B_LOCAL_PASS"); Console.Out.Flush(); GetTree().Quit();
+        Console.WriteLine("M1B_LOCAL_PASS"); Console.Out.Flush(); await app.CloseApplication();
     }
 }

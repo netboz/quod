@@ -6,7 +6,7 @@ committed knowledge base without touching it.
 Wrap a committed erlog state with `wrap_state/1,2`, run the goal, then extract:
 
 - `get_local_changes/1` — the ordered durable material: canonical fact
-  asserts/retracts followed by explicit event occurrences staged by the proof,
+  asserts/retracts and definition removals, then explicit event occurrences,
   as one `op()` list.
 - `get_read_set/1` — the **read-set**: one mutation-version token per
   `{Functor, Arity}` the proof read from the committed db (for the apply-time
@@ -391,10 +391,14 @@ provenance(#lp{local = Local, event_ops_rev = Events,
                          true -> committed_clauses(M, R, F);
                          false -> [{Tag, H, B} || {Tag, {H, B}} <- maps:to_list(Ret)]
                      end,
+          DefinitionMask = case Ab andalso M:get_procedure_type(R, F) =:= interpreted of
+                               true -> AssertMask bor intent_bit(AbMode);
+                               false -> AssertMask
+                           end,
           lists:foldl(
             fun({Tag, _, _}, Mask) ->
                 Mask bor intent_bit(maps:get({retract, Tag}, P, AbMode))
-            end, AssertMask, Retracts)
+            end, DefinitionMask, Retracts)
       end, 0, Local),
     EventMask = lists:foldl(
       fun({event, _, Mode}, Mask) -> Mask bor intent_bit(Mode) end, Facts, Events),
@@ -579,11 +583,17 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
                    true  -> [{retract, {H, B}} || {_T, H, B} <- committed_clauses(M, R, F)];
                    false -> [{retract, {H, B}} || {_Tag, {H, B}} <- maps:to_list(Ret)]
                end,
+    %% Keep exact clause removals for reactions, then remove the definition.
+    %% An empty interpreted predicate still has a definition to abolish.
+    Removal = case Ab andalso M:get_procedure_type(R, F) =:= interpreted of
+                  true -> [{abolish, F}];
+                  false -> []
+              end,
     %% A is already in final clause order. Apply front insertions oldest first
     %% so repeated prepend preserves that order ahead of committed clauses.
     Front = [{asserta, {H, B}} || {_T, H, B} <- lists:reverse(A)],
     Tail = [{assert, {H, B}} || {_T, H, B} <- lists:reverse(ZR)],
-    Retracts ++ Front ++ Tail.
+    Retracts ++ Removal ++ Front ++ Tail.
 
 -doc "The monotonic read set: predicate version tokens and exact terminal operation evidence.".
 -spec get_read_set(#lp{}) -> map().

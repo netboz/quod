@@ -129,7 +129,7 @@ Historical open-work and hardware acceptance records are in `doc/outdated/deferr
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
--export([apply_operation_projection/3, await_operation_recovery/5,
+-export([genesis_table_name/1, apply_operation_projection/3, await_operation_recovery/5,
          cancel_operation_waiter/4,
          finish_operation_target_result/5, install_operation_snapshot/2,
          drop_operation_recovery_owner/4, drop_operation_waiter/3,
@@ -12870,13 +12870,9 @@ valid_target_transaction_id(_Target, _Change) -> false.
 
 nonempty_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.
 
-%% Does a diff touch the committee (any `peer_admitted` assert/retract)? Hostile diffs can hold ANY
-%% term as an element — the catch-all keeps the scan total.
+%% Include definition removal in the same committee mutation gate.
 touches_committee(Diff) ->
-    lists:any(fun({K, {{peer_admitted, _, _, _, _}, _}})
-                    when K =:= assert; K =:= asserta; K =:= retract -> true;
-                 (_)                                      -> false
-              end, Diff).
+    quod_diff:touches_functor(Diff, {peer_admitted, 4}).
 
 %% The membership gate — PURE (no KB access; the KB `can_join` re-proof is the deferred support in
 %% `support_or_validate/2`): a

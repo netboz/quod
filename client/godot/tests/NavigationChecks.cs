@@ -20,11 +20,8 @@ public partial class ExportChecks
     async Task Move(OperationsPanel panel,Term subject,bool leave=false,bool lose=false,bool open=true,bool denied=false)
     {
         if(open) await ExactSubject(panel,subject);
-        var menu=(OptionButton)panel.FindChild("offered-operation",true,false);
         string label=leave ? "Leave space" : "Enter space";
-        int index=Enumerable.Range(1,menu.ItemCount-1).Single(i=>menu.GetItemText(i)==label);
-        if(menu.Selected!=index) await ChooseOperation(menu,index);
-        else Check(panel.Current?.Name==(leave ? "leave" : "enter"),"the sole current travel offer is already selected by the ordinary panel");
+        await ChooseOfferedOperation(panel,leave ? "leave" : "enter");
         NewDraft(panel);
         if(lose) await app.ActiveSession.Transport.Send("/qualification/arm-instruction-drop",new() { ["operation"]=leave ? "leave" : "enter" },CancellationToken.None);
         await ClickSubmit(panel);
@@ -127,7 +124,7 @@ public partial class ExportChecks
         }
         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,phase,checks,current_location=State["current_location"]?.ToString(),setup=app.ActiveAccounts.Setup!.ToString() }));
         await Press("disconnect"); await app.ViewsDisposed;
-        Console.WriteLine("M3_EXPORT_PASS "+phase); Console.Out.Flush(); GetTree().Quit();
+        Console.WriteLine("M3_EXPORT_PASS "+phase); Console.Out.Flush(); await app.CloseApplication();
     }
     async Task RecursiveScene(ScenePanel scene,Actor human,Term s0,Term s1,Term s2,Term leaf)
     {

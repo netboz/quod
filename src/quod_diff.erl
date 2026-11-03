@@ -30,7 +30,7 @@ Pure helpers over the committed erlog database for the content layer.
   functor from a frozen `#est{}`. Runtime declaration reconciliation uses this
   instead of executing the predicate and accidentally treating derived answers
   as declarations.
-- `touches_functor/2` — one exact clause-head check shared by immutable-manifest
+- `touches_functor/2` — one exact definition/clause check shared by immutable-manifest
   validation and root system-catalogue change detection.
 
 `op()` and `clause()` are defined in `quod_ledger.hrl`; `#est{}`/`#db{}` in
@@ -193,6 +193,8 @@ valid_op({Kind, {Head, Body}})
     callable_head(Head) andalso valid_stored_term(Head) andalso valid_clause_body(Body);
 valid_op({event, Term}) ->
     valid_event(Term);
+valid_op({abolish, {Name, Arity}}) ->
+    quod_wire_term:is_symbol(Name) andalso is_integer(Arity) andalso Arity >= 0;
 valid_op(_) -> false.
 
 -doc "Whether one concrete explicit event is ground and valid on the bounded wire.".
@@ -306,6 +308,13 @@ apply_op(M, R, {retract, Clause}) ->
                      end;
         none      -> {R, unchanged}
     end;
+apply_op(M, R, {abolish, Functor}) ->
+    case M:get_procedure_type(R, Functor) of
+        interpreted ->
+            {ok, R1} = M:abolish_clauses(R, Functor),
+            {R1, changed};
+        _ -> {R, unchanged}
+    end;
 apply_op(_M, R, {event, _Term}) ->
     {R, changed}.
 
@@ -313,7 +322,9 @@ normalize_op({Kind, Clause})
   when Kind =:= assert; Kind =:= asserta; Kind =:= retract ->
     {Kind, normalize_clause(Clause)};
 normalize_op({event, Term}) ->
-    {event, Term}.
+    {event, Term};
+normalize_op({abolish, Functor}) ->
+    {abolish, Functor}.
 
 %% Live proofs already emit Erlog's durable `{Code, HasCut}` body. Normalize the
 %% legal source-body form accepted from explicitly constructed transactions so
@@ -336,13 +347,14 @@ find_tag(M, R, F, H, B) ->
         _ -> none
     end.
 
--doc "Whether a diff asserts or retracts any clause with the exact functor.".
+-doc "Whether a diff mutates clauses or removes the exact predicate definition.".
 -spec touches_functor(list(), {term(), arity()}) -> boolean().
 touches_functor(Ops, Functor) when is_list(Ops) ->
     lists:any(
       fun({Kind, {Head, _Body}})
             when Kind =:= assert; Kind =:= asserta; Kind =:= retract ->
               functor(Head) =:= Functor;
+         ({abolish, F}) -> F =:= Functor;
          (_) -> false
       end, Ops).
 

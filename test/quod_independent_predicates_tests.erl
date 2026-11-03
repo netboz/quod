@@ -82,15 +82,17 @@ committed_retract_and_abolish_keep_each_original_mark_test() ->
         {succeed, Final} = erlog_int:prove_goal(
           {',', {retract, {p, one}}, {independent, {abolish, {'/', p, 1}}}}, St),
         ?assertEqual(3, quod_erlog_db_local_prove:provenance(Final)),
-        ?assertMatch([{retract, _}, {retract, _}], changes(Final))
+        ?assertMatch([{retract, _}, {retract, _}, {abolish, {p, 1}}], changes(Final))
     end).
 
-empty_second_abolish_does_not_relabel_a_retained_retract_test() ->
+definition_removal_preserves_retract_and_abolish_provenance_test() ->
     with_state(true, [{p, one}], fun(St) ->
         {succeed, Final} = erlog_int:prove_goal(
           {',', {independent, {retract, {p, one}}}, {abolish, {'/', p, 1}}}, St),
-        ?assertEqual(2, quod_erlog_db_local_prove:provenance(Final)),
-        ?assertMatch([{retract, _}], changes(Final))
+        %% The independent clause removal and ordinary definition removal
+        %% are distinct surviving writes; neither may relabel the other.
+        ?assertEqual(3, quod_erlog_db_local_prove:provenance(Final)),
+        ?assertMatch([{retract, _}, {abolish, {p, 1}}], changes(Final))
     end).
 
 prepared_effect_survives_cancelled_fact_test() ->

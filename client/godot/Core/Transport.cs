@@ -12,10 +12,21 @@ namespace Quod.Client;
 
 public sealed class ApiError(string message, int status, bool definite = false) : Exception(message)
 { public int Status { get; } = status; public bool Definite { get; } = definite; }
+public sealed record ProofPreview(string Cursor,SignedWork Work,ulong Deadline,JsonNode Reply);
 public static class Json
 {
     public static string S(JsonNode? value, string key) => value?[key]?.GetValue<string>() ?? throw new FormatException("Missing " + key);
     public static ulong U(JsonNode? value, string key) => ulong.Parse(value?[key]?.ToString() ?? throw new FormatException("Missing " + key));
+    public static string Error(JsonNode value)
+    {
+        string code=S(value,"error");
+        if(code!="material_limit")return code;
+        string actual=S(value,"actual"),limit=S(value,"limit");
+        if(!System.Numerics.BigInteger.TryParse(actual,System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var quantity) ||
+           !System.Numerics.BigInteger.TryParse(limit,System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var allowance) || quantity<=allowance)
+            throw new FormatException("Invalid resource allowance refusal.");
+        return $"Resource allowance exceeded ({S(value,"kind")}, {S(value,"resource").Replace('_',' ')}): needed {actual}; allowed {limit}.";
+    }
     public static bool Committed(JsonNode value) =>
         (value["aggregate"] == null || value["aggregate"]?.ToString() == "all_applied") &&
         (value["result"]?.ToString() == "ok" || (value["terminal"]?.ToString() == "true" &&
@@ -61,13 +72,25 @@ public sealed class Transport : IDisposable
         return socket;
     }
     public Uri SocketUri => new UriBuilder(origin) { Scheme = "wss", Path = "/api/views" }.Uri;
+    public async Task<byte[]> Model(string digest,long allowance,CancellationToken cancellation)
+    {
+        if(!System.Text.RegularExpressions.Regex.IsMatch(digest,"^[a-f0-9]{64}$") || allowance<=0)throw new FormatException("Invalid asset request.");
+        using var response=await client.GetAsync("/assets/models/"+digest+".glb",HttpCompletionOption.ResponseHeadersRead,cancellation);
+        response.EnsureSuccessStatusCode();
+        if(response.Content.Headers.ContentLength is long length && length>allowance)throw new FormatException("Model transfer bytes exceeded.");
+        using var stream=await response.Content.ReadAsStreamAsync(cancellation);using var output=new MemoryStream();var buffer=new byte[16384];
+        for(int count;(count=await stream.ReadAsync(buffer,cancellation))>0;) {
+            if(output.Length+count>allowance)throw new FormatException("Model transfer bytes exceeded.");output.Write(buffer,0,count);
+        }
+        byte[] bytes=output.ToArray();if(Convert.ToHexStringLower(SHA256.HashData(bytes))!=digest)throw new FormatException("Model digest mismatch.");return bytes;
+    }
     public async Task<JsonNode> Send(string route, JsonObject? body, CancellationToken cancellation, HttpMethod? method = null)
     {
         using var request = new HttpRequestMessage(method ?? (body == null ? HttpMethod.Get : HttpMethod.Post), route);
         if (body != null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
         using var response = await client.SendAsync(request, cancellation);
         var value = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellation)) ?? throw new FormatException("Invalid API response.");
-        if (!response.IsSuccessStatusCode) throw new ApiError(Json.S(value, "error"), (int)response.StatusCode,
+        if (!response.IsSuccessStatusCode) throw new ApiError(Json.Error(value), (int)response.StatusCode,
             value["submitted"]?.ToString() == "false" || (int)response.StatusCode is 400 or 401 or 403 or 410 or 413 or 429);
         return value;
     }
@@ -83,6 +106,11 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
     public string Network { get; private set; } = "";
     public string SessionId { get; private set; } = "";
     public ulong Expires { get; private set; }
+    readonly CancellationTokenSource lifetime=new();
+    bool disposed;
+    public event Action? Expired;
+    public bool IsExpired=>SessionId.Length!=0 && Expires<=Now;
+    public Task Expiration { get; private set; }=Task.CompletedTask;
     public static ulong Now => checked((ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
     public ulong Deadline => Math.Min(Expires, Now + 300000);
     public async Task Authenticate(CancellationToken cancellation)
@@ -101,6 +129,15 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
             ["signature"] = Identity.Encode(Key.Sign(bytes.ToArray())) }, timeout.Token);
         SessionId = Json.S(session, "session_id"); Network = Identity.Encode(network); Expires = Json.U(session, "expires_ms");
         if (Expires <= Now) throw new FormatException("Expired sign-in.");
+        Expiration=ObserveExpiry();
+    }
+    async Task ObserveExpiry()
+    {
+        try {
+            ulong now=Now;
+            await Task.Delay(TimeSpan.FromMilliseconds(Expires>now ? Expires-now : 0),lifetime.Token);
+            if(!lifetime.IsCancellationRequested)Expired?.Invoke();
+        } catch(OperationCanceledException) when(lifetime.IsCancellationRequested) { }
     }
     public (byte[] Bytes, JsonObject Body, ulong Deadline) Sign(Actor actor, string goal, byte mode = 0)
     {
@@ -116,10 +153,15 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
     public Task<JsonNode> SendDeadline(string route, JsonObject body, CancellationToken cancellation) => SendAt(route, body, Deadline, cancellation);
     public async Task<JsonNode> SendAt(string route, JsonObject body, ulong deadline, CancellationToken cancellation)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        if (deadline <= Now) throw new TimeoutException("Original request deadline expired.");
-        timeout.CancelAfter(TimeSpan.FromMilliseconds(deadline - Now));
+        using var timeout = RequestBudget(deadline,cancellation);
         return await Transport.Send(route, body, timeout.Token);
+    }
+    static CancellationTokenSource RequestBudget(ulong deadline,CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();ulong now=Now;
+        if(deadline<=now)throw new TimeoutException("Original request deadline expired.");
+        var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        timeout.CancelAfter(TimeSpan.FromMilliseconds(deadline-now));return timeout;
     }
     public async Task<JsonNode> Execute(Actor actor, string goal, string flow, CancellationToken cancellation)
     {
@@ -140,11 +182,18 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
     }
     async Task<JsonNode> Dispatch(SignedWork work, JsonObject body, string route, CancellationToken cancellation, ulong? expiry = null)
     {
+        ulong deadline=expiry??Deadline;
+        using(var admitted=RequestBudget(deadline,cancellation)) { }
         // Recovery is conservative even for a crash between durable save and send.
         store.Update(s => s.Pending.Add(work));
-        if (cancellation.IsCancellationRequested) { Forget(work.Id); cancellation.ThrowIfCancellationRequested(); }
         try {
-            var reply = await SendAt(route, body, expiry ?? Deadline, cancellation);
+            // Persistence can consume the remaining allowance. Only this local
+            // pre-send refusal is known not to have reached the transport.
+            CancellationTokenSource timeout;
+            try { timeout=RequestBudget(deadline,cancellation); }
+            catch { Forget(work.Id);throw; }
+            using var sending=timeout;
+            var reply = await Transport.Send(route, body, timeout.Token);
             if (!Json.Terminal(reply) && reply["result"]?.ToString() != "pending" && reply["status"]?.ToString() != "pending")
                 throw new FormatException("Unrecognized write reply; original work retained.");
             if (!Json.Terminal(reply) && reply["group_id"] != null) {
@@ -155,7 +204,7 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
                     s.Pending[index] = work with { OutcomeReference = reference.ToJsonString() }; });
             }
             // Account handoffs consume results together with their original work.
-            if (work.Flow is not ("signup" or "setup") && Json.Terminal(reply)) Forget(work.Id);
+            if (work.Flow is not ("signup" or "setup") && Json.Terminal(reply)) Finish(work,reply);
             return reply;
         } catch (ApiError error) {
             // Only installed pre-submission refusals can discard original work.
@@ -164,6 +213,14 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
         }
     }
     public void Forget(string id) => store.Update(s => s.Pending.RemoveAll(w => w.Id == id));
+    public void Finish(SignedWork original,JsonNode reply)
+    {
+        if(!Json.Terminal(reply))return;
+        store.Update(s=>{
+            s.Pending.RemoveAll(w=>w.Id==original.Id);
+            if(Json.Committed(reply) && original.SourceDraft!=null && s.SourceDrafts.GetValueOrDefault(original.Flow)==original.SourceDraft)s.SourceDrafts.Remove(original.Flow);
+        });
+    }
     public async Task<JsonNode> Resolve(SignedWork work, CancellationToken cancellation)
     {
         if (work.Network != Network) throw new InvalidOperationException("Work belongs to another network.");
@@ -179,15 +236,31 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
     }
     public static string ViewGoal(Actor target, Term goal) =>
         $"{Term.Text(target.Namespace)}::(current_ontology_identity({Term.Text(target.Namespace)},{Term.Binary(Identity.Decode(target.Anchor))}),{goal}).";
-    public async Task<string> ReadSource(Actor human, Actor tools, Actor target, CancellationToken cancellation)
+    public async Task<ProofPreview> Preview(Actor actor,string goal,string flow,SourceDraft draft,CancellationToken cancellation)
     {
-        var signed = Sign(human, ViewGoal(tools, Term.Call("prolog_source", target.Ontology, Term.Variable("Source"))), 2);
+        var signed=Sign(actor,goal,2);
+        var reply=await SendAt("/api/goals/cursors",signed.Body,signed.Deadline,cancellation);
+        if(reply["result"]?.ToString()!="solution")throw new InvalidOperationException("Edit preview refused: "+reply.ToJsonString());
+        return new(Json.S(reply,"cursor"),new(Identity.Digest(signed.Bytes),Network,actor,Json.S(signed.Body,"request"),Json.S(signed.Body,"signature"),flow,SourceDraft:draft),signed.Deadline,reply);
+    }
+    public Task<JsonNode> Accept(ProofPreview preview,CancellationToken cancellation) =>
+        Dispatch(preview.Work,new() { ["session_id"]=SessionId },"/api/goals/cursors/"+Uri.EscapeDataString(preview.Cursor)+"/accept",cancellation,preview.Deadline);
+    public async Task Stop(ProofPreview preview)
+    {
+        using var until=new CancellationTokenSource(TimeSpan.FromMilliseconds(preview.Deadline>Now ? preview.Deadline-Now : 1));
+        await Transport.Send("/api/goals/cursors/"+Uri.EscapeDataString(preview.Cursor),new() { ["session_id"]=SessionId },until.Token,HttpMethod.Delete);
+    }
+    public Task<string> ReadSource(Actor human, Actor tools, Actor target, CancellationToken cancellation) =>
+        ReadSource(human,ViewGoal(tools,Term.Call("prolog_source",target.Ontology,Term.Variable("Source"))),"Source",cancellation);
+    public async Task<string> ReadSource(Actor human,string goal,string binding,CancellationToken cancellation)
+    {
+        var signed = Sign(human,goal,2);
         var reply = await SendAt("/api/goals/cursors", signed.Body, signed.Deadline, cancellation);
         string? cursor = null; var text = new StringBuilder(); var decoder = new UTF8Encoding(false, true).GetDecoder();
         try {
             while (reply["result"]?.ToString() == "solution") {
                 cancellation.ThrowIfCancellationRequested(); cursor = Json.S(reply, "cursor");
-                var chunk = Json.Binding(reply, "Source").Require("source_chunk", 2);
+                var chunk = Json.Binding(reply,binding).Require("source_chunk",2);
                 if (chunk[0].Name is not ("more" or "done") || chunk[1].Kind != "binary") throw new FormatException("Invalid source chunk.");
                 var chars = new char[Encoding.UTF8.GetMaxCharCount(chunk[1].Bytes.Length)];
                 int count = decoder.GetChars(chunk[1].Bytes, chars, chunk[0].Name == "done"); text.Append(chars, 0, count);
@@ -202,5 +275,5 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
             }
         }
     }
-    public void Dispose() => Transport.Dispose();
+    public void Dispose() {if(disposed)return;disposed=true;lifetime.Cancel();Expired=null;Transport.Dispose();lifetime.Dispose();}
 }

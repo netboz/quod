@@ -455,6 +455,14 @@ recipes. A transient grid positions appearances without storing transforms,
 changing clause order or assigning predicates or agents to a containing space.
 Empty-but-defined predicates retain the existing catalogue semantics.
 
+An authorized committed `abolish/1` removes the predicate definition and its
+derived contents membership. Existing subscribed views invalidate on the owner
+change; the next source-authorized projection omits that occurrence and refuses
+its stale selected source Eidolon. Retracting the final clause leaves an empty
+definition and does not withdraw its occurrence. Recovery preserves this
+distinction through the existing durable operation owner. This establishes no
+deletion/recreation identity or individually selectable clause semantics.
+
 Pure exposure and model composition share the common presentation owner.
 The space bundle retains construction, assignment, admission and physical
 transitions. A configured modelling vocabulary remains the exact owner pin;

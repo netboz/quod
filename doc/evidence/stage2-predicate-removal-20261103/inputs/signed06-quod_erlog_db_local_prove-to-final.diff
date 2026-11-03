@@ -1,0 +1,11 @@
+--- /home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_erlog_db_local_prove.erl	2026-11-03 21:49:03.997943445 +0100
++++ /home/yan/src/quod_worktrees/pearl-stone/src/quod_erlog_db_local_prove.erl	2026-11-03 21:59:15.147438112 +0100
+@@ -6,7 +6,7 @@
+ Wrap a committed erlog state with `wrap_state/1,2`, run the goal, then extract:
+ 
+ - `get_local_changes/1` — the ordered durable material: canonical fact
+-  asserts/retracts followed by explicit event occurrences staged by the proof,
++  asserts/retracts and definition removals, then explicit event occurrences,
+   as one `op()` list.
+ - `get_read_set/1` — the **read-set**: one mutation-version token per
+   `{Functor, Arity}` the proof read from the committed db (for the apply-time

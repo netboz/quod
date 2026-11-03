@@ -6,6 +6,11 @@ namespace Quod.Client;
 public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Properties, Component[] Children)
 {
     public string Role => Id.ToString();
+    // The server's schema digest uses this same separation. Appearance cannot
+    // replace controls, fields, bindings or the baseline of a pending draft.
+    public Term Semantic => Term.Call("component",Id,Term.Atom(Kind),
+        Term.List(Properties.Where(p=>p.Key!="appearance").Select(p=>Term.Call("property",Term.Atom(p.Key),p.Value)).ToArray()),
+        Term.List(Children.Select(c=>c.Semantic).ToArray()));
     public string Label => Properties["label"].Kind == "binary" ? Properties["label"].TextValue : Properties["label"].Name;
     public bool Flag(string name, bool fallback = false) => Properties.TryGetValue(name, out var value) ? value.Name == "true" : fallback;
     public string Family => FamilyOf(Kind);
@@ -14,6 +19,7 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
         "text_box" or "text_area" => "text", "slider" or "rotary_knob" or "number_input" => "number",
         "checkbox" or "toggle" => "boolean", "selection" or "radio_group" or "selectable_list" or "table" => "choice",
         "label" or "status" or "help" or "error" or "separator" or "progress" => "display",
+        "editor"=>"editor", "catalogue_selection"=>"catalogue", "bindings"=>"bindings",
         "button" => "button", _ => throw new FormatException("Unsupported GUI component: " + kind) };
     public IEnumerable<Component> Leaves => Family == "container" ? Children.SelectMany(c => c.Leaves) : [this];
     public bool Input => Family is "text" or "number" or "boolean" or "choice";
@@ -34,8 +40,9 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
             if (!ids.Add(args[0].ToString()) || args[1].Kind != "atom") throw new FormatException("Invalid or repeated control identity.");
             string kind = args[1].Name, family = FamilyOf(kind);
             var allowed = new HashSet<string>(["label", "help", "enabled"]);
-            if (family == "container") allowed.Add("layout");
+            if (family == "container") allowed.UnionWith(["layout","appearance"]);
             if (family is "text" or "number" or "boolean" or "choice") allowed.UnionWith(["required", "readonly"]);
+            if (family is "editor" or "catalogue")allowed.Add("readonly");
             if (family == "text") allowed.Add("max_bytes");
             if (family == "number") allowed.UnionWith(["range", "unit"]);
             if (family == "choice") allowed.Add("options");
@@ -51,6 +58,7 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
                 if (a[0].Kind != "atom" || !allowed.Contains(a[0].Name) || !props.TryAdd(a[0].Name, a[1]))
                     throw new FormatException("Unsupported or duplicate GUI property.");
                 switch (a[0].Name) {
+                    case "appearance": _=AppearanceTokens(a[1]); break;
                     case "enabled": case "readonly": case "required": case "multiple":
                         if (a[1].Kind != "atom" || a[1].Name is not ("true" or "false")) throw new FormatException("Invalid GUI flag."); break;
                     case "label": case "unit":
@@ -82,6 +90,25 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
             return result;
         }
         return Read(value);
+    }
+    public static Dictionary<string,Term> AppearanceTokens(Term value)
+    {
+        value.Ground();var tokens=new Dictionary<string,Term>();
+        if(value.Kind=="atom"&&value.Name=="inherit")return tokens;
+        var appearance=value.Require("appearance",2);
+        if(appearance[0].Integer!=1)throw new FormatException("Unsupported GUI appearance version.");
+        foreach(var token in appearance[1].Items) {
+            var a=token.Require("token",2);string name=a[0].Name;
+            if(a[0].Kind!="atom"||!tokens.TryAdd(name,a[1]))throw new FormatException("Duplicate GUI appearance token.");
+            if(name is "panel" or "field" or "text" or "accent" or "edge" or "error" or "success") {
+                if(a[1].Require("rgb",3).Any(n=>n.Integer<0||n.Integer>255))throw new FormatException("Invalid GUI colour.");
+            } else if(name=="panel_opacity") {
+                if(a[1].Integer<0||a[1].Integer>1000)throw new FormatException("Invalid panel opacity.");
+            } else if(name is "spacing" or "padding" or "corner_radius") {
+                if(a[1].Integer<0||a[1].Integer>int.MaxValue)throw new FormatException("Unrenderable GUI appearance extent.");
+            } else throw new FormatException("Unsupported GUI appearance token: "+name);
+        }
+        return tokens;
     }
     public Term Draft(string text, bool initial = false)
     {

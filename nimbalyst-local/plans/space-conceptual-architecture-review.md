@@ -12,12 +12,35 @@ tags:
   - eidolons
 created: '2026-10-17'
 startDate: '2026-10-24T14:22:52Z'
-updated: 2026-11-03
-progress: 74
+updated: 2026-11-03T21:02:29.217648+00:00
+progress: 84
 trackerStatus:
   type: plan
 ---
 # Space and interaction architecture — implementation plan
+
+## Current Stage 2 reconciliation — predicate removal
+
+The bounded definition-removal continuation is implemented and verified in
+`pearl-stone`, based on Quod `b30967e33bb8d64eca3f8a093bad018549c9b8af`.
+`abolish/1` now survives sealing as definition removal in the same durable diff;
+its ordinary displayed predicate and selected source Eidolon withdraw through
+existing owners. Retraction of the last clause remains empty-but-defined.
+[Exact sources, retained failures and verification](../../doc/evidence/stage2-predicate-removal-20261103/STATUS.md)
+and the [handoff](../handoffs/stage2-d5-reconciliation-20261103.md#durable-predicate-definition-removal)
+record the bounded result and its source provenance.
+
+The full large-catalogue acceptance checkbox credits `configured-aggregate02`
+and the installed matching functional afterimages described by the renewal
+handoff; completed features and that aggregate campaign were not rerun here.
+Earlier failed and isolated-only status paragraphs below describe their labelled
+historical boundaries, rather than current blockers. Stage 2 remains partial:
+its remaining policy-owner audit stays open, while Stage 3, broader renewal work,
+ontology founding, deletion/recreation identity and clause selection stay separate.
+Erlog `79b3874617a4eb9f76d5089a3fc908667e605e8a` was subsequently published,
+with Yan's explicit authorization, to his `netboz/erlog` repository on
+`codex/stage2-policy-diagnostics`. [Finalization evidence](../../doc/evidence/stage2-finalization-20261103/STATUS.md)
+records the verified remote hash and the requested combined commit scope.
 
 ## Presentation limitations — accepted removal 2026-11-03
 
@@ -39,7 +62,7 @@ Yan clarified that predicates are ordinary Prolog instances with class-owned Eid
 
 **Current correction:** predicates use ordinary `entity_ref(Namespace,Genesis,predicate(Name/Arity))` subjects, class-local Prolog model/source recipes and the same recursive contents owner as other spaces. Authored `workspace(prolog_editor(Selection),...)` data binds the existing source editor. The predicate-specific client identity, selection event and dispatch have been removed. The earlier 37-check +41/−7 slice and freeze01–04 remain historical evidence; they do not describe current architecture. The current source, signed checks, failures and actual incremental delta are recorded in the [existing handoff](../handoffs/stage2-d5-reconciliation-20261103.md#ordinary-predicate-composition-correction).
 
-**Historical freeze01 boundaries (current removal and blockers are recorded above):** full large-ontology display was not accepted. The then-existing `quod:gui` scene policy in `gui_scene.pl` allowed 512 marks; the earlier observed 368 predicates require 736 marks with ordinary occurrence groups plus geometry. The full signed attempt ended in `proof_unavailable`, so the capacity calculation is not a claim that this was its only runtime cause. No filtering, pagination, budget increase or deadline change is introduced. `contents06` / `contents-signed07` passes 22 checks on a complete small ontology, including authored labels, three zero-work renewals, a real catalogue update, cycles and reconnect; it verifies the shared path only within its existing allowance. Yan subsequently authorized removal of those inherited presentation caps; this historical paragraph is not a new architecture approval gate. Definition-withdrawal remains blocked by the existing durable lifecycle: signed `abolish/1` becomes clause retractions and leaves an empty-but-defined catalogue entry. Empty definitions and deletion/recreation identity remain unchanged. D5 stays delivered; `moved-signed03` passes the affected shared-projection regression. The predicate/editor refactor passes `candidate-signed04` (48 checks), and delegated source denial passes `delegated-signed02` (14 checks). Stage 3/D7 and founding remain separate.
+**Historical freeze01 boundaries (current removal and blockers are recorded above):** full large-ontology display was not accepted. The then-existing `quod:gui` scene policy in `gui_scene.pl` allowed 512 marks; the earlier observed 368 predicates require 736 marks with ordinary occurrence groups plus geometry. The full signed attempt ended in `proof_unavailable`, so the capacity calculation is not a claim that this was its only runtime cause. No filtering, pagination, budget increase or deadline change is introduced. `contents06` / `contents-signed07` passes 22 checks on a complete small ontology, including authored labels, three zero-work renewals, a real catalogue update, cycles and reconnect; it verifies the shared path only within its existing allowance. Yan subsequently authorized removal of those inherited presentation caps; this historical paragraph is not a new architecture approval gate. At freeze01, definition-withdrawal was blocked by the durable lifecycle: signed `abolish/1` becomes clause retractions and leaves an empty-but-defined catalogue entry. Empty definitions and deletion/recreation identity remain unchanged. D5 stays delivered; `moved-signed03` passes the affected shared-projection regression. The predicate/editor refactor passes `candidate-signed04` (48 checks), and delegated source denial passes `delegated-signed02` (14 checks). Stage 3/D7 and founding remain separate.
 
 ## Purpose and boundaries
 
@@ -112,11 +135,11 @@ Stage 0 records completed design decisions. Production implementation starts at 
   - [x] Deliver the bounded D5 recursive contents/exterior contract: exact occurrence paths, composed frames, disclosure/cycles/revocation/reconnect, retained renewals and admitted shared-domain physics (accepted M3a/M3b; selected contents extended by Stage2-147/167).
   - [x] Deliver exact-subject exterior/contents/GUI choices, native presentation and guarded source editing through existing owners (accepted Stage2-147/167).
   - [x] Deliver accepted D6 predicate-level subjects through ordinary Prolog instances and class-owned recipes: one exact namespace/genesis/indicator selection opens all clauses through the guarded editor; edits/reorders preserve selection and semantic order. Individually selectable clauses are deferred (2026-11-03 ordinary composition refactor).
-  - [ ] Verify selected predicate withdrawal after true definition removal. Blocked: signed abolish is lowered to retractions by the existing durable operation owner, so this slice cannot exercise definition removal without broadening commit/history semantics. Preserve empty-but-defined catalogue membership and leave deletion/recreation identity undecided.
-  - [ ] Display ontology predicate contents through ordinary space composition under the clarified architecture. Display grants no entry, founding, physics, deletion/recreation identity or implicit spatial assignment.
+  - [x] Verify selected predicate withdrawal after true definition removal: signed baseline reproduced the empty-but-defined defect; durable abolish now removes the definition through the shared operation owners. Signed removal/denial/rollback/conflict, origin/foreign/atomic recovery, view/editor withdrawal, unaffected/empty-defined membership and unchanged zero-I/O checks pass. Deletion/recreation identity stays undecided. [Evidence](../../doc/evidence/stage2-predicate-removal-20261103/STATUS.md).
+  - [x] Display ontology predicate contents through ordinary space composition under the clarified architecture (delivered ordinary composition). Display grants no entry, founding, physics, deletion/recreation identity or implicit spatial assignment.
   - [x] Remove the duplicated nested128KiB and result/view/terrain512KiB subquotas through shared owners; preserve finite authored allowances, malformed/denied/cancelled requests and original-operation recovery on delivery failure (boundary campaign codecs/proof/browser/native/terrain checks).
   - [x] Require an authoritative source read in the ontology class contents recipe; direct interior and selected contents use the same recipe and preserve exact frame binding (denial-fixed01, selective-fixed01, projection01; actual enumeration query is guarded).
-  - [ ] Finish full large-catalogue signed renewal/update/revocation/reconnect acceptance under unchanged deadlines; retain all failing source/evidence labels.
+  - [x] Finish full large-catalogue signed renewal/update/revocation/reconnect acceptance under unchanged deadlines: configured-aggregate02 passes on the exact installed functional source; retain earlier failures and distinguish isolated runtime evidence from a new installed-runtime run.
   - [ ] Retire remaining on-path transport, signed-ingress and structural policy literals through existing owners. Yan clarified ordinary contact-node connection then root synchronization; no separate bootstrap policy/flow or numeric defaults.
   - [x] Complete Stage 2 caller/retirement accounting against actual dispatch and source composition; prior replacements are already retired, live landscape/question/physical paths remain D7/Stage 3 dependencies (2026-11-03 impact audit).
 - [ ] **3 — Terrain and helper retirement**
@@ -321,7 +344,7 @@ Exterior, contents and information GUIs depict the same subject. The proposed ac
 
 **Confirmed direction:** `ontology < space`; an ordinary space need not be an ontology or physical. Entering, reading predicates, editing source and joining/hosting consensus are separate permissions.
 
-**Confirmed direction:** derive ordinary predicate instances from the existing authorized catalogue and exact ontology history. Their class owns visual and source Eidolons. One selectable predicate opens all clauses; source edits and reorders keep selection and semantic order. Individually selectable clauses are deferred. The current transient grid is presentation data; larger-contents allocation remains open. A predicate describing A can appear inside ontology O while A occupies S; this does not place A in O. Infinite ontology extent expresses room for more predicates, subject to resource policy, not a decided spatial layout. [Self-reflection](/home/yan/src/quod/priv/ontologies/common_predicates.pl:42), [recipes](/home/yan/src/quod/priv/ontologies/quod_prolog_eidolons.pl:18), [catalogue/editor](/home/yan/src/quod/priv/ontologies/quod_prolog.pl:65).
+**Confirmed direction:** derive ordinary predicate instances from the existing authorized catalogue and exact ontology history. Their class owns visual and source Eidolons. One selectable predicate opens all clauses; source edits and reorders keep selection and semantic order. Individually selectable clauses are deferred. The current transient grid is presentation data; larger-contents signed acceptance is recorded in the renewal delivery evidence; authored allocation policy remains authoritative. A predicate describing A can appear inside ontology O while A occupies S; this does not place A in O. Infinite ontology extent expresses room for more predicates, subject to resource policy, not a decided spatial layout. [Self-reflection](/home/yan/src/quod/priv/ontologies/common_predicates.pl:42), [recipes](/home/yan/src/quod/priv/ontologies/quod_prolog_eidolons.pl:18), [catalogue/editor](/home/yan/src/quod/priv/ontologies/quod_prolog.pl:65).
 
 An eventual ontology constructor must use the existing founding/history lifecycle. A membership assertion alone does not establish a founded ontology; the construction integration below does not yet prove this special lifecycle can join ordinary instance creation.
 
@@ -561,7 +584,7 @@ Removing a local appearance does not delete the thread. Shared display grants no
 | D2 — Ownership and storage | U normally owns spaces/terrain A creates for U. Explicitly selected target ontology; no automatic personal storage default. Storage, hosting and location remain distinct. | Implementation: an explicit target selector using existing ontology identity. Later: shared-instance administration UI. |
 | D3 — U instructs A | Distinct authenticated actor; attempt-now behavior; no restart of unsubmitted instructions; exact submitted-operation recovery. | Implementation: bind the instruction to A's exact signed request and provide U's authorized outcome access through existing owners; acceptance is an attempt now, not a queued promise. |
 | D5 — Frames and exposure | Contents exteriors compose recursively: S0 containing S1 containing S2 displays all selected contents in S0 as one continuous space, subject to physics, without entry. Exact subjects and disclosure remain governed; no adopted infinite/finite prohibition. | Required delivery: composed transforms, physical agreement, authorized recursion, cycles, revocation and dependencies. M0 specifies the owner/frame contract and adapter gaps; M3 verifies S0/S1/S2 composition. This does not reopen completed Stage 1 or include broader D6 ontology editing. |
-| D6 — Ontology contents | Accepted 2026-11-03: ordinary Prolog predicate instances with class-owned Eidolons, displayed through ontology space contents. One predicate opens all clauses; edits/reorders retain selection and semantic order. | Shared subject/editor correction implemented. Large contents exceed the existing scene-mark allowance and full display remains unaccepted. Clause objects, deletion/recreation identity and founding remain separate; no implicit assignment or permission grant is added. |
+| D6 — Ontology contents | Accepted 2026-11-03: ordinary Prolog predicate instances with class-owned Eidolons, displayed through ontology space contents. One predicate opens all clauses; edits/reorders retain selection and semantic order. | Shared subject/editor correction and durable definition withdrawal are delivered. Full signed large-catalogue acceptance passed on the configured isolated runtime whose functional source is installed. Clause objects, deletion/recreation identity and founding remain separate; no implicit assignment or permission grant is added. |
 | D7 — Terrain and embodiment | Physics belongs to physical spaces; A retains its identity. Live subclass specialization is later. | Later terrain/physical-entry scope: terrain extent and A's body/pilot relationship. Keep current physical protections until their replacement covers them. |
 
 D3/D4/D8/D9 are implementation obligations within the first complete creation stage, not further design gates. Implement the agreed A-signed route directly; do not substitute a temporary U-signed creation path. D5/D6 belong to later recursive ontology contents; D7 belongs to pilot/physical-entry retirement. Ontology founding, composed-part deletion and live specialization stay in their own later scopes. The generic final-state validator remains excluded. Wire encoding and routine predicate naming are implementation choices under the agreed semantics.
@@ -570,7 +593,7 @@ D3/D4/D8/D9 are implementation obligations within the first complete creation st
 
 ## Smallest staged normalization
 
-Stages 0 and 1 are complete. Stage 2 has delivered same-agent travel, recursive contents and exact-subject presentation; its D6 predicate subject/editor slice now uses ordinary class/instance composition. Large-ontology display and true definition-withdrawal coverage remain open. Caller/retirement accounting is complete; live physical/terrain helper replacements remain D7/Stage 3 dependencies. Stage 3 remains sequenced after Stage 2. The table preserves the agreed scope and acceptance checks, rather than reporting every implementation as unstarted.
+Stages 0 and 1 are complete. Stage 2 has delivered same-agent travel, recursive contents and exact-subject presentation; its D6 predicate subject/editor slice now uses ordinary class/instance composition. Large-ontology signed acceptance is reconciled to the installed matching source; true definition-withdrawal coverage is delivered in the separate bounded campaign. Caller/retirement accounting is complete; live physical/terrain helper replacements remain D7/Stage 3 dependencies. Stage 3 remains sequenced after Stage 2. The table preserves the agreed scope and acceptance checks, rather than reporting every implementation as unstarted.
 
 | Stage | Scope | Completion evidence |
 | --- | --- | --- |

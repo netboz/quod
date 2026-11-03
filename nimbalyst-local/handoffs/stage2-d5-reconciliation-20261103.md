@@ -878,4 +878,81 @@ The exact proposal03 correction is now installed; all six functional/test afteri
 
 The tested runtime remains the isolated configured candidate:338 tests,29 signed checks,original three renewals inside one30-second observer. No new installed-runtime run or broader Stage2/hardware acceptance is claimed. The selected Quod backend plus HEAD reproduces all443 tested backend inputs, except the separately recorded comment-only correction. The small correction including comments is+18/−14; the coherent Quod production commit also includes validated prerequisite refactors and is+1785/−1974 against HEAD293cf611. Unrelated Godot work and private archives remain local. These are local commits; no new Erlog remote publication or user-store migration is included.
 
-The concrete combined patch and tests are proposal03/correction.patch. Exact source/evidence freeze: `nimbalyst-local/review-packets/stage2-renewal-diagnosis01`. Production/dependency delivery is separate; current Erlog pin remains5cad93c71579f138e053b3bb971c050bf2dacb7c. No Stage3,hardware,shutdown,optional heap-accounting or durable-abolish work.
+Historical proposal03 freeze: the combined patch and tests are proposal03/correction.patch, with source/evidence in `nimbalyst-local/review-packets/stage2-renewal-diagnosis01`. At that isolated freeze the Erlog pin remained5cad93c71579f138e053b3bb971c050bf2dacb7c; the local delivery supplement above supersedes that pin/status. That campaign excluded Stage3, hardware, shutdown, optional heap accounting and durable abolish.
+
+
+## Durable predicate definition removal
+
+The authorized bounded continuation is delivered in `pearl-stone`, based on
+Quod `b30967e33bb8d64eca3f8a093bad018549c9b8af`. Changes remain uncommitted.
+The existing Erlog pin is `79b3874617a4eb9f76d5089a3fc908667e605e8a`, locally
+available and unpublished; this continuation changed no dependency source.
+`work_radar` could not resolve `tsk_01M5PY8TEXKG858WBZJ1RHC6EW`. No duplicate task
+was created; the existing plan was linked to the session.
+
+[Campaign status, full failure ledger and source provenance](../../doc/evidence/stage2-predicate-removal-20261103/STATUS.md)
+record every invocation, child exit/EOF, exact source hash and remaining boundary.
+The real-owner baseline committed signed `abolish(likes/2)` but left
+`current_predicate(likes/2)` true. The overlay already knew the definition was
+abolished; sealing discarded that distinction by emitting clause retractions.
+The correction retains those retractions for existing reactions and follows
+with a definition-removal operation in the same diff. Existing validation,
+conflict descriptors, durable records, MVCC application/recovery and installed
+view dependencies now preserve the removal. Shared mutation guards cover policy,
+immutable predicate manifests and committee membership. No presentation/client
+branch or new registry, executor or persistence owner was added.
+
+Required signed success, ACL denial, cut/failure rollback, concurrency conflict,
+two-target atomicity, ordinary/foreign/atomic recovery and original-request
+lookup pass. Empty-but-defined membership survives last-clause retraction and
+withdraws only on abolition. Real signed gallery/editor subscriptions refresh,
+remove the occurrence and refuse the stale source recipe; an unaffected predicate
+remains. Repeated live/missing selections and repeated signed absence checks
+produce zero watched history/rebuild/write/sync work through existing trace
+barriers. Signed removal retains exactly one ordinary retract reaction. No
+user store, Godot change, deadline, limit or uncertain request was altered/replayed.
+
+Evidence is deliberately composite: `candidate01` has 71 passes and two corrected
+fixture failures; `guards07` has 88 passes and two corrected fixture failures;
+`signed06` includes passing ordinary/foreign recovery and displayed withdrawal;
+`corrections08` passes signed denial/atomic/conflict, DTX gate and explorer checks;
+`reaction09` passes the added reaction obligation. `production10` compiles all
+production modules without `TEST` or `export_all`, with configured Erlog. All
+failures remain literal.
+The extra invalid whole-committee probe returned pending, and is not reported as
+terminal denial. Its membership-safety obligation is tested at the shared gate;
+that broader endpoint reply behavior remains unchanged. No pending request was
+resubmitted. The gallery fixture is bounded authored content derived from real
+catalogue membership, not production filtering or a new acceptance substitute.
+
+Actual production-file delta is **+40/-21, net +19 across seven files**, including
+comments and one conditional test export for an existing fixture. The additional
+lines encode and account for the missing operation; duplicated committee scans
+were removed. Final source/receipt hashes and the exact production patch are in
+the campaign. Source at `corrections08` and `reaction09` matches final production;
+`signed06` differs only by two comments and the conditional test export.
+
+The plan now credits completed ordinary predicate composition and the prior
+configured large-catalogue signed acceptance on installed matching functional
+source. It also checks definition withdrawal. Earlier failure/partial freezes
+remain historical evidence. No completed large-catalogue feature/test campaign
+was repeated. Stage 2 remains partial for its separate policy-owner audit.
+Deletion/recreation identity and individual clauses remain unsettled, and no
+new ruling was necessary here. Stage 3 terrain, broader renewal optimization,
+founding, publication/package/deployment and human/hardware work stay separate.
+
+
+## Authorized commit finalization
+
+Yan subsequently authorized committing all pending work and pushing the pinned
+Erlog revision to his repository. The fast-forward push to `netboz/erlog` on
+`codex/stage2-policy-diagnostics` succeeded; an independent remote read confirmed
+`79b3874617a4eb9f76d5089a3fc908667e605e8a`. Earlier unpublished notes describe their
+historical checkpoint. [Finalization evidence](../../doc/evidence/stage2-finalization-20261103/STATUS.md)
+records publication, the complete project commit scope and fresh offline client
+integration checks. Backend source/test hashes still match the completed removal
+freeze. The broader current client passes 188 core checks, 10 admission checks
+and managed compilation. One obsolete deep-term refusal fixture was corrected in
+both generator and corpus after a separately retained failure. No production
+behavior, deadline or policy changed. Native reliability and broader Stage 2
+acceptance remain separate; no hardware or shutdown retry occurred.

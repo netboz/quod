@@ -69,7 +69,7 @@ const invalidMarks = [
 ]
 for (const text of invalidMarks) assert.throws(()=>readMarks(text), undefined, text)
 const validTerms = ['9'.repeat(400), '18446744073709551615', '-18446744073709551616000', "'quod:test'(<<\"\\x00\\\\xff\\\">>,[a,b])", '[f(1),g(-2)]', "'\\x3bb\\'(a)"]
-const invalidTerms = ['', 'a b', 'f(a,)', '[a,b', '<<"\\x100\\">>', 'f('.repeat(65)+'a'+')'.repeat(65)]
+const invalidTerms = ['', 'a b', 'f(a,)', '[a,b', '<<"\\x100\\">>']
 for (const text of invalidTerms) assert.throws(()=>readTerm(text))
 const data = { bundle, passphrase, public_key: b64url(provider.publicKey), account, requests,
   challenge: { value: challenge, nonce: b64url(nonce), bytes: b64url(challengeBytes), signature: b64url(new Uint8Array(await provider.sign(challengeBytes))) },

@@ -75,7 +75,8 @@ public sealed record PhysicsSample(string Fence, string Registration, ulong Tick
     }
 }
 
-public sealed record ControlBinding(ulong Epoch,ulong Body,ulong Revision,BigInteger Speed,ulong Lease,bool Grounded,Term Viewpoint)
+public sealed record ControlBinding(ulong Epoch,ulong Body,ulong Revision,BigInteger Speed,ulong Lease,bool Grounded,Term Viewpoint,
+    BigInteger? Snap=null,BigInteger? TeleportReach=null)
 {
     public static ControlBinding? Decode(Term control,Actor? principal,PhysicsSample sample)
     {
@@ -89,7 +90,18 @@ public sealed record ControlBinding(ulong Epoch,ulong Body,ulong Revision,BigInt
         if(view[2].Kind!="atom" || view[2].Name!="view_only") throw new FormatException("Unsupported desktop tracking mapping.");
         BigInteger speed=motion[1].Integer; ulong lease=checked((ulong)motion[3].Integer);
         if (speed<=0 || lease==0 || (motion[0].Name!="free" && motion[0].Name!="grounded")) throw new FormatException("Unsupported desktop motion profile.");
-        return new(epoch,id,revision,speed,lease,motion[0].Name=="grounded",view[1]);
+        var capabilities=new Dictionary<string,Term>();
+        foreach(var capability in motion[5].Items) {
+            if(!capabilities.TryAdd(capability.Name,capability)) throw new FormatException("Duplicate movement ability.");
+            switch(capability.Name) {
+                case "snap": case "jump": if(capability.Require(capability.Name,1)[0].Integer<=0) throw new FormatException("Invalid movement ability."); break;
+                case "teleport": var t=capability.Require("teleport",3); if(t[0].Integer<=0 || t[1].Integer<0 || t[2].Integer<1 || t[2].Integer>1000) throw new FormatException("Invalid teleport ability."); break;
+                case "reposition": if(capability.Kind!="atom") throw new FormatException("Invalid reposition ability."); break;
+                default: throw new FormatException("Unsupported movement ability.");
+            }
+        }
+        BigInteger? Ability(string name)=>capabilities.TryGetValue(name,out var term) ? term.Args[0].Integer : null;
+        return new(epoch,id,revision,speed,lease,motion[0].Name=="grounded",view[1],Ability("snap"),Ability("teleport"));
     }
 }
 
@@ -105,9 +117,11 @@ public sealed class WorldProjection
     public ControlBinding? Controlled { get; }
     public string View { get; }
     public string Selection { get; }
+    public string? Name { get; }
     public WorldProjection(JsonNode message,Actor space,Actor? principal=null)
     {
         View = Json.S(message,"view"); Selection = Json.S(message,"selection");
+        Name=message["name"]?.GetValue<string>();
         Marks = SceneMark.Decode(Term.Parse(Json.S(message,"marks")));
         Control = Term.Atom("none"); ViewFrames = [];
         if (Selection == "nonphysical") {

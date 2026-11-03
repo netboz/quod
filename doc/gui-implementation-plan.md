@@ -163,8 +163,8 @@ scope explicitly. Qualified class names keep ordinary ontology semantics.
 Selection values may be arbitrary ground terms; a colon in a submitted value
 is data and never asks another ontology to validate it.
 
-Text fields use a UTF-8 **byte** allowance, `max_bytes` (default 4096), rather
-than a misleading character count. Numeric values use integer units and the
+Text fields may declare a UTF-8 **byte** allowance, `max_bytes`; an absent
+allowance imposes no generic text quota. Supplied allowances remain authoritative. Numeric values use integer units and the
 inclusive `range(Min, Max, Step)` lattice. Every input appears exactly once in
 `gui_form/3`; shared declaration variables impose equality between fields.
 Readonly or disabled fields must echo their current frozen values, and a
@@ -999,3 +999,30 @@ remove obsolete dispatch and duplicate lifecycle machinery. Mark the tracker
 complete only when its required acceptance is met under the repository's
 review/commit workflow; partial implementation or unrun headset checks are not
 completion.
+
+### Current authored appearance contract
+
+The shared container vocabulary admits `appearance` separately from semantic
+values and permissions. `inherit` uses its enclosing appearance or offline
+adapter defaults. `appearance(1, Tokens)` supplies unique `token(Name, Value)`
+entries: `panel`, `field`, `text`, `accent`, `edge`, `error` and `success` accept
+integer `rgb(R,G,B)` channels in 0–255; `panel_opacity` accepts integer permille
+0–1000; `spacing`, `padding` and `corner_radius` accept nonnegative logical units.
+An adapter refuses an extent it cannot represent. Unknown versions, names,
+duplicates and invalid values fail through the existing schema owner.
+
+`gui_compile/6` excludes only appearance from its semantic tree digest. Exact
+subject, declarations, bindings, continuation and preconditions remain covered.
+Native consumers retain the same controls and drafts while updating their
+existing theme resources. A signed refresh still withdraws interaction; retained
+presentation remains hidden until replacement authorization is accepted. Changes
+to hit geometry cancel an active capture. Denial and consumer replacement retire
+the retained presentation through the existing owners.
+
+Godot translates these tokens to native themes and style boxes. Foreground,
+controls, status, popups and the adjacent keyboard remain opaque; only authored
+panel backgrounds use alpha. Desktop opacity and the user's Opaque/Larger text
+preferences take precedence. The existing browser parser accepts `inherit` and
+explicitly rejects authored tokens until its renderer supports them; it does not
+silently substitute defaults. This adapter boundary does not certify physical
+headset readability or comfort.

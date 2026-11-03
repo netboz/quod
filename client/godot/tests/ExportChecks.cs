@@ -44,6 +44,7 @@ public partial class ExportChecks : Node
         try {
             var args = OS.GetCmdlineUserArgs(); profile = args[Array.IndexOf(args, "--profile") + 1];
             app = application;
+            if(DisplayServer.GetName()=="headless")GetTree().Root.Size=new(1200,800);
             app.Changed += () => {
                 var state = State.AsObject(); state.Remove("setup"); state.Remove("human"); state.Remove("public_key"); state.Remove("network");
                 Console.WriteLine("M1B_STATE " + state.ToJsonString()); Console.Out.Flush();
@@ -53,6 +54,11 @@ public partial class ExportChecks : Node
             string phase = Env("M1B_PHASE");
             if (phase == "menu") { await NativeMenu(); return; }
             if (phase == "scene") { await SceneAdapter(); return; }
+            if (phase == "controller-input") { await ControllerAdapter(); return; }
+            if (phase == "presentation") { await PresentationAdapter(); return; }
+            if (phase is "workspace" or "workspace-render") { await WorkspaceAdapter(); return; }
+            if (phase is "openxr" or "openxr-input") { await OpenXRRuntime(); return; }
+            if (phase == "shutdown-connect") { await CloseDuringConnect(); return; }
             if (phase == "physics") { await PhysicsJourney(); return; }
             bool fresh = phase is "fresh" or "questions" or "m2-fresh" or "m3-fresh";
             if (phase == "tls") { await Tls(); return; }
@@ -91,11 +97,10 @@ public partial class ExportChecks : Node
             var offered = operations.Current ?? throw new Exception("No offered operation");
             Check(offered.Name == "controller_settings", "actual offered controller-preference operation");
             Check(offered.Form.Tree.Leaves.Count(c => c.Input) > 2, "generic typed offered inputs rendered");
+            if(phase=="m4-live") { await ControllerLive(operations);return; }
             if (phase.StartsWith("m2-")) { await SpaceCreation(phase, original); return; }
             if (phase == "closing") {
                 await Press("inspect");
-                var source = app.FindChild("source-tools", true, false) as SourcePanel ?? throw new Exception("Source tools");
-                source.Inspect(JsonSerializer.Deserialize<Actor>(original["human"]!.ToJsonString())!, true);
                 await app.CloseApplication();
                 Check(SignedView.LiveSockets == 0, "normal application close awaits opening consumer disposal");
                 using var reopened = new LocalStore(profile);
@@ -106,7 +111,7 @@ public partial class ExportChecks : Node
                 await Sources(original); await Questions(original);
                 await Press("disconnect"); await app.ViewsDisposed;
                 Check(SignedView.LiveSockets == 0, "source and deferred-question consumers dispose every socket");
-                Console.WriteLine("M1B_TOOLS_PASS"); Console.Out.Flush(); GetTree().Quit(); return;
+                Console.WriteLine("M1B_TOOLS_PASS"); Console.Out.Flush(); await app.CloseApplication(); return;
             }
             if (phase == "input") {
                 await Keyboard(operations, offered);
@@ -116,7 +121,7 @@ public partial class ExportChecks : Node
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     Check(GetViewport().GetTexture().GetImage().SavePng(screenshot) == Error.Ok, "actual exported GUI rendered to evidence image");
                 }
-                Console.WriteLine("M1B_INPUT_PASS"); Console.Out.Flush(); GetTree().Quit(); return;
+                Console.WriteLine("M1B_INPUT_PASS"); Console.Out.Flush(); await app.CloseApplication(); return;
             }
             if (phase is "fresh" or "reset") {
                 if (phase == "fresh") {
@@ -161,9 +166,9 @@ public partial class ExportChecks : Node
                 Check(State["live_sockets"]!.GetValue<int>() == 0, "disposed view consumers release every socket");
                 var report = new JsonObject { ["passed"] = true, ["phase"] = phase, ["checks"] = JsonSerializer.SerializeToNode(checks), ["original"] = original };
                 await File.WriteAllTextAsync(Env("M1B_RESULT"), report.ToJsonString());
-                Console.WriteLine("M1B_EXPORT_PASS"); Console.Out.Flush(); GetTree().Quit();
+                Console.WriteLine("M1B_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
             }
-        } catch (Exception error) { Console.Error.WriteLine(error.ToString()); Console.Error.WriteLine(app.Inspect()); Console.Error.Flush(); GetTree().Quit(1); }
+        } catch (Exception error) { Console.Error.WriteLine(error.ToString()); Console.Error.WriteLine(app.Inspect()); Console.Error.Flush(); await app.CloseApplication(1); }
     }
 
     readonly HashSet<SignedView> tracedOperationViews = [];
@@ -212,7 +217,8 @@ public partial class ExportChecks : Node
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         await session.Authenticate(timeout.Token);
         var instructions = Json.Binding(await session.Read(human, "personal_instructions(Instructions).", timeout.Token), "Instructions").Items;
-        Check(instructions.Length == 2, "server retains exactly original Save and Reset associations");
+        int expected=Environment.GetEnvironmentVariable("M4_REPAIR")=="1" ? 3 : 2;
+        Check(instructions.Length == expected, "server retains exactly original Save and Reset associations plus any explicitly qualified repair");
         foreach (var row in instructions) Check(Json.Committed(await session.ResolveInstruction(human, Identity.Encode(row.Require("instruction", 3)[0].Bytes), timeout.Token)), "original result recovered without originating journal");
         using var stranger = Identity.Create();
         using var strangerStore = new LocalStore(profile + "-stranger"); strangerStore.Create(stranger.Payload());

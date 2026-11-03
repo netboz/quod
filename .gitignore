@@ -9,3 +9,8 @@ rebar3.crashdump
 priv/certs/*.pem
 /native/*/target/
 /priv/native/
+
+# Generated diagnostic artifacts; retain source and recorded evidence.
+__pycache__/
+/doc/evidence/**/*.dll
+/doc/evidence/**/*.pdb

@@ -43,16 +43,23 @@ material or node names as Quod subjects. The rooted occurrence mark alone owns
 Two placements of one digest have distinct occurrence roots, transforms and
 selection identities. A recipe may mix mesh and primitive parts.
 
-The seven resource values are allowances in the authorized descriptor. The
-rendering ontology bounds each allowance and the client measures actual GLB
-costs before Babylon sees the bytes. Transfer bytes include the complete GLB;
-geometry bytes count referenced vertex and index buffer views; image pixels
-sum embedded image dimensions. Vertex and triangle counts include each scene
-node that references a mesh, so repeated drawing consumes the allowance.
-Nodes and materials are checked separately. A value above its allowance
-produces a named error. The scaled visual span and reach from its pivot are
-also bounded by rendering ontology policy.
-These limits are ontology policy, not Erlang or JavaScript constants.
+The seven resource values are allowances in the authorized descriptor: a positive
+integer or `unlimited`. The vocabulary imposes no second global maximum. The
+client measures actual GLB costs before Babylon sees the bytes. Transfer bytes
+include the complete GLB; geometry bytes count referenced vertex and index buffer
+views; image pixels sum embedded image dimensions. Vertex and triangle counts
+include each scene node that references a mesh, so repeated drawing consumes an
+explicit allowance. Nodes and materials are checked separately. Exceeding a
+finite authored allowance produces a named error. Exact frame relationships and
+finite renderer conversion remain required; arbitrary extent and pivot-reach
+ceilings do not replace those checks.
+
+Godot's current ordinary scene adapter supports primitive box, wire-box, sphere
+and group descriptors. Its controller `tracked_model(...,asset(...))` is a
+separate existing profile with seven explicit finite allowances, checked by
+`ControllerMapping.Decode`, `StaticGlb.Admit` and the retained `RenderModels`
+owner. It does not consume the ordinary `mesh_asset` descriptor. This contract
+does not claim new native mesh or terrain presentation support.
 
 ## Static asset profile and ownership
 

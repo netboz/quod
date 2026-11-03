@@ -6,7 +6,7 @@ not authorize deployment, refounding, history deletion or a version bump.
 
 1. Derive `instance_of(ontology, ontology_ref(Namespace, Anchor))` from the
    executing owner's `current_ontology_identity/2`, and declare ontology below
-   thing independently of space. `ontology_ref/2` is data, not a qualified name;
+   space for ordinary predicate-contents display (Yan’s 2026-11-03 clarification). `ontology_ref/2` is data, not a qualified name;
    keep ordinary `instance_of/2` and `isa/2` following intact. Replace
    `ontology_eidolons/1` and the client-only
    ontology selection kind with `entity_eidolons/2` everywhere, including signed
@@ -47,7 +47,7 @@ not authorize deployment, refounding, history deletion or a version bump.
    a non-code representation does not force `codeForm`. Keep the exact target and
    instance in every result and validate them in the client. Preserve exact
    anchors through generated ontology marks/lens subjects. A view occurrence
-   remains presentation; it creates no ontology, owner, space or physics.
+   remains presentation; it creates no ontology, owner, assignment or physics.
 
 5. Verify through real signed production seams: system read-only and administrator
    access, owned non-system access, private/other-owner refusal, wrong target

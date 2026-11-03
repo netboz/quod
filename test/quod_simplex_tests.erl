@@ -9611,6 +9611,12 @@ transaction_shape_gate_test() ->
     [A] = pubs(committee(1)),
     Good = tx([{assert, {{ok, x}, true}}]),
     ?assert(quod_simplex:change_acceptable(Good, [A])),
+    ?assert(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{abolish, {ok, 1}}]}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{abolish, {peer_admitted, 4}}]}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{abolish, {ok, -1}}]}, [A])),
     ?assertNot(quod_simplex:change_acceptable(Good#transaction{diff = [garbage]}, [A])),
     ?assertNot(quod_simplex:change_acceptable(
                  Good#transaction{diff = [{assert, {42, true}}]}, [A])),

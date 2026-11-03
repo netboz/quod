@@ -21,9 +21,17 @@ public partial class ExportChecks
         Check(index >= 0 && index < control.ItemCount,"offered selection exists: "+control.Name);
         control.Select(index); control.EmitSignal(OptionButton.SignalName.ItemSelected,index); await Frame();
     }
-    async Task ChooseOperation(OptionButton control,int index)
+    async Task ChooseOfferedOperation(OperationsPanel panel,string name)
     {
-        Check(index>0 && index<control.ItemCount,"offered operation has an explicit native menu item");
+        var pane=(EidolonPanel)app.FindChild("representations",true,false);
+        await Until(()=>pane.Available&&panel.Available);
+        var choice=pane.Offered.Single(e=>e.Operation&&e.Style==name);
+        var button=pane.FindChildren("*","Button",true,false).OfType<Button>().Single(b=>b.TooltipText==choice.Exact.ToString());
+        await NativePress(button);await Until(()=>panel.Current?.Name==name);
+    }
+    async Task ChooseNativeOption(OptionButton control,int index)
+    {
+        Check(index>0 && index<control.ItemCount,"offered choice has an explicit native menu item");
         for(Node? node=control.GetParent();node!=null;node=node.GetParent()) if(node is ScrollContainer scroll) scroll.EnsureControlVisible(control);
         control.GrabFocus(); await Frame();
         var selected=new TaskCompletionSource<long>(); void Selected(long value)=>selected.TrySetResult(value); control.ItemSelected+=Selected;
@@ -35,13 +43,13 @@ public partial class ExportChecks
                 await opened.Task.WaitAsync(TimeSpan.FromSeconds(5));
             } finally { popup.AboutToPopup-=Opened; }
             await Frame();
-            Check(popup.Visible,"native keyboard opens the offered operation menu");
+            Check(popup.Visible,"native keyboard opens the offered choice menu");
             popup.SetFocusedItem(index);
             Console.WriteLine("M2_NATIVE_KEY Return"); Console.Out.Flush();
-            Check(await selected.Task.WaitAsync(TimeSpan.FromSeconds(5))==index && control.Selected==index,"native menu confirms the selected offered operation");
+            Check(await selected.Task.WaitAsync(TimeSpan.FromSeconds(5))==index && control.Selected==index,"native menu confirms the selected offered choice");
         } finally { control.ItemSelected-=Selected; }
         await Frame();
-        Check(!control.GetPopup().Visible,"confirmed native operation menu is closed");
+        Check(!control.GetPopup().Visible,"confirmed native choice menu is closed");
         var root=GetTree().Root;
         var received=new TaskCompletionSource();
         void InputReceived(InputEvent input) { if(input is InputEventKey { Keycode:Key.F24,Pressed:true } key && key.WindowId==root.GetWindowId()) received.TrySetResult(); }
@@ -75,12 +83,12 @@ public partial class ExportChecks
     {
         for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent()) if(parent is ScrollContainer scroll) scroll.EnsureControlVisible(scene);
         await Frame();
-        var picked=new TaskCompletionSource<Term>(); void Selected(Term value)=>picked.TrySetResult(value); scene.Selected+=Selected;
+        var picked=new TaskCompletionSource<ScenePanel.Selection>(); void Selected(ScenePanel.Selection value)=>picked.TrySetResult(value); scene.Selected+=Selected;
         try {
             var viewport=scene.GetChildren().OfType<SubViewport>().Single();
             var point=scene.GlobalPosition+scene.Project(id,local)*scene.Size/(Vector2)viewport.Size;
             NativeClick(point);
-            Check((await picked.Task.WaitAsync(TimeSpan.FromSeconds(5))).ToString()==expected.ToString(),"normal mouse picking opens the exact rendered subject and anchor");
+            Check((await picked.Task.WaitAsync(TimeSpan.FromSeconds(5))).Subject.ToString()==expected.ToString(),"normal mouse picking opens the exact rendered subject and anchor");
         } finally { scene.Selected-=Selected; }
     }
     async Task NativeMenu()
@@ -95,17 +103,17 @@ public partial class ExportChecks
             }
             app.AddChild(fields);
         };
-        await Frame(); await ChooseOperation(menu,1); await ChooseOperation(menu,2); await ChooseOperation(menu,1);
+        await Frame(); await ChooseNativeOption(menu,1); await ChooseNativeOption(menu,2); await ChooseNativeOption(menu,1);
         var button=new Button { Position=new(100,300),Size=new(300,40),Text="Native pointer probe" }; app.AddChild(button); await Frame();
         var clicked=new TaskCompletionSource(); button.Pressed+=()=>clicked.TrySetResult(); NativeClick(button.GetGlobalRect().GetCenter());
         await clicked.Task.WaitAsync(TimeSpan.FromSeconds(5)); Check(clicked.Task.IsCompletedSuccessfully,"real native pointer presses the offered control");
-        Console.WriteLine("M2_MENU_PASS"); Console.Out.Flush(); GetTree().Quit();
+        Console.WriteLine("M2_MENU_PASS"); Console.Out.Flush(); await app.CloseApplication();
     }
     async Task CreationTarget(OperationsPanel panel, Actor target, string operation)
     {
         await Press("create-operations");
         var storage=(OptionButton)panel.FindChild("operation-storage",true,false);
-        int index=Enumerable.Range(0,storage.ItemCount).FirstOrDefault(i=>storage.GetItemText(i)==target.Namespace+" @ "+target.Anchor,-1);
+        int index=Enumerable.Range(0,storage.ItemCount).FirstOrDefault(i=>storage.GetItemTooltip(i)==target.Namespace+" @ "+target.Anchor,-1);
         if(index<0) {
             var ns=(LineEdit)panel.FindChild("exact-storage-namespace",true,false); ns.Text=target.Namespace;
             var anchor=(LineEdit)panel.FindChild("exact-storage-anchor",true,false); anchor.Text=target.Anchor;
@@ -115,9 +123,7 @@ public partial class ExportChecks
         await Until(()=>!panel.IsWorking);
         await Choose(classes,Enumerable.Range(0,classes.ItemCount).FirstOrDefault(i=>classes.GetItemText(i)=="space",-1));
         await Until(()=>panel.Available);
-        var offers=(OptionButton)panel.FindChild("offered-operation",true,false);
-        string label=operation switch { "create"=>"Create space","create_exact"=>"Create space with rational lengths","create_infinite"=>"Create infinite space",_=>throw new Exception("Unknown test selection") };
-        await ChooseOperation(offers,Enumerable.Range(0,offers.ItemCount).FirstOrDefault(i=>offers.GetItemText(i)==label,-1));
+        await ChooseOfferedOperation(panel,operation);
         Check(panel.Current!.Subject.ToString()==Term.Call("class_ref",Term.Text(target.Namespace),Term.Binary(Identity.Decode(target.Anchor)),Term.Atom("space")).ToString(),"selected target owns the actual local class and anchor");
     }
     async Task Type(LineEdit line,string value)
@@ -148,7 +154,7 @@ public partial class ExportChecks
             await clicked.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Check(panel.IsWorking && ((OptionButton)panel.FindChild("operation-storage",true,false)).Disabled &&
                 ((OptionButton)panel.FindChild("operation-class",true,false)).Disabled &&
-                ((OptionButton)panel.FindChild("offered-operation",true,false)).Disabled &&
+                app.FindChild("representation-choices",true,false).FindChildren("*","Button",true,false).OfType<Button>().All(b=>b.Disabled) &&
                 !((LineEdit)panel.FindChild("exact-storage-namespace",true,false)).Editable,
                 "active creation locks its actual target and offered selection");
         } finally { button.Pressed-=Pressed; }
@@ -246,7 +252,7 @@ public partial class ExportChecks
         string wireId=scene.SubjectIds(wire).Single();
         var corners=scene.WorldCorners(wireId);
         Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-100)<.0001f,"actual created default wireframe has100 metre width");
-        Check(scene.Pick(scene.Project(wireId,new Vector3(0,-50,-50)))?.ToString()==wire.ToString(),"picking the created wireframe resolves its actual generated reference");
+        Check(scene.Pick(scene.Project(wireId,new Vector3(0,-50,-50)))?.Subject.ToString()==wire.ToString(),"picking the created wireframe resolves its actual generated reference");
         for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent()) if(parent is ScrollContainer scroll) scroll.EnsureControlVisible(scene);
         await Frame();
         if(System.Environment.GetEnvironmentVariable("M2_SCREENSHOT") is string screenshot) {
@@ -317,7 +323,7 @@ public partial class ExportChecks
         Check(navigation.ToString()==s0.ToString(),"all creations leave the same A inside original parentless S0");
         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,checks,original=first.Select(t=>t.ToString()).ToArray(),wire=wire.ToString(),rational=rational.ToString(),foreign=foreignSpace.ToString() }));
         await Press("disconnect"); await app.ViewsDisposed; Check(SignedView.LiveSockets==0,"M2 view and operation consumers dispose all sockets");
-        Console.WriteLine("M2_EXPORT_PASS"); Console.Out.Flush(); GetTree().Quit();
+        Console.WriteLine("M2_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
     }
 
     async Task SpaceRefusals(OperationsPanel panel,Actor human,Term s0,ScenePanel scene)

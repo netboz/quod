@@ -95,7 +95,7 @@ absent_present_absent_conflicts_test() ->
                  quod_erlog_db_mvcc:version_token(db_ref(C3), {ghost, 1})),
     ?assertEqual({conflict, {ghost, 1}}, quod_diff:validate(ReadSet, db_ref(C3))).
 
-%% Production absence: op() has no abolish, so a retract that empties the
+%% Clause absence: a retract that empties the
 %% predicate is what the apply path actually commits — it must token absent.
 retract_to_empty_tokens_absent_test() ->
     [{assert, Clause}] = quod_ct:diff_for({ghost, boo}),

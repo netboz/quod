@@ -9,6 +9,7 @@ import queue
 import shutil
 import subprocess
 import threading
+import ctypes
 from desktop_input import deliver
 
 p = argparse.ArgumentParser()
@@ -37,7 +38,11 @@ def run(phase, profile, extra=None, kill=False, label=None):
     env.update(extra or {})
     display = ['--display-driver', 'wayland'] if a.desktop else ['--headless']
     command = [str(a.export)] + display + ['--', '--qualification', '--profile', str(profile), '--node', a.node, '--ca', a.ca]
-    child = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    def allow_owned_trace():
+        # Only this qualification process and its descendants may inspect the
+        # owned child if the unchanged watchdog detects a real shutdown hang.
+        if ctypes.CDLL(None).prctl(0x59616d61,os.getppid(),0,0,0)!=0:os._exit(125)
+    child = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,preexec_fn=allow_owned_trace)
     lines = queue.Queue()
     def receive():
         for line in child.stdout: lines.put(line)
@@ -48,7 +53,15 @@ def run(phase, profile, extra=None, kill=False, label=None):
         while True:
             try: line = lines.get(timeout=60)
             except queue.Empty:
-                child.kill(); child.wait(); records.append({'command': command, 'child_exit': child.returncode, 'watchdog': True}); raise RuntimeError('No progress before original watchdog')
+                diagnostic=a.evidence/(label+'-shutdown-stacks.log')
+                probe_exit=None;probe_error=None
+                try:
+                    with diagnostic.open('x') as trace:
+                        probe=subprocess.run(['gdb','-q','-batch','-p',str(child.pid),'-ex','set print frame-arguments none','-ex','set print entry-values no','-ex','thread apply all bt 16'],stdout=trace,stderr=subprocess.STDOUT,timeout=15)
+                        probe_exit=probe.returncode
+                except Exception as error:probe_error=str(error)
+                finally:child.kill();child.wait()
+                records.append({'command': command, 'child_exit': child.returncode, 'watchdog': True,'diagnostic':str(diagnostic),'diagnostic_exit':probe_exit,'diagnostic_error':probe_error}); raise RuntimeError('No progress before original watchdog')
             if line is None: break
             log.write(line); log.flush(); text += line; print(line.rstrip(), flush=True)
             try: deliver(line,child.pid,a.desktop,native_inputs)

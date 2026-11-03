@@ -27,6 +27,7 @@ p.add_argument('--network', required=True)
 p.add_argument('--evidence', type=Path, required=True)
 p.add_argument('--private', type=Path, required=True)
 p.add_argument('--desktop', action='store_true')
+p.add_argument('--controllers', action='store_true')
 p.add_argument('--journey', choices=['gui', 'spaces', 'navigation'], default='gui')
 a = p.parse_args()
 a.evidence = a.evidence.resolve()
@@ -128,9 +129,11 @@ class Proxy(BaseHTTPRequestHandler):
                     drops[flow]+=1; lose=True; instruction_drop_operations.append(instruction_drop_armed); instruction_drop_armed=None
                 if flow == 'question' and response.status < 300 and faults['question_reply_lost'] == 0:
                     faults['question_reply_lost'] += 1; lose = True
-                reply = json.loads(content)
+                asset=self.path.startswith('/assets/')
+                reply = {} if asset else json.loads(content)
                 records.append({'method': self.command, 'route': self.path, 'status': response.status, 'flow': flow, 'request_sha256': digest, 'reply_lost': lose,
-                    'result': reply.get('result'), 'outcome_status': reply.get('status'), 'aggregate': reply.get('aggregate')})
+                    'result': reply.get('result'), 'outcome_status': reply.get('status'), 'aggregate': reply.get('aggregate'),
+                    **({'asset_bytes':len(content),'asset_sha256':hashlib.sha256(content).hexdigest()} if asset else {})})
             if lose:
                 with socket.create_connection(('127.0.0.1', a.control_port), timeout=10) as owner:
                     owner.sendall(json.dumps({'request': encoded}).encode() + b'\n')
@@ -219,6 +222,9 @@ results = []
 try:
     phases={'gui':('fresh','reset','final'),'spaces':('m2-fresh','m2-final'),
             'navigation':('m3-fresh','m3-created','m3-entered','m3-left','m3-final','m3-negative-recovered')}[a.journey]
+    if a.controllers:
+        if a.journey!='gui':raise ValueError('Controller integration extends the existing GUI journey')
+        phases=('fresh','reset','m4-live','final')
     for phase in phases:
         env = dict(os.environ, M1B_PHASE=phase, M1B_NETWORK=a.network,
                    M1B_ORIGINAL=str(a.private / 'original.json'), M1B_RESULT=str(a.evidence / 'export-result.json'),
@@ -226,6 +232,7 @@ try:
                    M1B_CORPUS=str((Path.cwd() / 'client/test/fixtures/native-contract/contracts.json').resolve()),
                    M1B_ACCOUNT_BACKUP=str(a.private / 'account-backup.json'),
                    XDG_DATA_HOME=str(a.private / 'data'), XDG_CONFIG_HOME=str(a.private / 'config'), DOTNET_ROOT=str(a.private / 'no-installed-runtime'))
+        if a.controllers:env['M4_REPAIR']='1'
         if a.journey == 'spaces' and a.desktop:
             env['M2_SCREENSHOT'] = str((a.evidence / 'space-ui.png').resolve())
         if a.journey=='navigation':

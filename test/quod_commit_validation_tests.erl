@@ -696,14 +696,15 @@ read_certificate_refuses_a_stale_read_token_test() ->
 external_predicate_manifest_is_immutable_after_genesis_test() ->
     Ns = <<"quod:immutable-predicate-manifest">>,
     Anchor = <<229:256>>,
-    Diff = quod_ct:diff_for({external_predicate_modules, []}),
+    Diffs = [quod_ct:diff_for({external_predicate_modules, []}),
+             [{abolish, {external_predicate_modules, 1}}]],
     with_context(
       Ns, Anchor, [],
       fun(Context) ->
-          ?assertMatch(
+          [?assertMatch(
              {ok, {invalid, immutable_external_predicate_manifest}, _},
              quod_commit_validation:content(
-               [quod_ct:change(Ns, Diff, #{})], 1, check, Context))
+               [quod_ct:change(Ns, Diff, #{})], 1, check, Context)) || Diff <- Diffs]
       end).
 
 atomic_vote_cannot_change_external_predicate_manifest_test() ->

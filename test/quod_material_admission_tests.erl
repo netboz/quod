@@ -19,6 +19,15 @@ policy_is_authored_and_ambiguous_values_fail_closed_test() ->
           [{material_limit_override, plan, symbols, -1}],
           [{material_limit_override, plan, symbols, {'Unbound'}}]]).
 
+definition_removal_revalidates_affected_material_policy_test() ->
+    Est = quod_ct:committed_kb([]),
+    try
+        {ok, _, Reads} = quod_material_admission:policy(plan, Est),
+        ?assertEqual({error, {invalid_material_policy, plan}},
+            quod_material_admission:validate_update(plan, Est,
+                [{abolish, {material_limit, 3}}], Reads))
+    after quod_erlog_db_mvcc:delete((Est#est.db)#db.ref) end.
+
 policy_cannot_write_during_selection_test() ->
     Rule = {':-', {material_limit_override, plan, symbols, 1},
                   {assertz, policy_changed}},

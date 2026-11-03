@@ -85,6 +85,7 @@ public partial class ExportChecks
         selected=Actor.FromTerm(Term.Parse(Json.S(metadata,"s2")));await view.Reopen();await Wait(()=>current!=null);Agreement();
         selected=outer;await view.Reopen();await Wait(()=>current!=null);
         Check(current!.Controlled!=null && scene.Controlled,"exact signed viewer owns the selected streamed control binding");
+        Check(!input.Snap(1) && !input.Teleport(0,-1,.5),"mapping cannot create absent authored snap or teleport abilities");
         int rebuilt=scene.Rebuilt;string registration=current.Sample!.Registration,fence=current.Sample.Fence;
         using(var probe=new System.Net.Sockets.TcpClient()) {
             await probe.ConnectAsync("127.0.0.1",int.Parse(Env("M1B_CONTROL_PORT")),deadline.Token);
@@ -109,6 +110,10 @@ public partial class ExportChecks
         input.Drive(1,0,0);input.Drive(0,0,0);await input.Completion;
         await Wait(()=>ulong.TryParse(current?.Sample?.ControlState?["sequence"]?.GetValue<string>(),out var accepted) && accepted>=sequence+2);
         Check(true,"a desired stop received during an in-flight drive is admitted next through the same signed serial lane");
+        input.Drive(1.0/3,0,-1.0/3);await input.Completion;
+        var encoded=await SpaceControl(new(){["input"]=true});receipts.Add(encoded);
+        Check(Json.S(encoded,"input")=="drive(vector(666,0,-666),angular(0,0,0))","actual signed sender preserves integer truncation at both positive and negative velocity boundaries");
+        input.Drive(0,0,0);await input.Completion;
         // Exercise the production input adapter through an actual OS key event.
         for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent())if(parent is ScrollContainer scroll)scroll.EnsureControlVisible(scene);
         scene.GrabFocus();await Frame();Check(scene.HasFocus(),"desktop physics scene holds keyboard focus");var before=current!.Sample!.Bodies[(2,1)].Position.ToArray();
@@ -116,6 +121,38 @@ public partial class ExportChecks
         await Wait(()=>current?.Sample?.Bodies.TryGetValue((2,1),out var body)==true && body.Position.Zip(before,(a,b)=>(a-b)*(a-b)).Sum()>.0025);
         Console.WriteLine("M2_NATIVE_KEY release-w");Console.Out.Flush();await Frame();scene.ReleaseInput();await input.Completion;
         Check(frames>0,"native desktop key input advances the server-controlled body through actual streamed frames");
+        await SpaceControl(new(){["abilities"]=true});await Wait(()=>current?.Controlled is { Snap:not null,TeleportReach:not null });
+        var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
+        var gui=(SpatialGui)app.FindChild("shared-gui",true,false);var mapped=new OpenXRInput();scene.Viewport.AddChild(mapped);
+        using var models=new RenderModels((asset,cancel)=>session.Transport.Model(asset.Digest,asset.Allowed[0],cancel));
+        mapped.Configure(scene,gui,models,()=>input,()=>false,()=>[]);mapped.Install(mapping);mapped.AttachSources();
+        var tracker=new XRControllerTracker { Name="m4_native_motion",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
+        tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
+        tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+        XRServer.AddTracker(tracker);await Frame();await mapped.Completion;ulong mappedFrame=0;
+        void MappedFrame()=>mapped.Advance(++mappedFrame,true,true,true);
+        MappedFrame();
+        async Task Applied(Func<bool> gesture,string name) {
+            ulong prior=ulong.Parse(current!.Sample!.ControlState!["sequence"]!.GetValue<string>());
+            Check(gesture(),"authored "+name+" enters the existing signed serial input owner");
+            await input.Completion;var admitted=await SpaceControl(new(){["input"]=true});receipts.Add(admitted);
+            ulong admittedSequence=admitted["sequence"]!.GetValue<ulong>();
+            Check(admittedSequence>prior,"native owner admits a new monotone "+name+" sequence");
+            await Wait(()=>ulong.Parse(current!.Sample!.ControlState!["sequence"]!.GetValue<string>())==admittedSequence && current.Sample.ControlState["pending"]?.GetValue<bool>()==false);
+            receipts.Add(current!.Sample!.ControlState!.DeepClone());Agreement();
+        }
+        bool MappedPad(Vector2 axes,bool snap) {
+            tracker.SetInput("pad_axes",Vector2.Zero);tracker.SetInput("pad_press",false);MappedFrame();
+            int before=snap ? mapped.SnapRequests : mapped.TeleportRequests;
+            tracker.SetInput("pad_axes",axes);tracker.SetInput("pad_press",true);MappedFrame();
+            tracker.SetInput("pad_press",false);tracker.SetInput("pad_axes",Vector2.Zero);MappedFrame();
+            return (snap ? mapped.SnapRequests : mapped.TeleportRequests)==before+1;
+        }
+        await Applied(()=>MappedPad(new(1,0),true),"mapped snap");
+        await Applied(()=>MappedPad(new(0,1),false),"mapped teleport");
+        Check(true,"native feedback and rendered poses remain authoritative for mapped snap and teleport landing/path refusal");
+        XRServer.RemoveTracker(tracker);tracker.Dispose();mapped.StopSession();await mapped.Completion;
+        Check(mapped.Subscriptions==0 && models.LiveLeases==0,"mapped native movement consumer releases its trackers and real render leases");mapped.GetParent().RemoveChild(mapped);mapped.Free();
         var baseline=await SpaceControl(new(){["sample"]=true});receipts.Add(baseline);
         var independent=baseline["independent"]!.ToJsonString();
         int oldWithdrawn=withdrawn;
@@ -146,6 +183,6 @@ public partial class ExportChecks
         }
         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new{passed=true,checks,receipts,frames,withdrawn}));
         scene.Drive-=Drive;input.Dispose();testedInput=null;view.Dispose();independentView.Dispose();await Task.WhenAll(view.Completion!,independentView.Completion!);await input.Completion;scene.Withdraw();
-        Console.WriteLine("M3_PHYSICS_PASS");Console.Out.Flush();GetTree().Quit();
+        Console.WriteLine("M3_PHYSICS_PASS");Console.Out.Flush();await app.CloseApplication();
     }
 }

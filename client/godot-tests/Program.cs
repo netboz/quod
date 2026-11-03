@@ -13,6 +13,9 @@ static class Tests
     public static int Main(string[] args)
     {
         try {
+            if (args[0] == "admission-codecs") { AdmissionCodecChecks.Run(); return 0; }
+            if (args[0] == "recovery-errors") { awaitRecovery(args[1]); return 0; }
+            if (args[0] == "resource-errors") { ResourceErrorChecks.Run().GetAwaiter().GetResult(); return 0; }
             if (args[0] == "crash") { Crash(args); return 0; }
             string repo = Path.GetFullPath(args[0]);
             var corpus = JsonNode.Parse(File.ReadAllText(Path.Combine(repo, "client/test/fixtures/native-contract/contracts.json")))!;
@@ -52,10 +55,11 @@ static class Tests
                 }
             }
             Check(verified == 100, "all 100 real production fixtures including Reset");
-            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames();
+            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo);
             Console.WriteLine("CORE_PASS checks=" + checks); return 0;
         } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
+    static void awaitRecovery(string path) => RecoveryErrorChecks.Run(path).GetAwaiter().GetResult();
     static void Scenes()
     {
         string anchor = Term.Binary(new byte[32]).ToString();
@@ -74,6 +78,24 @@ static class Tests
         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace("'/'(1,3)","0.5") + "]")), "floating scene dimensions refuse");
         Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace(anchor,"<<\"wrong\">>") + "]")), "wrong depicted anchor refuses");
         Reject(() => new Length(BigInteger.One << 2000,1).RenderMetres(), "unrenderable finite extent refuses explicitly");
+    }
+    static void Models(string repo)
+    {
+        string digest="bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94";
+        byte[] bytes=File.ReadAllBytes(Path.Combine(repo,"priv/explorer/assets/models",digest+".glb"));
+        Check(Convert.ToHexStringLower(SHA256.HashData(bytes))==digest,"controller bytes match authored class-selected digest");
+        var report=StaticGlb.Validate(bytes);
+        var asset=new ModelAsset(digest,"gltf2-static-v1",[-59,-70,-117,59,23,106],[1114152,665696,17551,17344,37,1,4194304]);
+        report.Admit(asset);Check(report.Costs.SequenceEqual(asset.Allowed) && report.Bounds.SequenceEqual(asset.Bounds),"portable GLB measurement agrees with existing verified Vive model metadata");
+        Reject(()=>report.Admit(asset with { Allowed=[1114151,665696,17551,17344,37,1,4194304] }),"each appearance enforces transfer allowance against reusable verification");
+        Reject(()=>report.Admit(asset with { Bounds=[-60,-70,-117,59,23,106] }),"verified model refuses mismatched declared bounds");
+        var corrupt=(byte[])bytes.Clone();corrupt[0]=0;Reject(()=>StaticGlb.Validate(corrupt),"invalid GLB is rejected before engine decode");
+        uint jsonLength=System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(12,4));
+        var document=System.Text.Json.Nodes.JsonNode.Parse(bytes.AsSpan(20,(int)jsonLength))!;document["images"]="malformed";
+        byte[] json=System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());int padded=(json.Length+3)/4*4;
+        var malformed=new byte[bytes.Length-(int)jsonLength+padded];bytes.AsSpan(0,20).CopyTo(malformed);malformed.AsSpan(20,padded).Fill(32);json.CopyTo(malformed,20);bytes.AsSpan(20+(int)jsonLength).CopyTo(malformed.AsSpan(20+padded));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(malformed.AsSpan(8,4),(uint)malformed.Length);System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(malformed.AsSpan(12,4),(uint)padded);
+        Reject(()=>StaticGlb.Validate(malformed),"malformed optional GLB arrays refuse instead of becoming empty facilities");
     }
     static void WorldFrames()
     {

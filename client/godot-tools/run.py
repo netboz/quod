@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import urllib.request
@@ -18,6 +19,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bootstrap', action='store_true')
 parser.add_argument('--build', action='store_true')
 parser.add_argument('--export', action='store_true')
+parser.add_argument('--xr', action='store_true', help='Enable the installed OpenXR runtime using the Vulkan mobile renderer')
 parser.add_argument('arguments', nargs=argparse.REMAINDER)
 args = parser.parse_args()
 artifacts = json.loads((repo / 'doc/evidence/godot-m0-20261027/inputs/godot-artifacts.json').read_text())
@@ -66,6 +68,9 @@ if args.build or args.export:
 if args.export:
     (project / 'dist').mkdir(exist_ok=True)
     run_engine([str(engine), '--headless', '--path', str(project), '--export-release', 'Linux', str(project / 'dist/quod.x86_64')])
+    for notice in sorted((project/'assets').glob('*LICENSE*')):
+        shutil.copy2(notice,project/'dist'/notice.name)
 elif args.arguments:
     arguments = args.arguments[1:] if args.arguments[0] == '--' else args.arguments
-    run_engine([str(engine), '--path', str(project), *arguments])
+    xr_arguments = ['--xr-mode','on','--rendering-method','mobile','--rendering-driver','vulkan'] if args.xr else []
+    run_engine([str(engine), '--path', str(project), *xr_arguments,*arguments])

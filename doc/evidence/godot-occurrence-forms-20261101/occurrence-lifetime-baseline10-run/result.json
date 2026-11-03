@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-occurrence-forms-20261101/signed.py",
+    "occurrence-lifetime-baseline10",
+    "doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate10-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+    "occurrence-lifetime"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 24.739063960005296
+}

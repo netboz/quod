@@ -1,0 +1,49 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-shutdown-reliability-20261103/build.py",
+    "shutdown-observation01"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "3276f671f8ed606896c549418a7eae259120bcebce3abe5bc0c6da039adb243e",
+    "environment.py": "664a35735d155c979104f5f2d0075d98b5976ac3d45b91c580303a23054de043",
+    "hashes.py": "2f4b361984a3c594c268da63c71ea6d6da0aa5417de68460ae786b5f1a4160c9",
+    "instrument_close.py": "08d6dad282699a93fd3f7647b93aa0ea3560702db8fa62a2e119f6be55a30f48",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "journey.py": "8fed63ae61ae6617a10447a518fbfbfea0019ee9298ea76cce16bac4b3d1de39",
+    "run.py": "28c9b6cff447023553593e4068c1371bae1f8c5068bbea82c37f9f9600328113",
+    "serve.py": "847dea767c5c4cf1fa23857f488c003039afe056493f37ec61c03bbd5c23ac8b",
+    "shutdown_capture.py": "e97f4516a312fdb8f8c6c1f44eab17e98ff3765285441828c27bfa7b3205977f",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-03T10:13:31Z",
+  "elapsed_seconds": 33.614047050476074,
+  "private_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-shutdown-reliability-20261103/private/runs/shutdown-observation01-build/stdout.raw",
+      "sha256": "1e85422f5afc6f4ebeeb987fe7fe613ba34bacfef05eef92273dbcbacb49b293",
+      "bytes": 11114
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-shutdown-reliability-20261103/private/runs/shutdown-observation01-build/stderr.raw",
+      "sha256": "de665923f49d942e8278c84e4e6e3b45e4ce9f92adccdec23488c33a32d09a91",
+      "bytes": 675
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation01-build-stdout.log",
+      "sha256": "1e85422f5afc6f4ebeeb987fe7fe613ba34bacfef05eef92273dbcbacb49b293",
+      "bytes": 11114
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation01-build-stderr.log",
+      "sha256": "de665923f49d942e8278c84e4e6e3b45e4ce9f92adccdec23488c33a32d09a91",
+      "bytes": 675
+    }
+  }
+}

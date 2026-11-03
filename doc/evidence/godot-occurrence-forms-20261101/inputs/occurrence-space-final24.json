@@ -1,0 +1,106 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "a1a2eee4ef1bc45ecd9b36c1dfa94adc3c04d5366b8da8f7c3990074f8ed8c25",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space-final24/drivers/signed.py",
+      "sha256": "bfcb85cfcaab3dada0f19494c606b38e4eba4704896ded1ff4fb588582871c8b"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space-final24/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space-final24/drivers/hashes.py",
+      "sha256": "65aabc9c5a262d26e784bda8eeee52e3e9cde767ee74b8f1330a1628c8161c3e"
+    }
+  },
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-occurrence-space-stdout": true,
+    "client-occurrence-space-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space-final24/server-stdout.raw",
+      "sha256": "bc28da60b3b74cbc3eb7a0645a6886fc31f44d20b8379ff556b7f6b2c22bcfde",
+      "bytes": 129
+    },
+    "client-occurrence-space-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space-final24/client-occurrence-space-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space-final24/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-occurrence-space-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space-final24/client-occurrence-space-stdout.raw",
+      "sha256": "e7ec97b268921df6aac5de07c19db12393055efc67d895c39eca7ad808c8ddcf",
+      "bytes": 303522
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-occurrence-space": {
+      "explicit_completion": true,
+      "completion_monotonic": 213775.484782231,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "authorized same-ontology fixture offers a non-space instance form and two visual occurrences",
+        "actual two-occurrence native raster retained",
+        "both real native picks resolve the same exact anchored subject",
+        "native selection retains each chosen visual occurrence and pose alongside the same subject",
+        "remove only the separate diagnostic instrument membership before the space task",
+        "enabled action create-operations",
+        "actual bounded space-form control is reachable: representation-browse",
+        "actual bounded space-form control is reachable: @Button@82",
+        "actual bounded space-form control is reachable: control0",
+        "actual bounded space-form control is reachable: control7",
+        "ordinary offered Create commits the named space exactly once",
+        "actual bounded space-form control is reachable: hide-subject-form",
+        "named space exterior is an actual visible native selection target",
+        "the visible centre resolves the chosen space rather than an occluding subject",
+        "space pick retains its exact exterior occurrence without entering",
+        "actual bounded space-form control is reachable: representation-browse",
+        "actual bounded space-form control is reachable: @Button@180",
+        "retained actual space-enter-associated raster",
+        "the same class-selected authored Enter form targets the exact depicted space",
+        "actual bounded space-form control is reachable: form-personal-workspace",
+        "actual bounded space-form control is reachable: form-near-object",
+        "space-form relocation preserves its controller draft revision and original creation outcome",
+        "retained actual space-enter-spatial raster",
+        "space action uses the same associated spatial surface without native XR",
+        "viewing choosing and relocating the space form cause no travel or duplicate instruction",
+        "actual bounded space-form control is reachable: control0",
+        "one explicit original Move enters the exact space with the same personal agent",
+        "changed current interior cannot keep the previous exterior occurrence interactive",
+        "actual bounded space-form control is reachable: form-personal-workspace",
+        "actual bounded space-form control is reachable: representation-browse",
+        "actual bounded space-form control is reachable: @Button@181",
+        "actual bounded space-form control is reachable: control0",
+        "explicit offered Leave commits once and remains separate from form placement",
+        "enabled action disconnect",
+        "signed occurrence consumers retire through the existing owner"
+      ]
+    }
+  }
+}

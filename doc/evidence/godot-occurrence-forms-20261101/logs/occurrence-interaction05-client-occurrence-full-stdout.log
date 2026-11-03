@@ -1,0 +1,129 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS actual two-occurrence native raster retained
+PASS both real native picks resolve the same exact anchored subject
+PASS native selection retains each chosen visual occurrence and pose alongside the same subject
+PASS chosen real occurrence is visibly reachable before native pick
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one native scene gesture selects exactly its occurrence and subject
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS retained actual native first-associated-form raster
+PASS chosen authored operation is bound to the exact selected visible occurrence
+PASS actual native target enclosed without reveal: control0
+PASS native editor receives actual focus
+<private fixture/client diagnostic>
+PASS actual native target enclosed without reveal: form-personal-workspace
+<private fixture/client diagnostic>
+PASS explicit personal placement releases only the visual binding
+PASS actual native target enclosed without reveal: form-near-object
+<private fixture/client diagnostic>
+PASS explicit return restores the same current occurrence binding
+PASS relocation preserves the same native editor caret selection draft semantic revision and surface
+PASS chosen real occurrence is visibly reachable before native pick
+<private fixture/client diagnostic>
+PASS one native scene gesture selects exactly its occurrence and subject
+PASS retained actual native second-associated-form raster
+PASS two same-subject occurrences select distinct placement without reacquiring the form or draft
+PASS real owner work watcher installed
+PASS actual native target enclosed without reveal: form-personal-workspace
+<private fixture/client diagnostic>
+PASS actual native target enclosed without reveal: form-near-object
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS actual native target enclosed without reveal: form-personal-workspace
+<private fixture/client diagnostic>
+PASS actual native target enclosed without reveal: form-near-object
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS actual native target enclosed without reveal: form-personal-workspace
+<private fixture/client diagnostic>
+PASS actual native target enclosed without reveal: form-near-object
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS three relocations and accepted unchanged form/world renewals retain resources and perform no named history rebuild write sync work
+<private fixture/client diagnostic>
+PASS retained actual native form-False-1200-26 raster
+PASS form field primary action and placement reachable at (False, 1200, 26) / control0
+PASS form field primary action and placement reachable at (False, 1200, 26) / control1
+PASS form field primary action and placement reachable at (False, 1200, 26) / form-personal-workspace
+PASS responsive composition retains exact native form draft and operation revision
+<private fixture/client diagnostic>
+PASS retained actual native form-False-1200-48 raster
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

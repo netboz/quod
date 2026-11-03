@@ -1,0 +1,94 @@
+{
+  "label": "workbench-framing-final03-headless",
+  "qualification_phase": "workbench",
+  "passed": false,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-ontology-workbench-20261031/inputs/client-workbench-final03-manifest.json",
+  "manifest_sha256": "3337112d664acedac71a1c90399da744783d2d37e38a8ab911228cd0543a22ca",
+  "sources": {
+    "doc/evidence/godot-ontology-workbench-20261031/rehearse.py": "dbec630feb14fd117b97593b340d33120353f26966ad370abe33b94e507a2a1a",
+    "doc/evidence/godot-ontology-workbench-20261031/hashes.py": "0010259f5ed4e4bc6942f90777f962d7eaedadd042bd9f4589d0c58cab331df9",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+    "doc/evidence/godot-ontology-workbench-20261031/serve.py": "b74299ffd289ed13adb032cbc31f7a0849f4d54f2b4f1d1e01333abed69ac007"
+  },
+  "reader_errors": [],
+  "children": {
+    "server": {
+      "command": [
+        "python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-ontology-workbench-20261031/serve.py",
+        "workbench-framing-final03-headless-server",
+        "--stage",
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05",
+        "--profile",
+        "prod",
+        "--affected-wire",
+        "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json"
+      ],
+      "true_exit": 0
+    },
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-workbench-final03/source/client/godot/dist/quod.x86_64",
+        "--headless",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "mobile",
+        "--rendering-driver",
+        "vulkan",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-framing-final03-headless/identity",
+        "--node",
+        "https://127.0.0.1:39841",
+        "--ca",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-workbench-framing-final03-headless-server/backend-ca.pem"
+      ],
+      "true_exit": 1
+    }
+  },
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "fixture_ready": true,
+  "streams": {
+    "server-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-framing-final03-headless/server-stdout.raw",
+      "sha256": "3b914ad30d2cbb996802027fd78203d0b77799e57f09c1b24d5bf4c92bc3fe6d",
+      "bytes": 129,
+      "public_sha256": "5121b60746516965866e463793e6259659816f1d07646b3fb130250d941619d2"
+    },
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-framing-final03-headless/client-stdout.raw",
+      "sha256": "07a200ea3c9b547e5e794e1614ec449c436481d260a5de625905c644be5a13a5",
+      "bytes": 96624,
+      "public_sha256": "5d0147cabd069eb4cc9e831ed1bca03bca405b0e4bad976890bc894c72b1c5eb"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-framing-final03-headless/client-stderr.raw",
+      "sha256": "995e27bffb721cdfaa4f3cb82eeaa486dda4bba369042a4d153bc9d75a7b3f55",
+      "bytes": 5320,
+      "public_sha256": "69c5624876cb102bdba9ae969d1e05568cdb97094f01ae76aef6d8bad74fdf7b"
+    },
+    "server-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-framing-final03-headless/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "diagnostics": [],
+  "elapsed_seconds": 32.36132530501345
+}

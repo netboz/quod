@@ -1,0 +1,46 @@
+{
+  "build.py": {
+    "path": "doc/evidence/godot-client-retirement-20261101/build.py",
+    "sha256": "a285dc04de136f0a4d05f0b775e43ecdbe3677b649f8354069512063755cf57e"
+  },
+  "journey.py": {
+    "path": "doc/evidence/godot-client-retirement-20261101/journey.py",
+    "sha256": "e7cfaa3424add24eea37dc724f26ecdf5ee7aef787e8cf8b9f9dbd58692380d8"
+  },
+  "shutdown_capture.py": {
+    "path": "doc/evidence/godot-client-retirement-20261101/shutdown_capture.py",
+    "sha256": "e97f4516a312fdb8f8c6c1f44eab17e98ff3765285441828c27bfa7b3205977f"
+  },
+  "instrument_close.py": {
+    "path": "doc/evidence/godot-client-retirement-20261101/instrument_close.py",
+    "sha256": "08d6dad282699a93fd3f7647b93aa0ea3560702db8fa62a2e119f6be55a30f48"
+  },
+  "CloseTrace.cs": {
+    "path": "doc/evidence/godot-client-retirement-20261101/CloseTrace.cs",
+    "sha256": "31a56a256fff95507be68bfb77ea8684244d8f08e0ecaf7fd864e4f30213f0d9"
+  },
+  "run.py": {
+    "path": "doc/evidence/godot-visibility-client-package-20261102/run.py",
+    "sha256": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd"
+  },
+  "serve.py": {
+    "path": "doc/evidence/godot-visibility-client-package-20261102/serve.py",
+    "sha256": "20e9c82a75895e0bd0bad08fba727c7d43aa6bbfd231983dd36e48d40e84eb44"
+  },
+  "isolation.py": {
+    "path": "doc/evidence/godot-visibility-client-package-20261102/isolation.py",
+    "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+  },
+  "PackageJourneyChecks.cs": {
+    "path": "doc/evidence/godot-visibility-client-package-20261102/PackageJourneyChecks.cs",
+    "sha256": "01ebce69d2cee48c83dea7656e578ab1ae25ba3fa9a672a47189f13e3cc613ef"
+  },
+  "godot_m3b_fixture.erl": {
+    "path": "doc/evidence/godot-visibility-client-package-20261102/godot_m3b_fixture.erl",
+    "sha256": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69"
+  },
+  "godot_m3b_physics_fixture.erl": {
+    "path": "doc/evidence/godot-visibility-client-package-20261102/godot_m3b_physics_fixture.erl",
+    "sha256": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425"
+  }
+}

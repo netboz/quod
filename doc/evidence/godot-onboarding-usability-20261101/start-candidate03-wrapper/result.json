@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-onboarding-usability-20261101/run.py",
+    "onboarding-start-candidate03",
+    "--manifest",
+    "doc/evidence/godot-onboarding-usability-20261101/inputs/client-onboarding-candidate03-manifest.json",
+    "--phase",
+    "onboarding-start",
+    "--headed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.7056095729931258
+}

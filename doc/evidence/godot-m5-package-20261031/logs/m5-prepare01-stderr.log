@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/prepare.py", line 32, in <module>
+    assert len(candidates)==1,candidates;patch=candidates[0]
+           ^^^^^^^^^^^^^^^^^^
+AssertionError: []

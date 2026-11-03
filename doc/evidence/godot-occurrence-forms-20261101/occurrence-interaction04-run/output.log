@@ -1,0 +1,14 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+PASS actual two-occurrence native raster retained
+PASS both real native picks resolve the same exact anchored subject
+PASS native selection retains each chosen visual occurrence and pose alongside the same subject
+PASS chosen real occurrence is visibly reachable before native pick
+PASS one native scene gesture selects exactly its occurrence and subject
+PASS retained actual native first-associated-form raster
+PASS chosen authored operation is bound to the exact selected visible occurrence
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-occurrence-full": 1}, "native_inputs": 0}

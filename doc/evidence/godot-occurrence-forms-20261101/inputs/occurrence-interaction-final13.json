@@ -1,0 +1,157 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "9e4b3d7a136b700b35549105b5b40f94a62adf3d4e94de096d418db204ae5ba4",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-interaction-final13/drivers/signed.py",
+      "sha256": "bfcb85cfcaab3dada0f19494c606b38e4eba4704896ded1ff4fb588582871c8b"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-interaction-final13/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-interaction-final13/drivers/hashes.py",
+      "sha256": "65aabc9c5a262d26e784bda8eeee52e3e9cde767ee74b8f1330a1628c8161c3e"
+    }
+  },
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-occurrence-full-stdout": true,
+    "client-occurrence-full-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-interaction-final13/server-stdout.raw",
+      "sha256": "89998b21e6aa312820dc4a7fa4d38081284022d83977ed7aff535faa2bcbb2ea",
+      "bytes": 129
+    },
+    "client-occurrence-full-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-interaction-final13/client-occurrence-full-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "client-occurrence-full-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-interaction-final13/client-occurrence-full-stdout.raw",
+      "sha256": "09733409564f7479fc7105e0864fa48bc55e257974794260e492e82ebd065f85",
+      "bytes": 251136
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-interaction-final13/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-occurrence-full": {
+      "explicit_completion": true,
+      "completion_monotonic": 211504.609054099,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "authorized same-ontology fixture offers a non-space instance form and two visual occurrences",
+        "actual two-occurrence native raster retained",
+        "both real native picks resolve the same exact anchored subject",
+        "native selection retains each chosen visual occurrence and pose alongside the same subject",
+        "chosen real occurrence is visibly reachable before native pick",
+        "one native scene gesture selects exactly its occurrence and subject",
+        "retained actual native first-associated-form raster",
+        "chosen authored operation is bound to the exact selected visible occurrence",
+        "actual native target enclosed without reveal: control0",
+        "native editor receives actual focus",
+        "actual native target enclosed without reveal: form-personal-workspace",
+        "explicit personal placement releases only the visual binding",
+        "actual native target enclosed without reveal: form-near-object",
+        "explicit return restores the same current occurrence binding",
+        "relocation preserves the same native editor caret selection draft semantic revision and surface",
+        "chosen real occurrence is visibly reachable before native pick",
+        "one native scene gesture selects exactly its occurrence and subject",
+        "retained actual native second-associated-form raster",
+        "two same-subject occurrences select distinct placement without reacquiring the form or draft",
+        "real owner work watcher installed",
+        "actual native target enclosed without reveal: form-personal-workspace",
+        "actual native target enclosed without reveal: form-near-object",
+        "actual native target enclosed without reveal: form-personal-workspace",
+        "actual native target enclosed without reveal: form-near-object",
+        "actual native target enclosed without reveal: form-personal-workspace",
+        "actual native target enclosed without reveal: form-near-object",
+        "three relocations and accepted unchanged form/world renewals retain resources and perform no named history rebuild write sync work",
+        "retained actual native form-False-1200-26 raster",
+        "placement remains visible outside the bounded task scroll at (False, 1200, 26)",
+        "bounded actual native scroll reaches control0",
+        "retained actual native field-False-1200-26 raster",
+        "bounded actual native scroll reaches control1",
+        "retained actual native action-False-1200-26 raster",
+        "responsive composition retains exact native form draft and operation revision",
+        "retained actual native form-False-1200-48 raster",
+        "placement remains visible outside the bounded task scroll at (False, 1200, 48)",
+        "bounded actual native scroll reaches control0",
+        "retained actual native field-False-1200-48 raster",
+        "bounded actual native scroll reaches control1",
+        "retained actual native action-False-1200-48 raster",
+        "responsive composition retains exact native form draft and operation revision",
+        "retained actual native form-False-560-26 raster",
+        "placement remains visible outside the bounded task scroll at (False, 560, 26)",
+        "bounded actual native scroll reaches control0",
+        "retained actual native field-False-560-26 raster",
+        "bounded actual native scroll reaches control1",
+        "retained actual native action-False-560-26 raster",
+        "responsive composition retains exact native form draft and operation revision",
+        "retained actual native form-True-1200-26 raster",
+        "placement remains visible outside the bounded task scroll at (True, 1200, 26)",
+        "bounded actual native scroll reaches control0",
+        "retained actual native field-True-1200-26 raster",
+        "existing spatial surface is above the chosen occurrence with XR disabled",
+        "actual native target enclosed without reveal: control0",
+        "same native editor opens its existing adjacent keyboard",
+        "bounded actual native scroll reaches control1",
+        "retained actual native action-True-1200-26 raster",
+        "responsive composition retains exact native form draft and operation revision",
+        "retained actual native form-True-1200-48 raster",
+        "placement remains visible outside the bounded task scroll at (True, 1200, 48)",
+        "bounded actual native scroll reaches control0",
+        "retained actual native field-True-1200-48 raster",
+        "existing spatial surface is above the chosen occurrence with XR disabled",
+        "actual native target enclosed without reveal: control0",
+        "same native editor opens its existing adjacent keyboard",
+        "bounded actual native scroll reaches control1",
+        "retained actual native action-True-1200-48 raster",
+        "responsive composition retains exact native form draft and operation revision",
+        "selection relocation resizing and renewal issue no domain configuration or replay",
+        "bounded actual native scroll reaches control1",
+        "actual native target enclosed without reveal: control1",
+        "one explicit native submission produces the original committed outcome",
+        "original authored action committed once with the retained local draft",
+        "actual native target enclosed without reveal: form-personal-workspace",
+        "actual native target enclosed without reveal: form-near-object",
+        "received original outcome and installed editor survive postcommit relocation",
+        "ordinary authorized fixture source update commits",
+        "real scene movement updates placement while retaining the same editor and original outcome",
+        "ordinary authorized fixture source update commits",
+        "occurrence removal withdraws placement without destroying the retained independent form",
+        "actual native target enclosed without reveal: form-personal-workspace",
+        "unplaced subject is inspectable only through deliberate personal placement and its current signed form",
+        "wrong-anchor selection withdraws the form and never inherits occurrence authority",
+        "a freshly accepted independent world survives selected-subject refusal",
+        "enabled action disconnect",
+        "signed occurrence consumers retire through the existing owner"
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-onboarding-usability-20261101/signed.py",
+    "onboarding-expiry-baseline02",
+    "doc/evidence/godot-onboarding-usability-20261101/inputs/client-onboarding-baseline02-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+    "onboarding-expiry"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 40.72448483100743
+}

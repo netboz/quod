@@ -1,0 +1,26 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-onboarding-usability-20261101/qualify.py",
+    "--label",
+    "onboarding-qualification01",
+    "--product",
+    "onboarding-product01",
+    "--diagnostic",
+    "onboarding-final12",
+    "--full",
+    "onboarding-full-candidate07",
+    "--source",
+    "onboarding-source09",
+    "--numbers",
+    "onboarding-numbers08",
+    "--workspace",
+    "onboarding-workspace09",
+    "--context",
+    "onboarding-context-final12"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.7407217049913015
+}

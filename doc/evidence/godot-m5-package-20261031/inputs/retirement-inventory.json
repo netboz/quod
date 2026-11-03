@@ -1,0 +1,864 @@
+{
+  "passed": true,
+  "read_only": true,
+  "moves_deletions_deployment": false,
+  "active_sources": {
+    "agent_instance.pl": {
+      "physical": 284,
+      "nonblank_non_whole_comment": 213,
+      "sha256": "ffec2e02cfd6bf89e1bc1d26b61cfc6b6ffc9c0feea4807c64849e8b45373613"
+    },
+    "agent_recovery_policy.pl": {
+      "physical": 127,
+      "nonblank_non_whole_comment": 97,
+      "sha256": "9839cd3f6f49115391e00963f97401f34374f977d2b1b5054fb9e0e63400b865"
+    },
+    "animals.pl": {
+      "physical": 36,
+      "nonblank_non_whole_comment": 18,
+      "sha256": "75f1a2c0cac115091b1b54c7c410cebafae9a434c414e8df9159c9445640d018"
+    },
+    "common_predicates.pl": {
+      "physical": 532,
+      "nonblank_non_whole_comment": 382,
+      "sha256": "10677508dfb2ab7ed7a6386131e3b1bcb8f3a11ed1002eb3a64952b7212af32d"
+    },
+    "construction.pl": {
+      "physical": 206,
+      "nonblank_non_whole_comment": 173,
+      "sha256": "b86de51186ca0a308485d37f11237d26c96439a62681d449d18954c19597a266"
+    },
+    "cross_benchmark_source.pl": {
+      "physical": 8,
+      "nonblank_non_whole_comment": 2,
+      "sha256": "3da47909be1b5265c560405e1909e592aec5ee6fbf3d5f0339ab24ed04b99608"
+    },
+    "cross_benchmark_target.pl": {
+      "physical": 9,
+      "nonblank_non_whole_comment": 3,
+      "sha256": "b0b41c0b28598b4cd0143a8d11c59374f4f3898049e8c5c6ab9d05cc504e2d2e"
+    },
+    "fipa_request.pl": {
+      "physical": 78,
+      "nonblank_non_whole_comment": 50,
+      "sha256": "d7a7de47079235a134eec507efeb789afdc78fc8af6d6294f93e725ca22032da"
+    },
+    "geometry_schema.pl": {
+      "physical": 93,
+      "nonblank_non_whole_comment": 82,
+      "sha256": "90975d5382ebaaaeeb006ec0796207726a42201b590023eaf13cfc97c0329b54"
+    },
+    "gui_forms.pl": {
+      "physical": 297,
+      "nonblank_non_whole_comment": 227,
+      "sha256": "6f4623cd25ced128b0813cfdb5356154726483f0992dbf83ee87e19bb1d3b9e2"
+    },
+    "gui_instance.pl": {
+      "physical": 379,
+      "nonblank_non_whole_comment": 306,
+      "sha256": "3ba66deb9d36308a783b61583b260b82783de36b1b9fd729d9b23d8ce95107c0"
+    },
+    "gui_measure.pl": {
+      "physical": 272,
+      "nonblank_non_whole_comment": 169,
+      "sha256": "95b1c373b7e4e6c227d5106357b4696bb9ca7e102f630d58a869d7854fce5b58"
+    },
+    "gui_scene.pl": {
+      "physical": 549,
+      "nonblank_non_whole_comment": 375,
+      "sha256": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617"
+    },
+    "gui_tools.pl": {
+      "physical": 704,
+      "nonblank_non_whole_comment": 453,
+      "sha256": "75ce5fd72a19fc74223e1158a2a02a1034c4751b7a97f7c970937dc1c6adc3bf"
+    },
+    "hinged_example_view.pl": {
+      "physical": 30,
+      "nonblank_non_whole_comment": 24,
+      "sha256": "1b504de1d5f76068684b5968724944f287ef41e2cfd136d6af7c37da1e0bc935"
+    },
+    "instrument_configuration.pl": {
+      "physical": 70,
+      "nonblank_non_whole_comment": 60,
+      "sha256": "68bf3df1a39e184f44a42f22149fade89a1a0e51738e237df7c72018f699f561"
+    },
+    "lobby_atmosphere.pl": {
+      "physical": 52,
+      "nonblank_non_whole_comment": 43,
+      "sha256": "52e725869fb37f0c535fde08ed7576ab21b63b218559160e83d50a872414ebfd"
+    },
+    "lobby_instance.pl": {
+      "physical": 163,
+      "nonblank_non_whole_comment": 134,
+      "sha256": "57be0ddfc8d134da10e374bc493d8e4e6940c4f740ab3e4dc86861fe6a724a0a"
+    },
+    "lobby_worlds.pl": {
+      "physical": 179,
+      "nonblank_non_whole_comment": 155,
+      "sha256": "9b8388b039bee05bc8a8464dfc6a729c2c8dfd9447cb9cf913c87374a628f66b"
+    },
+    "material_policy.pl": {
+      "physical": 25,
+      "nonblank_non_whole_comment": 12,
+      "sha256": "8cd184e65422e19829ed9f2faade33606c1021f0ce082e3787e5ff636db3123d"
+    },
+    "node_instance.pl": {
+      "physical": 91,
+      "nonblank_non_whole_comment": 63,
+      "sha256": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40"
+    },
+    "pets.pl": {
+      "physical": 32,
+      "nonblank_non_whole_comment": 12,
+      "sha256": "7940ee0b18cced9019a56b98aeda795d97986acd29869a6e9ea84afff4c24197"
+    },
+    "quod_agent.pl": {
+      "physical": 13,
+      "nonblank_non_whole_comment": 10,
+      "sha256": "58664252af00ff0137d88268a529475941641ed34a7c199e68a1c5dabc49bb5f"
+    },
+    "quod_controllers.pl": {
+      "physical": 99,
+      "nonblank_non_whole_comment": 93,
+      "sha256": "78df5f091b5995d17a7465ebb416e9472ba1ca39914e66ea2df849ea357000b2"
+    },
+    "quod_environment.pl": {
+      "physical": 22,
+      "nonblank_non_whole_comment": 16,
+      "sha256": "2ecbd5e3208cb0a21890f6e5600a1813021a18df6618d02e12a00bb8a8c87f43"
+    },
+    "quod_environment_eidolons.pl": {
+      "physical": 33,
+      "nonblank_non_whole_comment": 25,
+      "sha256": "370cf34e94284de34669da8455e81634d24e723a4447b2171f9cb55f2a87a241"
+    },
+    "quod_gui.pl": {
+      "physical": 385,
+      "nonblank_non_whole_comment": 321,
+      "sha256": "969b6ab3eafd67cf5fd6f36c50b1657c90b34fa134d61657d1da50ec16863339"
+    },
+    "quod_hinged.pl": {
+      "physical": 161,
+      "nonblank_non_whole_comment": 135,
+      "sha256": "5a1b432da48b0439655994be2f6a8aa613db2cb18c4c1dc965d8b31a0c2078b2"
+    },
+    "quod_licence.pl": {
+      "physical": 257,
+      "nonblank_non_whole_comment": 157,
+      "sha256": "a93e1664cf1cf9db7de01ce5d0b6bddef357ffcb7e7b5ab5f641db272df21112"
+    },
+    "quod_lobby.pl": {
+      "physical": 248,
+      "nonblank_non_whole_comment": 223,
+      "sha256": "fc22164d4683b2bac4d67d91779d06ffa9a7b27d2b25367b56c827fb94dd4c25"
+    },
+    "quod_material.pl": {
+      "physical": 68,
+      "nonblank_non_whole_comment": 55,
+      "sha256": "8fa34ec28eb02510164f4d05f9e31ed10dd0a39784589e843761cf73adc8f96d"
+    },
+    "quod_material_eidolons.pl": {
+      "physical": 75,
+      "nonblank_non_whole_comment": 57,
+      "sha256": "f31583679b387e679378c3908dd2503ccc803dee17e31cf5de38382e3be224cf"
+    },
+    "quod_names.pl": {
+      "physical": 699,
+      "nonblank_non_whole_comment": 514,
+      "sha256": "b8a5f99dbf72d9f1d8498123c7ec010e37970a86879eae6008a15900873bdeee"
+    },
+    "quod_node.pl": {
+      "physical": 122,
+      "nonblank_non_whole_comment": 89,
+      "sha256": "f7531de9c3081ec26f77d43f34a937d2c7cfc2941ef4d27f6858764ae0d900a2"
+    },
+    "quod_physics.pl": {
+      "physical": 1038,
+      "nonblank_non_whole_comment": 858,
+      "sha256": "b24718fe4ee6f8c7aff9644dc3580d36cb2963e08cb936a3af0b119d0af7c439"
+    },
+    "quod_root.pl": {
+      "physical": 156,
+      "nonblank_non_whole_comment": 77,
+      "sha256": "20193024399f1fbccb745d4e730a2dd52ae6206a5c708815e44415dd8104293a"
+    },
+    "quod_space.pl": {
+      "physical": 590,
+      "nonblank_non_whole_comment": 499,
+      "sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38"
+    },
+    "quod_user.pl": {
+      "physical": 123,
+      "nonblank_non_whole_comment": 100,
+      "sha256": "5dd72d559c73f22050372d7659dc278805c05dea2fba7dd3bb397fc40ac25258"
+    },
+    "user_instance.pl": {
+      "physical": 540,
+      "nonblank_non_whole_comment": 442,
+      "sha256": "2993ac2ef2e3a9ab2142780dbb21b28c271d44130db5ead43901023e9fa00b99"
+    },
+    "voxel_world.pl": {
+      "physical": 219,
+      "nonblank_non_whole_comment": 177,
+      "sha256": "669e383e2e794184c66872e1529500ad301cfef2d35fbf92f96a1a3e72ecaf13"
+    },
+    "voxel_world_gui.pl": {
+      "physical": 156,
+      "nonblank_non_whole_comment": 136,
+      "sha256": "9e66b7089abe70078ea198da07e377bff77ed875c71e5121fe63ae8fd0f4035c"
+    },
+    "voxel_world_view.pl": {
+      "physical": 42,
+      "nonblank_non_whole_comment": 31,
+      "sha256": "9b8a5505d68bf1399aced9b867acf88a39be2fefa3366a3a757a5e758c31cf8e"
+    }
+  },
+  "archived_sources": {
+    "controller_preferences.pl": {
+      "physical": 150,
+      "nonblank_non_whole_comment": 139,
+      "sha256": "171fdb28e629a8fccf7306cf231bafbd569e56565925c4f43cf59f3510aa0b1b"
+    },
+    "gui_hud.pl": {
+      "physical": 94,
+      "nonblank_non_whole_comment": 75,
+      "sha256": "bb987312e1300028d67033d522553ddea460ddf9f0f6770c85fc3df4b01d969e"
+    },
+    "gui_operation.pl": {
+      "physical": 99,
+      "nonblank_non_whole_comment": 75,
+      "sha256": "c91b8d1545461aafe3b9a8f36df03dd488cba1f7944ed1b98cbbd6930f606530"
+    },
+    "gui_question.pl": {
+      "physical": 277,
+      "nonblank_non_whole_comment": 226,
+      "sha256": "d1abd3a7cf4ccdb51436bd74c78b00e1f7ba5a8042fda99c3fa46fa324d8b76b"
+    },
+    "human_user_instance.pl": {
+      "physical": 61,
+      "nonblank_non_whole_comment": 43,
+      "sha256": "332d09e43c75cdf977f40f9401f4f244796f27bc737f7f0d9241e256f693d899"
+    },
+    "m3a-space-entity-pose.pl": {
+      "physical": 5,
+      "nonblank_non_whole_comment": 5,
+      "sha256": "50b54a43c34fe3c2407307372de2d9e3c4cb9820a6cbce0ba629a84e6e487375"
+    },
+    "node_execution.pl": {
+      "physical": 91,
+      "nonblank_non_whole_comment": 63,
+      "sha256": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40"
+    },
+    "personal_agent.pl": {
+      "physical": 124,
+      "nonblank_non_whole_comment": 93,
+      "sha256": "55f3457dcc2594f50eacf0c1ce189be8bc495de26a5c7652652fb2b7aee8933f"
+    },
+    "quod_human_user.pl": {
+      "physical": 13,
+      "nonblank_non_whole_comment": 10,
+      "sha256": "eb323b03fe8a0168aea2077c7e07eca8ff0e0d7e4b5e41f6b0fa83fa9c330e77"
+    },
+    "quod_lens.pl": {
+      "physical": 457,
+      "nonblank_non_whole_comment": 272,
+      "sha256": "db667b0a7fb5f528bec09996929904eb305162745ba1854aec664e6f0de9ed68"
+    },
+    "quod_measure.pl": {
+      "physical": 285,
+      "nonblank_non_whole_comment": 181,
+      "sha256": "43135c44d20bbf1e2ea9762f1e85898476fb1845bc8cb3e17497c56ffc96c02b"
+    },
+    "quod_modelling.pl": {
+      "physical": 173,
+      "nonblank_non_whole_comment": 144,
+      "sha256": "f57f04d1565327aeb0d8fdbbab5cd96347c9e26e76e1d4089b616ecbc5469093"
+    },
+    "quod_prolog.pl": {
+      "physical": 242,
+      "nonblank_non_whole_comment": 186,
+      "sha256": "f15c6f0f39a6bc897c0c9dbaac342da24178999c2992f3a299bd95448b5bc7f6"
+    },
+    "quod_prolog_eidolons.pl": {
+      "physical": 45,
+      "nonblank_non_whole_comment": 36,
+      "sha256": "1d7d90147dd1cc5403b310fa30523638df66e0dc7fb04de4bcccc38e32d28bf9"
+    },
+    "quod_rendering.pl": {
+      "physical": 374,
+      "nonblank_non_whole_comment": 232,
+      "sha256": "f157aab960fc2112abb4b6d4e4023843ef8686c138e5fc93c7d41fa8a0e64f27"
+    },
+    "quod_signup.pl": {
+      "physical": 141,
+      "nonblank_non_whole_comment": 111,
+      "sha256": "6c415a1c1b3ae57009fcc99ec96f8bff804fa22f473ed3e4961b78f475c1a642"
+    },
+    "space.pl": {
+      "physical": 204,
+      "nonblank_non_whole_comment": 160,
+      "sha256": "95bc3ab6a978ff3c165e3fc8dc1305022aa2fd7cf2eca20354fbbe978e656b86"
+    },
+    "space_gui.pl": {
+      "physical": 57,
+      "nonblank_non_whole_comment": 54,
+      "sha256": "5cd335338b11d1f560009676560a276ebb1c540b10185137e01cfe4d2179df5a"
+    },
+    "space_view.pl": {
+      "physical": 45,
+      "nonblank_non_whole_comment": 38,
+      "sha256": "0027a04dfa67e89f64ae9fad43d8ac2e41b647c9314b3e997cf469bcfe8bf226"
+    }
+  },
+  "mapped_sources": {
+    "agent_instance.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_ask_SUITE.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_agent_failover_SUITE.erl",
+        "test/quod_effect_journal_tests.erl",
+        "test/quod_agent_actions_tests.erl",
+        "test/quod_agent_hosting_tests.erl",
+        "test/quod_gui_question_tests.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_agent_vault_tests.erl",
+        "test/quod_physics_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "agent_recovery_policy.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_agent_hosting_tests.erl",
+        "test/quod_agent_failover_SUITE.erl",
+        "test/quod_agent_observation_capacity_tests.erl",
+        "test/quod_agent_recovery_tests.erl",
+        "test/quod_agent_actions_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "animals.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_ask_SUITE.erl",
+        "test/quod_ask_tests.erl",
+        "test/quod_create_root_tests.erl",
+        "test/quod_genesis_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "common_predicates.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "src/quod_committed_projection.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "src/predicates/quod_common_primitives.erl",
+        "src/predicates/quod_ontology_predicates.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "construction.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "src/quod_committed_projection.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "controller_preferences.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "cross_benchmark_source.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "cross_benchmark_target.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "fipa_request.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_agent_hosting_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "gui_hud.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "gui_instance.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_ask_SUITE.erl",
+        "test/quod_gui_question_tests.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_gui_components_tests.erl",
+        "test/quod_gui_operations_tests.erl",
+        "test/quod_gui_stage1_tests.erl",
+        "test/quod_controller_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "gui_operation.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "gui_question.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "hinged_example_view.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_physics_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "human_user_instance.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "instrument_configuration.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_gui_examples_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "lobby_atmosphere.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_gui_examples_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "lobby_instance.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_physics_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "lobby_worlds.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_voxel_world_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "material_policy.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "src/quod_committed_projection.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "node_execution.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "personal_agent.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "pets.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_ask_tests.erl",
+        "test/quod_ask_SUITE.erl",
+        "test/quod_create_root_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_agent.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_environment.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_rendering_tests.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_environment_eidolons.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_rendering_tests.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_gui.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_gui_question_tests.erl",
+        "test/quod_space_creation_tests.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_ct.erl",
+        "test/quod_gui_components_tests.erl",
+        "test/quod_gui_operations_tests.erl",
+        "test/quod_controller_tests.erl",
+        "test/quod_gui_stage1_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_hinged.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_physics_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_human_user.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "quod_lens.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "quod_licence.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_licence_tests.erl",
+        "test/quod_lens_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_lobby.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_physics_tests.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_material.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_rendering_tests.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_material_eidolons.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_rendering_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_measure.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "quod_modelling.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "quod_names.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_names_tests.erl",
+        "test/quod_outcome_result_tests.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_constructor_tests.erl",
+        "test/quod_names_SUITE.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_node.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_ask_SUITE.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/join_SUITE.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_physics.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lobby_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_physics_tests.erl",
+        "test/quod_physics_control_tests.erl",
+        "test/quod_space_tests.erl",
+        "test/quod_voxel_world_tests.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_effect_journal_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_prolog.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "quod_prolog_eidolons.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "quod_rendering.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "quod_root.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "config/quod.conf",
+        "src/quod_schema.erl",
+        "src/quod_app.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_committee_predicates_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_ask_SUITE.erl",
+        "test/quod_simplex_SUITE.erl",
+        "test/growth_SUITE.erl",
+        "test/quod_root_resource_lifecycle_tests.erl",
+        "test/quod_create_root_tests.erl",
+        "test/quod_source_view_tests.erl",
+        "test/quod_ns_SUITE.erl",
+        "test/quod_node_context_tests.erl",
+        "test/quod_names_SUITE.erl",
+        "test/quod_agent_failover_SUITE.erl",
+        "test/quod_schema_tests.erl",
+        "test/join_SUITE.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "quod_signup.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "space.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [
+        "test/quod_space_creation_tests.erl",
+        "test/quod_physics_tests.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_voxel_world_tests.erl",
+        "test/quod_gui_operations_tests.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_effect_journal_tests.erl",
+        "test/quod_gui_browser_tests.erl",
+        "test/quod_gui_stage1_tests.erl",
+        "test/quod_space_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "space_gui.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "space_view.pl": {
+      "active": false,
+      "archived": true,
+      "literal_current_callers": [],
+      "disposition": "already archived; verify no active source loader"
+    },
+    "voxel_world.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_voxel_world_tests.erl",
+        "test/quod_physics_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "voxel_world_gui.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_voxel_world_tests.erl",
+        "test/quod_gui_examples_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    },
+    "voxel_world_view.pl": {
+      "active": true,
+      "archived": false,
+      "literal_current_callers": [
+        "test/quod_physics_tests.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl"
+      ],
+      "disposition": "still packaged; preserve valid owner/coverage"
+    }
+  },
+  "counts": {
+    "M0_baseline": {
+      "files": 50,
+      "physical_lines": 8595,
+      "production_metric_lines": 6508
+    },
+    "current_active_all": {
+      "files": 42,
+      "physical_lines": 9262,
+      "production_metric_lines": 7068
+    },
+    "current_production": {
+      "files": 35,
+      "physical_lines": 8984,
+      "production_metric_lines": 6867
+    },
+    "current_test_fixtures": {
+      "files": 7,
+      "physical_lines": 278,
+      "production_metric_lines": 201
+    },
+    "retained_archive": {
+      "files": 19,
+      "physical_lines": 2937,
+      "production_metric_lines": 2143
+    },
+    "checkpoint_before_equals_after": true,
+    "checkpoint_removed_files": 0,
+    "checkpoint_removed_production_lines": 0
+  },
+  "M0_target": {
+    "production_files": 24,
+    "test_sources": 7,
+    "production_metric_lines_maximum": 5700,
+    "not_claimed_achieved": true
+  },
+  "runtime_manifests": {
+    "rebar.config": {
+      "sha256": "91e7bdd0c9fd62c423cb04cea5c089db3df615666b899c093864c43ef0d4ce5a"
+    },
+    "rebar.lock": {
+      "sha256": "09f364a859950d3cf2aeece1e56c14f8fd6cbbd4b7cda2a4de4e83888b9df01b"
+    },
+    "Dockerfile": {
+      "sha256": "13af2c5664fc80a584ee2a4886269f43df1b3bb19b818322f1126e9f36febe2e"
+    },
+    ".dockerignore": {
+      "sha256": "b57665444a2d6988835c9ded127bf7e54b4647cc11acdaea27d64bc1308e7f5b"
+    },
+    "src/quod.app.src": {
+      "sha256": "2225fb3a89717a56c53b60b46d9ec68e7609ebb0b1ff40da7a1070c539519d5b"
+    },
+    "client/godot/Quod.csproj": {
+      "sha256": "fe215384ff2de0a13b7614ac84554f23be8b1416d78bf1b73286d3725efdc281"
+    },
+    "client/godot/export_presets.cfg": {
+      "sha256": "aa9ab34cda52b679f5d09ff2de83f369682a685d491519c2ab2b9cc3dec14536"
+    },
+    "client/godot-tools/run.py": {
+      "sha256": "0d44ff8edf9d57388a0f425e47721d421f5a8d052732084e355a94813fe0c8fb"
+    },
+    "client/native/README.md": {
+      "sha256": "db1e4f60dc43318795b1da67b48fa309b98fafea9f252bdf84541d50f94723d6"
+    }
+  },
+  "erlang_disposition": "M0 identified no whole superseded Erlang owner. Existing ontology/lifecycle/GUI/physics/source owners remain live; no source moved.",
+  "old_native": "client/native remains an independent retained implementation with hardware/teardown gaps; the new package contains no old extension, loader, Rust core or build dependency. Retirement requires exact remaining obligation disposition and coordinator authority.",
+  "Stage3": "optional atmosphere/environment/material/name/terrain and broader workbench remain explicit; no silent retirement or completion.",
+  "catalogue": {
+    "M0_observed_shared_with_root": 19,
+    "M0_foundational_including_8_nodes": 27,
+    "accepted_fresh_foundation_shared_with_root": 7,
+    "package_changes": 0,
+    "network_state_refreshed": false,
+    "dynamic_instances": "fresh fixture journey count is separate from old deployed-network population; no global census or deletion"
+  },
+  "cutover": "M0 network-boundary.md is historical. Refresh exact root/jobs/allocations/volumes/trust/ingress immediately before any separately gated irreversible action. No refresh or change of deployment resources performed here."
+}

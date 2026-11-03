@@ -1,0 +1,545 @@
+{
+  "passed": true,
+  "evidence_verified": true,
+  "package_passed": true,
+  "full_M4_or_M5": false,
+  "all_selected_cases_passed": true,
+  "current_journey_complete": true,
+  "reopen": "passed",
+  "product": {
+    "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-product01-manifest.json",
+    "sha256": "d67294b8bfe7f7f2dfdba9b65f48815b66dfc4409dad73d966455c1f0eb7d406",
+    "inputs": 98,
+    "exports": 196,
+    "export_bytes": 193578580,
+    "application_inputs_changed": false,
+    "rebuilt": false
+  },
+  "archives": [
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-occurrence-linux-x86_64-private01.tar.gz",
+      "archive_sha256": "b70009c9778d305f86dbb173df458f500d36bee7c7a64de46e69189b555690f0",
+      "archive_bytes": 78117876,
+      "export_files": 196,
+      "package_files": 207,
+      "export_manifest_sha256": "d67294b8bfe7f7f2dfdba9b65f48815b66dfc4409dad73d966455c1f0eb7d406"
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-occurrence-linux-x86_64-repro02.tar.gz",
+      "archive_sha256": "b70009c9778d305f86dbb173df458f500d36bee7c7a64de46e69189b555690f0",
+      "archive_bytes": 78117876,
+      "export_files": 196,
+      "package_files": 207,
+      "export_manifest_sha256": "d67294b8bfe7f7f2dfdba9b65f48815b66dfc4409dad73d966455c1f0eb7d406"
+    }
+  ],
+  "extraction": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence form clean inspection01/quod-linux-x86_64",
+  "ordinary_launch": {
+    "client_exit": 0,
+    "wrapper_exit": 0,
+    "mapped_exact_owned_close": true,
+    "own_CoreCLR": true,
+    "instrumented": false
+  },
+  "companion": {
+    "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/client-occurrence-companion04-manifest.json",
+    "sha256": "5d321e14afc2fb7135b6ff19b1e9ab182fb076c7df3461797afd14a8fd5561b2",
+    "production_inputs": 98,
+    "supplied": 99,
+    "exports": 196,
+    "checks": {
+      "initial": 47,
+      "reopen": 33
+    },
+    "whole_case_passed": true,
+    "post_completion_trigger": null,
+    "children": {
+      "server": 0,
+      "client-initial": 0,
+      "client-reopen": 0
+    },
+    "EOF": {
+      "server-stdout": true,
+      "server-stderr": true,
+      "client-initial-stdout": true,
+      "client-initial-stderr": true,
+      "client-reopen-stdout": true,
+      "client-reopen-stderr": true
+    },
+    "control_signals_and_software_native_pointer": true,
+    "host_input": false,
+    "final_states": {
+      "initial": {
+        "scenes": 0,
+        "sockets": 0,
+        "subscriptions": 0,
+        "sources": 0,
+        "appearances": 0,
+        "captures": 0,
+        "XR": false
+      },
+      "reopen": {
+        "scenes": 0,
+        "sockets": 0,
+        "subscriptions": 0,
+        "sources": 0,
+        "appearances": 0,
+        "captures": 0,
+        "XR": false
+      }
+    }
+  },
+  "selected_journey": "occurrence-journey04",
+  "server_sources": {
+    "src/quod_material_admission.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_material_admission.erl",
+      "sha256": "ceef0436b16a5127d6e6ae30b60897470084b12cf7ecf28255608eed0753ce2a",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_material_admission.beam",
+        "sha256": "1ced9a9336083dd4c62ee8bfebfc0ee3978c616458861c91394c28c6b58131b5",
+        "bytes": 6952
+      }
+    },
+    "src/quod_proof_session.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_proof_session.erl",
+      "sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_proof_session.beam",
+        "sha256": "f54d55524101d44265048eeb477d25af0b53c36ceb144db087de69ab302c85f8",
+        "bytes": 44572
+      }
+    },
+    "src/quod_scope_session.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_scope_session.erl",
+      "sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_scope_session.beam",
+        "sha256": "b108826f39b3a813e8c3a2f3126bebe76bba951c8a6801532632fd9853b4b30f",
+        "bytes": 82156
+      }
+    },
+    "src/quod_scope_wire.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_scope_wire.erl",
+      "sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_scope_wire.beam",
+        "sha256": "10090cbe9e38213d33a0d23377e623853596f1fdca7de812fc96133c717a937e",
+        "bytes": 45076
+      }
+    },
+    "src/predicates/quod_ask.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_ask.erl",
+      "sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_ask.beam",
+        "sha256": "956f437c5918b3b340216443a42b576ad030e3da1c0de7a389e710d29b2603bf",
+        "bytes": 90100
+      }
+    },
+    "src/quod_wire_term.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_wire_term.erl",
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_wire_term.beam",
+        "sha256": "ad069a6e52a47f1b592df723e02e810e9067dd438e82f0adee42a6e354033895",
+        "bytes": 32932
+      }
+    },
+    "src/quod_ontology_name.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_ontology_name.erl",
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_ontology_name.beam",
+        "sha256": "d771eb3cc986035004489969e1cb2cbc9c8e4c887b4fd6949f51692687e491df",
+        "bytes": 2700
+      }
+    },
+    "priv/ontologies/material_policy.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-material_policy.pl",
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169"
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-common_predicates.pl",
+      "sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "48dba94f659bfd0cd9662764cba224f719c8350c76d4874ca3f28de0a58b7f50",
+        "current_source_sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-occurrence-journey04-server/common_predicates.pl"
+      }
+    },
+    "priv/ontologies/quod_space.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_space.pl",
+      "sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38",
+        "current_source_sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-occurrence-journey04-server/quod_space.pl"
+      }
+    },
+    "priv/ontologies/gui_tools.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-gui_tools.pl",
+      "sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "54e497c546088f20becc8bfbb434ab54843924b3ec9d30a428d1ca817ab9f39a",
+        "current_source_sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-occurrence-journey04-server/gui_tools.pl"
+      }
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_gui.pl",
+      "sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "969b6ab3eafd67cf5fd6f36c50b1657c90b34fa134d61657d1da50ec16863339",
+        "current_source_sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-occurrence-journey04-server/quod_gui.pl"
+      }
+    },
+    "priv/ontologies/gui_forms.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-gui_forms.pl",
+      "sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "6f4623cd25ced128b0813cfdb5356154726483f0992dbf83ee87e19bb1d3b9e2",
+        "current_source_sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-occurrence-journey04-server/gui_forms.pl"
+      }
+    },
+    "src/quod_client_view.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/occurrence-journey04-server-quod_client_view.erl",
+      "sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+      "compiled_object_sha256": "98259c46743cdd6dd28de6f7df13535de31923ff1b647287d428af35ad5d69a1",
+      "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/space-name-owner03.json",
+      "qualification_sha256": "ab75350938e1025e6831328f6761123d50e6446201ec22daac7b25fb4a203f71"
+    }
+  },
+  "server_runtime_rebuilt": false,
+  "broader_evidence_reused": "accepted275 occurrence interaction27/91, preview27/117, workspace27/45, lifetime24/29, space24/40, input25/14 and focused keyboard/controller/ray/scene/material; accepted254 and appearance236 authority retained",
+  "package_checks": 9,
+  "launch_recipe": {
+    "passed": true,
+    "prepared": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-launch-recipe-occurrence-desktop-next01/prepared.json",
+    "sha256": "a17a19ad9ead717874d46a8343460edf195fb213a6956adba117c7444ee7855a",
+    "nothing_launched": true
+  },
+  "wrappers": {
+    "occurrence-isolation-probe01": {
+      "true_exit": 0,
+      "receipt_sha256": "b2106750b52b241577ad41ad29c2bfe4561e4a9c6fa47e66e7c911cf59a19b90",
+      "retained_failure": false
+    },
+    "occurrence-journey01": {
+      "true_exit": 1,
+      "receipt_sha256": "f2cc1cdc3d9dccfa7590fa6729ca9f2e97e086e98d9bbf142e3b8f298d7cd259",
+      "retained_failure": true
+    },
+    "occurrence-journey02": {
+      "true_exit": 1,
+      "receipt_sha256": "3bec164af8d5c7fa5400c89eda273aa3f6ce7874f02699fcea14f5a895513b7f",
+      "retained_failure": true
+    },
+    "occurrence-journey03": {
+      "true_exit": 1,
+      "receipt_sha256": "0f86c84c0791e3288299395fcd70a4063a78627002e96a242ebea8da22419608",
+      "retained_failure": true
+    },
+    "occurrence-journey04": {
+      "true_exit": 0,
+      "receipt_sha256": "2c9fdde5276793259dd9f55b31688579b026c69a35fcd5f0a7dc53d284bbedf3",
+      "retained_failure": false
+    },
+    "occurrence-launch-parser01": {
+      "true_exit": 0,
+      "receipt_sha256": "846adea28eb363ea4c89bbd5aa2e7ab75c42ff8f6be64b52a8a9ec71bbc15dab",
+      "retained_failure": false
+    },
+    "occurrence-launch-recipe01": {
+      "true_exit": 0,
+      "receipt_sha256": "2439e1b7773399a89804142464ca87c1243ccf7836f31ff6175b4d746fbe3ebd",
+      "retained_failure": false
+    },
+    "occurrence-ordinary-launch01": {
+      "true_exit": 0,
+      "receipt_sha256": "87a1ea7b0994a10a28bd798eee681c49c068ac9ad059137c6c1bdc2fcde202b4",
+      "retained_failure": false
+    },
+    "occurrence-package-checks01": {
+      "true_exit": 0,
+      "receipt_sha256": "18bfaecf32e0b822b6def339ee3c52a9c72596d7b8ac19117f76e36f72e4a1e6",
+      "retained_failure": false
+    },
+    "occurrence-package-compose01": {
+      "true_exit": 0,
+      "receipt_sha256": "739f37c55229eb3668ec94742201a2aa06c98389de6271b1cdcd2b5a118e6313",
+      "retained_failure": false
+    },
+    "occurrence-package-inspection01": {
+      "true_exit": 0,
+      "receipt_sha256": "6fd73b6cc267c930b7b1bdd15dcf944376d2d03eed4e555a6530e58a28b7c2e3",
+      "retained_failure": false
+    },
+    "occurrence-package-preparation01": {
+      "true_exit": 0,
+      "receipt_sha256": "048c3dc707ff0b22b67f147ebb357af97d0f2fe8ab3692f6bb8f493440d9876b",
+      "retained_failure": false
+    },
+    "occurrence-package-private01": {
+      "true_exit": 0,
+      "receipt_sha256": "f90529c7d5bfc2108e73da86254f2177d16fc64b8625d1f93b461fc6790ef769",
+      "retained_failure": false
+    },
+    "occurrence-package-repro02": {
+      "true_exit": 0,
+      "receipt_sha256": "b41b2a951de50e8c9ce1c133c316b064d3b23f7ece3edcffc9e1841b6f777c64",
+      "retained_failure": false
+    },
+    "occurrence-companion01-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "e02b1f01029fa7f09fcaa50923d78946bff9313182f9843ae19311f1634016f7"
+    },
+    "occurrence-companion01-build": {
+      "true_exit": 0,
+      "receipt_sha256": "5ba70595845af48e9f1b2c48e734d03c0295b3e0b487ee4903a726c4380403f1"
+    },
+    "occurrence-companion01-export": {
+      "true_exit": 0,
+      "receipt_sha256": "d40ee0c76bdb5497399b26aa3883b8852d84a307df1d696aa828912c5166f425"
+    },
+    "occurrence-companion01-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "6d70dc67117cf10019a96c9bbb06df9979c31b5ef5a74ea40f2bd0c83a8b4db5"
+    },
+    "occurrence-companion01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "e5b3ef86baa354ced7a7bafe83fea548e96284392382e0747f051b07be0fd24e"
+    },
+    "occurrence-companion01-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "6203109fcaca6fa47893d8cdcfd61e047cef57e63ebfea0386dd430b9475895e"
+    },
+    "occurrence-companion02-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "56406a2da5ef589f00d80ada1b175a0e12632a0ad2f0cb6ac20cf6e0f4714602"
+    },
+    "occurrence-companion02-build": {
+      "true_exit": 0,
+      "receipt_sha256": "f12e718d1eb14aa04fadbccaab8d95d8f2eb311e1e5b011191000f5a3192d171"
+    },
+    "occurrence-companion02-export": {
+      "true_exit": 0,
+      "receipt_sha256": "eeceacb02a22960c664406f704b60f0ce44f7700a5cb0da979df7c0f046221e8"
+    },
+    "occurrence-companion02-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "796136eff55cc3f2c2d953498acd615961d555e2f0cc9fb02b3b6eeaa7b56587"
+    },
+    "occurrence-companion02-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "9afa2a6d3e1d18e3f8f28890954b639140beb20e8ff8d44df89cd3b7032e0416"
+    },
+    "occurrence-companion02-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "028f206601684e07a479122c06170317e334c36dca4f0b73f319afbbe7cccad7"
+    },
+    "occurrence-companion03-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "3972982b82b40133461443e42eba135cd8cae422eeb265cd4a57a3798dd73093"
+    },
+    "occurrence-companion03-build": {
+      "true_exit": 0,
+      "receipt_sha256": "8fca8067beb3f4204e52ad056fda602691661aeae522ba8ee6baa6b47f25f6c9"
+    },
+    "occurrence-companion03-export": {
+      "true_exit": 0,
+      "receipt_sha256": "4274df6560bb6d7bb1241077441a178ac9696a694a460955832ca29473ab8e5c"
+    },
+    "occurrence-companion03-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "ef8c3568321587973474f81fde17ea919ce1caeca53324c140aae0d582fd58e6"
+    },
+    "occurrence-companion03-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "e346f94de681345b3c896dbf7273079b3d31a3dc86f0bce6a435c56e3051df30"
+    },
+    "occurrence-companion03-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "02b1652bc45b8b28cbe804553780c2a55958548e131daa4279f4bc4ae5357178"
+    },
+    "occurrence-companion04-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "88efeaecd3258194a486d80618591b6f7269acddd8f2747d27d807b086e039d6"
+    },
+    "occurrence-companion04-build": {
+      "true_exit": 0,
+      "receipt_sha256": "2fbc572ecc1a1dffc25909921f238f20ae58639ddd24591bde0bea05fc18ed46"
+    },
+    "occurrence-companion04-export": {
+      "true_exit": 0,
+      "receipt_sha256": "b6c1cc9b00bdb08304c287b6715b7d5e42f1190d493ac04cc41799098bcf9f82"
+    },
+    "occurrence-companion04-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "34e34ea3457e969759f912ebe741ea65f357d2b5621d4ebc218c3becaeced672"
+    },
+    "occurrence-companion04-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "1ed4754ba2eeb0c5e5a29a5a829c09c585b78762fd9dc416a5388f1e9addadfc"
+    },
+    "occurrence-companion04-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "1452b662563cbc597bac437423df38f9a18234d885af8630c0089c60701afd43"
+    }
+  },
+  "run_labels": [
+    "occurrence-isolation-probe01",
+    "occurrence-journey01",
+    "occurrence-journey02",
+    "occurrence-journey03",
+    "occurrence-journey04",
+    "occurrence-launch-parser01",
+    "occurrence-launch-recipe01",
+    "occurrence-ordinary-launch01",
+    "occurrence-package-checks01",
+    "occurrence-package-compose01",
+    "occurrence-package-inspection01",
+    "occurrence-package-preparation01",
+    "occurrence-package-private01",
+    "occurrence-package-repro02"
+  ],
+  "source_delta": {
+    "client/godot-tools/package/README.txt": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-client-package-20261101/inputs/before/client/godot-tools/package/README.txt",
+      "before_sha256": "c33fe3e39fb96d4d0bf9a6a7eaf314ddf3effbbc563f4a6f10d34bd34a3fa065",
+      "after_sha256": "354728013b2d097b8d0364f3ac9dcbe59366e7c91e4fdd3d0ddc1646f8a2b248",
+      "mode": 420
+    }
+  },
+  "line_delta": {
+    "added": 10,
+    "removed": 0
+  },
+  "cases": {
+    "occurrence-journey01": {
+      "passed": false,
+      "failure": "Empty: ",
+      "children": {
+        "server": 0,
+        "client-initial": -15
+      },
+      "prefix_checks": {
+        "client-initial": 6
+      },
+      "completion": {
+        "server": false,
+        "client-initial": false
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-initial-stdout": true,
+        "client-initial-stderr": true
+      },
+      "post_completion_trigger": null,
+      "reopen_executed": false,
+      "source_receipt_sha256": "8808740c94f0e7325145757d24d3a8f83413dc916c63ae790d7ffbb01ef1a8b4"
+    },
+    "occurrence-journey02": {
+      "passed": false,
+      "failure": "AssertionError: ",
+      "children": {
+        "server": 0,
+        "client-initial": 0,
+        "client-reopen": 1
+      },
+      "prefix_checks": {
+        "client-initial": 47,
+        "client-reopen": 6
+      },
+      "completion": {
+        "server": false,
+        "client-initial": true,
+        "client-reopen": false
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-initial-stdout": true,
+        "client-initial-stderr": true,
+        "client-reopen-stdout": true,
+        "client-reopen-stderr": true
+      },
+      "post_completion_trigger": null,
+      "reopen_executed": true,
+      "source_receipt_sha256": "3b0afd9d78ed8d423d2046a4cdf379410d2b5482fff48a3ec095c04dfcf632d6"
+    },
+    "occurrence-journey03": {
+      "passed": false,
+      "failure": "AssertionError: ",
+      "children": {
+        "server": 0,
+        "client-initial": 1
+      },
+      "prefix_checks": {
+        "client-initial": 40
+      },
+      "completion": {
+        "server": false,
+        "client-initial": false
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-initial-stdout": true,
+        "client-initial-stderr": true
+      },
+      "post_completion_trigger": null,
+      "reopen_executed": false,
+      "source_receipt_sha256": "5a189799b7e0f03bc7e29a4c3a179d05ea3dd5e9169f3eed2e4c761484d03f55"
+    },
+    "occurrence-journey04": {
+      "passed": true,
+      "failure": null,
+      "children": {
+        "server": 0,
+        "client-initial": 0,
+        "client-reopen": 0
+      },
+      "prefix_checks": {
+        "client-initial": 47,
+        "client-reopen": 33
+      },
+      "completion": {
+        "server": false,
+        "client-initial": true,
+        "client-reopen": true
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-initial-stdout": true,
+        "client-initial-stderr": true,
+        "client-reopen-stdout": true,
+        "client-reopen-stderr": true
+      },
+      "post_completion_trigger": null,
+      "reopen_executed": true,
+      "source_receipt_sha256": "9cf0b38ff5d771d93728d410b8b88eb6fe57896713bdee575381a634d9e45853"
+    }
+  },
+  "retained_new_failures": [
+    "occurrence-journey01",
+    "occurrence-journey02",
+    "occurrence-journey03"
+  ],
+  "historical_shutdown_fixed": false,
+  "human_acceptance": false,
+  "native_XR_or_host_input": false,
+  "limits": [
+    "Private current-host package; GLIBC2.44 and matching world-name server/trust required.",
+    "Ordinary uninstrumented launch is separate from the signed software Control/native-pointer companion.",
+    "Normal exits do not identify or fix historical noEOF failures.",
+    "No full M5 release, retirement, deployment, cutover, human usability or headset acceptance."
+  ],
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/occurrence-package-qualified01-hashes.json",
+    "sha256": "6f5722471423196c4ef840be1d596168f28fdb14a01732e5443bfc31d22c7e1c"
+  }
+}

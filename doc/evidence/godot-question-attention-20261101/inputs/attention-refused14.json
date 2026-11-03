@@ -1,0 +1,64 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "d95bc04f5f6bbd5f3d5acadf77280b40ed26bc9d5bca11884e282e5761f903fc",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-refused14/drivers/signed.py",
+      "sha256": "8eea2f27093e0ee11d2e04d9aca89ab4362799a502bd7e2aba23d3fec74626b4"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-refused14/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-refused14/drivers/hashes.py",
+      "sha256": "2df13f387f7d127b47265dec1ead54f38736e42bf874a3b20ecfa1ba5f2be6d7"
+    }
+  },
+  "failure": "Empty: ",
+  "unretired_failure": true,
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-attention-refused-stdout": true,
+    "client-attention-refused-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-refused14/server-stdout.raw",
+      "sha256": "bc08e52c9fff5db302907e19d0f7636acdd9039373f81a1a154ee49a38bd8731",
+      "bytes": 129
+    },
+    "client-attention-refused-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-refused14/client-attention-refused-stderr.raw",
+      "sha256": "0a7a13f851962ce02d48800cb32b93798f58496e50c34077cca36a24445261d5",
+      "bytes": 4944
+    },
+    "client-attention-refused-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-refused14/client-attention-refused-stdout.raw",
+      "sha256": "db867b6149d8669301179d6eea85b325f318497512cdf1e27795ba08f21744b6",
+      "bytes": 137412
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-refused14/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-attention-refused": {
+      "true_exit": -15
+    }
+  }
+}

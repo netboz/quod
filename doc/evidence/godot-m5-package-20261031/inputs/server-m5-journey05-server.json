@@ -1,0 +1,162 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "-i",
+    "--init",
+    "--user",
+    "1000:1000",
+    "--network",
+    "host",
+    "--name",
+    "quod-m4-live-m5-journey05-server",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031:/evidence:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-m5-journey05-server:/m1b",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-m5-journey05-server/tmp:/tmp",
+    "-w",
+    "/work",
+    "-e",
+    "QUOD_M3B_PRIVATE=/m1b",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-m5-journey05-server/common_predicates.pl:/work/_build/prod/lib/quod/priv/ontologies/common_predicates.pl:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-m5-journey05-server/common_predicates.pl:/work/priv/ontologies/common_predicates.pl:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-m5-journey05-server/quod_space.pl:/work/_build/prod/lib/quod/priv/ontologies/quod_space.pl:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-m5-journey05-server/quod_space.pl:/work/priv/ontologies/quod_space.pl:ro",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/prod/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "{ok,quod_client_view}=compile:file(\"/m1b/quod_client_view.erl\",[{outdir,\"/m1b/ebin\"},{i,\"/code/include\"}]),\n\n{ok,quod_lifecycle_single_path_tests}=compile:file(\"/m1b/quod_lifecycle_single_path_tests.erl\",[export_all,{outdir,\"/m1b/ebin\"},{i,\"/work/include\"}]),\n{ok,quod_physics_tests}=compile:file(\"/work/test/quod_physics_tests.erl\",[export_all,{outdir,\"/m1b/ebin\"},{i,\"/work/include\"}]),\n{ok,godot_m3b_fixture}=compile:file(\"/m1b/godot_m3b_fixture.erl\",[{outdir,\"/m1b/ebin\"}]),\ntrue=code:add_patha(\"/m1b/ebin\"),godot_m3b_fixture:start(),halt().\n"
+  ],
+  "stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05",
+  "profile": "prod",
+  "runtime_recompiled": true,
+  "executed_current_sources": {
+    "src/quod_client_auth.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_client_auth.erl",
+      "sha256": "919c55738448d003810ecd59eb4f7f8ac9ce8d396ef9d57a1c3cceb1499d9ad5",
+      "compiled_object_sha256": "a4325fcc4249ad2d1871e665787f9d1cd27e004c53d12d262dbda89d80885c91",
+      "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/quod_wire_term.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_wire_term.erl",
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "compiled_object_sha256": "3f377b838eded1326091d1937e85614ef667892ccbe34e7028533df842ca4311",
+      "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/predicates/quod_ask.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_ask.erl",
+      "sha256": "e40c7ccf2b2f61ebaf0647d6961b19a9b381cbdbed10cfa34724acc76ff74fc5",
+      "compiled_object_sha256": "bc65c1f62890c0793150974af19cdcea82905a4143ab143b8f9636f1b49fd1b2",
+      "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/quod_ontology_name.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_ontology_name.erl",
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+      "compiled_object_sha256": "51448778f3c2ce985d9152c00e06625a2e45f90cb2453fe1f9cde81d831813d8",
+      "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/quod_client_view.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_client_view.erl",
+      "sha256": "6a68ed523ab1575428a3f472ce43b104f6fd63e09e48d7a6728221a3c9580a2c",
+      "mode": 33188
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-common_predicates.pl",
+      "sha256": "10677508dfb2ab7ed7a6386131e3b1bcb8f3a11ed1002eb3a64952b7212af32d",
+      "mode": 33188
+    },
+    "priv/ontologies/quod_space.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_space.pl",
+      "sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38",
+      "mode": 33188
+    }
+  },
+  "worker_session": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "factory_adapter": {
+    "original_sha256": "749de71b7c5278fd2924854d5104528e2b038904a9744255abfadcff4d15d8a9",
+    "adapted_sha256": "b5078b85a20efa3e9a4fb33bfe59d5bb53da80631b11800087bddcd028ed2137",
+    "exact_replacements": [
+      {
+        "before": "_ = file:del_dir_r(Dir),\n    ok.",
+        "after": "ok.",
+        "reason": "Preserve private disposable fixture storage after stopping all owners; never include its credentials in source snapshots."
+      },
+      {
+        "before": "{ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),",
+        "after": "ok = application:set_env(quod, effect_journal_data_dir, Dir),\n    {ok, Journal} = quod_effect_journal:start_link(),",
+        "reason": "Existing production journal configuration and start_link/0; start_link/1 is TEST-only."
+      }
+    ]
+  },
+  "driver_sources": {
+    "serve.py": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-serve.py",
+      "sha256": "334a9602cfd32a7c3679264e1900e89cc8c08613f040b09a639adee6f265fb8f"
+    },
+    "godot_m3b_fixture.erl": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-godot_m3b_fixture.erl",
+      "sha256": "fc1f61d98735051cc08f5b27b9d626ea18d9031c9e139f030ad72a480dd2689a"
+    },
+    "godot_m3b_physics_fixture.erl": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-godot_m3b_physics_fixture.erl",
+      "sha256": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425"
+    }
+  },
+  "private_raw_log": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-m5-journey05-server/server-raw.log",
+  "child_exit": 0,
+  "elapsed_seconds": 61.90863385799457,
+  "affected_compiled_outputs": {
+    "ebin/godot_m3b_fixture.beam": {
+      "sha256": "03243dc0e1df34936aaf56aea586405e67d7ccf5ddab07df1c68780ba90b6578",
+      "bytes": 10964
+    },
+    "ebin/quod_client_auth.beam": {
+      "sha256": "a4325fcc4249ad2d1871e665787f9d1cd27e004c53d12d262dbda89d80885c91",
+      "bytes": 12744
+    },
+    "ebin/quod_wire_term.beam": {
+      "sha256": "3f377b838eded1326091d1937e85614ef667892ccbe34e7028533df842ca4311",
+      "bytes": 14388
+    },
+    "ebin/quod_lifecycle_single_path_tests.beam": {
+      "sha256": "25a8f02d2c8256fb424d2a63e9bc9c6c18b3d5d582b769df1ae34e1cf896422d",
+      "bytes": 213396
+    },
+    "ebin/quod_client_view.beam": {
+      "sha256": "db67cdbf4e19906c0399656db8997c8a7a392343002c2e1a3b1a6abed697af53",
+      "bytes": 35056
+    },
+    "ebin/quod_ask.beam": {
+      "sha256": "bc65c1f62890c0793150974af19cdcea82905a4143ab143b8f9636f1b49fd1b2",
+      "bytes": 42388
+    },
+    "ebin/quod_physics_tests.beam": {
+      "sha256": "bd3b75efeb67ea39d246cca912be64dfad6398ac32c17d9220dc8ab87e6ab98d",
+      "bytes": 484204
+    },
+    "ebin/quod_ontology_name.beam": {
+      "sha256": "51448778f3c2ce985d9152c00e06625a2e45f90cb2453fe1f9cde81d831813d8",
+      "bytes": 1532
+    }
+  }
+}

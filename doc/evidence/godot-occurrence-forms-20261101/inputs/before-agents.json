@@ -1,0 +1,17 @@
+{
+  "AGENTS.md": {
+    "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+    "copy": "doc/evidence/godot-occurrence-forms-20261101/inputs/before/AGENTS.md",
+    "mode": 33188,
+    "stat_key": [
+      2050,
+      524409,
+      8636,
+      1793279815035473820,
+      1793369060863888403
+    ],
+    "reference": "/data/quod-m4-vr-ca84d4f8-20261029/builds/vive-focus13-source-reconstruction02/AGENTS.md",
+    "stat_cache_hit": false,
+    "separately_verified_source_bytes": 8636
+  }
+}

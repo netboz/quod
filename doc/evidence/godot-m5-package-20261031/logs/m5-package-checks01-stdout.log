@@ -1,0 +1,8 @@
+PASS reject unsafe member /escape
+PASS reject unsafe member ../escape
+PASS reject unsafe member a/../b
+PASS reject unsafe member a//b
+PASS reject an incorrect supplied export-manifest identity
+PASS reject changed actual export bytes
+PASS extra notices cannot replace an export
+PASS launcher preserves cwd independence, literal argument boundaries and true child exit

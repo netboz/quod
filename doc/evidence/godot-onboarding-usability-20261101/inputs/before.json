@@ -1,0 +1,86 @@
+{
+  "client/godot/Main.cs": {
+    "sha256": "75b0e0f659d59e30482a23ffbe90792bb4ee9ad72355d41c3057470e8899f18a",
+    "stat_key": [
+      66305,
+      23512511,
+      37928,
+      1793497558487510736,
+      1793497558487510736
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-onboarding-usability-20261101/inputs/before/client/godot/Main.cs"
+  },
+  "client/godot/Core/Transport.cs": {
+    "sha256": "c85a54695b3776469eac6072498df5478625fc15dadf90fb2e910ed5b93111e0",
+    "stat_key": [
+      66305,
+      23512460,
+      19102,
+      1793484373640141278,
+      1793484373640141278
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-onboarding-usability-20261101/inputs/before/client/godot/Core/Transport.cs"
+  },
+  "client/godot/EidolonPanel.cs": {
+    "sha256": "2fb92744dc3c77f3abc3efcb9f6477873c8568b148dbdfa84311204c600f2e80",
+    "stat_key": [
+      66305,
+      23514723,
+      10351,
+      1793497866684238662,
+      1793497866684238662
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-onboarding-usability-20261101/inputs/before/client/godot/EidolonPanel.cs"
+  },
+  "client/godot/OperationsPanel.cs": {
+    "sha256": "d6d636b3e2b18b68c47b6e85592086316da178756f3d4b886b80d1b4d9814397",
+    "stat_key": [
+      66305,
+      23512509,
+      20587,
+      1793499944758988638,
+      1793499944758988638
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-onboarding-usability-20261101/inputs/before/client/godot/OperationsPanel.cs"
+  },
+  "client/godot/README.md": {
+    "sha256": "fb4e4ac27bded781701e692001bbc9f932bd2fb6f2ab4b6ab96b6d3223c956e2",
+    "stat_key": [
+      66305,
+      23513097,
+      16621,
+      1793500870459997848,
+      1793500870459997848
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-onboarding-usability-20261101/inputs/before/client/godot/README.md"
+  },
+  "client/godot/FormPanel.cs": {
+    "sha256": "66436b16af752f406516f9aef33e1bf5e6b9f507576128ae2884ed057f4bef15",
+    "stat_key": [
+      66305,
+      23512508,
+      15062,
+      1793499944460981199,
+      1793499944460981199
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-onboarding-usability-20261101/inputs/before/client/godot/FormPanel.cs"
+  },
+  "client/godot/tests/WorkspaceChecks.cs": {
+    "sha256": "96ea3c9c4e53ff1162a2501b1947cd3e019a95bc7089a64c6dbc19c2a259910b",
+    "stat_key": [
+      66305,
+      23462280,
+      22772,
+      1793454030941118215,
+      1793454030941118215
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-onboarding-usability-20261101/inputs/before/client/godot/tests/WorkspaceChecks.cs"
+  }
+}

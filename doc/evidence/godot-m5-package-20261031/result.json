@@ -1,0 +1,392 @@
+{
+  "passed": true,
+  "checkpoint": "private Linux package/software first-journey; full M5 remains open",
+  "selected_archive": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-stage2-linux-x86_64-private04.tar.gz",
+  "archive_sha256": "60a1869d03ac4ffc139dc13a2fddfea5a3449dbee619592c2b913f2a549c8cc4",
+  "archive_bytes": 78066741,
+  "extracted_launch": "/data/quod-m4-vr-ca84d4f8-20261029/private/m5 clean final-inspection04/quod-linux-x86_64/quod",
+  "files": 207,
+  "product_input_manifest_sha256": "18816e66c5fae94c282cb0025ff8968dca97e08a5f4eb3c4ee8a71d26b8fd8a3",
+  "product_inputs": 95,
+  "product_outputs": 196,
+  "product_DLL": "a2bebad924a5744e5708d186169658fcdf68eb337a846af81d32588ed0452641",
+  "product_PCK": "1145b32ef061d4c797a6f265c758a5bfe3cb259396497905a67cfb6682660483",
+  "engine": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono",
+    "sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268"
+  },
+  "product_input_changes": 0,
+  "production_domain_or_UI_changes": 0,
+  "ordinary_uninstrumented_launch": {
+    "actual_client_exit": 0,
+    "normal_guarded_close": 0,
+    "developer_tree_and_build_tools_absent": true,
+    "own_CoreCLR_loaded": true,
+    "reused_for_final_notice_only_delta": "all payload/launcher bytes equal; README-only difference proved"
+  },
+  "diagnostic_companion": "m5-companion05; identical95 live product inputs plus one removable partial/dispatch; never distributed",
+  "companion_builds": {
+    "m5-companion01": {
+      "manifest_sha256": "4e291d4745740f49a2ff5283f5cacfe5129259cba0f8ed751f936a4d759cc39c",
+      "commands": 5,
+      "exports": 196,
+      "actual_live_product_inputs_equal": true,
+      "changed_exports": {
+        "data_Quod_linuxbsd_x86_64/Quod.dll": {
+          "sha256": "264a1f7a1a79a05227edc6b4cf24b76ba2133543a71d4dc0152aa7d667bc5b69",
+          "bytes": 862720
+        },
+        "data_Quod_linuxbsd_x86_64/Quod.pdb": {
+          "sha256": "8c07804f91c795ca114d3b68e8fbfa54f65c3eca68725785c4fedb7e2e35604b",
+          "bytes": 223320
+        },
+        "quod.pck": {
+          "sha256": "8fbafbf5b2255ecba52cfb9d81701426c2ecbcf693392b0a03970692e665aadb",
+          "bytes": 13108
+        }
+      }
+    },
+    "m5-companion02": {
+      "manifest_sha256": "df268d36b0bf8d9919279d1dfec0942a4fc13c3fa23f787ba6b9c6b25d405d75",
+      "commands": 5,
+      "exports": 196,
+      "actual_live_product_inputs_equal": true,
+      "changed_exports": {
+        "data_Quod_linuxbsd_x86_64/Quod.dll": {
+          "sha256": "29280250c304990eba790613615bd3f021926875c15556a56d79fbcf1ab5a3cc",
+          "bytes": 865280
+        },
+        "data_Quod_linuxbsd_x86_64/Quod.pdb": {
+          "sha256": "eb40639a210ed63e0ee148cfb5caf8ca68c56c0d6c027f66c0263740e22f9b05",
+          "bytes": 223760
+        },
+        "quod.pck": {
+          "sha256": "8b0f3614448cce657750778bafe089ae7fae548c47d30517ac1aa7a837d434e9",
+          "bytes": 13108
+        }
+      }
+    },
+    "m5-companion03": {
+      "manifest_sha256": "ecde5f503c347355692cfccab1542966ab169a1c957ae98ff67e0e9faecaf46f",
+      "commands": 5,
+      "exports": 196,
+      "actual_live_product_inputs_equal": true,
+      "changed_exports": {
+        "data_Quod_linuxbsd_x86_64/Quod.dll": {
+          "sha256": "b3f07626d6ae0d2ac9c5e92267f1c5a2c7b424d297a9360fe13fa5367add9c82",
+          "bytes": 865792
+        },
+        "data_Quod_linuxbsd_x86_64/Quod.pdb": {
+          "sha256": "3d4983dc9da1ee4ae1e7aef87299a3cca06e6cd5db7e880c76800b7a8bf01ceb",
+          "bytes": 223876
+        },
+        "quod.pck": {
+          "sha256": "13f52fd0aef63d9792c6c8e5c953e42bdfef97b8db0ed73709091a9cb920af44",
+          "bytes": 13108
+        }
+      }
+    },
+    "m5-companion04": {
+      "manifest_sha256": "da5b783fbc505d4029f43b3d840762309e161f8624ed91cdb47d328f5f0fbca9",
+      "commands": 5,
+      "exports": 196,
+      "actual_live_product_inputs_equal": true,
+      "changed_exports": {
+        "data_Quod_linuxbsd_x86_64/Quod.dll": {
+          "sha256": "2a96a0903e00df4d9a9bb457036b65f2ce4c2a4af6ac34e6635f60854fc94a3f",
+          "bytes": 866304
+        },
+        "data_Quod_linuxbsd_x86_64/Quod.pdb": {
+          "sha256": "4f672256e900c9999333be9051766ed37fbda9fb115c8165d8eb37d232641bdc",
+          "bytes": 223900
+        },
+        "quod.pck": {
+          "sha256": "1e387d112a4b722a16bdc0acf84fc1b0361537988078603d1cb7e259613dc83f",
+          "bytes": 13108
+        }
+      }
+    },
+    "m5-companion05": {
+      "manifest_sha256": "aa99447df1aa7e849bd4c39a6b3b8d392fa386d67142ebfc1f921009053c1266",
+      "commands": 5,
+      "exports": 196,
+      "actual_live_product_inputs_equal": true,
+      "changed_exports": {
+        "data_Quod_linuxbsd_x86_64/Quod.dll": {
+          "sha256": "d1d3efb4d748939e33a51ba79e0cc79f0c8b298b7d164c86dffa61e1134b402e",
+          "bytes": 866816
+        },
+        "data_Quod_linuxbsd_x86_64/Quod.pdb": {
+          "sha256": "4bf918c1e32a473146ecf742e113fa8bbad59ee98057fe2005655f7e7a60d6af",
+          "bytes": 223948
+        },
+        "quod.pck": {
+          "sha256": "2cc990e08d15993fb9c9e0c1e241d5dcb115db4c30abf93d2c8f227ab2259b63",
+          "bytes": 13108
+        }
+      }
+    }
+  },
+  "native_journey": {
+    "checks": {
+      "client-initial": 63,
+      "client-reopen": 16
+    },
+    "native_input_records": 22,
+    "children": {
+      "server": 0,
+      "client-initial": 0,
+      "client-reopen": 0
+    },
+    "eof": 6,
+    "reader_errors": [],
+    "original_identities_and_no_replay": true,
+    "signed_control_source_bindings": {
+      "src/quod_client_auth.erl": {
+        "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_client_auth.erl",
+        "sha256": "919c55738448d003810ecd59eb4f7f8ac9ce8d396ef9d57a1c3cceb1499d9ad5",
+        "compiled_object_sha256": "a4325fcc4249ad2d1871e665787f9d1cd27e004c53d12d262dbda89d80885c91",
+        "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+        "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+      },
+      "src/quod_wire_term.erl": {
+        "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_wire_term.erl",
+        "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+        "compiled_object_sha256": "3f377b838eded1326091d1937e85614ef667892ccbe34e7028533df842ca4311",
+        "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+        "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+      },
+      "src/predicates/quod_ask.erl": {
+        "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_ask.erl",
+        "sha256": "e40c7ccf2b2f61ebaf0647d6961b19a9b381cbdbed10cfa34724acc76ff74fc5",
+        "compiled_object_sha256": "bc65c1f62890c0793150974af19cdcea82905a4143ab143b8f9636f1b49fd1b2",
+        "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+        "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+      },
+      "src/quod_ontology_name.erl": {
+        "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_ontology_name.erl",
+        "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+        "compiled_object_sha256": "51448778f3c2ce985d9152c00e06625a2e45f90cb2453fe1f9cde81d831813d8",
+        "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+        "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+      },
+      "src/quod_client_view.erl": {
+        "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_client_view.erl",
+        "sha256": "6a68ed523ab1575428a3f472ce43b104f6fd63e09e48d7a6728221a3c9580a2c",
+        "mode": 33188
+      },
+      "priv/ontologies/common_predicates.pl": {
+        "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-common_predicates.pl",
+        "sha256": "10677508dfb2ab7ed7a6386131e3b1bcb8f3a11ed1002eb3a64952b7212af32d",
+        "mode": 33188
+      },
+      "priv/ontologies/quod_space.pl": {
+        "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/inputs/m5-journey05-server-quod_space.pl",
+        "sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38",
+        "mode": 33188
+      }
+    }
+  },
+  "package_finite_checks": 8,
+  "reproducible_archive_bytes": true,
+  "ELF_objects": 16,
+  "GLIBC_floor": "2.44",
+  "cold_other_host": false,
+  "headset_hardware_runtime_started": false,
+  "full_M4_or_M5": false,
+  "retirement_or_cutover": false,
+  "commit_or_push": false,
+  "source_delta": "additive package tooling/docs/evidence only; inherited product inputs unchanged",
+  "retirement_counts": {
+    "M0_baseline": {
+      "files": 50,
+      "physical_lines": 8595,
+      "production_metric_lines": 6508
+    },
+    "current_active_all": {
+      "files": 42,
+      "physical_lines": 9262,
+      "production_metric_lines": 7068
+    },
+    "current_production": {
+      "files": 35,
+      "physical_lines": 8984,
+      "production_metric_lines": 6867
+    },
+    "current_test_fixtures": {
+      "files": 7,
+      "physical_lines": 278,
+      "production_metric_lines": 201
+    },
+    "retained_archive": {
+      "files": 19,
+      "physical_lines": 2937,
+      "production_metric_lines": 2143
+    },
+    "checkpoint_before_equals_after": true,
+    "checkpoint_removed_files": 0,
+    "checkpoint_removed_production_lines": 0
+  },
+  "runs": {
+    "m5-archive-inspection01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "b6827bce9edb797a58a303fa5a6f9285135fa72b750c71f29e7faec41dbf8f54"
+    },
+    "m5-companion-build01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "ba4d55871fe4e5991ee0a947af4f5e37df055e4e7093e078e7a1c7501c92f1d0"
+    },
+    "m5-companion-build02": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "b8863c1ed2cf8bc7b33343d54aa6e569a2217573eb18763d8e682a6eee5a5ec2"
+    },
+    "m5-companion-build03": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "48e691df5fb13c91bb5756845fde67d827c161a63e1c94d577b4abb8fa0b6aee"
+    },
+    "m5-companion-build04": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "da38bc3892619689c39b4935d3d51b812879f53e411efebc147eba1eeba4de4d"
+    },
+    "m5-companion-build05": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "1ab7379709e5d47ceee7aead88f5822392b92dfbb9a9bcef40652e3549a7ce7a"
+    },
+    "m5-final-inspection02": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "1453374d78a537ec11916f334332dde602079aaad85f9591ea56b475f4797388"
+    },
+    "m5-final-inspection04": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "90d1e279add826bb8489069b1c805e4547b3fff9af760f3fe68dd132f8a6141f"
+    },
+    "m5-isolation-probe01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "39905902d61fa6be4b9d8d8ab5fcf130c9dc1e85980532220bbb148f3bc355f1"
+    },
+    "m5-journey01": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "06dd691eacc67d3c94ae3de5e26038a364f841e26ee769d0ad8797059e97c3db"
+    },
+    "m5-journey02": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "347d1d657e318cff3476288fc20af24bc63eb3e76fdf7a7b26346a3608a98b39"
+    },
+    "m5-journey03": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "77dd4a09b8ef84d1a92e34edff0a2af0632bd43f5512e1032e862ee86043e517"
+    },
+    "m5-journey04": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "e244689c602d1fcc10291b53573c05a3076b35a300680f618f72ce88b05b5aa8"
+    },
+    "m5-journey05": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "30b0e5e4848b740c1ea096abb38c5b76810ec63d21a3de4ad2b44e92a12a4b68"
+    },
+    "m5-ordinary01": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "bdd43b5fa280aca61a350227ba986af844fc68a3e35054ed58296c4c26454056"
+    },
+    "m5-ordinary02": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "b1d269d5faabbd923308d84d815004382a7f600952dd329dabca8fda25e29829"
+    },
+    "m5-ordinary03": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "db7c776f5b0a0db5452e77a543b1dd4192be5a1cc2d321f3b2c35a84406c49f3"
+    },
+    "m5-package-checks01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "9a897eb01c7fd574a115473258f71c2b8729071c0379a2940be895bc2c087a09"
+    },
+    "m5-package-repro03": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "33dfa244310f66514091130f896983f2a10457015dff6302733a9f3844699faf"
+    },
+    "m5-package-repro05": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "59f0b03928380992f5ba6ae1b979c843bbacc77f469c66c7101345492594cf7d"
+    },
+    "m5-package01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "bb8ff5bc22f721cfce9d1a88f12f1854f02fd5060fcf36a81796b6c657eb9818"
+    },
+    "m5-package02": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "8e133f47502acb38cd9f54b0a64fe62b5d3b2c59f8986397f96973c125c80648"
+    },
+    "m5-package04": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "361cdad64dcfb28d1eda29f95e1c39065cc2cbb542d2c4e8ce15958d9568df07"
+    },
+    "m5-prepare01": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "e73bd2d65ba90ee80611298bf488e597dab8933c699d231f92e079ea53b3a5a0"
+    },
+    "m5-prepare02": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "6ef62d5d6aa4134eb055c2372284416f9566550fa3684eeb1569bf967dbf1a6b"
+    },
+    "m5-prepare03": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "ebbb74b4ed1a0e5ce9e3c8debeaba50aa370f0f5646c890a5a4a90c335e6e68b"
+    },
+    "m5-prepare04": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "c5ebb8a98841907e07bb40e0a38c8dc593b7afe77a3eb36a920551976959ac43"
+    },
+    "m5-retirement-inventory01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "30c8e48ad5a6dbb8375c7cea659f63af7d93b9b128bfff71ed48b4abc7c410ec"
+    }
+  },
+  "failures_retained": [
+    "m5-prepare01",
+    "m5-ordinary01",
+    "m5-ordinary02",
+    "m5-journey01",
+    "m5-journey02",
+    "m5-journey03",
+    "m5-journey04"
+  ],
+  "limits": [
+    "ordinary production package launch plus separately instrumented native-keyboard journey; no claim the uninstrumented product was itself driven through the whole journey",
+    "mouse guard failure remains retained; no pointer/hardware pass inferred",
+    "GLIBC2.44 pinned private engine; no older-distribution claim",
+    "full integrated-server release gates, hardware/comfort/old desktop stalls and irreversible retirement/cutover remain open"
+  ],
+  "tracker_body_publication": "blocked; no retry or bypass; metadata-only link returned linkedCount0, not visible/publication proof",
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/m5-package-qualified01.json",
+    "sha256": "f030b2f3378e4f13d6a766632a09598bf40c037b1cf880d12de96d9ed3624b86"
+  }
+}

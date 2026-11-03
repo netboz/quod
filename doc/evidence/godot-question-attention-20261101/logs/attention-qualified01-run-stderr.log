@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/qualify.py", line 134, in <module>
+    browser_log=(ev/'logs/attention-browser01-stdout.log').read_text();assert '# pass 33' in browser_log and '# fail 0' in browser_log
+                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

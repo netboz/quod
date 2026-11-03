@@ -1,0 +1,63 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "9e4b3d7a136b700b35549105b5b40f94a62adf3d4e94de096d418db204ae5ba4",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space13/drivers/signed.py",
+      "sha256": "bfcb85cfcaab3dada0f19494c606b38e4eba4704896ded1ff4fb588582871c8b"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space13/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space13/drivers/hashes.py",
+      "sha256": "65aabc9c5a262d26e784bda8eeee52e3e9cde767ee74b8f1330a1628c8161c3e"
+    }
+  },
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-occurrence-space-stdout": true,
+    "client-occurrence-space-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space13/server-stdout.raw",
+      "sha256": "0734fa7f506e7759294cbdfcf3e82dca203b5faa8b367db67b71399895fda4fa",
+      "bytes": 129
+    },
+    "client-occurrence-space-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space13/client-occurrence-space-stderr.raw",
+      "sha256": "61cbc70f86287bd9bc43563845d3e8a1affbb67f00c945903f97371bd63bc6bf",
+      "bytes": 4868
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space13/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-occurrence-space-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-space13/client-occurrence-space-stdout.raw",
+      "sha256": "edb9903b32d137570b08379119d37c1d6ac67c4528b317ba5c2a659b1774e9f0",
+      "bytes": 154831
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-occurrence-space": {
+      "true_exit": 1
+    }
+  }
+}

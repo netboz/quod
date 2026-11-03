@@ -1,0 +1,49 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-occurrence-visibility-20261102/build.py",
+    "visibility-candidate04"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "OccurrenceChecks.cs": "58907042e0c67c61c7fae17f0d7a775bb6221cb52d117b094d5b784af9fbe0b9",
+    "OccurrenceInteraction.cs": "509bede6abda24940459469ea7f0d495500c2ae45c7c2c3ca7f8a65a9015d704",
+    "OccurrencePreview.cs": "8c3b9904bffeb767fca0f7e6e727a9bdc59390f917acd64c2824195e2a01fec2",
+    "VisibilityChecks.cs": "f9b73ab551e224d311fc78feec94ca479269c34b5717362269df16e095543024",
+    "build.py": "f3fad47099bf30e4ffaf7cc9a532da580745117df7181b728ab95aa8170433ce",
+    "hashes.py": "4578d513b92c34e1ed0c82d8401361e2db5fd412e0678607ef151425bb305fb5",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "run.py": "d3b8d0bf172b644bc5330a674fac059d60b7ae9fc3e004d9b3bc9738e8facc33",
+    "signed.py": "bfcb85cfcaab3dada0f19494c606b38e4eba4704896ded1ff4fb588582871c8b",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-02T15:29:55Z",
+  "elapsed_seconds": 22.06794023513794,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/visibility-candidate04-build/stdout.raw",
+      "sha256": "cbb7eef33051c28ad93f95b705d46347412395184e59721e1d792e56e13d38b0",
+      "bytes": 1068
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/visibility-candidate04-build/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-visibility-20261102/logs/visibility-candidate04-build-stdout.log",
+      "sha256": "cbb7eef33051c28ad93f95b705d46347412395184e59721e1d792e56e13d38b0",
+      "bytes": 1068
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-visibility-20261102/logs/visibility-candidate04-build-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

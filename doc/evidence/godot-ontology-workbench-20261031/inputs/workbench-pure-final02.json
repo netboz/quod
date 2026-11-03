@@ -1,0 +1,47 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--user",
+    "1000:1000",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05:/work:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-pure-final02:/input",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/lib:/compiler:ro",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/prod/lib/*/ebin /work/_build/test/lib/quod/test /compiler/erlog/ebin /input -eval \"$1\"",
+    "sh",
+    "{ok,workbench_checks}=compile:file(\"/input/workbench_checks.erl\",[{outdir,\"/input\"}]),case eunit:test(workbench_checks,[verbose]) of ok->halt(0);error->halt(1) end."
+  ],
+  "true_exit": 1,
+  "passed": false,
+  "inputs": {
+    "doc/evidence/godot-ontology-workbench-20261031/workbench_checks.erl": {
+      "sha256": "7912506fa3d878bfc32023c128338ceb9d63b925fd93fb924493db53d4e0863f",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-pure-final02/workbench_checks.erl",
+      "mode": 33188
+    },
+    "priv/ontologies/gui_tools.pl": {
+      "sha256": "4e8c8510491c8b92af7c67b958398f17c5352e9cf37f8bf4411edb49964dfb89",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-pure-final02/gui_tools.pl",
+      "mode": 33188
+    }
+  },
+  "new_object": {
+    "sha256": "5a44a376f9fed42342282d9520237dc44ffe8584bb149f1356942b6e982ffe59",
+    "bytes": 10164
+  },
+  "existing_engine_owner": true,
+  "functional_fixture": false,
+  "hardware": false
+}

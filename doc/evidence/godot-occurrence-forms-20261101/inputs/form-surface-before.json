@@ -1,0 +1,32 @@
+{
+  "client/godot/Main.cs": {
+    "sha256": "0b22e3aa03f49c37ee1c9976cf40bcfd9e81f5c99558188f14efe3856e8cc94d",
+    "mode": 33188,
+    "separate_copy": "doc/evidence/godot-occurrence-forms-20261101/inputs/form-surface-before/client/godot/Main.cs"
+  },
+  "client/godot/ScenePanel.cs": {
+    "sha256": "714fc8e9e5b1f4d3ba141e28e54897ef9b7c383a2fec74069bf59ae7829dd2eb",
+    "mode": 33188,
+    "separate_copy": "doc/evidence/godot-occurrence-forms-20261101/inputs/form-surface-before/client/godot/ScenePanel.cs"
+  },
+  "client/godot/EidolonPanel.cs": {
+    "sha256": "5c32c7f8d52a426f97f6461d0540eed9155dfc6d781dd235df3502671cbeecd1",
+    "mode": 33188,
+    "separate_copy": "doc/evidence/godot-occurrence-forms-20261101/inputs/form-surface-before/client/godot/EidolonPanel.cs"
+  },
+  "client/godot/OpenXRInput.cs": {
+    "sha256": "4775206dfd6731e7c19ff65a1fd294860614a1c580d7528f416f8c40dd4dbd4e",
+    "mode": 33188,
+    "separate_copy": "doc/evidence/godot-occurrence-forms-20261101/inputs/form-surface-before/client/godot/OpenXRInput.cs"
+  },
+  "client/godot/SpatialGui.cs": {
+    "sha256": "b0db9b88562f94d42b833f736121a96729e0ccbbbddbbe10e356878575e61152",
+    "mode": 33188,
+    "separate_copy": "doc/evidence/godot-occurrence-forms-20261101/inputs/form-surface-before/client/godot/SpatialGui.cs"
+  },
+  "client/godot/SpatialKeyboard.cs": {
+    "sha256": "41d1a04b3ad06eba46ee45e13c352eebb8703c1e932568d5e55d4f527daf6cc2",
+    "mode": 33188,
+    "separate_copy": "doc/evidence/godot-occurrence-forms-20261101/inputs/form-surface-before/client/godot/SpatialKeyboard.cs"
+  }
+}

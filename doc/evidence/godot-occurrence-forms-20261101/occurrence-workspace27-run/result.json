@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-occurrence-forms-20261101/native.py",
+    "occurrence-workspace27",
+    "--manifest",
+    "doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate27-manifest.json",
+    "--phase",
+    "workspace"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 3.2856778530112933
+}

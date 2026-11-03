@@ -1,0 +1,48 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-ontology-workbench-20261031/build.py",
+    "workbench-candidate18"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "e1c30071b2c652154762fbdc525b11a7d96183f4669ca9fcb6e8b9c1552b3152",
+    "freeze_small.py": "45f4f1a4478393c3d6f20791b8c04dadfee336250901f26137145023be04fadb",
+    "hashes.py": "e083e75ce1733b6e7779e367621f2c2e84ac792698c2eb5918b75d70a2eecabf",
+    "pure.py": "7bbd325be990d06768906c87b5eb683f5bb97730a11984a5d11c87039179f5b0",
+    "qualify.py": "be07a6f2682148665fe518602af9703a97075112813bd2d9bf179a3cc66c8aa8",
+    "rehearse.py": "ac5d53d2a40d1fd300e20e842c5520ea2259dc2d55624a5b7c4917caf1b5ec8d",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "b74299ffd289ed13adb032cbc31f7a0849f4d54f2b4f1d1e01333abed69ac007",
+    "package.py": "909f502a6b5252313764a63887b3de44fce51a6f9e153886046ba7dcf19aab3e"
+  },
+  "start_utc": "2026-10-31T18:42:42Z",
+  "elapsed_seconds": 31.45227885246277,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/workbench-build-candidate18/stdout.raw",
+      "sha256": "1b856974468ec780dc3ff792ea963ec8182e9dee2fb03f8dc983937c6810e434",
+      "bytes": 1062
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/workbench-build-candidate18/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-ontology-workbench-20261031/logs/workbench-build-candidate18-stdout.log",
+      "sha256": "1b856974468ec780dc3ff792ea963ec8182e9dee2fb03f8dc983937c6810e434",
+      "bytes": 1062
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-ontology-workbench-20261031/logs/workbench-build-candidate18-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

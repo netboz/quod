@@ -1,0 +1,3 @@
+PASS current startup raster retained
+PASS fresh offline profile permits key creation/import only
+{"passed": false, "children": {"client": 1}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 0}

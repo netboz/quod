@@ -1,0 +1,47 @@
+PASS real native input is processed by this exact ordinary root before control focus
+PASS enabled ordinary action create-key
+PASS native action is visible inside the current ordinary desktop viewport
+PASS native keyboard focus belongs to the intended existing button
+PASS one real native keyboard activation emits exactly one button press
+PASS enabled ordinary action connect
+PASS native action is visible inside the current ordinary desktop viewport
+PASS native keyboard focus belongs to the intended existing button
+PASS one real native keyboard activation emits exactly one button press
+PASS real signed authentication uses the fresh fixture network
+PASS enabled ordinary action register
+PASS native action is visible inside the current ordinary desktop viewport
+PASS native keyboard focus belongs to the intended existing button
+PASS one real native keyboard activation emits exactly one button press
+PASS enabled ordinary action prepare
+PASS native action is visible inside the current ordinary desktop viewport
+PASS native keyboard focus belongs to the intended existing button
+PASS one real native keyboard activation emits exactly one button press
+PASS enabled ordinary action setup
+PASS native action is visible inside the current ordinary desktop viewport
+PASS native keyboard focus belongs to the intended existing button
+PASS one real native keyboard activation emits exactly one button press
+PASS enabled ordinary action create-operations
+PASS native action is visible inside the current ordinary desktop viewport
+PASS native keyboard focus belongs to the intended existing button
+PASS one real native keyboard activation emits exactly one button press
+PASS native action is visible inside the current ordinary desktop viewport
+PASS offered operation has an explicit native menu item
+PASS native keyboard opens the offered operation menu
+PASS native menu confirms the selected offered operation
+PASS confirmed native operation menu is closed
+PASS after popup closure real native input reaches the exact root window
+PASS native action is visible inside the current ordinary desktop viewport
+PASS offered operation has an explicit native menu item
+PASS native keyboard opens the offered operation menu
+PASS native menu confirms the selected offered operation
+PASS confirmed native operation menu is closed
+PASS after popup closure real native input reaches the exact root window
+PASS the current offered Create is already selected; unchanged native choice emits no new selection
+PASS offered create keeps the explicitly chosen existing storage and anchored class
+PASS current signed offered Submit is enabled
+PASS native action is visible inside the current ordinary desktop viewport
+PASS native keyboard focus belongs to the intended existing button
+PASS one real native keyboard activation emits exactly one button press
+PASS native keyboard Submit leaves no GUI pointer capture
+PASS one actual native Submit commits the governed creation through U to A
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-initial": 1}, "native_inputs": 14}

@@ -1,0 +1,93 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+PASS actual two-occurrence native raster retained
+PASS both real native picks resolve the same exact anchored subject
+PASS native selection retains each chosen visual occurrence and pose alongside the same subject
+PASS ordinary authorized same-ontology visual recipe is offered for the independent instance
+PASS the existing embedded visual picker returns its exact installed occurrence
+PASS choosing the authored form retains its previously selected embedded visual occurrence and visible native field
+PASS one form-only native tree and an external visual owner form an acyclic texture dependency
+PASS native associated target is enclosed without diagnostic reveal: control0
+PASS existing capture owner resolves the rendered native form control
+PASS desktop mirror gives actual focus to the retained native field
+PASS retained current preview-form-(False, 1200, 26) raster
+PASS explicit personal alternative is reachable at (False, 1200, 26)
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS existing capture owner resolves the rendered native form control
+PASS explicit personal placement releases only the preview binding
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS return retains exact occurrence native editor caret selection draft and semantic revision
+PASS retained current preview-form-(False, 1200, 48) raster
+PASS explicit personal alternative is reachable at (False, 1200, 48)
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS existing capture owner resolves the rendered native form control
+PASS explicit personal placement releases only the preview binding
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS return retains exact occurrence native editor caret selection draft and semantic revision
+PASS retained current preview-form-(False, 560, 26) raster
+PASS explicit personal alternative is reachable at (False, 560, 26)
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS existing capture owner resolves the rendered native form control
+PASS explicit personal placement releases only the preview binding
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS return retains exact occurrence native editor caret selection draft and semantic revision
+PASS retained current preview-form-(True, 1200, 26) raster
+PASS explicit personal alternative is reachable at (True, 1200, 26)
+PASS preview draws the same form texture near its exact visual occurrence without native XR
+PASS native associated target is enclosed without diagnostic reveal: control0
+PASS associated texture point is inside the visible preview and its clipping ancestors
+PASS existing capture owner resolves the rendered native form control
+PASS associated native field opens the single adjacent keyboard
+PASS native associated target is enclosed without diagnostic reveal: keyboard-char-97
+PASS associated texture point is inside the visible preview and its clipping ancestors
+PASS existing capture owner resolves the rendered native form control
+PASS keyboard native command retains the same active editor
+PASS native undo restores the editor and its original local draft together
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS associated texture point is inside the visible preview and its clipping ancestors
+PASS existing capture owner resolves the rendered native form control
+PASS explicit personal placement releases only the preview binding
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS return retains exact occurrence native editor caret selection draft and semantic revision
+PASS retained current preview-form-(True, 1200, 48) raster
+PASS explicit personal alternative is reachable at (True, 1200, 48)
+PASS preview draws the same form texture near its exact visual occurrence without native XR
+PASS native associated target is enclosed without diagnostic reveal: control0
+PASS associated texture point is inside the visible preview and its clipping ancestors
+PASS existing capture owner resolves the rendered native form control
+PASS associated native field opens the single adjacent keyboard
+PASS native associated target is enclosed without diagnostic reveal: keyboard-char-97
+PASS associated texture point is inside the visible preview and its clipping ancestors
+PASS existing capture owner resolves the rendered native form control
+PASS keyboard native command retains the same active editor
+PASS native undo restores the editor and its original local draft together
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS associated texture point is inside the visible preview and its clipping ancestors
+PASS existing capture owner resolves the rendered native form control
+PASS explicit personal placement releases only the preview binding
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS return retains exact occurrence native editor caret selection draft and semantic revision
+PASS existing work owner starts scoped observation
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS existing capture owner resolves the rendered native form control
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS existing capture owner resolves the rendered native form control
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS native associated target is enclosed without diagnostic reveal: form-personal-workspace
+PASS existing capture owner resolves the rendered native form control
+PASS native associated target is enclosed without diagnostic reveal: form-near-object
+PASS existing capture owner resolves the rendered native form control
+PASS unchanged preview/form renewals and relocation retain native and signed resources with zero named history rebuild write sync work
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-occurrence-preview": 1}, "native_inputs": 0}

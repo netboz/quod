@@ -1,0 +1,446 @@
+{
+  "method": "Read accepted immutable archive, hash every payload, inspect ELF metadata through anonymous memory descriptors; no client execution or product source changes",
+  "sourceHead": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "snapshotSHA256": "a06f1f934754d3d210e1b74c5685c2c523b1507bfc1a8af2ce9fc7ce4aec5349",
+  "archiveSHA256": "5e4f788e4190b886225e132a4ebe004a491d0647acc08f749325a997f8b9bd60",
+  "payloadEntries": 196,
+  "elfEntries": 16,
+  "externalDtNeededNames": [
+    "ld-linux-x86-64.so.2",
+    "libc.so.6",
+    "libdl.so.2",
+    "libgcc_s.so.1",
+    "liblttng-ust.so.0",
+    "libm.so.6",
+    "libpthread.so.0",
+    "librt.so.1",
+    "libstdc++.so.6"
+  ],
+  "maximumRecordedSymbolVersionRequirements": {
+    "GLIBC": "GLIBC_2.28",
+    "GLIBCXX": "GLIBCXX_3.4.22",
+    "CXXABI": "CXXABI_1.3.7"
+  },
+  "elfObjects": [
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/createdump",
+      "sha256": "59f538bbbe8c37e508e9cfdcb16c3381e043d3ebd837c8486497ec02de02c754",
+      "soname": [],
+      "needed": [
+        "libdl.so.2",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "GLIBCXX_3.4",
+        "GLIBCXX_3.4.20",
+        "GLIBCXX_3.4.21",
+        "GLIBC_2.14",
+        "GLIBC_2.15",
+        "GLIBC_2.17",
+        "GLIBC_2.2.5",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libSystem.Globalization.Native.so",
+      "sha256": "0dc43333f4ca1d2c382fb2831e364e7615725f061effb445e2c7ec54d0c57c84",
+      "soname": [
+        "libSystem.Globalization.Native.so"
+      ],
+      "needed": [
+        "libdl.so.2",
+        "libc.so.6"
+      ],
+      "requiredSymbolVersions": [
+        "GLIBC_2.2.5",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libSystem.IO.Compression.Native.so",
+      "sha256": "bff84e37ec07b5518d53c75273cb4cb8acfad0382628ed7d33347eeab99dd1f6",
+      "soname": [
+        "libSystem.IO.Compression.Native.so"
+      ],
+      "needed": [
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "requiredSymbolVersions": [
+        "GLIBC_2.14",
+        "GLIBC_2.16",
+        "GLIBC_2.2.5",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libSystem.Native.so",
+      "sha256": "a15a3c4e79f6186d716a08b269359a0e24b828b6df6f989459a6a04231743aac",
+      "soname": [
+        "libSystem.Native.so"
+      ],
+      "needed": [
+        "librt.so.1",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "GLIBC_2.10",
+        "GLIBC_2.11",
+        "GLIBC_2.14",
+        "GLIBC_2.16",
+        "GLIBC_2.2.5",
+        "GLIBC_2.3",
+        "GLIBC_2.3.2",
+        "GLIBC_2.3.4",
+        "GLIBC_2.4",
+        "GLIBC_2.6",
+        "GLIBC_2.9"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libSystem.Net.Security.Native.so",
+      "sha256": "1ed7784c58f72f15e4fe8d029605aaceab6d4a9ad5127ff025f272e3c1213e62",
+      "soname": [
+        "libSystem.Net.Security.Native.so"
+      ],
+      "needed": [
+        "libdl.so.2",
+        "libc.so.6"
+      ],
+      "requiredSymbolVersions": [
+        "GLIBC_2.14",
+        "GLIBC_2.2.5",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libSystem.Security.Cryptography.Native.OpenSsl.so",
+      "sha256": "47d1d1095fddb359d03dcfd5a51d73a56f5c3cb32739ab288aba82fb67888ac1",
+      "soname": [
+        "libSystem.Security.Cryptography.Native.OpenSsl.so"
+      ],
+      "needed": [
+        "libdl.so.2",
+        "libpthread.so.0",
+        "libc.so.6"
+      ],
+      "requiredSymbolVersions": [
+        "GLIBC_2.14",
+        "GLIBC_2.2.5",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libclrgc.so",
+      "sha256": "d122dee607b7cd4656a1540f71c6ba0e96cb42b2fc5c3538d64f7e9885f7d258",
+      "soname": [
+        "libclrgc.so"
+      ],
+      "needed": [
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "GLIBCXX_3.4",
+        "GLIBC_2.14",
+        "GLIBC_2.17",
+        "GLIBC_2.2.5",
+        "GLIBC_2.3",
+        "GLIBC_2.3.2",
+        "GLIBC_2.3.4",
+        "GLIBC_2.4",
+        "GLIBC_2.6",
+        "GLIBC_2.7"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libclrgcexp.so",
+      "sha256": "779768dcc8c7f4be648b4b65dd158a8cadb563b6e5606820089ccf15c7295814",
+      "soname": [
+        "libclrgcexp.so"
+      ],
+      "needed": [
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "GLIBCXX_3.4",
+        "GLIBC_2.14",
+        "GLIBC_2.17",
+        "GLIBC_2.2.5",
+        "GLIBC_2.27",
+        "GLIBC_2.3",
+        "GLIBC_2.3.2",
+        "GLIBC_2.3.4",
+        "GLIBC_2.4",
+        "GLIBC_2.6",
+        "GLIBC_2.7"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libclrjit.so",
+      "sha256": "b1982215159bcb8eb0cb57afdccbc9e970411750bd530d1e62592f5ac397c398",
+      "soname": [
+        "libclrjit.so"
+      ],
+      "needed": [
+        "libgcc_s.so.1",
+        "libpthread.so.0",
+        "librt.so.1",
+        "libdl.so.2",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "GLIBCXX_3.4",
+        "GLIBC_2.12",
+        "GLIBC_2.14",
+        "GLIBC_2.16",
+        "GLIBC_2.2.5",
+        "GLIBC_2.27",
+        "GLIBC_2.3",
+        "GLIBC_2.3.2",
+        "GLIBC_2.3.3",
+        "GLIBC_2.3.4",
+        "GLIBC_2.4",
+        "GLIBC_2.7",
+        "GLIBC_2.9"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libcoreclr.so",
+      "sha256": "df5cfe7ba5abf7931f4836726f2fbb0d47dc32caa45d3c209ddf7ccd25c32f4c",
+      "soname": [
+        "libcoreclr.so"
+      ],
+      "needed": [
+        "libgcc_s.so.1",
+        "libpthread.so.0",
+        "librt.so.1",
+        "libdl.so.2",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "CXXABI_1.3.7",
+        "GLIBCXX_3.4",
+        "GLIBC_2.10",
+        "GLIBC_2.12",
+        "GLIBC_2.14",
+        "GLIBC_2.16",
+        "GLIBC_2.2.5",
+        "GLIBC_2.27",
+        "GLIBC_2.3",
+        "GLIBC_2.3.2",
+        "GLIBC_2.3.3",
+        "GLIBC_2.3.4",
+        "GLIBC_2.4",
+        "GLIBC_2.6",
+        "GLIBC_2.7",
+        "GLIBC_2.9"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libcoreclrtraceptprovider.so",
+      "sha256": "8fc124b76a54a8f3c9ee941035ad1c716b99c845170331900984c069529660bc",
+      "soname": [
+        "libcoreclrtraceptprovider.so"
+      ],
+      "needed": [
+        "liblttng-ust.so.0",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6"
+      ],
+      "requiredSymbolVersions": [
+        "GLIBC_2.2.5",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libhostfxr.so",
+      "sha256": "2420322efa34abb54e37f27ec39060cf90e3bb135fae5f91c644aac1216d8f1d",
+      "soname": [
+        "libhostfxr.so"
+      ],
+      "needed": [
+        "libdl.so.2",
+        "libpthread.so.0",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "CXXABI_1.3.5",
+        "GLIBCXX_3.4",
+        "GLIBCXX_3.4.11",
+        "GLIBCXX_3.4.14",
+        "GLIBCXX_3.4.15",
+        "GLIBCXX_3.4.18",
+        "GLIBCXX_3.4.20",
+        "GLIBCXX_3.4.21",
+        "GLIBC_2.14",
+        "GLIBC_2.16",
+        "GLIBC_2.2.5",
+        "GLIBC_2.3",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libhostpolicy.so",
+      "sha256": "c5fdff4423791ce986f27c6ab16e195c993a937b38aaa64db15eaa1fce1728c2",
+      "soname": [
+        "libhostpolicy.so"
+      ],
+      "needed": [
+        "libdl.so.2",
+        "libpthread.so.0",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "CXXABI_1.3.5",
+        "GLIBCXX_3.4",
+        "GLIBCXX_3.4.11",
+        "GLIBCXX_3.4.14",
+        "GLIBCXX_3.4.15",
+        "GLIBCXX_3.4.18",
+        "GLIBCXX_3.4.20",
+        "GLIBCXX_3.4.21",
+        "GLIBCXX_3.4.22",
+        "GLIBC_2.14",
+        "GLIBC_2.16",
+        "GLIBC_2.2.5",
+        "GLIBC_2.3",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libmscordaccore.so",
+      "sha256": "54554757342c4325ab0eb8147afd1eafec1913fae6b2739cde225387673bdd23",
+      "soname": [
+        "libmscordaccore.so"
+      ],
+      "needed": [
+        "libgcc_s.so.1",
+        "libpthread.so.0",
+        "librt.so.1",
+        "libdl.so.2",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "GLIBCXX_3.4",
+        "GLIBCXX_3.4.21",
+        "GLIBC_2.12",
+        "GLIBC_2.14",
+        "GLIBC_2.16",
+        "GLIBC_2.2.5",
+        "GLIBC_2.3",
+        "GLIBC_2.3.2",
+        "GLIBC_2.3.3",
+        "GLIBC_2.3.4",
+        "GLIBC_2.4",
+        "GLIBC_2.6",
+        "GLIBC_2.7",
+        "GLIBC_2.9"
+      ]
+    },
+    {
+      "path": "client/godot/dist/data_Quod_linuxbsd_x86_64/libmscordbi.so",
+      "sha256": "6d90714c5ca42977be9025a15084d4f6bf071dfc2066093a856835e28be45505",
+      "soname": [
+        "libmscordbi.so"
+      ],
+      "needed": [
+        "libmscordaccore.so",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "CXXABI_1.3",
+        "GLIBCXX_3.4",
+        "GLIBC_2.10",
+        "GLIBC_2.14",
+        "GLIBC_2.17",
+        "GLIBC_2.2.5",
+        "GLIBC_2.3",
+        "GLIBC_2.4"
+      ]
+    },
+    {
+      "path": "client/godot/dist/quod.x86_64",
+      "sha256": "d776f83ae09d82cfa1295fb3d70ad7ab8a77fe66a4cc4f9d42244fae3665d8cc",
+      "soname": [],
+      "needed": [
+        "librt.so.1",
+        "libpthread.so.0",
+        "libdl.so.2",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "requiredSymbolVersions": [
+        "GLIBC_2.12",
+        "GLIBC_2.14",
+        "GLIBC_2.15",
+        "GLIBC_2.16",
+        "GLIBC_2.17",
+        "GLIBC_2.18",
+        "GLIBC_2.2.5",
+        "GLIBC_2.24",
+        "GLIBC_2.25",
+        "GLIBC_2.27",
+        "GLIBC_2.28",
+        "GLIBC_2.3",
+        "GLIBC_2.3.2",
+        "GLIBC_2.3.4",
+        "GLIBC_2.4",
+        "GLIBC_2.6",
+        "GLIBC_2.7",
+        "GLIBC_2.9"
+      ]
+    }
+  ],
+  "limits": [
+    "DT_NEEDED inspection does not include runtime dlopen/plugin dependencies or prove clean-host compatibility.",
+    "This is the production candidate09 export, not the R1 diagnostic export.",
+    "A later R2 source change requires its new qualified export and a refreshed package audit."
+  ],
+  "productTestsRun": false,
+  "runtimeOrGlobalEnvironmentChanged": false,
+  "M5AcceptanceCredited": false
+}

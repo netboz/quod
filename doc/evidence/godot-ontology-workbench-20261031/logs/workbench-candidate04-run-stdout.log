@@ -1,0 +1,22 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS exact owned ontology offers its authored graphical workbench
+PASS actual workbench recipe query completes under its normal signed target boundary
+PASS actual authored graph enters the existing shared scene adapter
+PASS authored class mark is the same exact class_ref used by offered operations
+PASS shared real scene picker preserves the class/history identity
+PASS real owner work observation precedes unchanged workbench renewals
+PASS unchanged workbench renewals perform zero watched history/rebuild/write/sync work
+PASS unchanged workbench retains graph, scene, source snapshot and local storage bytes
+PASS actual authored workbench option exists
+PASS workbench action is enclosed by the actual shared surface
+PASS native Control gesture releases its actual capture
+PASS real workbench native menu opens
+PASS native Control gesture releases its actual capture
+PASS real native popup selects the exact workbench item once
+PASS workbench action is enclosed by the actual shared surface
+PASS native Control gesture releases its actual capture
+{"passed": false, "children": {"server": 0, "client": 1}, "eof": {"server-stdout": true, "server-stderr": true, "client-stdout": true, "client-stderr": true}, "failure": null, "checks": 0}

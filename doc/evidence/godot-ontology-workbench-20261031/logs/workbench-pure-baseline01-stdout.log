@@ -1,0 +1,82 @@
+======================== EUnit ========================
+module 'workbench_checks'
+  workbench_checks: new_symbol_draft_does_not_allocate_atoms_test...*failed*
+in function workbench_checks:draft/3 (/input/workbench_checks.erl, line 37)
+in call from workbench_checks:'-new_symbol_draft_does_not_allocate_atoms_test/0-fun-4-'/3 (/input/workbench_checks.erl, line 9)
+in call from workbench_checks:with_owner/1 (/input/workbench_checks.erl, line 45)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:{badmatch,
+    {fail,
+        {est,
+            [{cp,predicate_failure,undefined,
+                 {workbench_change,
+                     {add,{isa,{'$quod_symbol',<<...>>},thing}},
+                     [],
+                     {3}},
+                 undefined,undefined,undefined,none,#{}},
+             {cp,predicate_failure,undefined,
+                 {term_variables,[<<>>,{add,{isa,...}}],[],[]},
+                 undefined,undefined,undefined,none,#{}},
+             {cp,predicate_failure,undefined,
+                 {term_variables,[<<>>,{add,{...}}],[]},
+                 undefined,undefined,undefined,none,#{}},
+             {cp,predicate_failure,undefined,
+                 {prolog_workbench_draft,<<>>,{add,{...}},{0}},
+                 undefined,undefined,undefined,none,#{}}],
+            #{4 => [],'Draft' => {0}},
+            5,
+            {db,quod_erlog_db_local_prove,
+                {lp,{db,quod_erlog_db_mvcc,
+                        {ref,#Ref<0.1208486687.1213857793.233856>,...},
+                        [],#{},...},
+                    #Ref<0.1208486687.1213726721.234313>,#{},[],[],#{},...},
+                [],
+                #{{instance_of,2} => {quod_common_primitives,assert_instance}},
+                #{}},
+            [{bounded,false,none},
+             {debug,off,[off,on]},
+             {dialect,erlog,none},
+             {double_quotes,codes,none},
+             {iso,true,none},
+             {max_arity,250,none},
+             {unknown,fail,...},
+             {'$quod_predicate_registry',...}],
+            [{prolog_workbench_draft,<<>>,{add,{isa,{...},...}},unbound},
+             {term_variables,[<<>>,{add,{...}}],[]},
+             {term_variables,[<<>>,{add,...}],[],[]},
+             {workbench_change,{add,{...}},[],unbound},
+             {workbench_fact,{isa,...}},
+             {atom,{...}}],
+            6,false,6,
+            {quod_wire_term,valid_failure_reason_stack},
+            0,none}}}
+  output:<<"">>
+
+  workbench_checks: remove_authored_fact_test...[0.016 s] ok
+  workbench_checks: replace_authored_text_attribute_test...[0.015 s] ok
+  workbench_checks: membership_creation_is_not_a_draft_shortcut_test...[0.013 s] ok
+  workbench_checks: rule_creation_is_not_a_fact_edit_test...[0.013 s] ok
+  workbench_checks: duplicate_and_missing_targets_refuse_test...[0.013 s] ok
+  workbench_checks: unchanged_replacement_preserves_clause_order_test...*failed*
+in function workbench_checks:'-unchanged_replacement_preserves_clause_order_test/0-fun-1-'/1 (/input/workbench_checks.erl, line 34)
+in call from workbench_checks:with_owner/1 (/input/workbench_checks.erl, line 45)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertEqual,[{module,workbench_checks},
+              {line,34},
+              {expression,"draft ( Source , { replace , { isa , before , thing } , { isa , before , thing } } , St )"},
+              {expected,<<"isa(before,thing).\nisa(other,thing).\n">>},
+              {value,<<"isa(other, thing).\nisa(before, thing).\n">>}]}
+  output:<<"">>
+
+  [done in 0.187 s]
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 5.

@@ -1,0 +1,10 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS exact owned ontology offers its authored graphical workbench
+PASS actual workbench recipe query completes under its normal signed target boundary
+PASS actual authored graph enters the existing shared scene adapter
+PASS same authorized graph plus changed controls repopulates the real native catalogues
+{"passed": false, "children": {"server": 0, "client": 1}, "eof": {"server-stdout": true, "server-stderr": true, "client-stdout": true, "client-stderr": true}, "failure": null, "checks": 0}

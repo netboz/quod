@@ -1,0 +1,141 @@
+{
+  "command": [
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-xr-focus-final02/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--audio-driver",
+    "Dummy",
+    "--xr-mode",
+    "off",
+    "--rendering-method",
+    "mobile",
+    "--rendering-driver",
+    "vulkan",
+    "--",
+    "--qualification",
+    "--profile",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/xr-focus-final02-menu01/identity"
+  ],
+  "manifest": "doc/evidence/godot-m4-xr-focus-20261030/inputs/client-xr-focus-final02-manifest.json",
+  "manifest_sha256": "5cfcabc64d1bee75b89ee7b5c9efa75761b7196c9d7d7387670e23f55fe9ce0e",
+  "actual_exports_admitted": 196,
+  "stat_bound_digest_hits": 196,
+  "driver_hashes": {
+    "application.py": "d2cb62c143da9ad585ab8dfedff39eca3f8e0272d94f4c30ceaffdf699783b68",
+    "hashes.py": "b99cbe09154606d33bc450ea5a70ae87176a3248a1646e0936f0ffe10395bc5e",
+    "digests.py": "4c356fa8d6501037fa77bde705af6fd1e916a76e2efb744f2dae96e57b0edd19",
+    "desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"
+  },
+  "native_input": [
+    {
+      "command": [
+        "wtype",
+        "-k",
+        "space"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 833604,
+      "before_pid": 833604,
+      "after_pid": 833604,
+      "target_geometry": null
+    },
+    {
+      "command": [
+        "wtype",
+        "-k",
+        "Return"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 833604,
+      "before_pid": 833604,
+      "after_pid": 833604,
+      "target_geometry": null
+    },
+    {
+      "command": [
+        "wtype",
+        "-k",
+        "F24"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 833604,
+      "before_pid": 833604,
+      "after_pid": 833604,
+      "target_geometry": null
+    },
+    {
+      "command": [
+        "wtype",
+        "-k",
+        "space"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 833604,
+      "before_pid": 833604,
+      "after_pid": 833604,
+      "target_geometry": null
+    },
+    {
+      "command": [
+        "wtype",
+        "-k",
+        "Return"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 833604,
+      "before_pid": 833604,
+      "after_pid": 833604,
+      "target_geometry": null
+    },
+    {
+      "command": [
+        "wtype",
+        "-k",
+        "F24"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 833604,
+      "before_pid": 833604,
+      "after_pid": 833604,
+      "target_geometry": null
+    },
+    {
+      "command": [
+        "wtype",
+        "-k",
+        "space"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 833604,
+      "before_pid": 833604,
+      "after_pid": 818027,
+      "target_geometry": null
+    }
+  ],
+  "watchdog_seconds": 60,
+  "physical_acceptance": false,
+  "passed": false,
+  "reader_errors": [],
+  "failure": "RuntimeError: Native qualification input lost its owned window",
+  "client_exit": -9,
+  "eof": {
+    "stdout": false,
+    "stderr": false
+  },
+  "completion_marker": false,
+  "observation_marker": false
+}

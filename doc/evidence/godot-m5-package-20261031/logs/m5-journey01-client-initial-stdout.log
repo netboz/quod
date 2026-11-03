@@ -1,0 +1,25 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled ordinary action create-key
+PASS native action is visible inside the current ordinary desktop viewport
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled ordinary action connect
+PASS native action is visible inside the current ordinary desktop viewport
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS real signed authentication uses the fresh fixture network
+PASS enabled ordinary action register
+PASS native action is visible inside the current ordinary desktop viewport
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled ordinary action prepare
+PASS native action is visible inside the current ordinary desktop viewport
+<private fixture/client diagnostic>

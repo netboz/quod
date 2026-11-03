@@ -1,0 +1,56 @@
+{
+  "viewed": [
+    "occurrence-journey02/associated-form.png",
+    "occurrence-journey02/spatial.png",
+    "occurrence-journey04/associated-form.png",
+    "occurrence-journey04/reopened-associated-form.png"
+  ],
+  "selected_files": {
+    "associated-form.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey04/sandbox/work/associated-form.png",
+      "sha256": "7a07eb4632e1e23b111eaaceee8d57529f511396d2046b1829436cf37c81a8c6"
+    },
+    "reopened-associated-form.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey04/sandbox/work/reopened-associated-form.png",
+      "sha256": "05482a2193de445f36a2634c955afcac7b6818f8dce4737631fa628022b28679"
+    },
+    "spatial.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey04/sandbox/work/spatial.png",
+      "sha256": "b6730f8a82f6dca6b0e8c81f3163b7a3d1cf30ffadf7e997ea544e7ee9876a3b"
+    },
+    "reopened-spatial.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey04/sandbox/work/reopened-spatial.png",
+      "sha256": "b6730f8a82f6dca6b0e8c81f3163b7a3d1cf30ffadf7e997ea544e7ee9876a3b"
+    }
+  },
+  "initial_to_reopen_rgb_difference_bbox": [
+    537,
+    374,
+    790,
+    402
+  ],
+  "same_full_scene_form_pixels_outside_editor": true,
+  "model_viewer_delta_was_initially_misread_as_black_raster": true,
+  "no_product_raster_failure_established": true,
+  "human_or_HMD_acceptance": false,
+  "spatial_initial_to_reopen_rgb_difference_bbox": null,
+  "spatial_pixels_identical": true,
+  "decoded_RGB": {
+    "associated-form.png": {
+      "bytes": 2880000,
+      "sha256": "3f18a4b40ab6ddaf8f36e1fca96b1431d534d88898885166359891961ca28cc9"
+    },
+    "reopened-associated-form.png": {
+      "bytes": 2880000,
+      "sha256": "c310da7387930d476e4060a65b2e022e75b2c9dd0543d24c8110acad9c5b0280"
+    },
+    "spatial.png": {
+      "bytes": 988320,
+      "sha256": "dcf97e7cdfbfa2f5404e5a118a2248580e1fdc1b29e976fe9335c51d88cf486b"
+    },
+    "reopened-spatial.png": {
+      "bytes": 988320,
+      "sha256": "dcf97e7cdfbfa2f5404e5a118a2248580e1fdc1b29e976fe9335c51d88cf486b"
+    }
+  }
+}

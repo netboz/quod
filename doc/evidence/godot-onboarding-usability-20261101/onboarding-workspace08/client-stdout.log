@@ -1,0 +1,11 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS the actual Current space operations control remains fully inside the shared workspace at (1850, 496)
+PASS the actual Current space operations control remains fully inside the shared workspace at (600, 900)
+PASS fixture delivers the native editor change into the existing form owner before measuring retention
+<private fixture/client diagnostic>
+PASS XR uses the actual shared controls with a readable-density layout profile
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

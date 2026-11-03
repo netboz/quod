@@ -1,0 +1,97 @@
+PASS no-key UI identifies the local first action without unavailable workspace controls
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at no-key (False, 1200, 20)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at no-key (False, 560, 20)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at no-key (True, 1200, 26)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at no-key (True, 1200, 48)
+PASS current native action is enabled and enclosed: create-key
+PASS one real native pointer press/release reaches the current action
+PASS created key offers connection without duplicate key creation
+PASS current native action is enabled and enclosed: connect
+PASS one real native pointer press/release reaches the current action
+PASS fresh signed key offers explicit account creation
+PASS current native action is enabled and enclosed: register
+PASS one real native pointer press/release reaches the current action
+PASS actual successful signup is labelled created and advances to storage review
+PASS current native action is enabled and enclosed: prepare
+PASS one real native pointer press/release reaches the current action
+PASS preparation leaves setup uncommitted with no pending action
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at prepared (False, 1200, 20)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at prepared (False, 560, 20)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at prepared (True, 1200, 26)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at prepared (True, 1200, 48)
+PASS current native action is enabled and enclosed: setup
+PASS one real native pointer press/release reaches the current action
+PASS current native action is enabled and enclosed: create-operations
+PASS one real native pointer press/release reaches the current action
+PASS offered selection exists: operation-storage
+PASS offered selection exists: operation-class
+PASS Create uses explicit existing account storage and exact authored class
+PASS current native action is enabled and enclosed: control7
+PASS one real native pointer press/release reaches the current action
+PASS one explicit native Create has an actual committed result
+PASS current native action is enabled and enclosed: open-returned-subject
+PASS one real native pointer press/release reaches the current action
+PASS current native action is enabled and enclosed: control0
+PASS one real native pointer press/release reaches the current action
+PASS one explicit native Move commits Enter through the same form owner
+PASS Create and Enter add exactly two personal instructions
+PASS current native action is enabled and enclosed: open-gui
+PASS one real native pointer press/release reaches the current action
+PASS invalid numeric native draft is retained as invalid before disconnect
+PASS persisted original-work fixture makes Check original outcomes the explicit next action
+PASS actual authenticated fixture expiry retires views and exposes explicit same-key recovery
+PASS expiry retains the exact original unknown work and cancels input without renewal
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at expired (False, 1200, 20)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at expired (False, 560, 20)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at expired (True, 1200, 26)
+PASS current onboarding raster retained
+PASS current instruction status and primary target enclosed at expired (True, 1200, 48)
+PASS current native action is enabled and enclosed: connect
+PASS one real native pointer press/release reaches the current action
+PASS same owned form retains invalid draft through actual expiry and explicit reconnect
+PASS explicit recovery retains original key U A S0 and current space
+PASS original-work recovery never resubmits the preserved unknown journal fixture
+PASS current native action is enabled and enclosed: disconnect
+PASS one real native pointer press/release reaches the current action
+PASS disconnect retires sockets and text/controller captures without native XR
+PASS returning or imported key starts offline with explicit Connect
+PASS current native action is enabled and enclosed: connect
+PASS one real native pointer press/release reaches the current action
+PASS returning account recovers original setup without offering duplicate provisioning
+PASS new process or imported key recovers the same original setup and committed location
+PASS returning and imported discovery add no personal instructions
+PASS process reopen retains the exact uncertain original association
+PASS current native action is enabled and enclosed: disconnect
+PASS one real native pointer press/release reaches the current action
+PASS disconnect retires sockets and text/controller captures without native XR
+PASS returning or imported key starts offline with explicit Connect
+PASS current native action is enabled and enclosed: connect
+PASS one real native pointer press/release reaches the current action
+PASS returning account recovers original setup without offering duplicate provisioning
+PASS new process or imported key recovers the same original setup and committed location
+PASS returning and imported discovery add no personal instructions
+PASS current native action is enabled and enclosed: workspace-connection
+PASS one real native pointer press/release reaches the current action
+PASS current native action is enabled and enclosed: disconnect
+PASS one real native pointer press/release reaches the current action
+PASS disconnect retires sockets and text/controller captures without native XR
+PASS returning or imported key starts offline with explicit Connect
+PASS current native action is enabled and enclosed: connect
+PASS one real native pointer press/release reaches the current action
+PASS unallocated imported key cannot replace its missing original account by registration
+PASS imported-key unavailability has a distinct truthful next-state explanation
+PASS current native action is enabled and enclosed: disconnect
+PASS one real native pointer press/release reaches the current action
+PASS disconnect retires sockets and text/controller captures without native XR
+{"passed": false, "failure": "Empty: ", "children": {"server": 0, "client-onboarding-full": 0, "client-onboarding-return": 0, "client-onboarding-import": 0, "client-onboarding-unallocated": -15}, "native_inputs": 0}

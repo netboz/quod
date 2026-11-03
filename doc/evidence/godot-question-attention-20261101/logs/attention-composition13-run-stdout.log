@@ -1,0 +1,14 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS explicit signed question fixture transaction commits
+PASS explicit signed question fixture transaction commits
+PASS explicit signed question fixture transaction commits
+PASS retained actual attention-arrival raster
+PASS new signed questions update attention without opening any working form before human selection
+PASS retained actual attention-home-1200-26 raster
+PASS compact attention retains the current interior viewport at (1200, 26)
+PASS retained actual attention-home-1200-48 raster
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-attention-composition": 1}, "native_inputs": 0}

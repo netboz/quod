@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-workbench-usability-20261101/signed.py",
+    "workbench-ux-candidate05",
+    "doc/evidence/godot-workbench-usability-20261101/inputs/client-workbench-ux-candidate05-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 198.7627535869833
+}

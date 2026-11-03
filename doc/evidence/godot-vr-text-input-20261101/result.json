@@ -1,0 +1,1025 @@
+{
+  "passed": true,
+  "full_M4_or_M5": false,
+  "full_QUO65_or_human_acceptance": false,
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "actual_model": "openai-codex:gpt-6-astra",
+  "effective_backend_effort": "unexposed",
+  "product": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-product01-manifest.json",
+    "sha256": "8b5c2dcbfb4a36b28d785935c27635c27387e008342c2d96a99471c8d48e510f",
+    "passed": true,
+    "supplied": 98,
+    "live": 98,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "diagnostic": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-final13-manifest.json",
+    "sha256": "b1475d137d4600a1422686ddb69b968be3b1cfc7e743b6ed8a91c8ca63c0b09d",
+    "passed": true,
+    "supplied": 100,
+    "live": 98,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "builds": {
+    "keyboard-baseline01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-baseline01-manifest.json",
+      "sha256": "5dac64767e7614c76d5dfd065abd6948e27e5ed778a85d6ec1fe081a1e7ce02f",
+      "passed": true,
+      "supplied": 98,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-baseline02": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-baseline02-manifest.json",
+      "sha256": "db62bf1d7011b8dc99c615676d41df7abde0484b30b28842090a0e2202b01959",
+      "passed": true,
+      "supplied": 98,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-candidate01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate01-manifest.json",
+      "sha256": "df7d799e4a86d074140d58e3e9c6957ac00aa4bcce2dfb9d8e9781f3f67e4f48",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-candidate02": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate02-manifest.json",
+      "sha256": "76608ef742aa2aae30d419de33c85fae83d0263ad85cca2b11b0130cf1be47fc",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-candidate05": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate05-manifest.json",
+      "sha256": "034aa5101806ab32842a7c2ae24ea383e571640836e0be113036b5f17b9bf15d",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-candidate07": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate07-manifest.json",
+      "sha256": "c0991fee55ed23f996767c7e60803dda42df2871dc1fd7a713383d0784ec94ab",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-candidate09": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate09-manifest.json",
+      "sha256": "610ccf107b5ab85b0aec30c2822cfdc4f45fd0bf740bc015ead3c4be3cb3aca3",
+      "passed": true,
+      "supplied": 100,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-candidate11": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate11-manifest.json",
+      "sha256": "dbd1d90aa3b0ff77e7008a63ab949e13ef47e51b4cf916d93c8cb65ca987bf8a",
+      "passed": true,
+      "supplied": 100,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-command-baseline06": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-command-baseline06-manifest.json",
+      "sha256": "010ad2f5b4ef280db0647b7b8910c71737b26fabfcb6b27781a6296cd2bce5a3",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-diagnostic03": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-diagnostic03-manifest.json",
+      "sha256": "cddd83b01df6440f8d24576fc2490d3fdbc54e6dd02aac263d2cc7d57bfee453",
+      "passed": false,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "keyboard-diagnostic04": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-diagnostic04-manifest.json",
+      "sha256": "d11c50dc7f966efe70c5b486fa8fef196c300706f8ef060b4fad31b56e820018",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-diagnostic08": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-diagnostic08-manifest.json",
+      "sha256": "a079d88478ada833596700a4c1c9c15506fdb90a0f3a7e714b043ddd82cfea43",
+      "passed": true,
+      "supplied": 100,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-final12": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-final12-manifest.json",
+      "sha256": "a23e47a7a7072870b1e2e792179b1bd416649a08ab872cf42d548f3a3d6d2d90",
+      "passed": true,
+      "supplied": 100,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-final13": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-final13-manifest.json",
+      "sha256": "b1475d137d4600a1422686ddb69b968be3b1cfc7e743b6ed8a91c8ca63c0b09d",
+      "passed": true,
+      "supplied": 100,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-product01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-product01-manifest.json",
+      "sha256": "8b5c2dcbfb4a36b28d785935c27635c27387e008342c2d96a99471c8d48e510f",
+      "passed": true,
+      "supplied": 98,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "keyboard-toggle-baseline10": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-toggle-baseline10-manifest.json",
+      "sha256": "19213568132b001d0a4eb177a35d923af2c28e80fe07a2bd81aa653fb490e4b4",
+      "passed": true,
+      "supplied": 100,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "selected": {
+    "editing": {
+      "label": "keyboard-final13-editing",
+      "checks": 172,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "b0580019dca73526e296feb367571706f11893f9d57cb1bd09147c7f37e39e90",
+      "executed_manifest": "keyboard-final13"
+    },
+    "ray": {
+      "label": "keyboard-final13-ray",
+      "checks": 16,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "73218ad5034d4011f9aa60c476fb7ad341717426f08d51b81ca87d7f383d5f1c",
+      "executed_manifest": "keyboard-final13"
+    },
+    "controller": {
+      "label": "keyboard-final13-controller",
+      "checks": 82,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "0d82631800675cf53838aa7587c0490a87fafaf9e440ce60da5cacc5cebd787f",
+      "executed_manifest": "keyboard-final13"
+    },
+    "workspace": {
+      "label": "keyboard-final13-workspace",
+      "checks": 47,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "a0f8e71400416d0d2cf98087d27450379895bd7d8f40432cdc9f9fd7a4350727",
+      "executed_manifest": "keyboard-final13"
+    },
+    "signed": {
+      "label": "keyboard-source13",
+      "checks": 21,
+      "true_exits": {
+        "server": 0,
+        "client-keyboard-signed": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-keyboard-signed-stdout": true,
+        "client-keyboard-signed-stderr": true
+      },
+      "report_sha256": "0fd8f76847dd109df9b4b6fbafd7d18ecf1c4e559a2ca9565b01b8d94125003c",
+      "host_input_count": 0,
+      "executed_manifest": "keyboard-final13"
+    }
+  },
+  "true_wrapper_outcomes": {
+    "keyboard-baseline01-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "3f61c17bcb9d31f2738ef1af926c374dcfaabf1be75f8fb47edfd93668888134",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline01-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "0e8a8f8b86be3805ba2e3f6fbbbec91939f0733fb7147b2e4484ca141b0cb5a5",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline01-export": {
+      "true_exit": 0,
+      "receipt_sha256": "4280404010ccd74b902b7c72ccfc1f50b13c31161006a4408646b93fb0be9831",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline01-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "2ae48c5f7a438a3b51f2079e6533b2e05b8bd43bd183253876b2b0fef7b55c50",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline01-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "deba5fd51c6fa27e6d852e3fa5a9f8061c25e44dde6eaea43a6cc834e6a9eb7a",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "a7eb948b1dcfc286a84e7ff251dfb5368556884ee07b84513e2acd8d98b88fd0",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline01-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "33499d90fd62d396b2ae24c99ea6dba3e57ca8369a66a7b36b879088ff85c4cb",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline02-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "efa36b1ac964e47b783fc80625279f9bf33c7f1c3c4825196f9bc070fcb36b4f",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline02-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "0a749dcc61c5353fc1d84bbe0c039f341003e8c891af733fe495dfce0f964be8",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline02-export": {
+      "true_exit": 0,
+      "receipt_sha256": "7902e0035eb7e21d480e6847034967a8298ff3bfaa53201fbd07d8b14f65dbec",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline02-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "54df5d1a6eecc20c4fc13956fcff5f169f04231d5f94fbaadb10230854d25e1c",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline02-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "49e810cdbb17706dc381818e6c356a05da287deb40536e29efd07385a4417489",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline02-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "2c013698d5d1c62adcac3f94e3316a7cad50a355970e6dd32e2f223e7369c1a0",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline02-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "e12c1e1a02f13d04a2ca7e0115719586c65ebc22c337e91c71d3cf222322dc5e",
+      "diagnostic_failure": false
+    },
+    "keyboard-baseline03-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "cd0974fccd7fdd6ea9ddb6c932a25200050eae040902724cf203dccdd8d62d5b",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate01-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "88a062b1e0b1c5fe990d5dc67ea0cf349afda784dc9f1b7e32b17aba48fa3b56",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate01-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "130deba2fa264829a4c5597d9d79e630a5bb1825fa7356b6e2f53bcdf854679a",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate01-export": {
+      "true_exit": 0,
+      "receipt_sha256": "1569e15099f47c306ddec087f80877858ee6a04a209a0ecd57a4515fecbcd79d",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate01-render-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "a9ff842f10460f028e50c291180e37fb72b10754adac6e26a0f6d3af83a0b7d0",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate01-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "ac825a71a9240c18a801fc5cc17edbe474108ad1ba708da84551d1f4d500b229",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "ec10730cd9f174e7cf3afe73a4908703ee282a68ba08c45619cde99ef818484e",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate01-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "55d009da1308d7d0a11005869b8633d200e0da11a8a7077537b6527ad8faf0f2",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate02-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "1efbef3069e46e44deed9abac296e1b77c0e2f67dbe923f8f8fe5486adb93ea7",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate02-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "0be211764cf1d5363b2bf97b3bd23f9c8ad55a72af6cff459cc93dde7d4c8bb6",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate02-export": {
+      "true_exit": 0,
+      "receipt_sha256": "77c434c6b357e4be689f086aca2352e7d0540949d4a4e82def879e89cc7dddd4",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate02-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "0cf72234bb2f936824a53fe4b4a2c4f1c051d3bbd11a6038457d90f5fdad4391",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate02-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "23ccd3e7c07793a31214ecc66e99a9f9605904c65ba2465253b47ca21f510e85",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate02-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "600665ac43650a6c075387f51f18e672f7f52f4d799b040451537e6354a3dce7",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate02-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "83da6489ed9193ed62cc405e589b56812967f110f2ffd473b374c22518b9df96",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate05-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "121a6bc5cb24f28732856b0a179c658ccbfb3e7bec46ca9c5da6a70fc1dae616",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate05-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "131f1b97ce888dc50bb3dd4e6dc307fdaf9e13b541a8f875c29f01254cf5a652",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate05-export": {
+      "true_exit": 0,
+      "receipt_sha256": "77a1433b34d522dcc3c83d7b3f87b9016ee20a84a8f1740eef1bed86f2084d38",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate05-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "1a06372ffeb1ed13e28305c29fba295300ac7d530d0e2d83456577b2e32fd420",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate05-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "da948f250097e4503b1a321c8776e0e789fbf1eb99d0cef1e3d6a414806165ea",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate05-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "4a6b943d5a21e6121dcade880d0935c3002b63d37943132e8feecd1d68e6fb1c",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate05-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "cc9124ac6988ad96b2ac2487a0554f2f81517175ab75371e255bbc3998990d61",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate07-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "d854eb92036e27e172a4d138ccb1d407f72ab398b53f7ce477c0aabc9feb6630",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate07-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "759afad5ba8aadc24686b583b12bd6f631001e894a8b74b7ea9409a30a893ff5",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate07-export": {
+      "true_exit": 0,
+      "receipt_sha256": "116d81dd68129c4eb6b3b71dbb0988c14dd36905c11d64131a058733eda5180b",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate07-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "3e1eff74e1a3c4547e064a2f1f8f2ec43635b739f4135ee5a01cdaaf053f1efe",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate07-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "5eccf4598060c7ecf7e9f64124ac745a73a391b39285b060fd327341ed5f72a6",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate07-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "a44af3c8c05d7f41078574b6a43060c4732bc0233a09c7932f7eaee028f790b2",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate07-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "c6333bc4da655d758862fda78074a276a797a68370d0b2200d06008e717ffed5",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate09-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "d6147772ea050fa763ca7d35cf6ee5d7499a6b590b8fcfb55be4cf76e5ebc892",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate09-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "01500b243364ba946f853c7f9de3af87bca922129d20a37cce35ed165f3cf5ff",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate09-export": {
+      "true_exit": 0,
+      "receipt_sha256": "03e4f79959a3755cb943edb1d8e794c3d87e7f32cc73a90ea02903a4fd978e47",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate09-render-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "8892a211ef75dea4c3494ee317ef711a1ef4498dfc9a5695c235c1ac0dbeaedc",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate09-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "3b170a7f574b759c930148707c97cfb8528b6775b438732e653239edcbe989a1",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate09-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "8279fd2c4bd8498a669c87e54c1e8297bd8fe7014c1f9c448a8225764913fc5c",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate09-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "c735f2e2908fae9eb3ed817b4a989f769173b0651d617a865fd9a3231f47aa95",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate11-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "78cc539ccdf0ec2114cdf5f50078285e78cddb3508ff735cc4a1f5cbb70a2c2a",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate11-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "0477154a30a4f4af146ba15668f13bb957d0c0baabc90741025143b767bf6532",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate11-export": {
+      "true_exit": 0,
+      "receipt_sha256": "9b5c6644973e4d8737edd69e99fc7154403a604e232e0cf1b39fdb197d15cd6e",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate11-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "b966e4d96f8ac355e4ad2e07a7c2ecedf485736c2c7f80fe6e939f65a30fe8ca",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate11-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "110f3c07d65ddad02760da168d7f94e7ff110edf7d368e0267309f7c8f82a9a9",
+      "diagnostic_failure": false
+    },
+    "keyboard-candidate11-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "aa76b8029d188853d53006db92303a1811968b546fa385f8c1c40df273b7584e",
+      "diagnostic_failure": false
+    },
+    "keyboard-command-baseline06-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "47ce993300222beb12f1539050a4a3b7667bcb0764635396233f2ad00e902b9c",
+      "diagnostic_failure": false
+    },
+    "keyboard-command-baseline06-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "1ba0e2ff073232168e6be8d0949bcac3aff286132669793f72144c833ce7ee26",
+      "diagnostic_failure": false
+    },
+    "keyboard-command-baseline06-export": {
+      "true_exit": 0,
+      "receipt_sha256": "fd5dc9b8f06d1c9a8573beec9caefa984057d44b3806022b272b876aee6491f6",
+      "diagnostic_failure": false
+    },
+    "keyboard-command-baseline06-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "6215765fcb032448f4f59ce39e6575565a52ff39ff6077adcdb417a102079cf5",
+      "diagnostic_failure": false
+    },
+    "keyboard-command-baseline06-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "ab6090c78b3bf07867a1596e61058d92dfdcb550cd0c68c990ccbcd17c46b0cd",
+      "diagnostic_failure": false
+    },
+    "keyboard-command-baseline06-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "5bfbaa67e3aff9a35db1181d5aa2ca6234c263cfbb19526db9d4a03c5b6b032e",
+      "diagnostic_failure": false
+    },
+    "keyboard-command-baseline06-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "7b9ca25b830ec037513ebf74a7d064d6e32d8db141890146ecbd6c4cf85b718b",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic03-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "1da370983607836c5d56b89ca1834533c8bbb91e6a0e3417d6dca6f3b7f30863",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic03-build-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "69d6ccbde5db7a84eac3a6ed45e9ad5086d26aaadfea85368c6ce09f32af0f1a",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic03-export": {
+      "true_exit": 1,
+      "receipt_sha256": "5d832181fe3eb21ceb046c59452ce0f66566f6f7cced1225cd87f9243f3214f2",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic03-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "3f0a9aeff96b6d071c78c7ad36a811bbe2767064eef19c2b54d68ced8a784fa7",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic03-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "dd10a959fa0da88acff230b1b4ac21e484f3425b71b35ac58fa6687d90ecb582",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic03-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "d2829429893ee3433f03a730aeccebf01b3db8584fd05d435dad98c76620667d",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic04-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "f86b8a0be0574f0ed66af99913c4b49c8b0b16644b091e4314afd17dd7c7f502",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic04-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "6d093d1de0378439acee9bec4b3d1b3268b6bf4ed6ce59f560dcd4d08ecce8df",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic04-export": {
+      "true_exit": 0,
+      "receipt_sha256": "3dfc48bb7bc5900c76db0a722a006fa7aeb7dfab73267ee98db04ff850d47ca5",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic04-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "ff58ccfe540aa3012b535e318269a207086e4392b183312e00641c7b4ce20b4f",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic04-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "32f18e421d0f15add5206f1dbbac3857994106429ad796ade9f18b7f5e4beec5",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic04-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "155faf18f6f4e4b49e68736397364eef48612639bda2f60ad4d86c3b2245c789",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic04-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "fe1193b4d1a2cc2ba661b1d340c2960530c70b09bdf2f5a919092a187d85e120",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic08-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "a5edb48899ff366d16ccf88537efaaa1f7197de88559c642927420f71fadd44f",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic08-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "9ebaf6f88c75a914b76dab05da791f7c43c2ae53c26f10f1262a0a3ac3ab08b8",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic08-export": {
+      "true_exit": 0,
+      "receipt_sha256": "8d67268355e41d22ecd7183ea425992daa9edbbf1d8f4cb2a5d1622c173dd994",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic08-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "7b42f14f8d0aafe4452d22508155e2073c9c5ee3bda7fb5cd5aa5aa11346bf09",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic08-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "a553ab089bb7c3345f25c4dc4941e9b73b4a8b2fb5d20b5cbc7fa904c31b7a28",
+      "diagnostic_failure": false
+    },
+    "keyboard-diagnostic08-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "7d11e8e1c970496cbc708bfdbc628bb06634b08fe0b74232ed8e2605360cc9df",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "47f04afe6f237a63efc07d04c56756ec9f127ef7a64933368c2149315fef11f4",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "be00261e4127ae411d1c010d075fa7d38e6e649e8c0cded5af9b3f6e0c0709a3",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-controller-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "5b022c93835027f18889a8a741809bc71d7cf39e25f5f0020213ecae0da64e6d",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-editing-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "e7309bdaf5e3bb97d02f847922a57e35718f6dafb27241771f0dbfd7ce9151ef",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-export": {
+      "true_exit": 0,
+      "receipt_sha256": "2d7b272a58278fdea1f452778a2854bedc4ec402736a4a60312ed846b65bec65",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-ray-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "beb907d6a22de21726c3074ef91fb20f118d31e1bcba3e6bb0739673bb14c26b",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "f270ce235927346f6f0a1bd3f28acaf0b0d9a90c5fd29bfa2f003498c539409b",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "7ac94ff7494a23ca43cecdeb75f4b173c7d7be02eb1cf84b2b1abf3e4f1242a8",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "f052b0b7e9ae41d96c5e470da04f9dd44738dc5c577c3be897c5a5cd08ea84c0",
+      "diagnostic_failure": false
+    },
+    "keyboard-final12-workspace-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "3726ef8ca8b5cf950b5a51a09f8f1a6ed6b857367259694d7ec71b7ee7fbdd62",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "17106eae7cc3b5ce923b178b8a6be2e7dc7aae56d208cbf707ab72bc9d16a605",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "64e22323761cdd09ad919125068864a521b38a0f97419692c8cc25fee09dcddd",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-controller-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "5e36fa07e2dcb7116f299bee893ba1e867aeac858bbd545e19256520d220928f",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-editing-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "d0219642f2f85cf35623ac665f2394980243708ef6022b6fafbccdc5b59cb1fb",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-export": {
+      "true_exit": 0,
+      "receipt_sha256": "c7014b8845d54418dfa2a150aa9d224f3c70c67f4805c79c318ae351d4f3bd65",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-ray-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "501890697ead72bc6869842644917a095b8a772bb6d4bf1e685160802d96c44f",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "8907fdee151d6a45fa3f9802d68867965f3e434b2f12afc8c169dfc8d9173194",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "c60596f50624ec50f884f2e5c00b0cc6e6b1b4b196931418ffb0fe7178bc62a6",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "3d950561dfea45e6d605b8b8219f3fca53eeff400e603dd365b9d47da3a97b02",
+      "diagnostic_failure": false
+    },
+    "keyboard-final13-workspace-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "fbc420f9dc9d7fc40d09bcbf5ffcb7ee546e8c4f7811322958101d19bbb50e53",
+      "diagnostic_failure": false
+    },
+    "keyboard-popup08-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "5488129d8b878f74cde629d6b017dfdd271718b8e97bbfd0800ca148854e7942",
+      "diagnostic_failure": false
+    },
+    "keyboard-product01-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "d3005df25d0d00cbb49cbdc739948b90893742aefbaacb83f232eb813a4ee716",
+      "diagnostic_failure": false
+    },
+    "keyboard-product01-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "49a4a6a4df281fc0643c6f8b307c39f6c8632621423e8a51bc2301a53721cb06",
+      "diagnostic_failure": false
+    },
+    "keyboard-product01-export": {
+      "true_exit": 0,
+      "receipt_sha256": "d779c0a56fc4d679be0cf6650fec7178104230ac5e8ef58608b02453e36a19c9",
+      "diagnostic_failure": false
+    },
+    "keyboard-product01-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "c7509cb3ab4870ee009f0dd085bb6b22b40e3754f8fdc959bca0757d12a7fe80",
+      "diagnostic_failure": false
+    },
+    "keyboard-product01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "c1202905d1495bcb3fc234c1dcce45e7901683b5ef416d90745e96949099a659",
+      "diagnostic_failure": false
+    },
+    "keyboard-product01-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "c8a1224461095034acca32b474fd66c94061ce5575543158598439bd63255502",
+      "diagnostic_failure": false
+    },
+    "keyboard-ray-popup11-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "453179a5bde72bd28b1784e67f55075923479acf3abd92295914c072fbbf6520",
+      "diagnostic_failure": false
+    },
+    "keyboard-ray05-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "1485eeeb286bdbb9c7929e784cec2d23d0a4aa7755c77ee4ac3cb2bb1cdbf40a",
+      "diagnostic_failure": false
+    },
+    "keyboard-ray07-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "5e50f91879e2888a7246511ae495680ef3cca878c43d2a7fd871446c6539312c",
+      "diagnostic_failure": false
+    },
+    "keyboard-source08-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "d3f9331036e62d6a14a3ce13ba09b047918a261e4fb1e3dd7b719f7a9c354c3b",
+      "diagnostic_failure": false
+    },
+    "keyboard-source13-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "99c323400673ebadff5436c10f9168ba7c9cda40cc8060cdd3bce919df316506",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-baseline10-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "0ab648b0ffa98c33241504256d3f3d8535d66ff5cfe5f93c85e11eb1a0e168bd",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-baseline10-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "74addf0724bde0d3dc9ce3f1c0b8b198eed53543e078fc672b2fe9b7d03f8bfd",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-baseline10-export": {
+      "true_exit": 0,
+      "receipt_sha256": "eb5fb46b19f01dc886ec953eef0486261601c66c416b838d6473364add07fb38",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-baseline10-render-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "51359579c6a575ba2b1dc1d7d6df4a00bee3fb40726d4b229a6a5c320bd8a492",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-baseline10-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "6958b77ad3e4be8af39972daaf252bbbb0a033af803cfd3647e062f010342526",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-baseline10-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "29abad536938118f1d25625fdda388bccf9e832da1ad43d7ce29cd29b17b188c",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-baseline10-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "36322296dedc66c9738094427a30b7c1004482ebb15ad6a2b8ab5fd3a1a43c4c",
+      "diagnostic_failure": false
+    },
+    "keyboard-toggle-final11-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "f560edc931d32ad9f4b4b7f4fd6d54895563d3abc8fdc2f8a4a5fa6c76f01ba1",
+      "diagnostic_failure": false
+    }
+  },
+  "source_delta": {
+    "client/godot/SpatialGui.cs": {
+      "before_path": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/SpatialGui.cs",
+      "before_sha256": "4f88460313b9a498bae6f2ba728cbf8a7d0dd39d51f05055378cf9eb469dad29",
+      "after_sha256": "923e652afb83a143b88667cca0567a4437c8da16d1a93ff70ba42bebee38a303",
+      "full_mode": 33188
+    },
+    "client/godot/OpenXRInput.cs": {
+      "before_path": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/OpenXRInput.cs",
+      "before_sha256": "21d422587077eb652eadbedab8dc290f2a5b018e466d1292d946b05ee57fa780",
+      "after_sha256": "b8685660484507e313365f93ada757883967fde945d3c5964289c1f760573162",
+      "full_mode": 33188
+    },
+    "client/godot/FormPanel.cs": {
+      "before_path": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/FormPanel.cs",
+      "before_sha256": "1d50d0f762bfcbdc125f9191303e6c4c2741376da9f5567954591bbfc99115c5",
+      "after_sha256": "66436b16af752f406516f9aef33e1bf5e6b9f507576128ae2884ed057f4bef15",
+      "full_mode": 33188
+    },
+    "client/godot/SourcePanel.cs": {
+      "before_path": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/SourcePanel.cs",
+      "before_sha256": "dd72023f26b0007d7e1880201e4098bc6707b625269096c419acb486e9bcaf19",
+      "after_sha256": "e102fb6341f54173dd8a5e8875b0cc65305c2a052e667c3e3af3833b22599373",
+      "full_mode": 33188
+    },
+    "client/godot/OperationsPanel.cs": {
+      "before_path": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/OperationsPanel.cs",
+      "before_sha256": "53358fa41212d1f2ecb789db833eea3c4c58fb9b5ef2d8d641ceed11fa1ecd4f",
+      "after_sha256": "d6d636b3e2b18b68c47b6e85592086316da178756f3d4b886b80d1b4d9814397",
+      "full_mode": 33188
+    },
+    "client/godot/README.md": {
+      "before_path": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/README.md",
+      "before_sha256": "8c576bb9bf8090c48e1848270867044251b7a589678f1e45859462b45c4995a0",
+      "after_sha256": "fb4e4ac27bded781701e692001bbc9f932bd2fb6f2ab4b6ab96b6d3223c956e2",
+      "full_mode": 33188
+    }
+  },
+  "new_product_sources": [
+    "client/godot/SpatialKeyboard.cs"
+  ],
+  "line_delta": {
+    "client/godot/SpatialGui.cs": {
+      "added": 11,
+      "removed": 4
+    },
+    "client/godot/OpenXRInput.cs": {
+      "added": 21,
+      "removed": 13
+    },
+    "client/godot/FormPanel.cs": {
+      "added": 1,
+      "removed": 2
+    },
+    "client/godot/SourcePanel.cs": {
+      "added": 1,
+      "removed": 1
+    },
+    "client/godot/OperationsPanel.cs": {
+      "added": 1,
+      "removed": 2
+    },
+    "client/godot/README.md": {
+      "added": 14,
+      "removed": 0
+    },
+    "client/godot/SpatialKeyboard.cs": {
+      "added": 127,
+      "removed": 0
+    }
+  },
+  "old_package_rebuilt": false,
+  "old_API_bytes_read": 0,
+  "commit_or_push": false,
+  "review_started": false,
+  "source_sharing_consent": "coordinator-owned; pending at last instruction",
+  "server": "unchanged accepted policy/wire/space owners; fresh disposable signed fixture",
+  "input_scope": "setup uses Control signals; typing and rays use native in-process events/injected XRServer; zero host input or native XR",
+  "limitations": [
+    "fixed AZERTY subset; hardware/platform input for other text",
+    "Main BackupDialog remains a separate desktop-only window",
+    "no human or headset ergonomics acceptance",
+    "historical shutdown pauses unresolved"
+  ],
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/keyboard-qualification01/computed-hashes.json",
+    "sha256": "58917d605311e79e5eb73ef3f1a677eb584ca4f4d4b3169b8a51c594fd61d8bc"
+  }
+}

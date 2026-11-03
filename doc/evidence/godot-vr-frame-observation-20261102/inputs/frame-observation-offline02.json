@@ -1,0 +1,91 @@
+{
+  "source_checks": 11,
+  "stage": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02",
+  "inputs": {
+    "FrameObservation.cs": {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-frame-observation-20261102/FrameObservation.cs",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02/FrameObservation.cs",
+      "sha256": "9212a143ecac241b17d5297e38a832d7f4f532e3c68acbf015d5caa698130c71"
+    },
+    "FrameObservationChecks.cs": {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-frame-observation-20261102/FrameObservationChecks.cs",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02/FrameObservationChecks.cs",
+      "sha256": "d960559702633658b50f4f97b6d67dfbcc3af9f04a6b39bfb9f56d5010e7cca4"
+    },
+    "VrFrameReady.cs": {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-frame-observation-20261102/VrFrameReady.cs",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02/VrFrameReady.cs",
+      "sha256": "fc61ee8cf0bb5d00220983bd2c2f9eeec3e11f69082c58ec9e8b4cd791e47391"
+    }
+  },
+  "commands": [
+    {
+      "phase": "build",
+      "argv": [
+        "dotnet",
+        "build",
+        "OfflineChecks.csproj",
+        "-c",
+        "Release",
+        "--configfile",
+        "NuGet.Config"
+      ],
+      "cwd": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02",
+      "true_exit": 0
+    },
+    {
+      "phase": "checks",
+      "argv": [
+        "dotnet",
+        "exec",
+        "bin/Release/net10.0/OfflineChecks.dll"
+      ],
+      "cwd": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02",
+      "true_exit": 0
+    }
+  ],
+  "app_fixture_runtime_started": false,
+  "dependency_archives": {
+    "bouncycastle.cryptography.2.7.0.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/bouncycastle.cryptography.2.7.0.nupkg",
+      "sha256": "f091ffccab4d03993e660bace277659a79dee0972f54d7f1f4bd46d680966241",
+      "bytes": 8730569
+    },
+    "godot.net.sdk.4.7.2.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/godot.net.sdk.4.7.2.nupkg",
+      "sha256": "679fe9c6736ca1943b06732ac5113f50c248ea0280593ff7db08814b72057acb",
+      "bytes": 19976
+    },
+    "godot.sourcegenerators.4.7.2.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/godot.sourcegenerators.4.7.2.nupkg",
+      "sha256": "4170a0666ce2d1137a8b2c9f7aab72a6782256c8c824a35e8a249f72b4445a42",
+      "bytes": 45681
+    },
+    "godotsharp.4.7.2.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/godotsharp.4.7.2.nupkg",
+      "sha256": "3dfcc5c7a452d56e9ce103cac92bc46f25f23828b886064bf363474af287fad3",
+      "bytes": 3222070
+    },
+    "godotsharpeditor.4.7.2.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/godotsharpeditor.4.7.2.nupkg",
+      "sha256": "faf33a701fbb99d27b93bee3a999613829a5cdadafc99f32a8125bffc0c38718",
+      "bytes": 177772
+    },
+    "microsoft.aspnetcore.app.ref.10.0.12.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/microsoft.aspnetcore.app.ref.10.0.12.nupkg",
+      "sha256": "b2cb6e55804cc8cc82ab750b07562866088f667994dbc09e9e46df6ee44aa060",
+      "bytes": 7209462
+    },
+    "microsoft.aspnetcore.app.runtime.linux-x64.10.0.12.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/microsoft.aspnetcore.app.runtime.linux-x64.10.0.12.nupkg",
+      "sha256": "5e3883d280dac567a4bc19a52a75669bf96e24bd41e29ec9ea1baafbd1a6a800",
+      "bytes": 12929687
+    },
+    "microsoft.netcore.app.runtime.linux-x64.10.0.12.nupkg": {
+      "referenced_path": "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/dependency-feed/microsoft.netcore.app.runtime.linux-x64.10.0.12.nupkg",
+      "sha256": "8869e2fb974bc810ffe40b8fb8e18b7ffb1d1a03e52a094c804668c4d793b1ae",
+      "bytes": 40083503
+    }
+  },
+  "passed": true
+}

@@ -1,0 +1,162 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS ordinary signed Connect uses the fresh fixture trust
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary current interior is reachable before any helper selection or scroll
+PASS fresh ordinary space has no manufactured contents
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+PASS existing signed owner creates one independent pending request
+PASS existing signed owner creates one independent pending request
+PASS exact visible occurrence is reachable before native picking
+PASS one native pick selects the exact occurrence and semantic subject without travel
+PASS offered ontology action form binds to the selected visual and exact subject
+PASS current authored title and Measurement section are visibly enclosed
+PASS current native target visible and enclosed: control0
+PASS one complete native gesture with no duplicate callback
+PASS actual native pointer focuses the existing editor
+PASS named work watcher installed for local placement
+PASS current native target visible and enclosed: form-personal-workspace
+PASS native action enabled: form-personal-workspace
+PASS one complete native gesture with no duplicate callback
+PASS explicit personal placement releases only the occurrence binding
+PASS current native target visible and enclosed: form-near-object
+PASS native action enabled: form-near-object
+PASS one complete native gesture with no duplicate callback
+PASS local near personal transitions perform zero named history rebuild write or sync work
+PASS near and personal preserve the same native editor draft caret selection and semantic revision
+PASS local relocation writes no profile and recreates no scene or signed consumer
+PASS exact visible occurrence is reachable before native picking
+PASS one native pick selects the exact occurrence and semantic subject without travel
+PASS second same-subject visual keeps the same form and does not move the agent
+PASS current ordinary composition raster retained: associated-form
+PASS same form surface sits above the chosen occurrence with native XR disabled
+PASS near form lies beyond the selected model's near face in its retained presentation basis
+PASS actual software spatial occurrence raster retained
+PASS selection text editing and placement issue no domain action or replay
+PASS bounded native scrolling reaches the chosen form control
+PASS current native target visible and enclosed: control1
+PASS native action enabled: control1
+PASS one complete native gesture with no duplicate callback
+PASS one explicit offered native submission returns its original committed result
+PASS current native target visible and enclosed: form-personal-workspace
+PASS native action enabled: form-personal-workspace
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: form-near-object
+PASS native action enabled: form-near-object
+PASS one complete native gesture with no duplicate callback
+PASS postcommit relocation retains the original outcome and editor
+PASS explicit Apply adds exactly one personal instruction
+PASS committed original configuration reads back exactly once; reopen draft remains unsubmitted
+PASS independent question arrival stays compact without replacing the occurrence form
+PASS current native target visible and enclosed: attention
+PASS native action enabled: attention
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: @Button@68
+PASS native action enabled: @Button@68
+PASS one complete native gesture with no duplicate callback
+PASS attention count and one user-selected exact request share the existing native owner
+PASS current native target visible and enclosed: control0
+PASS one complete native gesture with no duplicate callback
+PASS attention native editor receives ordinary software pointer focus
+PASS current ordinary composition raster retained: attention
+PASS current native target visible and enclosed: hide-question
+PASS native action enabled: hide-question
+PASS one complete native gesture with no duplicate callback
+PASS Later hides the local task and leaves its exact domain question pending
+PASS current native target visible and enclosed: @Button@68
+PASS native action enabled: @Button@68
+PASS one complete native gesture with no duplicate callback
+PASS Later and recall retain the same native draft caret and selection
+PASS current native target visible and enclosed: hide-question
+PASS native action enabled: hide-question
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: @Button@109
+PASS native action enabled: @Button@109
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: cancel-question
+PASS native action enabled: cancel-question
+PASS one complete native gesture with no duplicate callback
+PASS explicit Cancel commits only the second exact request; Later did not cancel the first
+PASS current native target visible and enclosed: hide-question
+PASS native action enabled: hide-question
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: hide-attention
+PASS native action enabled: hide-attention
+PASS one complete native gesture with no duplicate callback
+PASS return from attention recalls the same occurrence form and local draft
+PASS attention selection Later and independent Cancel retain the received original occurrence outcome
+PASS unsubmitted local question draft is not a domain answer and no uncertain work was replayed
+PASS current ordinary composition raster retained: returned-form
+PASS enabled action disconnect
+PASS ordinary disconnect retires signed consumers and input resources with XR off
+PASS new process loads the original active key
+PASS enabled action connect
+PASS ordinary signed Connect uses the fresh fixture trust
+PASS ordinary current interior is reachable before any helper selection or scroll
+PASS new-process same-profile reopen preserves original U A S0 key and location
+PASS reconnect performs no new personal instruction or uncertain replay
+PASS reopened account certifies the exact original operation and request with the same committed bindings
+PASS exact visible occurrence is reachable before native picking
+PASS one native pick selects the exact occurrence and semantic subject without travel
+PASS offered ontology action form binds to the selected visual and exact subject
+PASS current authored title and Measurement section are visibly enclosed
+PASS current native target visible and enclosed: control0
+PASS one complete native gesture with no duplicate callback
+PASS actual native pointer focuses the existing editor
+PASS named work watcher installed for local placement
+PASS current native target visible and enclosed: form-personal-workspace
+PASS native action enabled: form-personal-workspace
+PASS one complete native gesture with no duplicate callback
+PASS explicit personal placement releases only the occurrence binding
+PASS current native target visible and enclosed: form-near-object
+PASS native action enabled: form-near-object
+PASS one complete native gesture with no duplicate callback
+PASS local near personal transitions perform zero named history rebuild write or sync work
+PASS near and personal preserve the same native editor draft caret selection and semantic revision
+PASS local relocation writes no profile and recreates no scene or signed consumer
+PASS exact visible occurrence is reachable before native picking
+PASS one native pick selects the exact occurrence and semantic subject without travel
+PASS second same-subject visual keeps the same form and does not move the agent
+PASS current ordinary composition raster retained: reopened-associated-form
+PASS same form surface sits above the chosen occurrence with native XR disabled
+PASS near form lies beyond the selected model's near face in its retained presentation basis
+PASS actual software spatial occurrence raster retained
+PASS selection text editing and placement issue no domain action or replay
+PASS new process reopens the same anchored instance without reauthoring its fixture
+PASS committed original configuration reads back exactly once; reopen draft remains unsubmitted
+PASS independent question arrival stays compact without replacing the occurrence form
+PASS current native target visible and enclosed: attention
+PASS native action enabled: attention
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: @Button@46
+PASS native action enabled: @Button@46
+PASS one complete native gesture with no duplicate callback
+PASS attention count and one user-selected exact request share the existing native owner
+PASS same-profile reopen retains the original pending question identity without recreation
+PASS current native target visible and enclosed: control0
+PASS one complete native gesture with no duplicate callback
+PASS attention native editor receives ordinary software pointer focus
+PASS current ordinary composition raster retained: reopened-attention
+PASS current native target visible and enclosed: hide-question
+PASS native action enabled: hide-question
+PASS one complete native gesture with no duplicate callback
+PASS Later hides the local task and leaves its exact domain question pending
+PASS current native target visible and enclosed: @Button@46
+PASS native action enabled: @Button@46
+PASS one complete native gesture with no duplicate callback
+PASS Later and recall retain the same native draft caret and selection
+PASS current native target visible and enclosed: hide-question
+PASS native action enabled: hide-question
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: hide-attention
+PASS native action enabled: hide-attention
+PASS one complete native gesture with no duplicate callback
+PASS return from attention recalls the same occurrence form and local draft
+PASS reopened local question editing and Later issue no instruction or replay
+PASS unsubmitted local question draft is not a domain answer and no uncertain work was replayed
+PASS current ordinary composition raster retained: reopened-returned-form
+PASS enabled action disconnect
+PASS ordinary disconnect retires signed consumers and input resources with XR off
+{"passed": true, "failure": null, "children": {"server": 0, "client-initial": 0, "client-reopen": 0}, "native_inputs": 0}

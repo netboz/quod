@@ -1,0 +1,13 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "Quod.csproj",
+    "--locked-mode",
+    "--source",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/label02/feed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 1.7886365510003088
+}

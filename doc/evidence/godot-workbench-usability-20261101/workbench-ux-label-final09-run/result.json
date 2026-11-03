@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-workbench-usability-20261101/signed.py",
+    "workbench-ux-label-final09",
+    "doc/evidence/godot-workbench-usability-20261101/inputs/client-workbench-ux-final09-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+    "workbench-ux-labels"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 30.752095516974805
+}

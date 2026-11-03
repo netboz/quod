@@ -1,0 +1,90 @@
+{
+  "list_only": true,
+  "consumption": false,
+  "prior": {
+    "sessionId": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+    "count": 2,
+    "includeCompleted": false,
+    "prompts": [
+      {
+        "id": "meta-1793562327356-jvs8uue",
+        "status": "executing",
+        "createdAt": 1793562327357,
+        "claimedAt": 1793562327368,
+        "completedAt": null,
+        "errorMessage": null,
+        "promptPreview": "/planning-implement nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-273.md — NEW273 bounded QUO-24 continuation AFTER actual272 closure. Read the complete handoff and AGENTS. Yan explicitly chose 'End and fix rendering' desktop1793562000125 and then asked to reread/compare the floating GUI with...",
+        "prompt": "/planning-implement nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-273.md — NEW273 bounded QUO-24 continuation AFTER actual272 closure. Read the complete handoff and AGENTS. Yan explicitly chose 'End and fix rendering' desktop1793562000125 and then asked to reread/compare the floating GUI with the specs (actual local-1793562070947-vsk6s1e). Root has now reread the entire gui-plan plus implementation sections7–8 and traced current source. The handoff distinguishes allowed floating panels from the missing compact human-selected attention/task presentation, generic surface binding and unmeasured Vive ergonomics. Reproduce before correcting the shared solid material/light readability and existing attention/form presentation owners; preserve ontology authority, SAME forms/native controls/drafts/auth/original outcomes and unchanged costs. Generic object-surface schema/device profile remain explicit open gaps; do not invent a framework. Client272/fixture/bothwrappers0/all4EOF/ownedabsence verified; all old PTYs are forbidden. NO live/hardware/runtime/focus/host input or another human opportunity here. No old export/archive/history audit or broad unchanged suite, no identical green retry/deadline/close change. Same sole Astra writer; terminal Claude failure is not a gate. Progress autonomously through source-only software correction/affected gates and actual small freeze as detailed; no duplicate tracker/body publication or selflaunch next ticket."
+      },
+      {
+        "id": "meta-1793562632370-ewsrx7e",
+        "status": "pending",
+        "createdAt": 1793562632371,
+        "claimedAt": null,
+        "completedAt": null,
+        "errorMessage": null,
+        "promptPreview": "MATERIAL USER STEERING274 of existing273, NOT a duplicate ticket/launch. Yan explicitly corrects root: one offered Eidolon of an EXACT INSTANCE is its information/actions form, authored by the owning ontology from its offered API/actions; selecting it displays that form ABOVE/NEAR the previous visua...",
+        "prompt": "MATERIAL USER STEERING274 of existing273, NOT a duplicate ticket/launch. Yan explicitly corrects root: one offered Eidolon of an EXACT INSTANCE is its information/actions form, authored by the owning ontology from its offered API/actions; selecting it displays that form ABOVE/NEAR the previous visual Eidolon with an unambiguous subject relationship. A global 'put everything in it' panel is not Quod. He says this WAS ALREADY SPECIFIED, fears other requirements were missed, and now explicitly instructs: 'so review what you did according to the specs... not bad work, but not good either... industry failure.' Root acknowledges the missed requirement; this is not a new optional feature. SUPERSEDES273 priority and its instruction to leave generic object/form surface binding as a deferred gap. Do NOT proceed with an attention-list/global-panel reorganization as the answer to his complaint. Before further GUI production edits, read the full original GUI/Eidolon/space/native/foundation specs and identify conformance against current source and actual retained evidence. Produce a requirement-indexed inventory (met/partial/missing/contradicted/unverified), exact source/evidence links, and proposed order of necessary corrections; distinguish server/model capability already present from the native adapter gap. Root is independently auditing too. Existing clear renderer baselines may finish under their ORIGINAL bounds and remain retained; preserve any current changes/failures without resetting or relabelling them. No broad old suites/artifact/history rehash, no new production architecture/schema until existing-owner trace and review findings are reconciled. Check existing class_eidolon/eidolon(operation(Form)), gui_operations/gui_operation and exact anchored target path: Enter is already an authored space predicate/form; do not introspect arbitrary predicates or hardcode space actions/client ownership. Ontology != space: no new ontology per room. No new writer/model/reviewer/interrupt, no live XR/hardware/input/runtime/settings/test opportunity. Same active /planning-implement workflow; no next task or acceptance/freeze claim until actual review dispositions. Report the inventory/any current baseline or edits at one material boundary, then yield to root's reviewed correction scope. This is a control instruction, not an informational report."
+      }
+    ]
+  },
+  "current": [
+    {
+      "sessionId": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46",
+      "count": 0,
+      "includeCompleted": false,
+      "prompts": []
+    },
+    {
+      "sessionId": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+      "count": 3,
+      "includeCompleted": false,
+      "prompts": [
+        {
+          "id": "meta-1793562327356-jvs8uue",
+          "status": "executing",
+          "createdAt": 1793562327357,
+          "claimedAt": 1793562327368,
+          "completedAt": null,
+          "errorMessage": null,
+          "promptPreview": "/planning-implement nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-273.md — NEW273 bounded QUO-24 continuation AFTER actual272 closure. Read the complete handoff and AGENTS. Yan explicitly chose 'End and fix rendering' desktop1793562000125 and then asked to reread/compare the floating GUI with...",
+          "prompt": "/planning-implement nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-273.md — NEW273 bounded QUO-24 continuation AFTER actual272 closure. Read the complete handoff and AGENTS. Yan explicitly chose 'End and fix rendering' desktop1793562000125 and then asked to reread/compare the floating GUI with the specs (actual local-1793562070947-vsk6s1e). Root has now reread the entire gui-plan plus implementation sections7–8 and traced current source. The handoff distinguishes allowed floating panels from the missing compact human-selected attention/task presentation, generic surface binding and unmeasured Vive ergonomics. Reproduce before correcting the shared solid material/light readability and existing attention/form presentation owners; preserve ontology authority, SAME forms/native controls/drafts/auth/original outcomes and unchanged costs. Generic object-surface schema/device profile remain explicit open gaps; do not invent a framework. Client272/fixture/bothwrappers0/all4EOF/ownedabsence verified; all old PTYs are forbidden. NO live/hardware/runtime/focus/host input or another human opportunity here. No old export/archive/history audit or broad unchanged suite, no identical green retry/deadline/close change. Same sole Astra writer; terminal Claude failure is not a gate. Progress autonomously through source-only software correction/affected gates and actual small freeze as detailed; no duplicate tracker/body publication or selflaunch next ticket."
+        },
+        {
+          "id": "meta-1793562632370-ewsrx7e",
+          "status": "pending",
+          "createdAt": 1793562632371,
+          "claimedAt": null,
+          "completedAt": null,
+          "errorMessage": null,
+          "promptPreview": "MATERIAL USER STEERING274 of existing273, NOT a duplicate ticket/launch. Yan explicitly corrects root: one offered Eidolon of an EXACT INSTANCE is its information/actions form, authored by the owning ontology from its offered API/actions; selecting it displays that form ABOVE/NEAR the previous visua...",
+          "prompt": "MATERIAL USER STEERING274 of existing273, NOT a duplicate ticket/launch. Yan explicitly corrects root: one offered Eidolon of an EXACT INSTANCE is its information/actions form, authored by the owning ontology from its offered API/actions; selecting it displays that form ABOVE/NEAR the previous visual Eidolon with an unambiguous subject relationship. A global 'put everything in it' panel is not Quod. He says this WAS ALREADY SPECIFIED, fears other requirements were missed, and now explicitly instructs: 'so review what you did according to the specs... not bad work, but not good either... industry failure.' Root acknowledges the missed requirement; this is not a new optional feature. SUPERSEDES273 priority and its instruction to leave generic object/form surface binding as a deferred gap. Do NOT proceed with an attention-list/global-panel reorganization as the answer to his complaint. Before further GUI production edits, read the full original GUI/Eidolon/space/native/foundation specs and identify conformance against current source and actual retained evidence. Produce a requirement-indexed inventory (met/partial/missing/contradicted/unverified), exact source/evidence links, and proposed order of necessary corrections; distinguish server/model capability already present from the native adapter gap. Root is independently auditing too. Existing clear renderer baselines may finish under their ORIGINAL bounds and remain retained; preserve any current changes/failures without resetting or relabelling them. No broad old suites/artifact/history rehash, no new production architecture/schema until existing-owner trace and review findings are reconciled. Check existing class_eidolon/eidolon(operation(Form)), gui_operations/gui_operation and exact anchored target path: Enter is already an authored space predicate/form; do not introspect arbitrary predicates or hardcode space actions/client ownership. Ontology != space: no new ontology per room. No new writer/model/reviewer/interrupt, no live XR/hardware/input/runtime/settings/test opportunity. Same active /planning-implement workflow; no next task or acceptance/freeze claim until actual review dispositions. Report the inventory/any current baseline or edits at one material boundary, then yield to root's reviewed correction scope. This is a control instruction, not an informational report."
+        },
+        {
+          "id": "meta-1793562986400-42lcdzi",
+          "status": "pending",
+          "createdAt": 1793562986400,
+          "claimedAt": null,
+          "completedAt": null,
+          "errorMessage": null,
+          "promptPreview": "Material275 review integration: root read complete current ROOT0/worker2 bodies once and your actual response explicitly acknowledging274; list-only not consumption. Your stopped-GUI-edits/unaccepted-attention disposition is incorporated. Root independently confirms gui-plan89–129 +625–659 explicitl...",
+          "prompt": "Material275 review integration: root read complete current ROOT0/worker2 bodies once and your actual response explicitly acknowledging274; list-only not consumption. Your stopped-GUI-edits/unaccepted-attention disposition is incorporated. Root independently confirms gui-plan89–129 +625–659 explicitly require semantic form/surface association and occurrence/component/draft distinction. ScenePanel.Selected currently emits only Term subject, Pick resolves Subject, Main.SelectSubject feeds one global EidolonPanel; no occurrence/placement context reaches form. Exact space Enter/Leave authored at quod_space398–434 and gui_forms239–310 already provide domain semantics; preserve these. Root distinguishes delivered273-before copies from current unqualified material/attention source. Latest Yan expressly asked Claude ALSO review. After auto-review required expanded exact-source consent, actual desktop1793562904876 confirmed 37-file packet; new Fable READ reviewer899df2d0-074a-4d71-8ca0-18651faea55a created successfully, restricted to exact copied packet/manifest (not live private/raw/history). Advisory parallel review only, not a gate or new implementation. Root continues own spec matrix. No additional task, runtime, freeze or source instruction in this report."
+        }
+      ]
+    }
+  ],
+  "common_body_comparison": [
+    {
+      "id": "meta-1793562327356-jvs8uue",
+      "exact": true
+    },
+    {
+      "id": "meta-1793562632370-ewsrx7e",
+      "exact": true
+    }
+  ],
+  "incorporated": [
+    "meta-1793562632370-ewsrx7e",
+    "meta-1793562986400-42lcdzi"
+  ]
+}

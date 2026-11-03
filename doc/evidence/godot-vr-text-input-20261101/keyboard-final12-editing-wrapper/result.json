@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-vr-text-input-20261101/run.py",
+    "keyboard-final12-editing",
+    "--manifest",
+    "doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-final12-manifest.json",
+    "--headed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 7.306527477980126
+}

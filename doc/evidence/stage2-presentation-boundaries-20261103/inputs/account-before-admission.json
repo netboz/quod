@@ -1,0 +1,403 @@
+{
+  "production_delta": {
+    "added": 146,
+    "removed": 209,
+    "net": -63,
+    "paths": [
+      {
+        "path": "client/src/signed-client.js",
+        "production": true,
+        "added": 2,
+        "removed": 0,
+        "before_sha256": "99ae6a09009e00afa2440171814c3cb5d3cee92a98cbcb4f08350581286ea3dd",
+        "current_sha256": "56f5fb249237121ca301592566f635d99653163da6e7343a4b7b60a6ff63b76d"
+      },
+      {
+        "path": "client/src/simulation.js",
+        "production": true,
+        "added": 6,
+        "removed": 9,
+        "before_sha256": "acf145eb7e5541cb780ef54bbcb3282621c1383f017cac2919a36249c68a5bb0",
+        "current_sha256": "81ac3c65f35e69e04619ff752123ff1aa1887da3776cf94e52919d4cd570ce7e"
+      },
+      {
+        "path": "include/quod_client_goal_limits.hrl",
+        "production": true,
+        "added": 0,
+        "removed": 8,
+        "before_sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+        "current_sha256": "3f247d09272dcfa1ac3904f734ca6766579eb8273901495f3d85b2d0d4646f9b"
+      },
+      {
+        "path": "include/quod_proof_limits.hrl",
+        "production": true,
+        "added": 0,
+        "removed": 1,
+        "before_sha256": "e3d2641261eccfaf5491d5e48351d17f718c996a2612352ea7a9248d24f83cfd",
+        "current_sha256": "148158d699aabc2a83ff12b916fc92e22dd7bc6968a67d71e7c83d64d2d806f8"
+      },
+      {
+        "path": "priv/ontologies/common_predicates.pl",
+        "production": true,
+        "added": 30,
+        "removed": 9,
+        "before_sha256": "27a23b8d3d34e2f9e04316e9d2b101d92befbd039c623d293b4488a7da46a049",
+        "current_sha256": "b7da4728aa1df6a7fd5466315d1151065c94cbbba4eb2706225ca9e49a1b1435"
+      },
+      {
+        "path": "src/predicates/quod_ask.erl",
+        "production": true,
+        "added": 1,
+        "removed": 1,
+        "before_sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+        "current_sha256": "7ee405022eeedf3a69e106496b7afabbafedf983eb7ffcffd980da1c1a9aa48e"
+      },
+      {
+        "path": "src/quod_client_goal_endpoint.erl",
+        "production": true,
+        "added": 5,
+        "removed": 11,
+        "before_sha256": "4e8ceb6ff917d265ec27643da7963c92ee64abb1b0ea2ce61f5b1f9bf4360e2a",
+        "current_sha256": "c5cb2d7c36ed261cb8bfb900f93050903a4e91e5f436de55d9680085cee6325d"
+      },
+      {
+        "path": "src/quod_client_goal_router.erl",
+        "production": true,
+        "added": 23,
+        "removed": 18,
+        "before_sha256": "96362eb7980b1a79e308d5ed9baea29613239a70af2d120f11e667630235def4",
+        "current_sha256": "5c7cf90e295b91bd008c4bbbfd3163e7506b1abbb035e01d70cb0dd79aee926d"
+      },
+      {
+        "path": "src/quod_client_result.erl",
+        "production": true,
+        "added": 50,
+        "removed": 63,
+        "before_sha256": "7196780a64d1d28efaee6e249094b38ed3628f75f3f1fc796d8c93b9bd94d74e",
+        "current_sha256": "0fd9d6eb82212df1bdb5f2d6457d378e82f9f9822b6c1d8c8206890c8943fd2e"
+      },
+      {
+        "path": "src/quod_client_view.erl",
+        "production": true,
+        "added": 9,
+        "removed": 18,
+        "before_sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+        "current_sha256": "9a89fad9275e73f41521cd7738f7dd7a8f8dde6c9db0c1191e01dfc28b2608de"
+      },
+      {
+        "path": "src/quod_dtx.erl",
+        "production": true,
+        "added": 2,
+        "removed": 4,
+        "before_sha256": "eec22a3b55674ee83c8a6367ac52101e3a559747c405516ed548bf8aa46da436",
+        "current_sha256": "65fc93734dcce71adc2457b3e31b3d1216fd0e73304adca3a42142a7158c5768"
+      },
+      {
+        "path": "src/quod_physics.erl",
+        "production": true,
+        "added": 6,
+        "removed": 16,
+        "before_sha256": "39792fb4a50c149e20550ce6070d18df4e8568b5b1e5c9e379b8190e3aa8659b",
+        "current_sha256": "be812d304da32461b175c3190246239bed22068e92aecc7b3d4c3561aa4844aa"
+      },
+      {
+        "path": "src/quod_proof_session.erl",
+        "production": true,
+        "added": 3,
+        "removed": 4,
+        "before_sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+        "current_sha256": "47481ede0cab64605d40d99c8a1df843ea954a41eea32c37687d05e047a418a0"
+      },
+      {
+        "path": "src/quod_scope_session.erl",
+        "production": true,
+        "added": 3,
+        "removed": 4,
+        "before_sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+        "current_sha256": "62b706bba9f9c8ea9a73bf3721f16739a417115fe2cdc100f0cddec878a0279c"
+      },
+      {
+        "path": "src/quod_scope_wire.erl",
+        "production": true,
+        "added": 1,
+        "removed": 1,
+        "before_sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+        "current_sha256": "5bc92822bb84dccc7a0f11619c859080ac5abdd054e09e5899f9d99c30079019"
+      },
+      {
+        "path": "src/quod_terrain_wire.erl",
+        "production": true,
+        "added": 2,
+        "removed": 39,
+        "before_sha256": "43f6d82f6565d888552e0a1bacac1c72a4ec31e16f39bdd0c8b7a0fbcb8c83d9",
+        "current_sha256": "d831af9ae3114b6635df33a9d178d274c9d6fcd73a41d60b196419bd360a9934"
+      },
+      {
+        "path": "src/quod_wire_term.erl",
+        "production": true,
+        "added": 3,
+        "removed": 3,
+        "before_sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+        "current_sha256": "9b08181a111ecdfad0c650c5570f1f1aba30f35e33aa202af3bb8e35279dc14e"
+      }
+    ]
+  },
+  "all_saved_changes": [
+    {
+      "path": "client/godot-tests/Program.cs",
+      "production": false,
+      "added": 2,
+      "removed": 0,
+      "before_sha256": "454d8e7bdd52ce4b7cd20d6c2ae7ad985eefe31690b06b78053f036409cc13bf",
+      "current_sha256": "47e40716822201ffb02f13c30431cf5f025d8bc31bf7556381280875e15a507d"
+    },
+    {
+      "path": "client/src/signed-client.js",
+      "production": true,
+      "added": 2,
+      "removed": 0,
+      "before_sha256": "99ae6a09009e00afa2440171814c3cb5d3cee92a98cbcb4f08350581286ea3dd",
+      "current_sha256": "56f5fb249237121ca301592566f635d99653163da6e7343a4b7b60a6ff63b76d"
+    },
+    {
+      "path": "client/src/simulation.js",
+      "production": true,
+      "added": 6,
+      "removed": 9,
+      "before_sha256": "acf145eb7e5541cb780ef54bbcb3282621c1383f017cac2919a36249c68a5bb0",
+      "current_sha256": "81ac3c65f35e69e04619ff752123ff1aa1887da3776cf94e52919d4cd570ce7e"
+    },
+    {
+      "path": "client/test/signed-client.test.js",
+      "production": false,
+      "added": 26,
+      "removed": 0,
+      "before_sha256": "aeae6bbd2de09a2a847cc2510c1023aa2b232a35dce9f096a0bf91dd389e81ff",
+      "current_sha256": "f474d971a1c9f51364319986e35f2f5ffda570de6fe208c9df74175c001b6477"
+    },
+    {
+      "path": "client/test/terrain-delivery.test.js",
+      "production": false,
+      "added": 9,
+      "removed": 13,
+      "before_sha256": "b5dfeb9ec58dcd09df69433813e266c6d30fb6840d661b3c41836b4ebbe14f49",
+      "current_sha256": "4c924c09745e134fd0eab6d5caeacef1ece085c644fee4f20389c7dd59f1d6bf"
+    },
+    {
+      "path": "doc/physics-native.md",
+      "production": false,
+      "added": 7,
+      "removed": 5,
+      "before_sha256": "461580a6d602f0fb2e8d9c7947a457b5f3235ce3f98b99da73448f8dcc915409",
+      "current_sha256": "8ad92a07942afc8a3de3d9ca7fe862ce1d083e6751ab6ad66be92f43d514701f"
+    },
+    {
+      "path": "doc/spaces.md",
+      "production": false,
+      "added": 4,
+      "removed": 1,
+      "before_sha256": "45c61e624dcda0931306c03f0537f2cedd1d52c400028a652a5fa0d2f91c1a4a",
+      "current_sha256": "2d8837581807a99ddb1457edb23a840be7f687d1760ac4ffc8d03d1897c40c4c"
+    },
+    {
+      "path": "include/quod_client_goal_limits.hrl",
+      "production": true,
+      "added": 0,
+      "removed": 8,
+      "before_sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "current_sha256": "3f247d09272dcfa1ac3904f734ca6766579eb8273901495f3d85b2d0d4646f9b"
+    },
+    {
+      "path": "include/quod_proof_limits.hrl",
+      "production": true,
+      "added": 0,
+      "removed": 1,
+      "before_sha256": "e3d2641261eccfaf5491d5e48351d17f718c996a2612352ea7a9248d24f83cfd",
+      "current_sha256": "148158d699aabc2a83ff12b916fc92e22dd7bc6968a67d71e7c83d64d2d806f8"
+    },
+    {
+      "path": "priv/ontologies/common_predicates.pl",
+      "production": true,
+      "added": 30,
+      "removed": 9,
+      "before_sha256": "27a23b8d3d34e2f9e04316e9d2b101d92befbd039c623d293b4488a7da46a049",
+      "current_sha256": "b7da4728aa1df6a7fd5466315d1151065c94cbbba4eb2706225ca9e49a1b1435"
+    },
+    {
+      "path": "src/predicates/quod_ask.erl",
+      "production": true,
+      "added": 1,
+      "removed": 1,
+      "before_sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+      "current_sha256": "7ee405022eeedf3a69e106496b7afabbafedf983eb7ffcffd980da1c1a9aa48e"
+    },
+    {
+      "path": "src/quod_client_goal_endpoint.erl",
+      "production": true,
+      "added": 5,
+      "removed": 11,
+      "before_sha256": "4e8ceb6ff917d265ec27643da7963c92ee64abb1b0ea2ce61f5b1f9bf4360e2a",
+      "current_sha256": "c5cb2d7c36ed261cb8bfb900f93050903a4e91e5f436de55d9680085cee6325d"
+    },
+    {
+      "path": "src/quod_client_goal_router.erl",
+      "production": true,
+      "added": 23,
+      "removed": 18,
+      "before_sha256": "96362eb7980b1a79e308d5ed9baea29613239a70af2d120f11e667630235def4",
+      "current_sha256": "5c7cf90e295b91bd008c4bbbfd3163e7506b1abbb035e01d70cb0dd79aee926d"
+    },
+    {
+      "path": "src/quod_client_result.erl",
+      "production": true,
+      "added": 50,
+      "removed": 63,
+      "before_sha256": "7196780a64d1d28efaee6e249094b38ed3628f75f3f1fc796d8c93b9bd94d74e",
+      "current_sha256": "0fd9d6eb82212df1bdb5f2d6457d378e82f9f9822b6c1d8c8206890c8943fd2e"
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "production": true,
+      "added": 9,
+      "removed": 18,
+      "before_sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+      "current_sha256": "9a89fad9275e73f41521cd7738f7dd7a8f8dde6c9db0c1191e01dfc28b2608de"
+    },
+    {
+      "path": "src/quod_dtx.erl",
+      "production": true,
+      "added": 2,
+      "removed": 4,
+      "before_sha256": "eec22a3b55674ee83c8a6367ac52101e3a559747c405516ed548bf8aa46da436",
+      "current_sha256": "65fc93734dcce71adc2457b3e31b3d1216fd0e73304adca3a42142a7158c5768"
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "production": true,
+      "added": 6,
+      "removed": 16,
+      "before_sha256": "39792fb4a50c149e20550ce6070d18df4e8568b5b1e5c9e379b8190e3aa8659b",
+      "current_sha256": "be812d304da32461b175c3190246239bed22068e92aecc7b3d4c3561aa4844aa"
+    },
+    {
+      "path": "src/quod_proof_session.erl",
+      "production": true,
+      "added": 3,
+      "removed": 4,
+      "before_sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+      "current_sha256": "47481ede0cab64605d40d99c8a1df843ea954a41eea32c37687d05e047a418a0"
+    },
+    {
+      "path": "src/quod_scope_session.erl",
+      "production": true,
+      "added": 3,
+      "removed": 4,
+      "before_sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+      "current_sha256": "62b706bba9f9c8ea9a73bf3721f16739a417115fe2cdc100f0cddec878a0279c"
+    },
+    {
+      "path": "src/quod_scope_wire.erl",
+      "production": true,
+      "added": 1,
+      "removed": 1,
+      "before_sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+      "current_sha256": "5bc92822bb84dccc7a0f11619c859080ac5abdd054e09e5899f9d99c30079019"
+    },
+    {
+      "path": "src/quod_terrain_wire.erl",
+      "production": true,
+      "added": 2,
+      "removed": 39,
+      "before_sha256": "43f6d82f6565d888552e0a1bacac1c72a4ec31e16f39bdd0c8b7a0fbcb8c83d9",
+      "current_sha256": "d831af9ae3114b6635df33a9d178d274c9d6fcd73a41d60b196419bd360a9934"
+    },
+    {
+      "path": "src/quod_wire_term.erl",
+      "production": true,
+      "added": 3,
+      "removed": 3,
+      "before_sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "current_sha256": "9b08181a111ecdfad0c650c5570f1f1aba30f35e33aa202af3bb8e35279dc14e"
+    },
+    {
+      "path": "test/quod_client_goal_endpoint_tests.erl",
+      "production": false,
+      "added": 13,
+      "removed": 9,
+      "before_sha256": "7761ddbd944786a7f53a74031938ec42f16da40f9a154cbcc9f09e0f0e774d65",
+      "current_sha256": "c448f808e80055c3889cee8daced8c46b104fc3638fc1a3bf3f6a8b9646566fe"
+    },
+    {
+      "path": "test/quod_client_goal_router_tests.erl",
+      "production": false,
+      "added": 65,
+      "removed": 0,
+      "before_sha256": "b552a1ebcab9103cc3e3ac1a95da430dcf2096e8ed495663915cf6e9ff58450b",
+      "current_sha256": "15026f500c27f235946d7ed054d2a81e30ab447d74ba923c10afea05d8dd0b52"
+    },
+    {
+      "path": "test/quod_client_result_tests.erl",
+      "production": false,
+      "added": 26,
+      "removed": 45,
+      "before_sha256": "faf935372486a762fa0e319c37993b9432bd3ed3c38108bea6fd570066e78228",
+      "current_sha256": "393f3aaed43ae492cd8b64759dc694ca620c70c3d0df6783bbe928d8f34014ac"
+    },
+    {
+      "path": "test/quod_dtx_tests.erl",
+      "production": false,
+      "added": 28,
+      "removed": 13,
+      "before_sha256": "5f0204c736dfe8895d0252739106c7a0e24d594eaea95f246402469e6e6fb771",
+      "current_sha256": "40afffda4ad7abd9f04a0a0729be5476d27b4677e9a2c34db3f27ea6acbd8e2d"
+    },
+    {
+      "path": "test/quod_lens_tests.erl",
+      "production": false,
+      "added": 20,
+      "removed": 0,
+      "before_sha256": "2b37cd01f31c96879989416def4ba06d6011510109706c83e84302f8e5c7613f",
+      "current_sha256": "c589a2004da2a3c1a81825bfe4bb8b97091b6b96879dc81af77ac2c143f64ef3"
+    },
+    {
+      "path": "test/quod_physics_tests.erl",
+      "production": false,
+      "added": 16,
+      "removed": 22,
+      "before_sha256": "2d1edb8aef277e4a2d2b233ad73f6e310e504ea9355a833f81b7f93c4ab4d282",
+      "current_sha256": "c2b2ce308976f8df46f9e596cf6cd27f5d63b42273f00117600a8c72058f88e1"
+    },
+    {
+      "path": "test/quod_proof_answer_tests.erl",
+      "production": false,
+      "added": 1,
+      "removed": 1,
+      "before_sha256": "03ee153e01021093b7058407e62608cab5ca779fe14ad67ac01400fcff1dbc30",
+      "current_sha256": "0b11c4ae01cf74f8a6e6287aa879fc3143b1752104e80927193f3209b4d67f67"
+    },
+    {
+      "path": "test/quod_scope_session_tests.erl",
+      "production": false,
+      "added": 26,
+      "removed": 0,
+      "before_sha256": "020600800d1ff724cac916e734e16ac0727f614a1c5d6029d3f7eb876156fdfd",
+      "current_sha256": "6d3957a2369e066fb75ded812baaf78bfac031ad0b4e248dece6da7a80960e26"
+    },
+    {
+      "path": "test/quod_scope_wire_tests.erl",
+      "production": false,
+      "added": 1,
+      "removed": 1,
+      "before_sha256": "c72ee60cd82efe9e3e9f8d580236e04d228140c75e79ebced79960f8582b31ef",
+      "current_sha256": "e75883ca3d99870f1975632d0cd97eecf4d4123675eda8af5ead909c44cdc721"
+    },
+    {
+      "path": "test/quod_terrain_wire_tests.erl",
+      "production": false,
+      "added": 8,
+      "removed": 23,
+      "before_sha256": "220c2e4c34a5eb71bc894aed4024fce1323823d4422f0b5704c25ab4dbc9e7dc",
+      "current_sha256": "c2bf44ea87f3c2c9cf8b53567500f4abbecd777591bd783b0a11565fda654140"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "source_inputs": {
+    "client/godot/Core/Accounts.cs": "5501d66b10d1263de9483ebefc9a3368530d704050f137b944200d6c71640b19",
+    "client/godot/Core/Term.cs": "5850cff771cf6e318fcf6a60e9a601883e69eb4b079d49f18bc6c2862e53cd9f",
+    "client/godot/Core/Forms.cs": "cf16ee762460a272ddea53df9c9d35b8efe683e48d4529aaedc998ceff1b28c6",
+    "client/godot/Core/LocalStore.cs": "c46cdd3fb872282e1eb654aa0e2423b9c94ab0f50733a8858b52cb006a5b02c2",
+    "client/godot/Core/World.cs": "7e49eeb8a694f534aaf4edb14e996890f1971ea18f00f47545e6518f66c23f57",
+    "client/godot/Core/SignedView.cs": "db5588da9961b6ff5630d31379cd806c496a1cc8289d50f531ad45bced22c39f",
+    "client/godot/Core/StaticGlb.cs": "92c7c7ca435e77cfdbc8799de5da90b56771631b3363fbb500824e04273b8795",
+    "client/godot/Core/Transport.cs": "43d056bc0e973b40238d08d820146b9db089dc161900b9c6c96f8051c6f64375",
+    "client/godot/Core/Controllers.cs": "48ef99ae766c2ff1beefafd1fa7704a8b9b8fa791c6e47380a0c35dd07c54418",
+    "client/godot/Core/PhysicsInput.cs": "caca8288b6dd9d0213685429eaf8cfdba9fe4c45e7d1c0a07c39ea10398ccb27",
+    "client/godot/Core/Eidolons.cs": "32d9962d715d4fbcf79e271730822df72a298d8340161f71a39f87b956be835b",
+    "client/godot/Core/Scene.cs": "b2f5592cdcdfd4365a0b414a984a40b23a899adf553ba7d6168ac4179275a8a8",
+    "client/godot/Core/Identity.cs": "77490a81b8dda5c44506573586dfb0b5cb7b61856f7052778db53792214cd1db",
+    "client/godot-tests/RecoveryErrorChecks.cs": "a10eacc8edca09465b3554a498140f5e5bbd8f5109db688d804291494c70fa2d",
+    "client/godot-tests/ResourceErrorChecks.cs": "b66ec13195c8555ae22e59654a8f4a445b2d9c6ec7901dd1d46f0b0768e98983",
+    "client/godot-tests/Program.cs": "47e40716822201ffb02f13c30431cf5f025d8bc31bf7556381280875e15a507d",
+    "client/godot-tests/Quod.Client.Tests.csproj": "57c3f3d2eb06367878bb36a3012b910f083ca3511631c893457b2c5286e2f70e",
+    "client/godot-tests/global.json": "58cf5bad3915ebd7a3e327e9ad99ded232e9a4f03ff46917126a1df3019713a3",
+    "client/godot-tests/packages.lock.json": "b0859cf2270dddd7f4b99fbfdbc418322b1c7d6a60b8a465e15d1be824cdb641"
+  },
+  "steps": [
+    {
+      "phase": "restore",
+      "command": [
+        "dotnet",
+        "restore",
+        "--locked-mode"
+      ],
+      "true_exit": 0,
+      "stdout_eof": true,
+      "stderr_eof": true,
+      "elapsed_seconds": 1.291210666000552
+    },
+    {
+      "phase": "build",
+      "command": [
+        "dotnet",
+        "build",
+        "--no-restore"
+      ],
+      "true_exit": 0,
+      "stdout_eof": true,
+      "stderr_eof": true,
+      "elapsed_seconds": 3.5023263309994945
+    },
+    {
+      "phase": "recovery",
+      "command": [
+        "dotnet",
+        "run",
+        "--no-build",
+        "--",
+        "recovery-errors",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/native01/profile"
+      ],
+      "true_exit": 1,
+      "stdout_eof": true,
+      "stderr_eof": true,
+      "elapsed_seconds": 0.6811903320012789
+    }
+  ]
+}

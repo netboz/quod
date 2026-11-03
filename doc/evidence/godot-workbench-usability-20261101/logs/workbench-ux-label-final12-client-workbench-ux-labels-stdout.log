@@ -1,0 +1,118 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS current native target is enabled and enclosed: @Button@79
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native pointer releases the actual capture
+PASS one native release activates its displayed button exactly once
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS current native target is enabled and enclosed: control0
+PASS native pointer releases the actual capture
+PASS one native release activates its displayed button exactly once
+PASS opened native catalogue fits the actual surface
+PASS native pointer releases the actual capture
+PASS native catalogue selects a changed exact item once
+PASS current native target is enabled and enclosed: control1
+PASS native pointer releases the actual capture
+PASS one native release activates its displayed button exactly once
+PASS opened native catalogue fits the actual surface
+PASS native pointer releases the actual capture
+PASS native catalogue selects a changed exact item once
+PASS actual native raster retained: inspection-baseline
+PASS native inspection separates readable selected fact and exact details from unrequested class and attribute preparation fields
+PASS inspection retains the exact anchored class identity
+PASS current native target is enabled and enclosed: control3
+PASS native pointer releases the actual capture
+PASS one native release activates its displayed button exactly once
+<private fixture/client diagnostic>
+PASS actual native raster retained: label-1200-26
+PASS native action label preserves whole words when they fit its clipping viewport at (True, 1200, 26)
+PASS readable action remains enclosed at (True, 1200, 26)
+<private fixture/client diagnostic>
+PASS actual native raster retained: label-1200-48
+PASS native action label preserves whole words when they fit its clipping viewport at (True, 1200, 48)
+PASS readable action remains enclosed at (True, 1200, 48)
+<private fixture/client diagnostic>
+PASS actual native raster retained: label-560-26
+PASS native action label preserves whole words when they fit its clipping viewport at (False, 560, 26)
+PASS readable action remains enclosed at (False, 560, 26)
+PASS shared action sizing retains explicit authored row order
+PASS shared action sizing preserves authored field values at row
+PASS shared action sizing retains explicit authored grid order
+PASS shared action sizing preserves authored field values at grid
+PASS shared action sizing retains explicit authored column order
+PASS shared action sizing preserves authored field values at column
+PASS enabled action disconnect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS label consumers retire normally
+WORKBENCH_UX_PASS
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

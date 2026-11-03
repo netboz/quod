@@ -1,0 +1,188 @@
+using Godot;
+using Quod.Client;
+using Json=Quod.Client.Json;
+
+// Local presentation of one exact subject. Recipes, authorization, drafts,
+// scene resources and execution remain with their existing owners.
+public partial class EidolonPanel : VBoxContainer
+{
+    readonly Label context=new() { Name="representation-subject",Text="Selected subject",AutowrapMode=TextServer.AutowrapMode.WordSmart };
+    readonly Label selectionText=new() { Name="representation-selection",AutowrapMode=TextServer.AutowrapMode.WordSmart };
+    readonly Label status=new() { Name="representation-status",AutowrapMode=TextServer.AutowrapMode.WordSmart };
+    readonly VBoxContainer choices=new() {Name="representation-choices"};
+    readonly Dictionary<string,Button> choiceButtons=[];
+    readonly Label exact=new() { Name="representation-identity",Visible=false,AutowrapMode=TextServer.AutowrapMode.WordSmart };
+    readonly ScenePanel preview=new() { Name="representation-scene",Visible=false };
+    readonly SourcePanel source=new() { Name="source-tools",Visible=false };
+    readonly WorkbenchPanel workbench=new() {Name="ontology-workbench",Visible=false};
+    public OperationsPanel Operations { get; }=new() { Name="operations" };
+    public Subject? Current { get; private set; }
+    public Eidolon? Selected { get; private set; }
+    public bool Available { get; private set; }
+    public string StatusText=>status.Text;
+    public Eidolon[] Offered { get; private set; }=[];
+    public Func<Actor?>? CurrentLocation { get; set; }
+    public event Action? Changed;
+    SignedSession session=null!;Accounts accounts=null!;LocalStore store=null!;
+    SignedView? discovery,representation;
+    Task retired=Task.CompletedTask;
+    long generation,selection;
+    string? preferred;
+    bool disposed,workbenchSource;
+    public Task Completion=>Task.WhenAll(retired,discovery?.Completion??Task.CompletedTask,
+        representation?.Completion??Task.CompletedTask,Operations.Completion,source.Completion);
+    public override void _Ready()
+    {
+        context.ThemeTypeVariation="Heading";AddChild(context);
+        AddChild(new Label {Name="representation-help",Text="Viewing changes only this panel. An action opens a form; confirm there to submit it.",AutowrapMode=TextServer.AutowrapMode.WordSmart});
+        AddChild(choices);AddChild(selectionText);
+        var actions=new HFlowContainer();AddChild(actions);
+        var inspect=SpatialGui.ActionButton("Inspect storage source","inspect-subject-storage");actions.AddChild(inspect);
+        inspect.Pressed+=()=>{var storage=Current?.Target??Operations.SelectedStorage;if(storage!=null&&!Operations.IsWorking)Open(session,accounts,store,storage.Ontology);};
+        var details=SpatialGui.ActionButton("Exact subject / recipe");actions.AddChild(details);details.Pressed+=()=>exact.Visible=!exact.Visible;
+        var close=SpatialGui.ActionButton("Hide subject");actions.AddChild(close);close.Pressed+=Cancel;
+        AddChild(exact);AddChild(status);AddChild(Operations);AddChild(preview);AddChild(workbench);AddChild(source);
+        Operations.SubjectOpened+=SubjectOpened;Operations.Changed+=()=>{
+            if(Selected?.Operation==true&&(!Operations.Available||Operations.Current?.Name!=Selected.Style)) {
+                WithdrawRepresentation();Operations.Hide();status.Text="The selected action is unavailable. Choose a current view or action.";
+            }
+            RefreshContext();inspect.Disabled=Operations.IsWorking||(Current==null&&Operations.SelectedStorage==null);Changed?.Invoke();};
+        Operations.Cancelled+=()=>{Retire();Hide();Changed?.Invoke();};
+        source.Changed+=()=>{workbench.UpdateAccess();Changed?.Invoke();};
+        preview.Selected+=s=>{if(workbench.Visible)workbench.Select(s);else Open(session,accounts,store,s);};
+        workbench.CanEdit=()=>source.CanEdit;
+        workbench.Prepare+=change=>{workbenchSource=true;source.Show();source.PrepareFact(change);};
+        workbench.ShowSource+=()=>{workbenchSource=!workbenchSource;source.Visible=workbenchSource;};
+        workbench.OpenSubject+=s=>Open(session,accounts,store,s);
+    }
+    string Caption(Eidolon e)=>e.Operation ? Operations.Offered.FirstOrDefault(o=>o.Name==e.Style)?.Form.Tree.Label??e.Caption
+        : e.Purpose.Name switch {
+            "playing"=>e.Style.Replace('_',' ')+" view",
+            "edition"=>e.Style.Replace('_',' ')+" view · editing",
+            "prolog"=>"Source · "+e.Style.Replace('_',' '),
+            "inspection"=>"Inspect · "+e.Style.Replace('_',' '),
+            _=>e.Caption };
+    public void RefreshContext()
+    {
+        context.Text=Current==null ? "Choose where to create" : CurrentLocation?.Invoke()?.Entity.ToString()==Current.Exact.ToString() ? "Current space"
+            : Current.Exact.Name=="ontology_ref" ? "Selected ontology" : Current.Exact.Name=="class_ref" ? "Selected class · "+Current.Local : Operations.SubjectLabel;
+        selectionText.Text=Selected==null ? "Choose an available view or action." : (Selected.Operation ? "Action form · " : "Viewing · ")+Caption(Selected);
+        foreach(var e in Offered)if(choiceButtons.TryGetValue(e.Exact.ToString(),out var button)) {
+            bool selected=Selected?.Exact.ToString()==e.Exact.ToString();
+            bool available=Available&&!Operations.IsWorking&&(!e.Operation || Operations.Available&&Operations.Offered.Any(o=>o.Name==e.Style));
+            button.Text=(selected ? "✓ " : "")+Caption(e)+(available ? "" : " · unavailable");
+            button.Disabled=!available;button.SetPressedNoSignal(selected);
+        }
+    }
+    void PresentChoices()
+    {
+        choiceButtons.Clear();foreach(var child in choices.GetChildren()){choices.RemoveChild(child);child.QueueFree();}
+        foreach(bool operation in new[]{false,true}) {
+            var items=Offered.Where(e=>e.Operation==operation).ToArray();if(items.Length==0)continue;
+            choices.AddChild(new Label {Text=operation ? "Actions · open a form" : "Views · no movement",ThemeTypeVariation="Heading"});
+            var row=new HFlowContainer();choices.AddChild(row);
+            foreach(var item in items) {
+                var button=SpatialGui.ActionButton(Caption(item));button.ToggleMode=true;button.TooltipText=item.Exact.ToString();
+                choiceButtons.Add(item.Exact.ToString(),button);row.AddChild(button);long expected=generation;
+                button.Pressed+=()=>{
+                    if(!disposed&&expected==generation&&Available&&!Operations.IsWorking&&Offered.Any(e=>e.Exact.ToString()==item.Exact.ToString())&&
+                       (!item.Operation||Operations.Available&&Operations.Offered.Any(o=>o.Name==item.Style)))Choose(item,true);
+                    RefreshContext();
+                };
+            }
+        }
+        RefreshContext();
+    }
+    void Configure(SignedSession session,Accounts accounts,LocalStore store)
+    {
+        if(!ReferenceEquals(this.session,session)) {
+            Retire();
+            if(this.session?.Network!=session.Network || this.accounts?.Human!=accounts.Human || this.session?.Key.PublicText!=session.Key.PublicText){Current=null;preferred=null;}
+        }
+        this.session=session;this.accounts=accounts;this.store=store;Show();
+    }
+    public bool Resume(SignedSession session,Accounts accounts,LocalStore store)
+    {
+        bool same=this.session?.Network==session.Network && this.accounts?.Human==accounts.Human && this.session?.Key.PublicText==session.Key.PublicText;
+        if(!same || Current==null)return false;
+        Open(session,accounts,store,Current.Exact);return true;
+    }
+    public void Disconnect()=>Operations.Cancel();
+    public void Open(SignedSession session,Accounts accounts,LocalStore store,Term exact)
+    {
+        if(Operations.IsWorking)return;
+        Configure(session,accounts,store);var subject=Subject.Decode(exact);
+        if(Current?.Exact.ToString()==exact.ToString() && Available)return;
+        if(exact.Name=="ontology_ref"){Operations.Suspend();SubjectOpened(subject.Target,exact);}
+        else Operations.OpenSubject(session,accounts,subject.Target,exact);
+    }
+    public void OpenStorage(SignedSession session,Accounts accounts,LocalStore store,Actor? location)
+    {Configure(session,accounts,store);Retire();Current=null;preferred=null;choices.Hide();source.Hide();preview.Hide();Operations.Show();Operations.OpenStorage(session,accounts,location);}
+    void SubjectOpened(Actor target,Term exactSubject)
+    {
+        if(Current?.Exact.ToString()!=exactSubject.ToString())preferred=null;
+        Retire();Current=Subject.Decode(exactSubject);long expected=generation;
+        Operations.Hide();
+        if(Current.Target.Namespace!=target.Namespace || Current.Target.Anchor!=target.Anchor)throw new FormatException("Subject names another storage identity.");
+        exact.Text=exactSubject.ToString();status.Text="Reading this subject's authored representations…";
+        choices.Show();PresentChoices();
+        discovery=new(session,accounts.Human!,target,"eidolons",SignedSession.ViewGoal(target,Term.Call("entity_eidolons",Current.Local,Term.Variable("View"))));
+        discovery.Projection+=message=>{
+            if(disposed||expected!=generation)return;
+            var next=Eidolon.Decode(Json.S(message,"value"));
+            bool same=Offered.Select(x=>x.Exact.ToString()).SequenceEqual(next.Select(x=>x.Exact.ToString()));
+            Offered=next;Available=true;
+            if(!same)PresentChoices();
+            var chosen=next.SingleOrDefault(e=>e.Exact.ToString()==preferred);
+            if(preferred==null)chosen=next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Style==Operations.Current?.Name)??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
+            if(chosen!=null)Choose(chosen);else{WithdrawRepresentation();status.Text=next.Length==0 ? "No authored representations are currently offered." : "The selected representation was withdrawn. Choose a current offered representation.";}
+            RefreshContext();Changed?.Invoke();
+        };
+        discovery.Withdrawn+=reason=>{if(expected!=generation)return;Available=false;WithdrawRepresentation();Operations.Hide();status.Text=reason;RefreshContext();Changed?.Invoke();};
+        _=discovery.Start();Changed?.Invoke();
+    }
+    public void Choose(Eidolon choice,bool reveal=false)
+    {
+        if(!Available || Current==null || !Offered.Any(e=>e.Exact.ToString()==choice.Exact.ToString()))throw new InvalidOperationException("Choose a current authored representation.");
+        if(Selected?.Exact.ToString()==choice.Exact.ToString()) {
+            if(reveal&&choice.Operation)Operations.Choose(choice.Style,true);
+            return;
+        }
+        if(preferred!=choice.Exact.ToString())workbenchSource=false;
+        WithdrawRepresentation();Selected=choice;preferred=choice.Exact.ToString();RefreshContext();
+        exact.Text=Current.Exact+"\n"+choice.Exact;
+        if(choice.Operation){Operations.Show();Operations.Choose(choice.Style,reveal);status.Text="";Changed?.Invoke();return;}
+        Operations.Hide();long expected=generation,selected=selection;
+        string kind=choice.Purpose.Kind=="atom" && choice.Purpose.Name is "playing" or "edition" ? "eidolon_scene" : "eidolon";
+        representation=new(session,accounts.Human!,Current.Target,kind,SignedSession.ViewGoal(Current.Target,choice.Read(Current.Local)));
+        representation.Projection+=message=>{
+            if(disposed||expected!=generation||selected!=selection)return;
+            if(message["marks"]!=null){preview.ApplyProjection(message,Current.Target,accounts.Human!,ack=>_ = representation.Send(ack));preview.Show();status.Text="Live selected representation. Opening it does not move your agent.";}
+            else {
+                var value=Term.Parse(Json.S(message,"value"));
+                if(value.Name=="workbench") {
+                    var a=value.Require("workbench",6);
+                    var workspace=Term.Call("workspace",Term.Atom("prolog_editor"),a[0],a[1],a[2],a[5]);
+                    source.Install(session,accounts,store,Current,choice,workspace);
+                    workbench.Install(Current.Target,a[3],a[4]);workbench.Show();source.Visible=workbenchSource;preview.Apply(a[3].Require("graph",3)[2]);preview.Show();
+                    status.Text="Authored classes, membership and attributes of this exact ontology. Graph layout changes no domain location.";
+                } else {source.Install(session,accounts,store,Current,choice,value);source.Show();status.Text="Authorized inspection of this exact subject's storage.";}
+            }
+            Changed?.Invoke();
+        };
+        representation.Message+=message=>{if(expected==generation&&selected==selection && message["frame"]!=null)preview.ApplyFrame(message,ack=>_ = representation.Send(ack));};
+        representation.Withdrawn+=reason=>{if(expected!=generation||selected!=selection)return;preview.Withdraw();preview.Hide();workbench.Withdraw();workbench.Hide();source.Withdraw();status.Text=reason;Changed?.Invoke();};
+        status.Text="Reading the chosen recipe…";_ = representation.Start();Changed?.Invoke();
+    }
+    void WithdrawRepresentation()
+    {
+        selection++;Selected=null;preview.Withdraw();preview.Hide();workbench.Withdraw();workbench.Hide();source.Withdraw();source.Hide();
+        var previous=representation;representation=null;previous?.Dispose();Keep(previous?.Completion??Task.CompletedTask);
+    }
+    void Keep(Task task)=>retired=retired.IsCompleted ? task : Task.WhenAll(retired,task);
+    void Retire()
+    {generation++;Available=false;workbenchSource=false;Offered=[];WithdrawRepresentation();var prior=discovery;discovery=null;prior?.Dispose();Keep(prior?.Completion??Task.CompletedTask);}
+    public void DisposeView(){if(disposed)return;disposed=true;Retire();source.DisposeView();Operations.DisposeView();}
+    public void Cancel()=>Operations.Cancel();
+    public override void _ExitTree()=>DisposeView();
+}

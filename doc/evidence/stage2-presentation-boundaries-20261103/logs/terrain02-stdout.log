@@ -1,0 +1,7 @@
+======================== EUnit ========================
+quod_physics_tests: -terrain_delivery_credit_and_replacement_test_/0-fun-6- (static)...[0.035 s] ok
+quod_physics_tests: -terrain_delivery_credit_and_replacement_test_/0-fun-6- (moving)...[1.816 s] ok
+quod_physics_tests: -voxel_signed_view_delivers_only_bound_resident_chunks_test_/0-fun-15-...[1.761 s] ok
+quod_physics_tests: -voxel_signed_view_delivers_complete_large_resident_selection_test_/0-fun-7-...[1.590 s] ok
+=======================================================
+  All 4 tests passed.

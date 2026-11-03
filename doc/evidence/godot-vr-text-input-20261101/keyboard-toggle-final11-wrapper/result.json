@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-vr-text-input-20261101/run.py",
+    "keyboard-toggle-final11",
+    "--manifest",
+    "doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate11-manifest.json",
+    "--headed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 6.541566357016563
+}

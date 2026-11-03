@@ -1,0 +1,169 @@
+{
+  "exit": 1,
+  "literal": "AssertionError",
+  "location": "freeze.py line 24: assert h(stage/n)==digest",
+  "mismatches": [
+    {
+      "receipt": "label04-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58",
+      "diagnostic_override_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58"
+    },
+    {
+      "receipt": "probe02-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "7b7e108b898f4ddabb83f3e544b8ce676e96bd380c7353b77256bc8f5480341c",
+      "diagnostic_override_sha256": "7b7e108b898f4ddabb83f3e544b8ce676e96bd380c7353b77256bc8f5480341c"
+    },
+    {
+      "receipt": "delegated01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "47c9bdb5d3b7502f8059be5107c1165d2c46a66698e5a9614f6c646c492373d4",
+      "diagnostic_override_sha256": "47c9bdb5d3b7502f8059be5107c1165d2c46a66698e5a9614f6c646c492373d4"
+    },
+    {
+      "receipt": "delegated02-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "47c9bdb5d3b7502f8059be5107c1165d2c46a66698e5a9614f6c646c492373d4",
+      "diagnostic_override_sha256": "47c9bdb5d3b7502f8059be5107c1165d2c46a66698e5a9614f6c646c492373d4"
+    },
+    {
+      "receipt": "candidate03-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980",
+      "diagnostic_override_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980"
+    },
+    {
+      "receipt": "contents02-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8",
+      "diagnostic_override_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8"
+    },
+    {
+      "receipt": "probe03-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "7b7e108b898f4ddabb83f3e544b8ce676e96bd380c7353b77256bc8f5480341c",
+      "diagnostic_override_sha256": "7b7e108b898f4ddabb83f3e544b8ce676e96bd380c7353b77256bc8f5480341c"
+    },
+    {
+      "receipt": "candidate01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980",
+      "diagnostic_override_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980"
+    },
+    {
+      "receipt": "candidate04-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980",
+      "diagnostic_override_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980"
+    },
+    {
+      "receipt": "contents05-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8",
+      "diagnostic_override_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8"
+    },
+    {
+      "receipt": "probe01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "7b7e108b898f4ddabb83f3e544b8ce676e96bd380c7353b77256bc8f5480341c",
+      "diagnostic_override_sha256": "7b7e108b898f4ddabb83f3e544b8ce676e96bd380c7353b77256bc8f5480341c"
+    },
+    {
+      "receipt": "allowance01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "b64bfb65309ffd6b2ca589112ded1eca1c0695487d55730deaf6e4c78e1a167d",
+      "diagnostic_override_sha256": "b64bfb65309ffd6b2ca589112ded1eca1c0695487d55730deaf6e4c78e1a167d"
+    },
+    {
+      "receipt": "label03-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58",
+      "diagnostic_override_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58"
+    },
+    {
+      "receipt": "cost01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "e5e86fec89e866f19c251863c62b4e8b3d466d3324c3791d56d4d3ec24e5d4e7",
+      "diagnostic_override_sha256": "e5e86fec89e866f19c251863c62b4e8b3d466d3324c3791d56d4d3ec24e5d4e7"
+    },
+    {
+      "receipt": "contents03-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8",
+      "diagnostic_override_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8"
+    },
+    {
+      "receipt": "contents04-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8",
+      "diagnostic_override_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8"
+    },
+    {
+      "receipt": "moved01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "ca8eac5140ace59d4dc5a8711f801308979398a464efd3e7de36055ae1d5ed82",
+      "diagnostic_override_sha256": "ca8eac5140ace59d4dc5a8711f801308979398a464efd3e7de36055ae1d5ed82"
+    },
+    {
+      "receipt": "contents06-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8",
+      "diagnostic_override_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8"
+    },
+    {
+      "receipt": "label01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58",
+      "diagnostic_override_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58"
+    },
+    {
+      "receipt": "label02-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58",
+      "diagnostic_override_sha256": "4ab5687436590c4ac214070d98179126e399bfdde87c6164e0b467ce837a2f58"
+    },
+    {
+      "receipt": "baseline01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980",
+      "diagnostic_override_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980"
+    },
+    {
+      "receipt": "contents01-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8",
+      "diagnostic_override_sha256": "4bd44703d2f1ba38978e1b130ac307a368b14ab2023ce0b970b924c72922bae8"
+    },
+    {
+      "receipt": "candidate02-build.json",
+      "name": "client/godot/tests/ExportChecks.cs",
+      "declared_input_sha256": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+      "executed_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980",
+      "diagnostic_override_sha256": "201342927a36cec7fddd9a9ea8e9cd02b0300fb0e2bf444f86fa6deea2553980"
+    }
+  ],
+  "packet_created": false
+}

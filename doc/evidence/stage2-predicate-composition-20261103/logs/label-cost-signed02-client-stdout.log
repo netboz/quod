@@ -1,0 +1,46 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS format
+PASS observed format ms=10 value=<<"sample / 2.\n">>
+PASS model
+PASS observed model ms=20 value=[part(<<"predicate">>,box(800,500,200),transform(0,0,0,0,0,0),surface(<<"#6A90D9">>,0,700,0,[]),label(<<"sample / 2">>,<<"above">>),depicts_nothing)]
+PASS catalogue-count
+PASS observed catalogue-count ms=20 value=184
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

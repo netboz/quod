@@ -1,0 +1,22 @@
+PASS exact closed280 observer retained
+PASS one diagnostic insertion: var observation=new FrameObservation
+PASS one diagnostic insertion: long observationStarted=System.Diagnostics.Stopwatch.GetTimestamp
+PASS one diagnostic insertion: frame_observation=observation.Snapshot
+PASS one diagnostic insertion: observation.Record
+PASS removing observation additions reproduces exact original bootstrap readiness predicates deadline and cleanup
+PASS uses the one existing notification subscription
+PASS existing early-stop and final unsubscribe paths preserved
+PASS original native bound and compound rendered counter unchanged
+PASS fixture stop is literal stop plus LF
+PASS client finish remains separate and preparation grants no launch
+  Determining projects to restore...
+/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01/OfflineChecks.csproj : error NU1100: Unable to resolve 'Microsoft.AspNetCore.App.Ref (= 10.0.12)' for 'net10.0'.
+  Failed to restore /data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01/OfflineChecks.csproj (in 298 ms).
+
+Build FAILED.
+
+/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01/OfflineChecks.csproj : error NU1100: Unable to resolve 'Microsoft.AspNetCore.App.Ref (= 10.0.12)' for 'net10.0'.
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.75

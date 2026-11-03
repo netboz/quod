@@ -1,0 +1,127 @@
+======================== EUnit ========================
+module 'carrier_admission_checks'
+  carrier_admission_checks: full_material_payload_roundtrip_test...[0.013 s] ok
+  carrier_admission_checks: journal_frame_has_no_material_subquota_test...[0.010 s] ok
+  [done in 0.029 s]
+module 'quod_scope_wire_tests'
+  quod_scope_wire_tests: scope_open_trace_metadata_is_transient_and_fail_closed_test...[0.022 s] ok
+  quod_scope_wire_tests: all_command_shapes_roundtrip_deterministically_test...[0.004 s] ok
+  quod_scope_wire_tests: independent_metadata_roundtrips_and_refuses_malformed_values_test...ok
+  quod_scope_wire_tests: savepoint_lineage_and_public_intent_are_independent_wire_fields_test...ok
+  quod_scope_wire_tests: scope_v5_authentication_digest_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: scope_v5_binding_rejects_principal_and_authentication_substitution_test...ok
+  quod_scope_wire_tests: all_events_carry_exact_state_and_roundtrip_test...ok
+  quod_scope_wire_tests: prepared_budget_error_is_bounded_and_survives_scope_wire_test...ok
+  quod_scope_wire_tests: scope_error_target_binding_does_not_constrain_invocation_errors_test...ok
+  quod_scope_wire_tests: answer_binding_protocol_error_round_trips_test...ok
+  quod_scope_wire_tests: seal_operations_round_trip_without_material_subquota_test...ok
+  quod_scope_wire_tests: manifest_attestation_payloads_are_canonical_test...ok
+  quod_scope_wire_tests: read_certificate_scope_results_use_the_closed_error_catalog_test...ok
+  quod_scope_wire_tests: group_effect_binding_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: operation_effect_submission_crosses_scope_without_subquota_test...ok
+  quod_scope_wire_tests: scope_namespace_uses_directory_bound_test...ok
+  quod_scope_wire_tests: submit_operations_round_trip_without_material_subquota_test...[0.004 s] ok
+  quod_scope_wire_tests: retired_generic_public_errors_are_rejected_test...ok
+  quod_scope_wire_tests: goal_stays_opaque_until_explicit_payload_decode_test...ok
+  quod_scope_wire_tests: opaque_goal_symbol_survives_scope_codec_test...ok
+  quod_scope_wire_tests: payload_byte_bounds_are_exact_test...[0.019 s] ok
+  quod_scope_wire_tests: large_malformed_scope_envelope_still_fails_closed_test...ok
+  quod_scope_wire_tests: outer_safe_etf_and_version_are_fail_closed_test...ok
+  quod_scope_wire_tests: unknown_outer_atom_is_not_created_test...ok
+  quod_scope_wire_tests: identity_probe_and_response_are_fixed_safe_frames_test...ok
+  quod_scope_wire_tests: ids_sequences_chain_generation_and_dirty_are_bounded_test...ok
+  quod_scope_wire_tests: dirty_is_mandatory_and_error_vocabulary_is_closed_test...ok
+  quod_scope_wire_tests: lineage_controller_shapes_and_limits_are_exact_test...[0.001 s] ok
+  quod_scope_wire_tests: superseded_transaction_wire_shapes_are_rejected_test...ok
+  [done in 0.137 s]
+module 'quod_signing_journal_tests'
+  quod_signing_journal_tests: era_latches_and_exact_bodies_survive_recovery_test...[0.034 s] ok
+  quod_signing_journal_tests: archived_protocol_custody_is_not_material_height_test...[0.041 s] ok
+  quod_signing_journal_tests: era_competing_support_is_refused_before_append_test...[0.018 s] ok
+  quod_signing_journal_tests: persists_votes_and_dtx_floor_test...[0.060 s] ok
+  quod_signing_journal_tests: malformed_supported_block_is_rejected_without_mutation_test...[0.025 s] ok
+  quod_signing_journal_tests: conflicting_votes_fail_stop_test...[0.053 s] ok
+  quod_signing_journal_tests: unused_header_is_replaceable_but_used_compacted_header_is_not_test...[0.054 s] ok
+  quod_signing_journal_tests: missing_recovery_fails_without_creating_a_file_test...ok
+  quod_signing_journal_tests: legacy_magics_fail_explicitly_without_mutation_test...ok
+  quod_signing_journal_tests: superseded_signing_magic_fails_explicitly_without_mutation_test...[0.001 s] ok
+  quod_signing_journal_tests: legacy_magic_in_tail_is_not_trimmed_test...[0.012 s] ok
+  quod_signing_journal_tests: superseded_signing_magic_in_tail_is_not_trimmed_test...[0.013 s] ok
+  quod_signing_journal_tests: torn_final_frame_is_trimmed_after_domain_validation_test...[0.026 s] ok
+  quod_signing_journal_tests: domain_mismatch_precedes_torn_tail_repair_test...[0.015 s] ok
+  quod_signing_journal_tests: complete_crc_corruption_fails_without_mutation_test...[0.030 s] ok
+  quod_signing_journal_tests: reconcile_uses_only_the_validated_summary_test...[0.027 s] ok
+  quod_signing_journal_tests: dtx_floors_are_scoped_by_author_admission_test...[0.050 s] ok
+  quod_signing_journal_tests: uncommitted_dtx_floor_survives_unrelated_reconciliation_test...[0.024 s] ok
+  quod_signing_journal_tests: uncommitted_dtx_floor_is_pruned_by_admission_rotation_test...[0.019 s] ok
+  quod_signing_journal_tests: committed_dtx_floor_survives_without_local_record_test...[0.016 s] ok
+  quod_signing_journal_tests: committed_dtx_floor_wins_over_lower_local_floor_test...[0.016 s] ok
+  quod_signing_journal_tests: malformed_current_admissions_rejects_reconciliation_test...[0.012 s] ok
+  quod_signing_journal_tests: invalid_dtx_control_cannot_mutate_the_journal_test...[0.016 s] ok
+  quod_signing_journal_tests: each_pending_dtx_is_one_durable_frame_test...[0.070 s] ok
+  quod_signing_journal_tests: pending_compaction_preserves_a_later_same_lane_floor_test...[0.053 s] ok
+  quod_signing_journal_tests: pending_dtx_reenveloping_is_scoped_to_its_group_test...[0.081 s] ok
+  quod_signing_journal_tests: pending_vote_reclassification_keeps_custody_and_exposed_floor_test...[0.045 s] ok
+  quod_signing_journal_tests: pending_reclassification_cannot_discard_own_material_test...[0.033 s] ok
+  quod_signing_journal_tests: -source_journal_owner_death_recovers_exact_preparation_permission_test_/0-fun-6- (missing)...[0.031 s] ok
+  quod_signing_journal_tests: -source_journal_owner_death_recovers_exact_preparation_permission_test_/0-fun-6- (bound)...[0.035 s] ok
+  quod_signing_journal_tests: -source_journal_owner_death_recovers_exact_preparation_permission_test_/0-fun-6- (signed)...[0.046 s] ok
+  quod_signing_journal_tests: source_enrollment_readiness_and_signing_survive_separate_reopens_test...[0.048 s] ok
+  quod_signing_journal_tests: missing_source_enrollment_can_only_sign_its_own_negative_after_restart_test...[0.046 s] ok
+  quod_signing_journal_tests: source_pending_can_renew_only_its_exact_intent_after_readmission_test...[0.050 s] ok
+  quod_signing_journal_tests: negative_only_manifest_custody_survives_compaction_test...[0.054 s] ok
+  quod_signing_journal_tests: real_qsj4_is_refused_by_name_and_empty_qsj6_opens_test...*failed*
+in function quod_signing_journal_tests:'-real_qsj4_is_refused_by_name_and_empty_qsj6_opens_test/0-fun-6-'/2 (/checks/source/test/quod_signing_journal_tests.erl, line 799)
+in call from quod_signing_journal_tests:with_dir/1 (/checks/source/test/quod_signing_journal_tests.erl, line 1159)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{badmatch,{error,enoent}}
+  output:<<"">>
+
+  quod_signing_journal_tests: scanner_recovers_distinct_pending_groups_from_one_lane_test...[0.062 s] ok
+  quod_signing_journal_tests: reconcile_prunes_each_pending_group_independently_test...[0.066 s] ok
+  quod_signing_journal_tests: pending_dtx_population_has_no_compiled_count_limit_test...[1.549 s] ok
+  quod_signing_journal_tests: compaction_orders_pending_groups_canonically_test...[0.126 s] ok
+  quod_signing_journal_tests: superseded_record_version_is_not_accepted_under_current_magic_test...[0.012 s] ok
+  quod_signing_journal_tests: effect_custody_is_durable_idempotent_and_admission_scoped_test...[0.021 s] ok
+  quod_signing_journal_tests: dormant_transaction_requires_durable_binding_before_activation_test...[0.024 s] ok
+  quod_signing_journal_tests: dormant_transaction_activation_record_is_rejected_on_recovery_test...[0.016 s] ok
+  quod_signing_journal_tests: compressed_record_is_rejected_without_mutation_test...[0.012 s] ok
+  quod_signing_journal_tests: unknown_atom_record_is_rejected_without_atom_creation_test...[0.012 s] ok
+  quod_signing_journal_tests: frame_capacity_follows_its_uint32_encoding_test...[0.009 s] ok
+  quod_signing_journal_tests: pending_reference_keeps_manifest_coordinator_across_another_validator_signature_test...[0.034 s] ok
+  [done in 3.241 s]
+module 'quod_dtx_phase_index_tests'
+  quod_dtx_phase_index_tests: protocol_era_path_is_bounded_by_membership_changes_and_capture_test...[0.017 s] ok
+  quod_dtx_phase_index_tests: protocol_era_delta_rejects_replacement_forks_and_nonincreasing_heights_test...ok
+  quod_dtx_phase_index_tests: protocol_era_path_performs_only_indexed_predecessor_reads_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: same_group_append_is_invisible_to_an_older_capture_test...[0.078 s] ok
+  quod_dtx_phase_index_tests: different_group_append_is_absent_from_an_older_capture_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: committee_capture_keeps_old_eras_and_route_values_test...ok
+  quod_dtx_phase_index_tests: discarded_committee_delta_does_not_mutate_the_index_test...ok
+  quod_dtx_phase_index_tests: owner_death_voids_a_read_only_capture_test...ok
+  quod_dtx_phase_index_tests: capture_cost_is_constant_by_call_count_test...[0.005 s] ok
+  quod_dtx_phase_index_tests: retained_capture_cost_is_constant_by_call_count_test...[0.006 s] ok
+  quod_dtx_phase_index_tests: retained_read_capture_survives_mutable_writer_death_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: constant_work_extent_stats_follow_committed_rows_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: exact_history_survives_interleaved_windows_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: failed_transition_never_replaces_exact_history_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: preview_isolated_until_one_explicit_commit_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: one_delta_commits_all_interleaved_groups_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: same_phase_batch_commits_every_exact_history_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: window_delta_has_no_arbitrary_group_count_cap_test...[0.049 s] ok
+  quod_dtx_phase_index_tests: phase_batch_failure_commits_no_partial_history_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: singleton_batch_reapply_is_idempotent_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: noncanonical_or_trailing_history_fails_closed_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: canonical_history_under_the_wrong_group_key_fails_closed_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: session_paths_are_unique_and_close_removes_only_its_file_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: suspended_session_reopens_with_exact_history_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: killed_owner_does_not_collide_and_startup_cleanup_is_exact_test...[0.001 s] ok
+  quod_dtx_phase_index_tests: malformed_control_is_rejected_before_index_access_test...ok
+  [done in 0.249 s]
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 104.

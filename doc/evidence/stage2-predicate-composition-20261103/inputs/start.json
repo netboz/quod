@@ -1,0 +1,11 @@
+{
+  "priv/ontologies/common_predicates.pl": "a277245bf43e62d183a0fef0db494e9bf12ef9038237a826f0fe1d1bf28d42ee",
+  "priv/ontologies/quod_space.pl": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+  "priv/ontologies/gui_tools.pl": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+  "client/godot/SourcePanel.cs": "8126a42d8c21815d6d09d8796ffe444d7cbef76d170d6658e0a37e7a13cf8e25",
+  "client/godot/EidolonPanel.cs": "c30bbeb6b23e1edc5f466bfe87d5b132238f6d1d137289927a511ebd92ecd537",
+  "client/src/world.js": "e7ed5edaa93cac0f9ebee65e82361b6c565e7eed6e3d38bc84785d3a555ddcf5",
+  "client/src/world.d.ts": "e38bcff417fbb4e0b00bce656819bf1268fe6df8e834075b1742ffbef087948e",
+  "client/godot/Core/Eidolons.cs": "9036b4ea127f6cbb9a78f89baf6db2292dee34945809d8abfe236d74026c2913",
+  "client/godot/Core/Scene.cs": "cd060f35cf6656e55f92888ebaeb5f419b266b5a3d23c17f62f62228c8013a58"
+}

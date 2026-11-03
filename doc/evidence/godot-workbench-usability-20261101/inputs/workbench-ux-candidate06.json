@@ -1,0 +1,52 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "19bc92d5d3326e48fc0b0379830d47cdb07ea64caaef69b4e3b9f6831c3e8039",
+  "failure": "Empty: ",
+  "unretired_failure": true,
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-workbench-ux-stdout": true,
+    "client-workbench-ux-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-candidate06/server-stdout.raw",
+      "sha256": "e78e1799ec33198fb9f99d0d665d9989a8abe2048b46ff2dc80ef28641111061",
+      "bytes": 129
+    },
+    "client-workbench-ux-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-candidate06/client-workbench-ux-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "client-workbench-ux-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-candidate06/client-workbench-ux-stdout.raw",
+      "sha256": "73aa2825d82f258653d50ec39ede4ea09469cbcd2a74a5e10b109466acdae247",
+      "bytes": 157575
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-candidate06/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-workbench-ux": {
+      "explicit_completion": true,
+      "completion_monotonic": 151856.463452112,
+      "true_exit": -15
+    }
+  }
+}

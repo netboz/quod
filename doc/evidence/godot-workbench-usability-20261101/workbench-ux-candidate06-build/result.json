@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-workbench-usability-20261101/build.py",
+    "workbench-ux-candidate06"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 34.25637697399361
+}

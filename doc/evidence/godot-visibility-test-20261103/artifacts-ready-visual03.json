@@ -1,0 +1,83 @@
+{
+  "state": "ARTIFACTS_READY_TO_LAUNCH",
+  "launch_authorized": false,
+  "live_client_or_fixture_started": false,
+  "label": "visibility-visual-human03",
+  "parent_card": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/artifacts-ready.json",
+  "parent_card_sha256": "4efeceb493d3df28eb0e468360de962b331f44b25f0f259e93f45be64551a343",
+  "exact_stat_records_verified": 48,
+  "runtime_manifest_sha256": "5954b3a1dc001cf3f496ac93de9a516c17445bff3d62e93a410bb10a113ed477",
+  "fixture_image": "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+  "fixture_image_present": true,
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "fixture": {
+    "argv": [
+      "python3",
+      "-B",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-attention-vr-preparation-20261102/manual_run.py",
+      "visibility-visual-fixture-wrapper03",
+      "--",
+      "python3",
+      "-B",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/serve.py",
+      "visibility-visual-human03-server",
+      "--stage",
+      "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+      "--profile",
+      "test",
+      "--qualified",
+      "--presentation-source",
+      "--clean-manifest",
+      "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source-manifest.json",
+      "--affected-wire",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/space-name-owner03.json"
+    ],
+    "tty": true,
+    "await": "M1B_READY",
+    "stop_literal": "stop\\n"
+  },
+  "client": {
+    "argv": [
+      "python3",
+      "-B",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-visual-readiness-20261102/live.py",
+      "--label",
+      "visibility-visual-human03",
+      "--manifest",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-test-20261103/inputs/client-visibility-visual-companion04-manifest.json",
+      "--server-label",
+      "visibility-visual-human03-server",
+      "--launch-and-begin"
+    ],
+    "tty": true,
+    "await": "VISUAL_READY",
+    "finish_literal": "finish\\n"
+  },
+  "bounds": {
+    "preparation": 180,
+    "participant": 1800,
+    "normal_close": 60,
+    "outer": 2100,
+    "authentic_expiry": "earlier absolute cutoff; never renewed"
+  },
+  "human_preparation": "Yan sends launch from the desktop, then puts on the headset immediately. The local owner sends begin after mapped PREPARED. No typed reply or confirmation is required while wearing it; do not change SteamVR settings or infer readiness from process start.",
+  "visual_gate": "first Focused + CanRender + advancing stereo frame + tracked head + accepted signed world/receiver + unexpired authentication; no controller wait",
+  "first_human_task": "Look at the two labeled parts of one Analyzer. Select one. Report whether Analyzer settings and Measurement appear in front of that part and whether the field and action are readable. No Submit.",
+  "optional_followup": "Move the same form to Personal workspace and back Near this object, then report whether it remains readable.",
+  "known_limit": "Last live attempt advanced 236 stereo frames but stayed Visible with no controller profiles, and SteamVR later crashed after the app closed. No cause or headset usability pass is established.",
+  "no_test_time_build_or_audit": true,
+  "preserve_closed_targets": true,
+  "companion_manifest": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-test-20261103/inputs/client-visibility-visual-companion04-manifest.json",
+    "sha256": "16d2c211c6687494bcf188f249c88ba054c1bcd8b97b685e56c936b46cc0cef7",
+    "live_inputs": 98,
+    "supplied_inputs": 100,
+    "exports": 196,
+    "passed": true
+  },
+  "gate_change": "The diagnostic child no longer has a 30-second visual admission timeout. Existing local preparation180, participant1800, authentic expiry and normal close are retained.",
+  "derived_from_card": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-test-20261103/artifacts-ready-visual02.json",
+    "sha256": "1fb6e491859523927caad925ba6435fdb4ec4c7ff1d656c6fac4fc1b781c18fe"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "production_consumers_before": 0,
+  "retired_definitions": [
+    "QUOD_MAX_PLAN_ENVELOPE_BYTES",
+    "QUOD_MAX_DURABLE_RESULT_BYTES",
+    "QUOD_MAX_DTX_BODY_BYTES",
+    "QUOD_MAX_DTX_CONTROL_BYTES",
+    "QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES",
+    "QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES"
+  ],
+  "historical_values": {
+    "QUOD_MAX_PLAN_ENVELOPE_BYTES": 424064,
+    "QUOD_MAX_DURABLE_RESULT_BYTES": 16384,
+    "QUOD_MAX_DTX_BODY_BYTES": 424064,
+    "QUOD_MAX_DTX_CONTROL_BYTES": 456804,
+    "QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES": 1012977,
+    "QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES": 28
+  },
+  "changed_test_callers": [
+    "test/quod_client_result_tests.erl",
+    "test/quod_proof_answer_tests.erl",
+    "test/quod_dtx_tests.erl",
+    "test/quod_scope_wire_tests.erl",
+    "test/quod_dtx_endpoint_tests.erl",
+    "test/quod_signing_journal_tests.erl",
+    "test/quod_atomic_tests.erl",
+    "test/quod_read_certificate_tests.erl",
+    "doc/evidence/stage2-presentation-boundaries-20261103/carrier_admission_checks.erl"
+  ]
+}

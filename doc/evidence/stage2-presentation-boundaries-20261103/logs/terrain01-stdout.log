@@ -1,0 +1,49 @@
+======================== EUnit ========================
+quod_physics_tests: -terrain_delivery_credit_and_replacement_test_/0-fun-6- (static)...[0.034 s] ok
+quod_physics_tests: -terrain_delivery_credit_and_replacement_test_/0-fun-6- (moving)...[1.822 s] ok
+quod_physics_tests: -voxel_signed_view_delivers_only_bound_resident_chunks_test_/0-fun-15-...*failed*
+in function quod_physics_tests:installed/4 (/checks/quod_physics_tests.erl, line 3325)
+in call from quod_physics_tests:'-with_voxel_view/5-fun-4-'/6 (/checks/quod_physics_tests.erl, line 5878)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/checks/quod_physics_tests.erl, line 3264)
+in call from quod_agent_hosting_tests:with_host/4 (/work/test/quod_agent_hosting_tests.erl, line 1654)
+in call from quod_physics_tests:with_world/3 (/checks/quod_physics_tests.erl, line 3267)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{physics_not_installed,any,#{},
+                       #{agent_observation_refusals_total => 0,
+                         reaction_failures => 0,runner_active => false,
+                         events_seen => 5,reconcile_failures => 0,
+                         reactions_active => 6,resource_dependencies => 5,
+                         agent_capacity_status => ready,e_frontier => 6,
+                         observed_agent_instances => 0,
+                         reactions_executed => 0,hosted_agent_instances => 0,
+                         source_targets_active => 0,subscriptions_active => 0,
+                         agent_work_blocked => 0,...}}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_9FC01845A4F42B86
+">>
+
+quod_physics_tests: -voxel_signed_view_delivers_complete_large_resident_selection_test_/0-fun-7-...*failed*
+in function quod_physics_tests:installed/4 (/checks/quod_physics_tests.erl, line 3325)
+in call from quod_physics_tests:'-with_voxel_view/5-fun-4-'/6 (/checks/quod_physics_tests.erl, line 5878)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/checks/quod_physics_tests.erl, line 3264)
+in call from quod_agent_hosting_tests:with_host/4 (/work/test/quod_agent_hosting_tests.erl, line 1654)
+in call from quod_physics_tests:with_world/3 (/checks/quod_physics_tests.erl, line 3267)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{physics_not_installed,any,#{},
+                       #{agent_observation_refusals_total => 0,
+                         reaction_failures => 0,runner_active => false,
+                         events_seen => 6,reconcile_failures => 0,
+                         reactions_active => 6,resource_dependencies => 5,
+                         agent_capacity_status => ready,e_frontier => 7,
+                         observed_agent_instances => 0,
+                         reactions_executed => 0,hosted_agent_instances => 0,
+                         source_targets_active => 0,subscriptions_active => 0,
+                         agent_work_blocked => 0,...}}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_222CA72491AB1375
+">>
+
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 2.

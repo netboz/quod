@@ -1,0 +1,88 @@
+{
+  "passed": true,
+  "children": {
+    "server": {
+      "command": [
+        "python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-predicate-composition-20261103/serve.py",
+        "moved-signed03",
+        "--stage",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+        "--profile",
+        "test",
+        "--qualified",
+        "--clean-manifest",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source-manifest.json",
+        "--presentation-source",
+        "--affected-wire",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/space-name-owner03.json",
+        "--physics"
+      ],
+      "true_exit": 0
+    },
+    "client": {
+      "command": [
+        "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--path",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/moved01/source/client/godot",
+        "--",
+        "--qualification",
+        "--profile",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/moved-signed03/profile",
+        "--node",
+        "https://127.0.0.1:36159",
+        "--ca",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/server-moved-signed03/backend-ca.pem"
+      ],
+      "true_exit": 0
+    }
+  },
+  "reader_errors": [],
+  "hardware": false,
+  "build_label": "moved01",
+  "explicit_completion": true,
+  "checks": [
+    "the selected authored contents recipe is admitted independently of unrelated optional representations",
+    "the shared selected-representation consumer renders the existing three recursive independent appearances",
+    "selected physical representation returns frame credit through the same view owner and continues beyond the initial delivery",
+    "existing owner work observation is installed before unchanged selected-view renewals",
+    "unchanged selected contents retain resources with zero watched history/install/write/sync work",
+    "a real source update propagates without collapsing independent occurrences",
+    "dependency denial withdraws the selected consumer while a fresh accepted independent projection stays available",
+    "selected representation and independent view resources retire with their consumers"
+  ],
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "streams": {
+    "client-stderr.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/moved-signed03/client-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-stdout.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/moved-signed03/client-stdout.raw",
+      "sha256": "4316696d06350c08c68e8c46032eb1905d9dfcce3c6d6627a9c2132bc05860ff",
+      "bytes": 4164
+    },
+    "server-stdout.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/moved-signed03/server-stdout.raw",
+      "sha256": "3c02e6d7a255691b45c9105f9c17449782f080ef1c6b60105152802070a88ea2",
+      "bytes": 117
+    },
+    "server-stderr.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/moved-signed03/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

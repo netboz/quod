@@ -1,0 +1,10 @@
+{
+  "label": "stage2-d5-impact-audit02",
+  "command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-d5-impact-20261103/audit02.py"
+  ],
+  "child_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true
+}

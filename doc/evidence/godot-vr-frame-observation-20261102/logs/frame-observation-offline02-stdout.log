@@ -1,0 +1,42 @@
+PASS exact closed280 observer retained
+PASS one diagnostic insertion: var observation=new FrameObservation
+PASS one diagnostic insertion: long observationStarted=System.Diagnostics.Stopwatch.GetTimestamp
+PASS one diagnostic insertion: frame_observation=observation.Snapshot
+PASS one diagnostic insertion: observation.Record
+PASS removing observation additions reproduces exact original bootstrap readiness predicates deadline and cleanup
+PASS uses the one existing notification subscription
+PASS existing early-stop and final unsubscribe paths preserved
+PASS original native bound and compound rendered counter unchanged
+PASS fixture stop is literal stop plus LF
+PASS client finish remains separate and preparation grants no launch
+  Determining projects to restore...
+  Restored /data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02/OfflineChecks.csproj (in 613 ms).
+  OfflineChecks -> /data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline02/bin/Release/net10.0/OfflineChecks.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:06.90
+PASS no callbacks is an explicit zero
+PASS no callback does not invent a predicted-time sample
+PASS no callback does not invent a session transition
+PASS native calls and direct shouldRender remain unobserved
+PASS callbacks count even when render admission is false
+PASS first and last positive predicted times are retained
+PASS progress is counted independently of CanRender
+PASS false render admission is measured without manufactured rendered frames
+PASS unchanged state is not a transition
+PASS zero-based monotonic callback interval is retained with its frequency
+PASS recovery and withdrawal accumulate without resetting counters
+PASS visible focused and synchronized transitions are retained
+PASS transition binds its initiating and resulting states to the callback interval
+PASS a retained snapshot does not mutate with later samples
+PASS initial zero is not replaced by the first positive time
+PASS equal and decreasing times are distinguished from progression
+PASS nonpositive samples remain explicit
+PASS transition storage remains bounded while total and omitted counts stay truthful
+PASS the latest state and time remain current after retention fills
+PASS large callback sequences retain a bounded payload-free report
+FRAME_OBSERVATION_PASS {"checks":20,"synthetic":true,"native_runtime_started":false,"fixture_started":false,"rendered_frame_claim":false}
+FRAME_OFFLINE_COMPLETE {"source_checks": 11, "build_exit": 0, "check_exit": 0, "native_runtime_started": false}

@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-reliability-20261103/qualify.py", line 84, in <module>
+    copy(OWNER / name)
+    ~~~~^^^^^^^^^^^^^^
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-reliability-20261103/qualify.py", line 36, in copy
+    shutil.copy2(path, target)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/shutil.py", line 529, in copy2
+    copyfile(src, dst, follow_symlinks=follow_symlinks)
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/shutil.py", line 313, in copyfile
+    with open(src, 'rb') as fsrc:
+         ~~~~^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-visual-readiness-20261102/closure281.json'

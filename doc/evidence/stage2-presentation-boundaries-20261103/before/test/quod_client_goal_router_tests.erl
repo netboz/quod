@@ -1,0 +1,614 @@
+-module(quod_client_goal_router_tests).
+-moduledoc false.
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(PEER, <<16#41:256>>).
+-define(ENDPOINT, {{127, 0, 0, 1}, 4567}).
+-define(OWNER, {session, <<16#42:256>>, <<16#43:256>>}).
+
+production_owner_publishes_each_router_incarnation_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => <<1:256>>, node_key => <<2:256>>}),
+    true = quod_reg:subscribe({client_goal_router, node}),
+    try
+        [begin
+            {ok, Owner} = quod_client_goal_router:start_link(),
+            try
+                receive {client_goal_router_ready, Owner} -> ok
+                after 1000 -> error(router_readiness_notice_missing)
+                end,
+                ?assertEqual(Owner, whereis(quod_client_goal_router))
+            after gen_server:stop(Owner) end
+         end || _ <- [first, replacement]]
+    after quod_reg:unsubscribe({client_goal_router, node}), gen_server:stop(Auth) end.
+
+cursor_target_states_are_named_before_the_shared_renderer_test() ->
+    ?assertEqual(
+       {error, cursor_not_found},
+       quod_client_goal_router:test_cursor_target_result({error, not_found})),
+    ?assertEqual(
+       {error, cursor_not_ready},
+       quod_client_goal_router:test_cursor_target_result({error, not_ready})),
+    ?assertEqual(
+       {error, cursor_busy},
+       quod_client_goal_router:test_cursor_target_result({error, busy})),
+    ?assertEqual(
+       {error, proof_unavailable},
+       quod_client_goal_router:test_cursor_target_result({error, bad_state})).
+
+submit_target_documented_outcomes_select_one_reply_test() ->
+    Request = {submit, <<0:128>>, <<>>, <<0:512>>, none, []},
+    ?assertEqual(
+       {response, {refused, <<0:128>>, busy}},
+       quod_client_goal_router:test_submit_target_result(
+         Request, {error, busy})),
+    ?assertEqual(
+       {response, {error, <<0:128>>, operation_conflict}},
+       quod_client_goal_router:test_submit_target_result(
+         Request, {error, operation_conflict})).
+
+result_is_correlated_and_fully_cleaned_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          Caller = submit_async(Router, Fixture, none, 1000),
+          {Request, _Frame} = sent_request(Link),
+          RequestId = quod_client_goal_endpoint:request_id(Request),
+          {ok, ResultBlob} = quod_client_result:encode({answers, 7, []}),
+          respond(Router, Link, {result, RequestId, ResultBlob}),
+          receive
+              {Caller, {ok, Evidence,
+                        {normalized, {answers, 7, []}}}} ->
+                  ?assertEqual(maps:get(evidence, Fixture), Evidence)
+          after 1000 -> error(router_result_missing)
+          end,
+          await_stats(Router, #{correlations => 0, routes => 0}),
+          assert_released_lease(Link, Router)
+      end).
+
+failed_cursor_open_releases_lease_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        CursorId = <<16#49:256>>,
+        Caller = submit_async(Router, Fixture, CursorId, 1000),
+        {Request, _} = sent_request(Link),
+        RequestId = quod_client_goal_endpoint:request_id(Request),
+        {ok, Blob} = quod_client_result:encode(fail),
+        respond(Router, Link, {cursor_result, RequestId, CursorId, Blob}),
+        receive {Caller, {ok, _, {normalized, fail}}} -> ok
+        after 1000 -> error(cursor_fail_result_missing) end,
+        await_stats(Router, #{correlations => 0, routes => 0}),
+        assert_released_lease(Link, Router)
+    end).
+
+assert_released_lease(Link, Router) ->
+    Ref = receive {transport_lease_owner, Link, Router, R} -> R
+          after 1000 -> error(transport_lease_owner_missing) end,
+    Channel = quod_client_goal_endpoint:channel(),
+    receive
+        {transport_lease_released, Link, Router, ?PEER, ?ENDPOINT,
+         Channel, Ref} -> ok
+    after 1000 -> error(transport_lease_release_missing)
+    end.
+
+local_process_uses_the_existing_wire_and_correlation_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        Parent = self(),
+        Caller = spawn(fun() ->
+            Parent ! {self(), quod_client_goal_router:test_submit(
+              Router, route(), {process, self(), <<16#43:256>>},
+              maps:get(evidence, Fixture), maps:get(request_bytes, Fixture),
+              maps:get(signature, Fixture), none, [], quod_time:now_ms() + 5000, 1000)}
+        end),
+        {Request, _} = sent_request(Link),
+        RequestId = quod_client_goal_endpoint:request_id(Request),
+        {ok, Blob} = quod_client_result:encode({answers, 7, []}),
+        respond(Router, Link, {result, RequestId, Blob}),
+        receive {Caller, {ok, _, {normalized, {answers, 7, []}}}} -> ok
+        after 1000 -> error(local_process_result_missing) end,
+        await_stats(Router, #{correlations => 0, routes => 0})
+    end).
+
+wrong_peer_never_satisfies_an_exact_correlation_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          Caller = submit_async(Router, Fixture, none, 1000),
+          {Request, _Frame} = sent_request(Link),
+          RequestId = quod_client_goal_endpoint:request_id(Request),
+          {ok, ResultBlob} = quod_client_result:encode(fail),
+          {ok, WrongPeerResult} = quod_client_goal_endpoint:encode_response(
+                                    {result, RequestId, ResultBlob}),
+          Router ! {quod_message, {<<0:256>>, Link},
+                    quod_client_goal_endpoint:channel(), WrongPeerResult},
+          respond(Router, Link, {result, RequestId, ResultBlob}),
+          receive {Caller, {ok, _, {normalized, fail}}} -> ok
+          after 1000 -> error(exact_peer_result_missing)
+          end,
+          await_stats(Router, #{correlations => 0})
+      end).
+
+preexecution_refusals_remain_route_eligible_test_() ->
+    [?_test(refusal_is_returned_before_any_result(Reason))
+     || Reason <- [not_ready, busy, rate_limited]].
+
+refusal_is_returned_before_any_result(Reason) ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          Caller = submit_async(Router, Fixture, none, 1000),
+          {Request, _Frame} = sent_request(Link),
+          RequestId = quod_client_goal_endpoint:request_id(Request),
+          respond(Router, Link, {refused, RequestId, Reason}),
+          receive {Caller, {error, {refused, Reason}}} -> ok
+          after 1000 -> error(preexecution_refusal_missing)
+          end,
+          await_stats(Router, #{correlations => 0, routes => 0})
+      end).
+
+link_failure_before_send_is_the_only_pre_send_result_test() ->
+    Parent = self(),
+    OpenFun = fun(Peer, _Endpoint, Channel) ->
+                      Ref = make_ref(),
+                      self() ! {link_error, Ref, Peer, Channel},
+                      Parent ! open_attempted,
+                      Ref
+              end,
+    {ok, Router} = quod_client_goal_router:test_start_link(OpenFun),
+    Fixture = fixture(),
+    try
+        ?assertEqual(
+           {error, pre_send},
+           submit(Router, Fixture, none, 1000)),
+        receive open_attempted -> ok after 1000 -> error(no_open_attempt) end,
+        await_stats(Router, #{correlations => 0, routes => 0})
+    after stop_router(Router) end.
+
+missing_router_is_provably_pre_send_test() ->
+    ?assertEqual(undefined, whereis(quod_client_goal_router)),
+    Fixture = fixture(),
+    ?assertEqual(
+       {error, pre_send},
+       quod_client_goal_router:submit(
+         route(), ?OWNER, maps:get(evidence, Fixture),
+         maps:get(request_bytes, Fixture), maps:get(signature, Fixture),
+         none, [], quod_time:now_ms() + 5000, 1000)).
+
+post_send_timeout_is_uncertain_and_leaves_nothing_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          Evidence = maps:get(evidence, Fixture),
+          Caller = submit_async(Router, Fixture, none, 30),
+          _ = sent_request(Link),
+          receive {Caller, {error, {uncertain, Evidence}}} -> ok
+          after 1000 -> error(router_uncertainty_missing)
+          end,
+          await_stats(Router, #{correlations => 0, routes => 0})
+      end).
+
+invalid_response_counts_the_exact_gateway_boundary_test() ->
+    with_outcome_metrics(
+      fun() ->
+          with_router(
+            fun(Router, Link, _Fixture) ->
+                Fixture = fixture(execute),
+                Evidence = maps:get(evidence, Fixture),
+                Before = outcome_counter(gateway_execute_transport),
+                Caller = submit_async(Router, Fixture, none, 1000),
+                {Request, _Frame} = sent_request(Link),
+                RequestId = quod_client_goal_endpoint:request_id(Request),
+                respond_opaque(
+                  Router, Link,
+                  {result, RequestId, term_to_binary(arbitrary)}),
+                receive
+                    {Caller, {error, {uncertain, Evidence}}} -> ok
+                after 1000 -> error(invalid_response_uncertainty_missing)
+                end,
+                ?assertEqual(
+                   Before + 1,
+                   outcome_counter(gateway_execute_transport)),
+                await_stats(Router, #{correlations => 0, routes => 0})
+            end)
+      end).
+
+normalized_target_pending_is_not_counted_again_at_gateway_test() ->
+    with_outcome_metrics(
+      fun() ->
+          with_router(
+            fun(Router, Link, _Fixture) ->
+                Fixture = fixture(execute),
+                Evidence = maps:get(evidence, Fixture),
+                Ref = maps:get(operation_ref, Evidence),
+                TargetBefore = outcome_counter(target_execute),
+                GatewayBefore = outcome_counter(gateway_execute_transport),
+                ok = quod_client_result:observe_outcome_unknown(
+                       target_execute, engine_result,
+                       {error, {outcome_unknown, Ref}}),
+                Caller = submit_async(Router, Fixture, none, 1000),
+                {Request, _Frame} = sent_request(Link),
+                RequestId = quod_client_goal_endpoint:request_id(Request),
+                {ok, ResultBlob} = quod_client_result:encode({pending, Ref}),
+                respond(Router, Link, {result, RequestId, ResultBlob}),
+                receive
+                    {Caller, {ok, Evidence,
+                              {normalized, {pending, Ref}}}} -> ok
+                after 1000 -> error(target_pending_result_missing)
+                end,
+                ?assertEqual(TargetBefore + 1,
+                             outcome_counter(target_execute)),
+                ?assertEqual(GatewayBefore,
+                             outcome_counter(gateway_execute_transport)),
+                await_stats(Router, #{correlations => 0, routes => 0})
+            end)
+      end).
+
+caller_death_cleans_the_exact_outbound_correlation_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          Parent = self(),
+          Caller = spawn(
+                     fun() ->
+                         Parent ! {caller_ready, self()},
+                         _ = submit(Router, Fixture, none, 1000),
+                         Parent ! unexpected_caller_reply
+                     end),
+          receive {caller_ready, Caller} -> ok
+          after 1000 -> error(caller_not_ready) end,
+          _ = sent_request(Link),
+          MRef = monitor(process, Caller),
+          exit(Caller, kill),
+          receive {'DOWN', MRef, process, Caller, killed} -> ok
+          after 1000 -> error(caller_down_missing) end,
+          await_stats(Router, #{correlations => 0, routes => 0}),
+          receive unexpected_caller_reply -> error(caller_was_replied)
+          after 0 -> ok end
+      end).
+
+cursor_route_reuses_one_link_and_drops_after_stop_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          CursorId = <<16#44:256>>,
+          Caller = submit_async(Router, Fixture, CursorId, 1000),
+          {OpenRequest, _} = sent_request(Link),
+          OpenId = quod_client_goal_endpoint:request_id(OpenRequest),
+          {ok, BindingBlob} = quod_durable_term:encode_result(#{}),
+          {ok, SolutionBlob} = quod_client_result:encode(
+                                 {solution, CursorId, 7, BindingBlob}),
+          respond(Router, Link,
+                  {cursor_result, OpenId, CursorId, SolutionBlob}),
+          receive
+              {Caller, {ok, _,
+                        {normalized, {solution, CursorId, 7, _}}}} -> ok
+          after 1000 -> error(cursor_open_result_missing)
+          end,
+          await_stats(Router, #{correlations => 0, routes => 1}),
+          %% Transport releases a stream when its lease owner exits. The
+          %% request worker is already gone; the cursor route must own it.
+          Lease = receive
+              {transport_lease_owner, Link, LeaseOwner, Ref} ->
+                  ?assertEqual(Router, LeaseOwner), Ref
+          after 1000 -> error(transport_lease_owner_missing)
+          end,
+          NextCaller = cursor_async(Router, CursorId, next, 1000),
+          {{cursor, NextId, CursorId, next}, _} = sent_request(Link),
+          respond(Router, Link,
+                  {cursor_result, NextId, CursorId, SolutionBlob}),
+          receive
+              {NextCaller, {ok, _,
+                            {normalized, {solution, CursorId, 7, _}}}} -> ok
+          after 1000 -> error(cursor_next_result_missing)
+          end,
+          await_stats(Router, #{correlations => 0, routes => 1}),
+          receive {transport_lease_released, Link, _, _, _, _, _} ->
+              error(cursor_lease_released_early)
+          after 0 -> ok end,
+          StopCaller = cursor_async(Router, CursorId, stop, 1000),
+          {{cursor, StopId, CursorId, stop}, _} = sent_request(Link),
+          {ok, StoppedBlob} = quod_client_result:encode(stopped),
+          respond(Router, Link,
+                  {cursor_result, StopId, CursorId, StoppedBlob}),
+          receive
+              {StopCaller, {ok, _, {normalized, stopped}}} -> ok
+          after 1000 -> error(cursor_stop_result_missing)
+          end,
+          await_stats(Router, #{correlations => 0, routes => 0}),
+          Channel = quod_client_goal_endpoint:channel(),
+          receive
+              {transport_lease_released, Link, Router, ?PEER, ?ENDPOINT,
+               Channel, Lease} -> ok
+          after 1000 -> error(cursor_lease_not_released)
+          end,
+          receive {transport_lease_released, Link, _, _, _, _, Lease} ->
+              error(cursor_lease_released_twice)
+          after 0 -> ok end
+      end).
+
+expired_idle_route_returns_reason_once_to_its_owner_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        CursorId = <<16#51:256>>,
+        open_expiring_cursor(Router, Link, Fixture, CursorId),
+        assert_released_lease(Link, Router),
+        ?assertEqual({error, not_found}, quod_client_goal_router:test_cursor(
+            Router, {session, <<0:256>>, <<0:256>>}, CursorId, accept, 1000)),
+        Evidence = maps:get(evidence, Fixture),
+        #{request := #{agent_namespace := Ns}} = Evidence,
+        Expected = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+        ?assertEqual({ok, Evidence, {normalized, Expected}},
+            quod_client_goal_router:test_cursor(Router, ?OWNER, CursorId, accept, 1000)),
+        ?assertEqual({error, not_found},
+            quod_client_goal_router:test_cursor(Router, ?OWNER, CursorId, accept, 1000)),
+        ?assertMatch(#{correlations := 0, routes := 0},
+                     quod_client_goal_router:test_stats(Router)),
+        receive {transport_lease_released, Link, _, _, _, _, _} ->
+            error(cursor_lease_released_twice)
+        after 0 -> ok end,
+        receive {link_frame, Link, _} -> error(expired_accept_was_sent)
+        after 0 -> ok end
+    end).
+
+route_expiry_does_not_replace_an_inflight_accept_outcome_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        CursorId = <<16#52:256>>,
+        Trace = trace:session_create(?MODULE, self(), []),
+        1 = trace:process(Trace, Router, true, ['receive']),
+        try
+            open_expiring_cursor(Router, Link, Fixture, CursorId),
+            Caller = cursor_async(Router, CursorId, accept, 1000),
+            {{cursor, RequestId, CursorId, accept}, _} = sent_request(Link),
+            receive {trace, Router, 'receive', {route_expired, {?OWNER, CursorId}, _}} -> ok
+            after 1000 -> error(route_expiry_missing) end,
+            %% This call observes the owner after it processed the expiry.
+            ?assertMatch(#{correlations := 1, routes := 1},
+                         quod_client_goal_router:test_stats(Router)),
+            receive {transport_lease_released, Link, _, _, _, _, _} ->
+                error(inflight_accept_lease_released)
+            after 0 -> ok end,
+            {ok, Blob} = quod_client_result:encode({answers, 8, []}),
+            respond(Router, Link, {cursor_result, RequestId, CursorId, Blob}),
+            receive {Caller, {ok, _, {normalized, {answers, 8, []}}}} -> ok
+            after 1000 -> error(accepted_outcome_lost) end,
+            assert_released_lease(Link, Router)
+        after trace:session_destroy(Trace) end
+    end).
+
+open_expiring_cursor(Router, Link, Fixture, CursorId) ->
+    Parent = self(),
+    Caller = spawn(fun() -> Parent ! {self(), quod_client_goal_router:test_submit(
+        Router, route(), ?OWNER, maps:get(evidence, Fixture),
+        maps:get(request_bytes, Fixture), maps:get(signature, Fixture),
+        CursorId, [], quod_time:now_ms() + 300, 1000)} end),
+    {Request, _} = sent_request(Link),
+    RequestId = quod_client_goal_endpoint:request_id(Request),
+    {ok, Bindings} = quod_durable_term:encode_result(#{}),
+    {ok, Blob} = quod_client_result:encode({solution, CursorId, 7, Bindings}),
+    respond(Router, Link, {cursor_result, RequestId, CursorId, Blob}),
+    receive {Caller, {ok, _, {normalized, {solution, CursorId, 7, _}}}} -> ok
+    after 1000 -> error(cursor_open_missing) end.
+
+cursor_target_link_death_drops_the_exact_route_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          CursorId = <<16#47:256>>,
+          Caller = submit_async(Router, Fixture, CursorId, 1000),
+          {OpenRequest, _} = sent_request(Link),
+          OpenId = quod_client_goal_endpoint:request_id(OpenRequest),
+          {ok, BindingBlob} = quod_durable_term:encode_result(#{}),
+          {ok, SolutionBlob} = quod_client_result:encode(
+                                 {solution, CursorId, 7, BindingBlob}),
+          respond(Router, Link,
+                  {cursor_result, OpenId, CursorId, SolutionBlob}),
+          receive {Caller, {ok, _, {normalized, {solution, CursorId, 7, _}}}} -> ok
+          after 1000 -> error(cursor_open_result_missing) end,
+          await_stats(Router, #{correlations => 0, routes => 1}),
+          exit(Link, kill),
+          await_stats(Router, #{correlations => 0, routes => 0})
+      end).
+
+%% Current rows must follow the live router maps, while the owner-lifetime
+%% peaks survive exact cleanup.  Opening and stopping one real cursor exercises
+%% both the outbound correlation owner and the retained cursor-route owner.
+owner_stats_keep_peaks_after_cursor_cleanup_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          CursorId = <<16#48:256>>,
+          Trace = trace:session_create(?MODULE, self(), []),
+          1 = trace:process(Trace, Router, true, [procs, 'receive']),
+          try
+              Caller = submit_async(Router, Fixture, CursorId, 1000),
+              {OpenRequest, _} = sent_request(Link),
+              OpenWorker = receive_router_worker(Router),
+              assert_owner_stats(
+                Router,
+                #{outbound => 1, inbound => 0, cursor_routes => 1},
+                #{outbound => 1, inbound => 0, cursor_routes => 1}),
+
+              OpenId = quod_client_goal_endpoint:request_id(OpenRequest),
+              {ok, BindingBlob} = quod_durable_term:encode_result(#{}),
+              {ok, SolutionBlob} = quod_client_result:encode(
+                                     {solution, CursorId, 7, BindingBlob}),
+              respond(Router, Link,
+                      {cursor_result, OpenId, CursorId, SolutionBlob}),
+              receive
+                  {Caller, {ok, _,
+                            {normalized, {solution, CursorId, 7, _}}}} -> ok
+              after 1000 -> error(cursor_owner_open_result_missing)
+              end,
+              await_router_worker_cleanup(Router, OpenWorker),
+              assert_owner_stats(
+                Router,
+                #{outbound => 0, inbound => 0, cursor_routes => 1},
+                #{outbound => 1, inbound => 0, cursor_routes => 1}),
+
+              StopCaller = cursor_async(Router, CursorId, stop, 1000),
+              {{cursor, StopId, CursorId, stop}, _} = sent_request(Link),
+              StopWorker = receive_router_worker(Router),
+              {ok, StoppedBlob} = quod_client_result:encode(stopped),
+              respond(Router, Link,
+                      {cursor_result, StopId, CursorId, StoppedBlob}),
+              receive
+                  {StopCaller, {ok, _, {normalized, stopped}}} -> ok
+              after 1000 -> error(cursor_owner_stop_result_missing)
+              end,
+              await_router_worker_cleanup(Router, StopWorker),
+              assert_owner_stats(
+                Router,
+                #{outbound => 0, inbound => 0, cursor_routes => 0},
+                #{outbound => 1, inbound => 0, cursor_routes => 1})
+          after trace:session_destroy(Trace) end
+      end).
+
+receive_router_worker(Router) ->
+    receive {trace, Router, spawn, Worker, _} -> Worker
+    after 1000 -> error(router_worker_not_spawned)
+    end.
+
+await_router_worker_cleanup(Router, Worker) ->
+    %% A caller reply precedes worker exit, but does not order delivery of its
+    %% DOWN to the router. Observe that reception; the following stats call
+    %% can only run after the router has installed its cleanup result.
+    receive {trace, Router, 'receive', {'DOWN', _, process, Worker, normal}} -> ok
+    after 1000 -> error(router_worker_cleanup_not_received)
+    end.
+
+router_death_after_send_preserves_request_uncertainty_test() ->
+    Parent = self(),
+    Link = spawn(fun() -> link_loop(Parent) end),
+    OpenFun = open_fun(Link),
+    {ok, Router} = quod_client_goal_router:test_start_link(OpenFun),
+    unlink(Router),
+    Fixture = fixture(),
+    Evidence = maps:get(evidence, Fixture),
+    Caller = submit_async(Router, Fixture, none, 1000),
+    _ = sent_request(Link),
+    MRef = monitor(process, Router),
+    exit(Router, kill),
+    receive {'DOWN', MRef, process, Router, killed} -> ok
+    after 1000 -> error(router_down_missing)
+    end,
+    receive {Caller, {error, {uncertain, Evidence}}} -> ok
+    after 1500 -> error(router_restart_erased_uncertainty)
+    end,
+    Link ! stop.
+
+with_router(Fun) ->
+    Parent = self(),
+    Link = spawn(fun() -> link_loop(Parent) end),
+    Release = fun(Peer, Endpoint, Channel, Ref) ->
+                      Parent ! {transport_lease_released, Link, self(), Peer,
+                                Endpoint, Channel, Ref}, ok
+              end,
+    {ok, Router} = quod_client_goal_router:test_start_link(open_fun(Link), Release),
+    try Fun(Router, Link, fixture())
+    after stop_router(Router), Link ! stop end.
+
+open_fun(Link) ->
+    Parent = self(),
+    fun(Peer, _Endpoint, Channel) ->
+            Ref = make_ref(),
+            Parent ! {transport_lease_owner, Link, self(), Ref},
+            self() ! {link_up, Ref, Peer, Channel, Link},
+            Ref
+    end.
+
+fixture() ->
+    fixture(read).
+
+fixture(Mode) when Mode =:= read; Mode =:= execute ->
+    quod_ct:signed_goal_fixture(
+      #{network => <<16#45:256>>, target => {<<"quod:test">>, <<16#46:256>>},
+        key_pair => quod_identity:generate(), mode => Mode,
+        deadline => quod_time:now_ms() + 5000,
+        goal_text => <<"true.">>}).
+
+with_outcome_metrics(Fun) ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_routertest">>),
+        Fun()
+    after
+        true = unregister(quod_metrics),
+        Placeholder ! stop
+    end.
+
+outcome_counter(Producer) ->
+    Label = atom_to_binary(Producer, utf8),
+    case prometheus_counter:value(
+           quod_client_outcome_unknown_total, [Label]) of
+        undefined -> 0;
+        Value -> Value
+    end.
+
+submit(Router, Fixture, CursorBinding, TimeoutMs) ->
+    quod_client_goal_router:test_submit(
+      Router, route(), ?OWNER, maps:get(evidence, Fixture),
+      maps:get(request_bytes, Fixture), maps:get(signature, Fixture),
+      CursorBinding, [], quod_time:now_ms() + 5000, TimeoutMs).
+
+submit_async(Router, Fixture, CursorBinding, TimeoutMs) ->
+    Parent = self(),
+    spawn(fun() ->
+                  Parent ! {self(),
+                            submit(Router, Fixture, CursorBinding, TimeoutMs)}
+          end).
+
+cursor_async(Router, CursorId, Command, TimeoutMs) ->
+    Parent = self(),
+    spawn(fun() ->
+                  Parent ! {self(), quod_client_goal_router:test_cursor(
+                                           Router, ?OWNER, CursorId,
+                                           Command, TimeoutMs)}
+          end).
+
+route() -> #{node_key => ?PEER, endpoint => ?ENDPOINT}.
+
+link_loop(Parent) ->
+    receive
+        {send_ordered, Frame} ->
+            Parent ! {link_frame, self(), Frame},
+            link_loop(Parent);
+        stop -> ok
+    end.
+
+sent_request(Link) ->
+    receive
+        {link_frame, Link, Frame} ->
+            {ok, Request} = quod_client_goal_endpoint:route_request(Frame),
+            {Request, Frame}
+    after 1000 -> error(request_frame_missing)
+    end.
+
+respond(Router, Link, Response) ->
+    {ok, Frame} = quod_client_goal_endpoint:encode_response(Response),
+    Router ! {quod_message, {?PEER, Link},
+              quod_client_goal_endpoint:channel(), Frame},
+    ok.
+
+respond_opaque(Router, Link, Response) ->
+    InnerBlob = term_to_binary(Response, [deterministic]),
+    Frame = term_to_binary(
+              {quod_client_goal_endpoint, 1, InnerBlob}, [deterministic]),
+    Router ! {quod_message, {?PEER, Link},
+              quod_client_goal_endpoint:channel(), Frame},
+    ok.
+
+await_stats(_Router, _Expected, 0) -> error(router_cleanup_timeout);
+await_stats(Router, Expected, Remaining) ->
+    Stats = quod_client_goal_router:test_stats(Router),
+    case maps:with(maps:keys(Expected), Stats) =:= Expected of
+        true -> ok;
+        false ->
+            receive after 1 -> ok end,
+            await_stats(Router, Expected, Remaining - 1)
+    end.
+
+await_stats(Router, Expected) -> await_stats(Router, Expected, 1000).
+
+assert_owner_stats(Router, Current, Peak) ->
+    Stats = quod_client_goal_router:test_stats(Router),
+    ?assertEqual(Current, maps:get(owner_current, Stats)),
+    ?assertEqual(Peak, maps:get(owner_peak, Stats)).
+
+stop_router(Router) ->
+    case is_process_alive(Router) of
+        true -> gen_server:stop(Router);
+        false -> ok
+    end.

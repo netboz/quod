@@ -1,0 +1,37 @@
+{
+  "debug_outputs": {
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-subjects/candidate06/source/client/godot/.godot/mono/temp/bin/Debug/BouncyCastle.Cryptography.dll": {
+      "sha256": "ef92fc661e8d7ba8ec4d39a7cdfcdba41f14cb327f0d24fe79d0b5bb428899b5",
+      "bytes": 5155728
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-subjects/candidate06/source/client/godot/.godot/mono/temp/bin/Debug/GodotSharp.dll": {
+      "sha256": "2afe2686aacfefac36da6601b59aeb05e560f06e4970cd5036100acd2ca4249d",
+      "bytes": 5928960
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-subjects/candidate06/source/client/godot/.godot/mono/temp/bin/Debug/GodotSharpEditor.dll": {
+      "sha256": "195c81c1ccb7c05559fc79b4acbb9025154a74ad99ecb9bb3747b5fbfc2ed1d1",
+      "bytes": 303104
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-subjects/candidate06/source/client/godot/.godot/mono/temp/bin/Debug/Quod.deps.json": {
+      "sha256": "715b2ae60941f8cf1b30e53f2f2a8c79a48f9ef988f65d5b48ba93e8d695218b",
+      "bytes": 2227
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-subjects/candidate06/source/client/godot/.godot/mono/temp/bin/Debug/Quod.dll": {
+      "sha256": "5626ced1188647665082bfed9c3276d0e3921978b2ed27ae0d7778fbd74d28f2",
+      "bytes": 1085440
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-subjects/candidate06/source/client/godot/.godot/mono/temp/bin/Debug/Quod.pdb": {
+      "sha256": "7aecb59a900cd05315a3752ea6fe003b322e390b1365c8743e49a17be43ad951",
+      "bytes": 502040
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-subjects/candidate06/source/client/godot/.godot/mono/temp/bin/Debug/Quod.runtimeconfig.json": {
+      "sha256": "320bc549395b687be98f139de2ba90a8ef7eebd31dcac1744d05ee7b8b4c4eac",
+      "bytes": 294
+    }
+  },
+  "engine": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+    "sha256": "fc1bd592b5e771c65d52968f99835b4f2b7fe7b7cbc141e202cb63e01c95ec4d"
+  },
+  "packaged": false
+}

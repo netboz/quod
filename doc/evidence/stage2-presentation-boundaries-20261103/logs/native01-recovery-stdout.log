@@ -1,0 +1,3 @@
+PASS delivery failure is not certified nonexecution
+PASS one execution send retains original durable work
+PASS original signed work survives store reopen

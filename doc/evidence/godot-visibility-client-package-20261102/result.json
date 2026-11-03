@@ -1,0 +1,427 @@
+{
+  "passed": true,
+  "package_passed": true,
+  "evidence_verified": true,
+  "all_selected_cases_passed": true,
+  "all_attempts_passed": false,
+  "product": {
+    "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-visibility-20261102/inputs/client-visibility-product01-manifest.json",
+    "sha256": "40276e0371d70153f701eb15883e06c05ca97fe4ec21f78b4079cb79615b3bda",
+    "inputs": 98,
+    "exports": 196,
+    "export_bytes": 193600488,
+    "application_changed": false,
+    "rebuilt": false,
+    "trace_free": true,
+    "distributable": false
+  },
+  "archives": [
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-visibility-linux-x86_64-private01.tar.gz",
+      "sha256": "91891ac46fb1ccbe3657e02f65d8a58dccf7bd5228b2fe2adbb4bab55ed9e286",
+      "bytes": 78135371,
+      "files": 207
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-visibility-linux-x86_64-repro02.tar.gz",
+      "sha256": "91891ac46fb1ccbe3657e02f65d8a58dccf7bd5228b2fe2adbb4bab55ed9e286",
+      "bytes": 78135371,
+      "files": 207
+    }
+  ],
+  "extraction": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility clean inspection01/quod-linux-x86_64",
+  "package_checks": 9,
+  "unchanged_ELF_count": 16,
+  "GLIBC_floor": "2.44",
+  "ordinary_launch": {
+    "child_exit": 0,
+    "wrapper_exit": 0,
+    "normal_close_exit": 0,
+    "mapped_exact_owned_close": true,
+    "packaged_CoreCLR": true,
+    "qualification_flag": false,
+    "XR": false
+  },
+  "builds": {
+    "client-visibility-package-companion01-manifest.json": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/client-visibility-package-companion01-manifest.json",
+      "sha256": "b89c9b9cf2fe76825f3e1d9c0b5093bb2ba3a1262436084d2908febca6898d8e",
+      "production_inputs": 98,
+      "supplied": 99,
+      "exports": 196,
+      "five_phases_exit0": true
+    },
+    "client-visibility-package-companion02-manifest.json": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/client-visibility-package-companion02-manifest.json",
+      "sha256": "4854d969cd4d0491fac02c9f43ed143a51600bf899c88bf18bd5d39c5bb754bf",
+      "production_inputs": 98,
+      "supplied": 99,
+      "exports": 196,
+      "five_phases_exit0": true
+    },
+    "client-visibility-vr-visual-companion01-manifest.json": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/client-visibility-vr-visual-companion01-manifest.json",
+      "sha256": "6487ed72423564586080030a180b87f64473a68a46b81bf9160773946e1a9f17",
+      "production_inputs": 98,
+      "supplied": 100,
+      "exports": 196,
+      "five_phases_exit0": true
+    }
+  },
+  "selected_journey": "visibility-package-journey02",
+  "cases": {
+    "visibility-package-journey01": {
+      "passed": false,
+      "failure": "AssertionError: ",
+      "children": {
+        "server": 0,
+        "client-initial": 1
+      },
+      "checks": {},
+      "passing_prefix": {
+        "client-initial": 14
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-initial-stdout": true,
+        "client-initial-stderr": true
+      },
+      "receipt_sha256": "097d10039e13598892c5d730422ecaff83370ef47267aa0540e687d348f7fb23",
+      "post_completion_trigger": null,
+      "reopen_executed": false
+    },
+    "visibility-package-journey02": {
+      "passed": true,
+      "failure": null,
+      "children": {
+        "server": 0,
+        "client-initial": 0,
+        "client-reopen": 0
+      },
+      "checks": {
+        "initial": 93,
+        "reopen": 68
+      },
+      "passing_prefix": {
+        "client-initial": 93,
+        "client-reopen": 68
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-initial-stdout": true,
+        "client-initial-stderr": true,
+        "client-reopen-stdout": true,
+        "client-reopen-stderr": true
+      },
+      "receipt_sha256": "d5babae02fc276e41b98d3d14acd3151618f1996a4855e3e87c9211fa566160f",
+      "post_completion_trigger": null,
+      "reopen_executed": true
+    }
+  },
+  "final_managed_states": {
+    "initial": {
+      "scenes": 0,
+      "sockets": 0,
+      "subscriptions": 0,
+      "sources": 0,
+      "appearances": 0,
+      "captures": 0,
+      "XR": false
+    },
+    "reopen": {
+      "scenes": 0,
+      "sockets": 0,
+      "subscriptions": 0,
+      "sources": 0,
+      "appearances": 0,
+      "captures": 0,
+      "XR": false
+    }
+  },
+  "server_sources": {
+    "src/quod_material_admission.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_material_admission.erl",
+      "sha256": "ceef0436b16a5127d6e6ae30b60897470084b12cf7ecf28255608eed0753ce2a",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_material_admission.beam",
+        "sha256": "1ced9a9336083dd4c62ee8bfebfc0ee3978c616458861c91394c28c6b58131b5",
+        "bytes": 6952
+      }
+    },
+    "src/quod_proof_session.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_proof_session.erl",
+      "sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_proof_session.beam",
+        "sha256": "f54d55524101d44265048eeb477d25af0b53c36ceb144db087de69ab302c85f8",
+        "bytes": 44572
+      }
+    },
+    "src/quod_scope_session.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_scope_session.erl",
+      "sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_scope_session.beam",
+        "sha256": "b108826f39b3a813e8c3a2f3126bebe76bba951c8a6801532632fd9853b4b30f",
+        "bytes": 82156
+      }
+    },
+    "src/quod_scope_wire.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_scope_wire.erl",
+      "sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_scope_wire.beam",
+        "sha256": "10090cbe9e38213d33a0d23377e623853596f1fdca7de812fc96133c717a937e",
+        "bytes": 45076
+      }
+    },
+    "src/predicates/quod_ask.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_ask.erl",
+      "sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_ask.beam",
+        "sha256": "956f437c5918b3b340216443a42b576ad030e3da1c0de7a389e710d29b2603bf",
+        "bytes": 90100
+      }
+    },
+    "src/quod_wire_term.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_wire_term.erl",
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_wire_term.beam",
+        "sha256": "ad069a6e52a47f1b592df723e02e810e9067dd438e82f0adee42a6e354033895",
+        "bytes": 32932
+      }
+    },
+    "src/quod_ontology_name.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_ontology_name.erl",
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_ontology_name.beam",
+        "sha256": "d771eb3cc986035004489969e1cb2cbc9c8e4c887b4fd6949f51692687e491df",
+        "bytes": 2700
+      }
+    },
+    "priv/ontologies/material_policy.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-material_policy.pl",
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169"
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-common_predicates.pl",
+      "sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "48dba94f659bfd0cd9662764cba224f719c8350c76d4874ca3f28de0a58b7f50",
+        "current_source_sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-visibility-package-journey02-server/common_predicates.pl"
+      }
+    },
+    "priv/ontologies/quod_space.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_space.pl",
+      "sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38",
+        "current_source_sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-visibility-package-journey02-server/quod_space.pl"
+      }
+    },
+    "priv/ontologies/gui_tools.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-gui_tools.pl",
+      "sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "54e497c546088f20becc8bfbb434ab54843924b3ec9d30a428d1ca817ab9f39a",
+        "current_source_sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-visibility-package-journey02-server/gui_tools.pl"
+      }
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_gui.pl",
+      "sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "969b6ab3eafd67cf5fd6f36c50b1657c90b34fa134d61657d1da50ec16863339",
+        "current_source_sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-visibility-package-journey02-server/quod_gui.pl"
+      }
+    },
+    "priv/ontologies/gui_forms.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-gui_forms.pl",
+      "sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b",
+      "presentation_overlay": {
+        "qualified_parent_sha256": "6f4623cd25ced128b0813cfdb5356154726483f0992dbf83ee87e19bb1d3b9e2",
+        "current_source_sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b",
+        "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-visibility-package-journey02-server/gui_forms.pl"
+      }
+    },
+    "src/quod_client_view.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-journey02-server-quod_client_view.erl",
+      "sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+      "compiled_object_sha256": "98259c46743cdd6dd28de6f7df13535de31923ff1b647287d428af35ad5d69a1",
+      "actual_qualification": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/space-name-owner03.json",
+      "qualification_sha256": "ab75350938e1025e6831328f6761123d50e6446201ec22daac7b25fb4a203f71"
+    }
+  },
+  "server_runtime_rebuilt": false,
+  "shared_question_owners_reused": {
+    "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-attention-review-20261102/inputs/shared-question-owners.json",
+    "sha256": "c628c37325b2c6e9cd553c7528cdf4ae55d27025b95573e405be84dd73f4ed34",
+    "current_resources": [
+      "priv/ontologies/gui_instance.pl",
+      "priv/ontologies/user_instance.pl"
+    ]
+  },
+  "browser_reused": {
+    "checks": 33,
+    "receipt_sha256": "8ed5c167b5e655903a73f56a35dd6e25ff16078e0a19d8810b07fb60d1e6924a",
+    "source_only": true,
+    "browser_runtime": false
+  },
+  "rasters": {
+    "reopened-spatial.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/reopened-spatial.png",
+      "sha256": "6cbafd9d7f86a514142647d57515607d2a02d84eb0ab45533fbcdbdb0c758fdb",
+      "bytes": 14795,
+      "viewed": true
+    },
+    "reopened-associated-form.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/reopened-associated-form.png",
+      "sha256": "aee4cf8d55ea475ea308498900dcad7701809c7ff44f473e8dfdd8bb176521bd",
+      "bytes": 73721,
+      "viewed": true
+    },
+    "reopened-attention.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/reopened-attention.png",
+      "sha256": "aa8024b639b205bd60879a23b0f1d4c7bf713461caec47c5691d51ca272cd2bb",
+      "bytes": 44389,
+      "viewed": true
+    },
+    "associated-form.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/associated-form.png",
+      "sha256": "8a40b7f90a5c17f3133c83b08719794fbbe0bb9e4a38656fec13bcce65f32ae0",
+      "bytes": 73781,
+      "viewed": true
+    },
+    "spatial.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/spatial.png",
+      "sha256": "6cbafd9d7f86a514142647d57515607d2a02d84eb0ab45533fbcdbdb0c758fdb",
+      "bytes": 14795,
+      "viewed": true
+    },
+    "attention.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/attention.png",
+      "sha256": "f99e5d93640b37c3dabc8957a7bb0e551f34dde769cb1490a51cc62274f3d932",
+      "bytes": 44583,
+      "viewed": true
+    },
+    "returned-form.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/returned-form.png",
+      "sha256": "5d11493d4895eca937c7eafcd9e59e8c6767cc08357222246123976bedbd540e",
+      "bytes": 86779,
+      "viewed": true
+    },
+    "reopened-returned-form.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey02/sandbox/work/reopened-returned-form.png",
+      "sha256": "aee4cf8d55ea475ea308498900dcad7701809c7ff44f473e8dfdd8bb176521bd",
+      "bytes": 73721,
+      "viewed": true
+    }
+  },
+  "raster_limits": [
+    "Desktop initial and reopened forms visibly show Analyzer settings, Measurement, field and explicit action.",
+    "Both scene-only spatial textures show the two occurrences; they are not XR eye captures or a full associated-panel visibility proof.",
+    "Long descriptive occurrence labels overlap in the narrow desktop scene pane. No fixture spacing or production fix is included."
+  ],
+  "artifacts_ready": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/artifacts-ready.json",
+    "sha256": "4efeceb493d3df28eb0e468360de962b331f44b25f0f259e93f45be64551a343",
+    "state": "ARTIFACTS_READY_TO_LAUNCH",
+    "launch_authorized": false
+  },
+  "retained_new_failure": "journey01 asserted visibility of the deliberately hidden duplicate FormPanel title; whole1/client1/server0/4EOF/14 prefix. Diagnostic02 checks the actual representation-title outside the scroll; no production change.",
+  "retained_parent_failures": [
+    "preview06: 118 functional checks but wholeFAIL original60s noEOF",
+    "interaction06: wholeFAIL unclassified compound assertion",
+    "all previous human/retirement failures unchanged"
+  ],
+  "production_line_delta": {
+    "added": 0,
+    "removed": 0
+  },
+  "changed_inherited_paths": [],
+  "historical_shutdown_fixed": false,
+  "native_XR_or_host_input": false,
+  "human_HMD_acceptance": false,
+  "full_M4_M5_acceptance": false,
+  "future_launch_authorized": false,
+  "limits": [
+    "Private current-host package only; GLIBC2.44 and matching qualified server/trust required.",
+    "Fresh visual companion is built but has not been launched. Actual Focused/CanRender/stereo/signed admission remains required.",
+    "Visual admission does not grant interaction or prove headset pixels, reach or readability.",
+    "No full certified-negative application completion, broad browser appearance support, or historical shutdown fix."
+  ],
+  "wrappers": {
+    "visibility-package-card01": {
+      "true_exit": 0,
+      "receipt_sha256": "6e6896ea4e01104b6aa5d2d006e59c8c42b553f1389a9df049b6602a6d66c4a2"
+    },
+    "visibility-package-checks01": {
+      "true_exit": 0,
+      "receipt_sha256": "0f47fc0b0344827ce15adddec99c6c9638df80e4af0c121394d18919638a2180"
+    },
+    "visibility-package-companion01-build": {
+      "true_exit": 0,
+      "receipt_sha256": "8710cbb200f887d48dc5d77c237119907449ac9080fe2593f18b55a88941b40b"
+    },
+    "visibility-package-companion02-build": {
+      "true_exit": 0,
+      "receipt_sha256": "e18d484b1b7b0c3d57b3e36d4d8fc214995becef7580bc017b71929f88460cbe"
+    },
+    "visibility-package-inspection01": {
+      "true_exit": 0,
+      "receipt_sha256": "85a72bd4630d430a425ca4d438b2b910645595b675eb23fca3876379bca3124c"
+    },
+    "visibility-package-isolation-probe01": {
+      "true_exit": 0,
+      "receipt_sha256": "c732265120c51554be324433abdf593653c5d946543f57b79819f66dd0e1ea84"
+    },
+    "visibility-package-journey01": {
+      "true_exit": 1,
+      "receipt_sha256": "f2cccf9d4bf33c062f89b49312834f9869c16af251a9489c6bb7040fe695e08a"
+    },
+    "visibility-package-journey02": {
+      "true_exit": 0,
+      "receipt_sha256": "5809ffbdf13526e9988c18f16259afdef23b1ffd959037b24cabaf8e01c9c9b9"
+    },
+    "visibility-package-ordinary-launch01": {
+      "true_exit": 0,
+      "receipt_sha256": "6a711b1d80633e518b051a4c624a88f2b9e4691323e6da027a5acd4f43150b49"
+    },
+    "visibility-package-preparation01": {
+      "true_exit": 0,
+      "receipt_sha256": "e4c35009d5b23eb4ad2bd1f439337551cb1b104ffa9c8feb8e106177e660836c"
+    },
+    "visibility-package-private01": {
+      "true_exit": 0,
+      "receipt_sha256": "5a71356aba7b8e4675ffed08dda2ab0dd34f594f9d356b395a99afb282b4ba68"
+    },
+    "visibility-package-repro02": {
+      "true_exit": 0,
+      "receipt_sha256": "002fe6a124994f184dad05d1d0840d73bbfd4bc32ede5104642b4850d43e1dc4"
+    },
+    "visibility-vr-visual-companion01-build": {
+      "true_exit": 0,
+      "receipt_sha256": "601d8a8ba78d3ae1f11a5920cab899fe8c92d6c67838e59191c8bc37b6dd244e"
+    }
+  },
+  "evidence_index": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/visibility-package-evidence01.json",
+    "sha256": "54a24b37d2f17c110be402d3fd0403a5b5fd50ff1d11e5e709e9f236ed70153c",
+    "records": 1827
+  },
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/visibility-package-qualified01-hashes.json",
+    "sha256": "6c63b63eac8df5259edca607e2097e32fc12aebbd53264767ace8655eb5762c8",
+    "records": 178800,
+    "pathless_preserved": true
+  }
+}

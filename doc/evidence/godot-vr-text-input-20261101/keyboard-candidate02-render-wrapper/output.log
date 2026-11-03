@@ -1,0 +1,4 @@
+PASS ordinary native pointer focuses the actual editable spatial field
+PASS actual focused spatial field raster retained
+PASS focusing an editable spatial native field exposes the adjacent keyboard
+{"passed": false, "children": {"client": 1}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 1}

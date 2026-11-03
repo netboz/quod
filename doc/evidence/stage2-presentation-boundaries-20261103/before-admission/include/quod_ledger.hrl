@@ -1,0 +1,165 @@
+%%% include/quod_ledger.hrl
+%%% Canonical types + records for the quod content/ordering layer
+%%% (`quod_simplex` consensus, `quod_prolog` fact engine, `quod_ledger_store`, and their tests).
+%%% Defined ONCE here and `-include`d everywhere — the single source of truth.
+-ifndef(QUOD_LOG_HRL).
+-define(QUOD_LOG_HRL, true).
+
+-type log_index() :: non_neg_integer().      %% 0 = empty-log / origin sentinel; entries are 1..N
+-type pubkey()    :: binary().               %% Ed25519 public key (32 bytes)
+-type endpoint()  :: {inet:hostname(), inet:port_number()}.   %% where a node is dialed — a routing hint
+%% A node's STABLE identity is its pubkey. (Transitional: the no-identity/test path still uses an
+%% `endpoint()` as the id, so `node_id()` admits both until those suites migrate to keypairs.)
+-type node_id()   :: pubkey() | endpoint().
+%% Identity is the `node_id()` (the pubkey); `endpoint()` is only "where it is now" (a seed/contact/
+%% redirect target, resolved on connect). Membership entries are node_id-only, so a host move never
+%% rewrites the durable log; the address travels as a hint (gossip / the link header).
+
+%% A Prolog clause; identity is its content only (Head + Body).
+-type clause() :: {Head :: term(), Body :: term()}.   %% Body == true for a plain fact
+%% The differ's ordered material operations: fact mutations plus explicit
+%% occurrences which the reducer publishes without mutating ontology facts.
+-type op()     :: {assert, clause()} | {asserta, clause()}
+                | {retract, clause()} | {event, term()}.
+%% The read-set: one exact mutation-version token per predicate {Functor, Arity}.
+%% This header owns the token alphabet — it is part of the signed transaction
+%% bytes; the MVCC store implements it (`quod_erlog_db_mvcc:version_token/2`).
+%% `{present, Slot}`/`{absent, Slot}` name the last committed mutation height at
+%% the reader's snapshot; `absent` means that mutation left no clauses to serve
+%% (a retraction that emptied the predicate, or an abolish tombstone), so
+%% absent → present → absent still conflicts by height. `never_present` means no
+%% committed mutation existed; `static` names an unwritable built-in/compiled
+%% predicate. The transient `staged` marker used during same-block validation is
+%% deliberately NOT part of this alphabet and is rejected on the wire.
+-type read_token() :: never_present
+                    | {present, non_neg_integer()}
+                    | {absent, non_neg_integer()}
+                    | static.
+-type prolog_symbol() :: atom() | {'$quod_symbol', binary()}.
+-type read_check() ::
+        #{ {Functor :: prolog_symbol(), Arity :: non_neg_integer()} =>
+               read_token(),
+           {1, binary(), <<_:256>>} =>
+               {<<_:256>>, {0, <<_:256>>} | {1, <<_:256>>, <<_:256>>, <<_:256>>},
+                pos_integer(), 0 | 1 | 2, pos_integer(), pos_integer()} }.
+
+%% The committed change record. Every non-genesis transaction carries an Ed25519
+%% signature over canonical bytes bound to the TARGET's immutable identity
+%% `{Ns, GenesisAnchor, AuthorAdmission}` (owned by `quod_transaction`);
+%% `author` is the submitting node's 32-byte public key and AuthorAdmission is
+%% its current continuous membership generation. Only anchored genesis uses
+%% `sig = none`.
+%% A transaction is built from a sealed local plan (`m:quod_dtx`): `origin`
+%% names the proof's origin ontology, `proof_id` the distributed proof, and
+%% `plan_digest` the canonical unsigned plan bytes — `none` only for genesis.
+-record(transaction, {tx_id      :: binary(),            %% target-bound digest of the complete semantic write
+                 role = application :: application |
+                                       {remote_application, term(), term(), binary()} |
+                                       {remote_claim, term(), [tuple()], [term()]} |
+                                       {remote_complete, term(), binary(), term()},
+                                                        %% one canonical content family: Prolog application or
+                                                        %% operation metadata; evidence has dedicated fields below
+                 evidence = none :: none | {term(), tuple()} |
+                                           {applications, [{term(), tuple()}]},
+                                                        %% exact referenced record + certified ledger ref;
+                                                        %% signed but excluded from semantic identity
+                 foreign_reads = [] :: [term()],       %% certified read-only plan statements;
+                                                        %% signed but excluded from semantic identity
+                 origin       :: {binary(), binary()},%% proof origin identity {OriginNs, OriginAnchor}; genesis = {Ns, <<0:256>>}
+                 proof_id = none :: binary() | none,  %% 32-byte distributed-proof id; none only for genesis
+                 plan_digest = none :: binary() | none, %% SHA-256 of the sealed plan's canonical bytes; none only for genesis
+                 goal = undefined :: binary() | undefined, %% canonical atom-safe goal blob; undefined only for genesis
+                 result = undefined :: binary() | undefined, %% canonical atom-safe sorted bindings blob; undefined only for genesis
+                 diff         :: [op()],              %% concrete fact mutations and explicit events
+                 read_check   :: read_check(),        %% what the proof relied on (OCC)
+                 effects = [] :: [quod_effect:effect()], %% bounded typed direct effects; never callbacks/goals
+                 request_auth = none :: none | quod_client_goal:request_auth(),
+                                                        %% exact signed user intent; none for node/genesis work
+                 auth_transcript = none :: none | {agent_goal_v1, binary()},
+                                                        %% one canonical top-level can_invoke transcript
+                 author = none :: node_id() | none,    %% set to the submitting node's pubkey before ingress
+                 author_seq = 0 :: non_neg_integer(), %% signed, strictly increasing per author; 0 only before ingress/genesis
+                 submitted_at = 0 :: non_neg_integer(), %% client submit wall-clock (ms since Unix epoch); 0 = unset/genesis. Advisory (self-reported).
+                 sig = none   :: binary() | none,     %% 64-byte Ed25519 signature; none only for genesis
+                 signed_bytes = none :: binary() | none, %% exact canonical bytes covered by `sig`; a derived view never replaces them
+                 claim_view = none :: none | tuple(), %% decode-owned authenticated plans/request; never serialized
+                 authentication = none :: none | {binary(), binary(), binary()}}). %% checked author/signature/bytes; never serialized
+
+%% --- DispersedSimplex consensus records (doc/outdated/simplex_extended.pdf) ---
+%% Protocol views are era-local and distinct from material ledger indices.
+%% Genesis has the fixed `genesis` era/view 0; its hash derives the first era.
+%% A later era's virtual view-0 root names the preceding terminal membership
+%% block by its ORIGINAL hash, without re-encoding that block in the new era.
+-type slot() :: non_neg_integer().
+-type consensus_era() :: genesis | <<_:256>>.
+-type protocol_ref() :: {consensus_era(), slot(), <<_:256>>}.
+
+%% One proposed/committed block payload.  The single `{batch, Items}` family is
+%% homogeneous: either ordinary transactions, or canonical DTX-control blobs
+%% from one protocol phase.  The ledger classifier rejects empty, mixed,
+%% malformed, duplicate, and non-canonical batches.
+-type entry_data() :: {batch, nonempty_list(#transaction{})}
+                    | {batch, nonempty_list({dtx, quod_atomic:control()})}.
+-type block_payload() :: empty | entry_data().
+
+%% A proposed block for a slot. `payload` is one tagged `block_payload()` (a
+%% membership change remains an ordinary #transaction asserting/retracting
+%% `peer_admitted`). `parent` is the exact era/view/hash of its notarized
+%% ancestor (or the era's virtual root). It may be newer than the durable
+%% material head while consensus is pipelined.
+%% `height` is the signed material position: genesis is 1, a material child
+%% advances its parent's height by one, and an empty carrier preserves it.
+%% This binds an exact foreign claim without reconstructing unrelated history.
+%% `timestamp` is the leader's propose wall-clock (ms since Unix epoch) — the canonical block time (cf.
+%% Bitcoin nTime / Ethereum block.timestamp / CometBFT block.Time). It is inside the exact producer-owned
+%% `block_bytes`, so a committed block's timestamp is covered by its cert. The
+%% leader sets it monotonic (≥ the parent block's timestamp); validators reject a proposal that goes
+%% backwards. Carriers inherit their parent's time; genesis is fixed at zero. The decoded
+%% fields are only a local view of those hashed bytes. Future hardening: a
+%% CometBFT-style voting-power-weighted median of validator timestamps instead of the leader's single clock.
+-record(block, {slot      :: slot(),
+                era       :: consensus_era(),
+                parent    :: none | protocol_ref(),
+                height    :: pos_integer(),
+                payload   :: block_payload(),
+                timestamp = 0 :: non_neg_integer(),
+                block_bytes = none :: binary() | none}). %% producer-owned canonical identity; other fields are its decoded view
+
+%% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
+%% `complaint` (advance the protocol view without a material row). `block_hash`
+%% binds a support/commit share to a block (`none` for an era/view complaint). `signer` = the validator's pubkey (node_id);
+%% `sig` = Ed25519 over the canonical share bytes (`quod_simplex:share_bytes/4`),
+%% including the locally-derived namespace/genesis consensus domain.
+-record(share, {kind       :: support | commit | complaint,
+                era        :: <<_:256>>,
+                slot       :: slot(),
+                block_hash :: binary() | none,
+                signer     :: node_id(),
+                sig        :: binary()}).
+
+%% A quorum certificate = a bag of ≥⅔ `share`s of the SAME (kind, era, view, block_hash) from distinct
+%% validators. `sigs` = `[{signer_pubkey, sig}]`. Verification requires both the known validator set
+%% and the trusted local namespace/genesis domain — this IS the P2 relayed-commit proof: a subscriber
+%% verifies a block without trusting the relay or accepting a certificate from another ontology/chain.
+-record(cert, {kind       :: support | commit | complaint,
+               era        :: <<_:256>>,
+               slot       :: slot(),
+               block_hash :: binary() | none,
+               sigs       :: [{node_id(), binary()}]}).
+
+%% A committed material entry retains the exact tagged block payload.
+%% Genesis is material height 1, protocol genesis/view 0. Later heights are
+%% contiguous regardless of skipped views or empty protocol carriers.
+%% Native records are decoded views, never an alternate append interface.
+%% `cert` is the compact CommitQC of a selected finalizing descendant (or this
+%% block). It requires verified hash-linked ancestry in the archive; the codec
+%% alone does not establish finality. Genesis has no certificate.
+-record(entry, {index       :: log_index(),
+                data        :: entry_data(),
+                timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's covered timestamp for local consumers;
+                                                    %% the artifact retains the block view bound to `block_bytes`.
+                block_bytes = none :: binary() | none, %% exact committed block bytes
+                cert = none :: term()}). %% A decoded view is not a finality verdict;
+                                        %% the forward verifier checks certificate shape/signatures.
+
+-endif.

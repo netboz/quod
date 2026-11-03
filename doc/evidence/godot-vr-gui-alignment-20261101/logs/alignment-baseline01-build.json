@@ -1,0 +1,45 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-vr-gui-alignment-20261101/build.py",
+    "alignment-baseline01"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "65d9fc0363ce3660922a070d9e6edcb599a126352fd8d6bb3b30e6675c02c7af",
+    "hashes.py": "65aabc9c5a262d26e784bda8eeee52e3e9cde767ee74b8f1330a1628c8161c3e",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "signed.py": "ca1c995bea89280843d2afe15d1bdc5445458c5209764cd1e86b4ad3790a283f",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-01T19:49:16Z",
+  "elapsed_seconds": 21.223215341567993,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/alignment-baseline01-build/stdout.raw",
+      "sha256": "c26fee1cdbc6b11e62e920b526a3060f451225c02e5e4b51a6b8e2577e64585f",
+      "bytes": 11015
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/alignment-baseline01-build/stderr.raw",
+      "sha256": "b5d60ad742a3b99f5128f5e5a146e0f4801696783c9987e8770b25a793ea33f6",
+      "bytes": 667
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/logs/alignment-baseline01-build-stdout.log",
+      "sha256": "c26fee1cdbc6b11e62e920b526a3060f451225c02e5e4b51a6b8e2577e64585f",
+      "bytes": 11015
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/logs/alignment-baseline01-build-stderr.log",
+      "sha256": "b5d60ad742a3b99f5128f5e5a146e0f4801696783c9987e8770b25a793ea33f6",
+      "bytes": 667
+    }
+  }
+}

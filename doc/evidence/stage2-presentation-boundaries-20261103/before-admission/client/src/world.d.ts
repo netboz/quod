@@ -1,0 +1,70 @@
+import type { SignedIdentity, AgentReference, SignedGoalOptions } from './signed-client.js'
+export type ProofView = { title: string; goal: string; results: string; run: string; next: string; accept: string; stop: string; resolve: string }
+export type CodeView = { title: string; predicate: string; source: string; editable: boolean;
+  new_predicate?: string; results?: string; run?: string; accept?: string; stop?: string;
+  create?: string; resolve?: string }
+export type GuiComponent = {
+  kind: string; role: string; label: string
+  help?: string; enabled?: boolean; readonly?: boolean
+  columns?: number; visibleRows?: number; percent?: number
+  image?: string; headings?: string[]
+  range?: { min: number; max: number; step: number }; unit?: string
+  required?: boolean; multiple?: boolean; maxBytes?: number; options?: { value: string; label: string; cells?: string[] }[]
+  layout?: 'column' | 'row' | 'grid'; children?: GuiComponent[]
+}
+export type GuiView = { title: string; enabled?: boolean; layout?: 'column' | 'row' | 'grid'; fields: GuiComponent[] }
+export type OntologyReference = { namespace: string; anchor: Uint8Array }
+export type EidolonChoice = { purpose: string; style: string; recipe: OntologyReference & { name: string } }
+export type EidolonWorkspace = { target: OntologyReference; tools: OntologyReference; selection?: PrologTerm | null; view: GuiView }
+export type EidolonRepresentation = { kind: 'workspace'; controller: 'prolog_editor' | 'proof_console' | 'space_library'; workspace: EidolonWorkspace }
+  | { kind: 'lens'; target: OntologyReference; lens: OntologyReference; view: string; parameters: PrologTerm }
+export function ontologyTerm(reference: OntologyReference): PrologTerm
+export function ontologySubject(reference: OntologyReference): Subject
+export function readTextProjection(identity: SignedIdentity, agent: AgentReference,
+  reference: OntologyReference, goal: PrologTerm, binding: string, signal?: AbortSignal): Promise<string>
+export type GuiQuestionForm = {
+  source: { namespace: string; anchor: string; form: string }
+  responsible: { namespace: string; anchor: string; instanceText: string }
+  openedRevision: string; revision: string; valuesToken: string
+  view: GuiView; values: Record<string, string>; submit: string; state: PrologTerm
+  interaction: 'editable' | 'stale' | 'submitted'
+}
+export type GuiQuestionReference = OntologyReference & { question: PrologTerm }
+export type GuiQuestionStatus = 'awaiting' | 'committed' | 'rejected' | 'aborted' | 'expired'
+export function readGuiQuestionReferences(binding: string): GuiQuestionReference[]
+export function readGuiQuestionStatus(identity: SignedIdentity, agent: AgentReference,
+  reference: GuiQuestionReference, options?: SignedGoalOptions): Promise<GuiQuestionStatus>
+export function guiQuestionSubmission(reference: GuiQuestionReference, form: GuiQuestionForm,
+  draft: Record<string, string>): string
+export function guiQuestionCancellation(reference: GuiQuestionReference): string
+export function readGuiQuestionForm(binding: string): GuiQuestionForm
+export function anchoredGoal(reference: { namespace: string; anchor: Uint8Array }, goal: unknown): string
+export function readGuiView(binding: string): GuiView
+export function formLabels(view: GuiView, expected: Record<string, string>): Record<string, string>
+export function proofForm(view: GuiView): ProofView
+export function codeForm(view: GuiView): CodeView
+export class GoalFailure extends Error {
+  constructor(reasons?: string[])
+  accessDenied: boolean
+  reasons: string[]
+}
+export function singleBinding(reply: Record<string, unknown>, name: string): string
+export function readAgentReference(binding: string): { namespace: string; anchor: string; instanceText: string }
+export function readReference(binding: string): { namespace: string; anchor: Uint8Array }
+import type { PrologTerm } from './prolog-term.js'
+export type Subject = { ontology: string; anchor: Uint8Array | null; entity: PrologTerm }
+export type WorldMark = { id: string; depicts: Subject | null }
+export type MenuEntry = { id: string; label: string; view: string }
+export type SpaceReference = OntologyReference & { instance: PrologTerm }
+export type ViewDependency = { ns: string; genesis_anchor: string; height: string }
+export function readSpaceNavigation(identity: SignedIdentity, agent: AgentReference,
+  reference?: SpaceReference | null, options?: SignedGoalOptions): Promise<{
+  reference: SpaceReference; dependencies: ViewDependency[]; modes: string[]
+} | null>
+export function readEntityEidolons(identity: SignedIdentity, agent: AgentReference, subject: Subject): Promise<EidolonChoice[]>
+export function readEidolon(identity: SignedIdentity, agent: AgentReference, subject: Subject, choice: EidolonChoice): Promise<EidolonRepresentation>
+export function readEidolonRepresentation(binding: string, subject: Subject): EidolonRepresentation
+
+export function guiDigest(term: PrologTerm): string
+export function guiDraftFields(view: GuiView, draft: Record<string,string>): PrologTerm
+export function readGuiForm(tree: PrologTerm, fields: PrologTerm, control: PrologTerm): { view: GuiView; values: Record<string,string>; submit: string }

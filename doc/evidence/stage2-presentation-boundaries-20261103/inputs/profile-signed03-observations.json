@@ -1,0 +1,5 @@
+[
+  "CONTENTS_RENEWAL_RECEIPT 0",
+  "RENEWAL_MS 14659",
+  "RENEWAL_WORK {\"profile\":[{\"function\":\"quod_proof_scope(run_step,3)\",\"calls\":4865,\"time_us\":205171},{\"function\":\"quod_erlog_db_local_prove(get_procedure,2)\",\"calls\":390399,\"time_us\":2272681},{\"function\":\"quod_common_primitives(variant_digest_2,3)\",\"calls\":286,\"time_us\":8262},{\"function\":\"quod_erlog_db_mvcc(get_interpreted_functors,1)\",\"calls\":857,\"time_us\":469930},{\"function\":\"erlog_int(prove_goal_clause,4)\",\"calls\":489872,\"time_us\":10479616},{\"function\":\"erlog_int(unify_head,4)\",\"calls\":489872,\"time_us\":114045}],\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"wall_us\":14702805,\"cpu_ms\":14692}"
+]

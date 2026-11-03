@@ -1,0 +1,16 @@
+PASS capture distinct direct-engine pipes immediately at Popen
+PASS direct engine descriptors are real write ends
+PASS actual helper launch notification arrives within finite bound
+PASS existing runtime launch-line seam identifies only its named helper
+PASS other executable and unrelated lines do not select a process
+PASS real helper incarnation and direct parent are recorded
+PASS helper write descriptors exactly match both captured engine pipes
+PASS replaced incarnation refuses descriptor attribution
+PASS wrong helper executable refuses descriptor attribution
+PASS direct engine exits normally through its owned input
+PASS same helper remains an exact writer after direct engine exit
+PASS no EOF is invented while the helper retains both write ends
+PASS actual stdout EOF follows normal helper completion
+PASS actual stderr EOF follows normal helper completion
+PASS missing process is explicit unknown rather than writer attribution
+PIPE_OWNERSHIP_PASS {"checks": 15, "engine_exit": 0, "eof": {"stdout": true, "stderr": true}, "observation_only": true, "runtime_or_hardware": false, "signals": 0, "real_owner": "pipe_ownership"}

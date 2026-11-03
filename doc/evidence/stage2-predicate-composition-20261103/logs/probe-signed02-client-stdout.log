@@ -1,0 +1,60 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS observation catalogue ms=16 committed=True
+PASS catalogue
+PASS observation catalogue_count=368
+PASS observation contents exposure ms=118 committed=True
+PASS contents exposure
+PASS observation exposure_count=368
+PASS observation single entity scene ms=35 committed=True
+PASS single entity scene
+PASS observation single model ms=20 committed=True
+PASS single model
+PASS observation projection subset 1 ms=61 committed=True
+PASS projection subset 1
+PASS observation marks=2
+PASS observation projection subset 10 ms=400 committed=True
+PASS projection subset 10
+PASS observation marks=20
+PASS observation projection subset 50 ms=2312 committed=True
+PASS projection subset 50
+PASS observation marks=100
+PREDICATE_PASS 12
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

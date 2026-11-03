@@ -1,0 +1,38 @@
+{
+  "source_checks": 11,
+  "stage": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01",
+  "inputs": {
+    "FrameObservation.cs": {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-frame-observation-20261102/FrameObservation.cs",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01/FrameObservation.cs",
+      "sha256": "9212a143ecac241b17d5297e38a832d7f4f532e3c68acbf015d5caa698130c71"
+    },
+    "FrameObservationChecks.cs": {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-frame-observation-20261102/FrameObservationChecks.cs",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01/FrameObservationChecks.cs",
+      "sha256": "8bb2d0dc36091eb3bdbd52bf9a489e1e57abb045cc10c88277ee692e599bc602"
+    },
+    "VrFrameReady.cs": {
+      "source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-frame-observation-20261102/VrFrameReady.cs",
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01/VrFrameReady.cs",
+      "sha256": "fc61ee8cf0bb5d00220983bd2c2f9eeec3e11f69082c58ec9e8b4cd791e47391"
+    }
+  },
+  "commands": [
+    {
+      "phase": "build",
+      "argv": [
+        "dotnet",
+        "build",
+        "OfflineChecks.csproj",
+        "-c",
+        "Release",
+        "--configfile",
+        "NuGet.Config"
+      ],
+      "cwd": "/data/quod-m4-vr-ca84d4f8-20261029/builds/frame-observation-offline01",
+      "true_exit": 1
+    }
+  ],
+  "app_fixture_runtime_started": false
+}

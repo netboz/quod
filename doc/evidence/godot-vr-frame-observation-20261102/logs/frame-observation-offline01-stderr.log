@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-frame-observation-20261102/offline_checks.py", line 88, in <module>
+    assert result.returncode == 0, phase
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: build

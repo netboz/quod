@@ -1,0 +1,38 @@
+[
+  {
+    "font_px": 26,
+    "working_pixels": [
+      1200,
+      800
+    ],
+    "surface_pixels": [
+      1200,
+      1368
+    ],
+    "distance_m": 2.0,
+    "metres_per_pixel": 0.00125,
+    "working_height_m": 1.0,
+    "keyboard_lower_edge_relative_to_panel_center_m": -1.21,
+    "nominal_em_box_degrees": 0.9310359298086419,
+    "width_degrees": 41.112090439166934,
+    "limit": "nominal layout geometry only, not glyph ink, headset optical angle or human comfort"
+  },
+  {
+    "font_px": 48,
+    "working_pixels": [
+      1200,
+      800
+    ],
+    "surface_pixels": [
+      1200,
+      1616
+    ],
+    "distance_m": 2.0,
+    "metres_per_pixel": 0.00125,
+    "working_height_m": 1.0,
+    "keyboard_lower_edge_relative_to_panel_center_m": -1.52,
+    "nominal_em_box_degrees": 1.7187444872893616,
+    "width_degrees": 41.112090439166934,
+    "limit": "nominal layout geometry only, not glyph ink, headset optical angle or human comfort"
+  }
+]

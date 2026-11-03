@@ -1,0 +1,270 @@
+{
+  "state": "ARTIFACTS_READY_TO_LAUNCH",
+  "live_fixture_or_client_started": false,
+  "requires_fresh_root_physical_confirmation_and_launch": true,
+  "no_automatic_begin": true,
+  "reused_manifest": "doc/evidence/godot-steamvr-coordinated-20261101/inputs/client-steamvr269-companion01-manifest.json",
+  "manifest_sha256": "187bea2c60cbd47daffc3568e22662828c56fc1a2c4b12b4009cd1fd01631374",
+  "companion_manifest_sha256": "187bea2c60cbd47daffc3568e22662828c56fc1a2c4b12b4009cd1fd01631374",
+  "production_inputs": 98,
+  "supplied_inputs": 99,
+  "no_build_or_export_repeated": true,
+  "no_export_payload_read": true,
+  "selected_export_exact_stats": {
+    "quod.x86_64": {
+      "stat_key": [
+        2050,
+        4875912,
+        98746600,
+        1793557135122577098,
+        1793557135122577098
+      ],
+      "sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268"
+    },
+    "quod.pck": {
+      "stat_key": [
+        2050,
+        4875913,
+        13312,
+        1793557135160357749,
+        1793557135160357749
+      ],
+      "sha256": "3f3d72316c1d3ea5f663b89f24610a198f29dafe283d37353fbf9db0c1a95e1e"
+    },
+    "data_Quod_linuxbsd_x86_64/Quod.dll": {
+      "stat_key": [
+        2050,
+        4876076,
+        950272,
+        1793557135199579038,
+        1793557135199579038
+      ],
+      "sha256": "75e470ee2dc3ac0b61ba10374b3d2460ad1afa93639ddc8f6fecd4de48606b5e"
+    }
+  },
+  "current_server_sources": {
+    "src/quod_material_admission.erl": {
+      "stat_key": [
+        66305,
+        32914319,
+        3845,
+        1793482992245911765,
+        1793482992245911765
+      ],
+      "sha256": "ceef0436b16a5127d6e6ae30b60897470084b12cf7ecf28255608eed0753ce2a"
+    },
+    "src/quod_proof_session.erl": {
+      "stat_key": [
+        66305,
+        32914342,
+        44301,
+        1793482992284912728,
+        1793482992284912728
+      ],
+      "sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8"
+    },
+    "src/quod_scope_session.erl": {
+      "stat_key": [
+        66305,
+        32914354,
+        78227,
+        1793482992323913691,
+        1793482992323913691
+      ],
+      "sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9"
+    },
+    "src/quod_scope_wire.erl": {
+      "stat_key": [
+        66305,
+        32914355,
+        42609,
+        1793482992442916631,
+        1793482992442916631
+      ],
+      "sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472"
+    },
+    "src/predicates/quod_ask.erl": {
+      "stat_key": [
+        66305,
+        32914240,
+        84316,
+        1793482992363914680,
+        1793482992363914680
+      ],
+      "sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06"
+    },
+    "src/quod_wire_term.erl": {
+      "stat_key": [
+        66305,
+        32914367,
+        32717,
+        1793459404130449263,
+        1793459404130449263
+      ],
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff"
+    },
+    "src/quod_ontology_name.erl": {
+      "stat_key": [
+        66305,
+        32914327,
+        1268,
+        1793459404616123466,
+        1793459404616123466
+      ],
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f"
+    },
+    "priv/ontologies/material_policy.pl": {
+      "stat_key": [
+        66305,
+        32557935,
+        1649,
+        1793482992207910826,
+        1793482992207910826
+      ],
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169"
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "stat_key": [
+        66305,
+        32557919,
+        26362,
+        1793546465562949361,
+        1793546465562949361
+      ],
+      "sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2"
+    },
+    "priv/ontologies/quod_space.pl": {
+      "stat_key": [
+        66305,
+        32557972,
+        33326,
+        1793546465606950696,
+        1793546465606950696
+      ],
+      "sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2"
+    },
+    "priv/ontologies/gui_tools.pl": {
+      "stat_key": [
+        66305,
+        32557970,
+        41206,
+        1793506285786534230,
+        1793506285786534230
+      ],
+      "sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73"
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "stat_key": [
+        66305,
+        32557942,
+        17794,
+        1793535466641622539,
+        1793535466641622539
+      ],
+      "sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766"
+    },
+    "priv/ontologies/gui_forms.pl": {
+      "stat_key": [
+        66305,
+        32558420,
+        15501,
+        1793535280287082104,
+        1793535280287082104
+      ],
+      "sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b"
+    },
+    "src/quod_client_view.erl": {
+      "stat_key": [
+        66305,
+        32914281,
+        52939,
+        1793546465684953063,
+        1793546465684953063
+      ],
+      "sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec"
+    }
+  },
+  "guards_reused": {
+    "checks": 28,
+    "source_sha256": "597ac45e1e1088c988fb72734fddca34aab5016221e1636cee728360a6478678",
+    "original_stat": [
+      66305,
+      28445597,
+      2863,
+      1793557077879133692,
+      1793557077879133692
+    ],
+    "regression_rerun": false
+  },
+  "new_observation_regression": {
+    "checks": 15,
+    "child_exit": 0,
+    "wrapper_exit": 0,
+    "no_runtime_or_hardware": true
+  },
+  "driver_inputs": {
+    "live.py": "c2a6c4bed09353fb9e34b4011b27f914f71b85b0e851ce4bf60bc3fac558b799",
+    "hashes.py": "23538f8b1eff0ca3de5800326877540e32bb83b7ca8350164d3c66a609151916",
+    "pipe_ownership.py": "7c50f2c1e3fbdb11b2ff7df7952a65247d74887ae4abf844844fe512ddca8e69",
+    "supervision.py": "597ac45e1e1088c988fb72734fddca34aab5016221e1636cee728360a6478678",
+    "godot_m3b_fixture.erl": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69",
+    "godot_m3b_physics_fixture.erl": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "test_pipe_ownership.py": "07104d77395befd473ed312b1e60dcd1fa539d01ca31f664538071aa9c296556",
+    "serve.py": "20e9c82a75895e0bd0bad08fba727c7d43aa6bbfd231983dd36e48d40e84eb44",
+    "manual_run.py": "361785f53ec1a4b71976e6f67dd329c2b7a1f68cc274938f1f52654d6179f61d"
+  },
+  "commands": {
+    "fixture": {
+      "argv": [
+        "python3",
+        "-B",
+        "doc/evidence/godot-steamvr-working-20261101/manual_run.py",
+        "steamvr271-server-wrapper01",
+        "--",
+        "python3",
+        "-B",
+        "doc/evidence/godot-steamvr-working-20261101/serve.py",
+        "steamvr271-human01-server",
+        "--stage",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+        "--profile",
+        "test",
+        "--qualified",
+        "--presentation-source",
+        "--clean-manifest",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source-manifest.json",
+        "--affected-wire",
+        "doc/evidence/godot-space-experience-20261101/inputs/space-name-owner03.json"
+      ],
+      "tty": true
+    },
+    "client": {
+      "argv": [
+        "python3",
+        "-B",
+        "doc/evidence/godot-steamvr-working-20261101/live.py",
+        "--label",
+        "steamvr271-human01",
+        "--manifest",
+        "doc/evidence/godot-steamvr-coordinated-20261101/inputs/client-steamvr269-companion01-manifest.json",
+        "--server-label",
+        "steamvr271-human01-server"
+      ],
+      "tty": true
+    }
+  },
+  "original_bounds_seconds": {
+    "preparation": 180,
+    "native_admission": 30,
+    "participant": 1800,
+    "normal_close": 60,
+    "outer": 2100
+  },
+  "limits": [
+    "269 remains whole failed: client0/wrapper1/no EOF; original pipe correspondence unknown",
+    "Current helper writer observation is diagnostic only, not a teardown fix",
+    "Post-begin native admission and current human task remain unverified",
+    "Root physical launch gate precedes any fixture or client clock; separate exact-owned begin follows PREPARED"
+  ]
+}

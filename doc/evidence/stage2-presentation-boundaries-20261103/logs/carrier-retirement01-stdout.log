@@ -1,0 +1,386 @@
+======================== EUnit ========================
+module 'quod_proof_answer_tests'
+  quod_proof_answer_tests: default_answer_allocation_is_authored_test...[0.051 s] ok
+  quod_proof_answer_tests: producer_enforces_exact_canonical_quantity_test...[0.021 s] ok
+  quod_proof_answer_tests: receiver_uses_own_policy_and_atom_safe_measurement_test...[0.006 s] ok
+  quod_proof_answer_tests: answer_policy_is_pinned_and_concurrent_change_conflicts_test...[0.028 s] ok
+  quod_proof_answer_tests: invalid_ambiguous_and_missing_answer_policy_refuse_test...[0.024 s] ok
+  quod_proof_answer_tests: encoding_and_complete_envelope_safety_remain_test...*failed*
+in function quod_proof_answer_tests:encoding_and_complete_envelope_safety_remain_test/0 (/checks/source/test/quod_proof_answer_tests.erl, line 106)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_proof_answer_tests},
+              {line,106},
+              {expression,"quod_scope_wire : encode_payload ( answer , binary : copy ( << 0 >> , ? LEGACY_SCOPE_WIRE_MAX_ENVELOPE_BYTES ) )"},
+              {expected,{error,{too_large,answer}}},
+              {value,{ok,<<131,104,2,97,1,109,0,15,...>>}}]}
+  output:<<"">>
+
+  quod_proof_answer_tests: cancellation_keeps_original_policy_and_discards_continuation_test...[0.006 s] ok
+  quod_proof_answer_tests: pinned_answer_admission_reuses_selection_without_history_or_io_test...[0.011 s] ok
+  [done in 0.188 s]
+module 'quod_scope_wire_tests'
+  quod_scope_wire_tests: scope_open_trace_metadata_is_transient_and_fail_closed_test...[0.013 s] ok
+  quod_scope_wire_tests: all_command_shapes_roundtrip_deterministically_test...ok
+  quod_scope_wire_tests: independent_metadata_roundtrips_and_refuses_malformed_values_test...ok
+  quod_scope_wire_tests: savepoint_lineage_and_public_intent_are_independent_wire_fields_test...ok
+  quod_scope_wire_tests: scope_v5_authentication_digest_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: scope_v5_binding_rejects_principal_and_authentication_substitution_test...ok
+  quod_scope_wire_tests: all_events_carry_exact_state_and_roundtrip_test...ok
+  quod_scope_wire_tests: prepared_budget_error_is_bounded_and_survives_scope_wire_test...ok
+  quod_scope_wire_tests: scope_error_target_binding_does_not_constrain_invocation_errors_test...ok
+  quod_scope_wire_tests: answer_binding_protocol_error_round_trips_test...ok
+  quod_scope_wire_tests: seal_operations_round_trip_without_material_subquota_test...ok
+  quod_scope_wire_tests: manifest_attestation_payloads_are_canonical_test...ok
+  quod_scope_wire_tests: read_certificate_scope_results_use_the_closed_error_catalog_test...ok
+  quod_scope_wire_tests: group_effect_binding_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: operation_effect_submission_crosses_scope_without_subquota_test...ok
+  quod_scope_wire_tests: scope_namespace_uses_directory_bound_test...ok
+  quod_scope_wire_tests: submit_operations_round_trip_without_material_subquota_test...[0.002 s] ok
+  quod_scope_wire_tests: retired_generic_public_errors_are_rejected_test...ok
+  quod_scope_wire_tests: goal_stays_opaque_until_explicit_payload_decode_test...ok
+  quod_scope_wire_tests: opaque_goal_symbol_survives_scope_codec_test...ok
+  quod_scope_wire_tests: payload_byte_bounds_are_exact_test...[0.020 s] ok
+  quod_scope_wire_tests: large_malformed_scope_envelope_still_fails_closed_test...ok
+  quod_scope_wire_tests: outer_safe_etf_and_version_are_fail_closed_test...ok
+  quod_scope_wire_tests: unknown_outer_atom_is_not_created_test...ok
+  quod_scope_wire_tests: identity_probe_and_response_are_fixed_safe_frames_test...ok
+  quod_scope_wire_tests: ids_sequences_chain_generation_and_dirty_are_bounded_test...ok
+  quod_scope_wire_tests: dirty_is_mandatory_and_error_vocabulary_is_closed_test...ok
+  quod_scope_wire_tests: lineage_controller_shapes_and_limits_are_exact_test...[0.001 s] ok
+  quod_scope_wire_tests: superseded_transaction_wire_shapes_are_rejected_test...ok
+  [done in 0.123 s]
+module 'quod_client_result_tests'
+  quod_client_result_tests: signed_read_dependencies_survive_answers_failure_and_errors_test...[0.006 s] ok
+  quod_client_result_tests: read_dependency_heights_are_lossless_json_test...[0.002 s] ok
+  quod_client_result_tests: many_dependencies_and_answers_keep_their_exact_values_test...[0.011 s] ok
+  quod_client_result_tests: material_budget_errors_report_the_actual_resource_test...ok
+  quod_client_result_tests: invalid_material_policy_survives_the_client_boundary_test...ok
+  quod_client_result_tests: independent_refusals_remain_typed_through_the_client_boundary_test...ok
+  quod_client_result_tests: all_normalized_results_roundtrip_test...ok
+  quod_client_result_tests: bare_engine_states_and_tagged_cursor_states_have_distinct_names_test...ok
+  quod_client_result_tests: independent_complete_vectors_keep_every_target_in_success_shaped_replies_test...[0.002 s] ok
+  quod_client_result_tests: local_http_uses_the_normalized_binary_name_result_test...ok
+  quod_client_result_tests: signed_binding_preserves_binary_identity_and_numeric_values_test...ok
+  quod_client_result_tests: complete_results_and_dependencies_have_no_second_allocation_test...[0.007 s] ok
+  quod_client_result_tests: transient_bindings_use_the_complete_reply_contract_test...*failed*
+in function quod_client_result_tests:transient_bindings_use_the_complete_reply_contract_test/0 (/checks/source/test/quod_client_result_tests.erl, line 223)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_client_result_tests},
+              {line,223},
+              {expression,"quod_durable_term : decode_result ( Binding )"},
+              {expected,{error,{too_large,result}}},
+              {value,{ok,[{<<"X">>,<<"xxxxxxxxxxxxxxxxxxxx"...>>}]}}]}
+  output:<<"">>
+
+  quod_client_result_tests: large_cursor_answers_preserve_invalid_result_refusal_test...[0.005 s] ok
+  quod_client_result_tests: client_binding_validation_retains_canonical_name_rules_test...ok
+  quod_client_result_tests: prepared_budget_error_survives_signed_normalization_and_http_test...ok
+  quod_client_result_tests: conflict_retry_is_a_specific_public_conflict_test...ok
+  quod_client_result_tests: malformed_and_noncanonical_results_are_rejected_test...ok
+  quod_client_result_tests: result_delivery_failure_preserves_recovery_http_contract_test...ok
+  [done in 0.090 s]
+module 'quod_read_certificate_tests'
+  quod_read_certificate_tests: f_plus_one_signatures_verify_test...[0.022 s] ok
+  quod_read_certificate_tests: one_below_threshold_does_not_verify_test...[0.001 s] ok
+  quod_read_certificate_tests: noncommittee_signatures_are_ignored_test...[0.001 s] ok
+  quod_read_certificate_tests: canonical_codec_roundtrips_and_rejects_noncanonical_or_wrong_shape_test...[0.001 s] ok
+  quod_read_certificate_tests: codec_bound_is_owned_by_the_dtx_body_limit_test...*failed*
+in function quod_read_certificate_tests:codec_bound_is_owned_by_the_dtx_body_limit_test/0 (/checks/source/test/quod_read_certificate_tests.erl, line 54)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_read_certificate_tests},
+              {line,54},
+              {expression,"quod_read_certificate : decode ( AboveLimit )"},
+              {expected,{error,too_large}},
+              {value,{error,invalid_read_certificate}}]}
+  output:<<"">>
+
+  quod_read_certificate_tests: encoder_bound_is_already_enforced_by_binding_test...*failed*
+in function quod_read_certificate_tests:encoder_bound_is_already_enforced_by_binding_test/0 (/checks/source/test/quod_read_certificate_tests.erl, line 74)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,
+    [{module,quod_read_certificate_tests},
+     {line,74},
+     {expression,"quod_read_certificate : binding ( Oversized )"},
+     {expected,error},
+     {value,
+         {ok,#{target =>
+                   {<<"nnnnnnnnnnnnnnnnnnnnnnnn"...>>,<<205,38,98,21,78,...>>},
+               proof_id => <<205,4,164,117,68,152,224,...>>,
+               signatures => [{<<"¡ð)\t¹{"...>>,<<154,225,99,213,...>>}],
+               committee_id => <<93,238,77,214,15,248,208,...>>,
+               plan_digest => <<213,104,138,82,213,90,2,...>>,
+               anchor_ref =>
+                   {quod_dtx_ref,3,<<"nnnnnnnnnnnnnnnn"...>>,<<"Í&b"...>>,7,
+                       <<"Bò"...>>,<<...>>,...},
+               statement =>
+                   {quod_read_vote,3,
+                       {<<"nnnnnnnnnnnn"...>>,<<"Í&b"...>>},
+                       <<205,4,164,...>>,
+                       <<"Õh"...>>,
+                       {7,...},
+                       <<...>>}}}}]}
+  output:<<"">>
+
+  quod_read_certificate_tests: every_read_statement_field_is_signature_bound_test...[0.001 s] ok
+  quod_read_certificate_tests: equivalent_finality_subsets_sign_one_state_statement_test...[0.002 s] ok
+  [done in 0.058 s]
+module 'quod_dtx_tests'
+  quod_dtx_tests: era_reference_names_material_height_and_a_compact_preferred_head_test...[0.011 s] ok
+  quod_dtx_tests: era_verified_selected_entry_discharges_an_unavailable_preferred_witness_test...[0.011 s] ok
+  quod_dtx_tests: sealed_plan_carries_exact_diff_and_read_tokens_test...[0.007 s] ok
+  quod_dtx_tests: seal_rechecks_namespace_gate_before_exposing_plan_test...[0.007 s] ok
+  quod_dtx_tests: untouched_scope_is_not_material_test...[0.007 s] ok
+  quod_dtx_tests: signed_origin_scope_seals_operation_claim_without_database_diff_test...[0.007 s] ok
+  quod_dtx_tests: signed_non_origin_empty_scope_remains_not_material_test...[0.006 s] ok
+  quod_dtx_tests: read_only_participant_seals_empty_diff_with_read_check_test...[0.006 s] ok
+  quod_dtx_tests: independent_lane_is_explicit_and_selects_the_canonical_vector_test...[0.012 s] ok
+  quod_dtx_tests: write_lane_routing_is_derived_only_from_sealed_plans_test...[0.043 s] ok
+  quod_dtx_tests: signed_plan_verifies_and_rejects_tamper_test...[0.007 s] ok
+  quod_dtx_tests: large_goal_seals_and_roundtrips_test...[0.008 s] ok
+  quod_dtx_tests: decode_is_bounded_and_shape_checked_test...*failed*
+in function quod_dtx_tests:decode_is_bounded_and_shape_checked_test/0 (/checks/source/test/quod_dtx_tests.erl, line 393)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_dtx_tests},
+              {line,393},
+              {expression,"quod_dtx : decode ( << 0 : ( ? LEGACY_MAX_PLAN_ENVELOPE_BYTES + 1 ) / unit : 8 >> )"},
+              {expected,{error,{too_large,plan}}},
+              {value,{error,{protocol_error,bad_payload}}}]}
+  output:<<"">>
+
+  quod_dtx_tests: origin_outcome_identity_keeps_foreign_payloads_opaque_test...[0.006 s] ok
+  quod_dtx_tests: verified_plan_restart_materializes_new_functor_at_owner_test...ok
+  quod_dtx_tests: superseded_keyed_plan_v5_is_rejected_test...ok
+  quod_dtx_tests: plan_material_replays_admitted_vocabulary_on_a_cold_vm_test...[0.002 s] ok
+  quod_dtx_tests: plan_material_rejects_invalid_diff_and_duplicate_reads_test...ok
+  quod_dtx_tests: legacy_or_unclassified_transcript_is_rejected_test...[0.006 s] ok
+  quod_dtx_tests: outcome_bridge_refuses_in_owner_contexts_before_reading_test...[0.006 s] ok
+  quod_dtx_tests: outcome_reads_survive_extraction_and_sealing_test...[0.006 s] ok
+  quod_dtx_tests: material_diff_with_live_bridge_fails_seal_test...[0.006 s] ok
+  quod_dtx_tests: bridge_use_without_a_diff_still_seals_test...[0.006 s] ok
+  quod_dtx_tests: overlay_separates_tokens_from_bridge_markers_test...[0.006 s] ok
+  quod_dtx_tests: transcript_orders_invocations_and_tags_terminals_test...[0.006 s] ok
+  quod_dtx_tests: transcript_invocation_ids_are_never_reused_test...[0.006 s] ok
+  quod_dtx_tests: peer_ready_taint_is_exempt_only_for_membership_diff_test...[0.012 s] ok
+  quod_dtx_tests: transcript_population_uses_the_complete_plan_envelope_test...*failed*
+in function quod_dtx_tests:transcript_population_uses_the_complete_plan_envelope_test/0 (/checks/source/test/quod_dtx_tests.erl, line 750)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_dtx_tests},
+              {line,750},
+              {expression,"quod_dtx : seal_session ( Session , bind ( ) )"},
+              {expected,{error,{too_large,plan}}},
+              {value,{ok,{quod_plan,#{origin =>
+                                          {<<"quod:origin">>,<<0,0,0,...>>},
+                                      target => {<<"quod:dtx">>,<<0,0,0,...>>},
+                                      base_height => 1,
+                                      proof_id => <<0,0,0,0,0,...>>,
+                                      principal => anonymous,
+                                      request_binding => none,...},
+                                    none,none}}}]}
+  output:<<"">>
+
+  quod_dtx_tests: binary_heavy_nested_goal_uses_complete_plan_admission_test...[0.009 s] ok
+  quod_dtx_tests: binary_heavy_cancel_and_malformed_goal_preserve_transcript_lifecycle_test...[0.007 s] ok
+  quod_dtx_tests: denied_transcript_keeps_request_and_never_executes_it_test...[0.007 s] ok
+  quod_dtx_tests: read_only_session_records_no_transcript_test...[0.007 s] ok
+  quod_dtx_tests: finalize_seals_local_scope_and_stores_the_plan_test...[0.013 s] ok
+  quod_dtx_tests: finalize_of_a_clean_proof_seals_nothing_test...[0.006 s] ok
+  quod_dtx_tests: finalize_fails_the_proof_on_a_refused_seal_test...[0.006 s] ok
+  quod_dtx_tests: failed_material_proof_aborts_without_sealing_test...[0.006 s] ok
+  quod_dtx_tests: large_signed_request_is_preserved_by_transaction_and_vote_test...*failed*
+in function quod_dtx_tests:large_signed_request_is_preserved_by_transaction_and_vote_test/0 (/checks/source/test/quod_dtx_tests.erl, line 972)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_dtx_tests},
+              {line,972},
+              {expression,"quod_client_goal : encode ( Request # { goal_text => << GoalText / binary , \" \" >> } )"},
+              {expected,{error,{too_large,goal_text}}},
+              {value,{ok,<<"quod.agent.goal.v1"...>>}}]}
+  output:<<"">>
+
+  quod_dtx_tests: plan_attestation_rejects_a_different_valid_plan_test...[0.031 s] ok
+  quod_dtx_tests: effect_only_plan_is_admitted_once_by_the_shared_dtx_validator_test...[0.001 s] ok
+  quod_dtx_tests: noncanonical_plan_envelope_cannot_change_a_group_id_test...[0.015 s] ok
+  quod_dtx_tests: manifest_yields_exact_event_context_test...[0.016 s] ok
+  quod_dtx_tests: more_than_sixty_four_disjoint_groups_vote_without_a_cap_test...[0.556 s] ok
+  quod_dtx_tests: batch_rejects_duplicate_signed_lane_sequence_test...[0.017 s] ok
+  quod_dtx_tests: batch_reducer_preserves_per_control_attribution_test...[0.018 s] ok
+  quod_dtx_tests: overlapping_writes_block_and_batch_failure_is_atomic_test...[0.017 s] ok
+  quod_dtx_tests: ordinary_content_blocks_only_on_an_exact_active_conflict_test...[0.017 s] ok
+  quod_dtx_tests: read_write_and_write_read_conflicts_are_symmetric_test...[0.017 s] ok
+  quod_dtx_tests: same_effect_custody_conflicts_even_when_effect_ids_differ_test...[0.004 s] ok
+  quod_dtx_tests: event_only_resolve_retains_only_the_source_completion_marker_test...[0.005 s] ok
+  quod_dtx_tests: independent_commit_fences_acknowledge_in_reverse_order_test...[0.017 s] ok
+  quod_dtx_tests: certified_entry_ref_binds_exact_entry_test...[0.022 s] ok
+  quod_dtx_tests: certified_entry_ref_accepts_another_valid_quorum_subset_test...[0.019 s] ok
+  quod_dtx_tests: certified_entry_ref_binds_pinned_genesis_test...ok
+  [done in 1.241 s]
+module 'quod_atomic_tests'
+  quod_atomic_tests: presentation_is_compact_authenticated_and_not_a_vote_test...[0.023 s] ok
+  quod_atomic_tests: transport_correlation_does_not_reauthenticate_or_admit_material_test...[0.026 s] ok
+  quod_atomic_tests: presentation_acknowledgment_is_not_a_certified_vote_test...[0.022 s] ok
+  quod_atomic_tests: vote_retains_only_the_voting_roles_bundle_test...[0.028 s] ok
+  quod_atomic_tests: negative_vote_can_authenticate_without_any_plan_test...[0.022 s] ok
+  quod_atomic_tests: expired_signed_request_remains_authenticatable_for_cleanup_test...[0.022 s] ok
+  quod_atomic_tests: changing_deadline_requires_new_source_authentication_test...[0.021 s] ok
+  quod_atomic_tests: vote_deadline_may_not_extend_signed_expiry_test...[0.022 s] ok
+  quod_atomic_tests: source_attestation_is_not_optional_or_substitutable_test...[0.021 s] ok
+  quod_atomic_tests: signed_request_cannot_be_removed_or_substituted_test...[0.042 s] ok
+  quod_atomic_tests: own_plan_signature_is_not_replaced_by_source_witness_test...[0.021 s] ok
+  quod_atomic_tests: foreign_bundle_cannot_stand_in_for_own_material_test...[0.020 s] ok
+  quod_atomic_tests: one_source_attestation_check_even_when_source_votes_test...[0.031 s] ok
+  quod_atomic_tests: resolve_requires_certified_reference_shapes_not_endpoint_answers_test...[0.022 s] ok
+  quod_atomic_tests: reference_vectors_require_exact_name_order_and_unique_targets_test...[0.022 s] ok
+  quod_atomic_tests: complete_cannot_omit_any_role_test...[0.021 s] ok
+  quod_atomic_tests: many_participants_preserve_exact_complete_evidence_test...[0.123 s] ok
+  quod_atomic_tests: reference_enumeration_is_exhaustive_and_shared_with_decoded_material_test...[0.033 s] ok
+  quod_atomic_tests: optional_hint_selection_never_authenticates_or_admits_a_vote_test...ok
+  quod_atomic_tests: old_record_family_has_no_decode_arm_test...[0.023 s] ok
+  quod_atomic_tests: control_decode_carries_material_without_reverification_test...[0.029 s] ok
+  quod_atomic_tests: owned_control_signing_and_renewal_do_not_reauthenticate_plans_test...[0.026 s] ok
+  quod_atomic_tests: control_wire_cannot_inject_cached_material_test...[0.022 s] ok
+  quod_atomic_tests: vote_selection_changes_only_the_uncommitted_choice_test...[0.027 s] ok
+  quod_atomic_tests: installed_vote_classification_and_reduction_do_no_signature_work_test...[0.023 s] ok
+  quod_atomic_tests: vote_deadline_uses_certified_time_without_renewal_or_signature_work_test...[0.030 s] ok
+  quod_atomic_tests: author_signature_binds_target_sequence_phase_and_timestamp_test...[0.023 s] ok
+  quod_atomic_tests: control_wave_preserves_one_signing_sequence_per_lane_test...[0.022 s] ok
+  quod_atomic_tests: commit_evidence_requires_every_roles_exact_positive_vote_test...[0.026 s] ok
+  quod_atomic_tests: positive_vote_is_not_abort_evidence_test...[0.023 s] ok
+  quod_atomic_tests: negative_only_enrollment_supports_an_unvoted_roles_tombstone_test...[0.022 s] ok
+  quod_atomic_tests: source_refusal_is_sufficient_without_another_groups_claim_test...[0.022 s] ok
+  quod_atomic_tests: surplus_and_substituted_reference_evidence_is_rejected_test...[0.025 s] ok
+  quod_atomic_tests: resolve_materialization_uses_the_owned_plan_without_signature_work_test...[0.025 s] ok
+  [done in 1.012 s]
+module 'quod_dtx_endpoint_tests'
+  quod_dtx_endpoint_tests: owner_errors_use_the_wire_refusal_vocabulary_test...ok
+  quod_dtx_endpoint_tests: outcome_binding_depth_roundtrips_through_transport_test...ok
+  quod_dtx_endpoint_tests: channel_and_wire_bounds_are_fixed_test...ok
+  quod_dtx_endpoint_tests: trace_carrier_is_transport_only_and_never_changes_correlation_test...ok
+  quod_dtx_endpoint_tests: all_request_shapes_roundtrip_deterministically_test...ok
+  quod_dtx_endpoint_tests: all_response_shapes_roundtrip_and_correlate_test...[0.003 s] ok
+  quod_dtx_endpoint_tests: certified_remote_application_response_correlates_test...[0.008 s] ok
+  quod_dtx_endpoint_tests: direction_namespace_and_exact_correlation_are_enforced_test...ok
+  quod_dtx_endpoint_tests: read_attest_correlation_binds_the_exact_plan_test...ok
+  quod_dtx_endpoint_tests: applied_response_carries_signer_and_signature_test...ok
+  quod_dtx_endpoint_tests: cancel_operation_effect_rejects_the_old_tuple_test...ok
+  quod_dtx_endpoint_tests: entry_hint_roundtrips_as_untrusted_sidecar_test...[0.007 s] ok
+  quod_dtx_endpoint_tests: application_result_sidecar_roundtrips_entry_and_member_vote_test...[0.067 s] ok
+  quod_dtx_endpoint_tests: malformed_received_hint_is_ignored_without_losing_the_request_test...[0.006 s] ok
+  quod_dtx_endpoint_tests: entry_sidecar_keeps_foreign_symbols_wrapped_test...ok
+  quod_dtx_endpoint_tests: published_group_pending_status_uses_current_wire_vocabulary_test...ok
+  quod_dtx_endpoint_tests: outcome_view_and_floor_correlation_are_exact_test...ok
+  quod_dtx_endpoint_tests: old_phase_refusal_and_absence_barrier_vocabulary_is_rejected_test...ok
+  quod_dtx_endpoint_tests: submit_digest_correlation_is_exact_test...ok
+  quod_dtx_endpoint_tests: selected_negative_vote_correlates_without_becoming_an_uncommitted_refusal_test...[0.017 s] ok
+  quod_dtx_endpoint_tests: malformed_and_noncanonical_frames_fail_closed_test...*failed*
+in function quod_dtx_endpoint_tests:malformed_and_noncanonical_frames_fail_closed_test/0 (/checks/source/test/quod_dtx_endpoint_tests.erl, line 507)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_dtx_endpoint_tests},
+              {line,507},
+              {expression,"quod_dtx_endpoint : encode_request ( Ns , { submit , id ( 1 ) , << 0 : ( ? LEGACY_MAX_DTX_BODY_BYTES + 1 ) / unit : 8 >> } , [ ] )"},
+              {expected,{error,{too_large,record}}},
+              {value,{ok,<<131,104,5,119,17,113,117,111,...>>}}]}
+  output:<<"">>
+
+  quod_dtx_endpoint_tests: committed_outcome_preserves_unknown_binding_symbols_test...ok
+  quod_dtx_endpoint_tests: unknown_atoms_are_not_created_test...ok
+  quod_dtx_endpoint_tests: invalid_fixed_shapes_are_rejected_test...ok
+  [done in 0.180 s]
+module 'quod_signing_journal_tests'
+  quod_signing_journal_tests: era_latches_and_exact_bodies_survive_recovery_test...[0.046 s] ok
+  quod_signing_journal_tests: archived_protocol_custody_is_not_material_height_test...[0.037 s] ok
+  quod_signing_journal_tests: era_competing_support_is_refused_before_append_test...[0.021 s] ok
+  quod_signing_journal_tests: persists_votes_and_dtx_floor_test...[0.036 s] ok
+  quod_signing_journal_tests: malformed_supported_block_is_rejected_without_mutation_test...[0.032 s] ok
+  quod_signing_journal_tests: conflicting_votes_fail_stop_test...[0.077 s] ok
+  quod_signing_journal_tests: unused_header_is_replaceable_but_used_compacted_header_is_not_test...[0.044 s] ok
+  quod_signing_journal_tests: missing_recovery_fails_without_creating_a_file_test...ok
+  quod_signing_journal_tests: legacy_magics_fail_explicitly_without_mutation_test...ok
+  quod_signing_journal_tests: superseded_signing_magic_fails_explicitly_without_mutation_test...[0.002 s] ok
+  quod_signing_journal_tests: legacy_magic_in_tail_is_not_trimmed_test...[0.030 s] ok
+  quod_signing_journal_tests: superseded_signing_magic_in_tail_is_not_trimmed_test...[0.030 s] ok
+  quod_signing_journal_tests: torn_final_frame_is_trimmed_after_domain_validation_test...[0.031 s] ok
+  quod_signing_journal_tests: domain_mismatch_precedes_torn_tail_repair_test...[0.011 s] ok
+  quod_signing_journal_tests: complete_crc_corruption_fails_without_mutation_test...[0.016 s] ok
+  quod_signing_journal_tests: reconcile_uses_only_the_validated_summary_test...[0.030 s] ok
+  quod_signing_journal_tests: dtx_floors_are_scoped_by_author_admission_test...[0.030 s] ok
+  quod_signing_journal_tests: uncommitted_dtx_floor_survives_unrelated_reconciliation_test...[0.020 s] ok
+  quod_signing_journal_tests: uncommitted_dtx_floor_is_pruned_by_admission_rotation_test...[0.016 s] ok
+  quod_signing_journal_tests: committed_dtx_floor_survives_without_local_record_test...[0.012 s] ok
+  quod_signing_journal_tests: committed_dtx_floor_wins_over_lower_local_floor_test...[0.023 s] ok
+  quod_signing_journal_tests: malformed_current_admissions_rejects_reconciliation_test...[0.023 s] ok
+  quod_signing_journal_tests: invalid_dtx_control_cannot_mutate_the_journal_test...[0.015 s] ok
+  quod_signing_journal_tests: each_pending_dtx_is_one_durable_frame_test...[0.039 s] ok
+  quod_signing_journal_tests: pending_compaction_preserves_a_later_same_lane_floor_test...[0.042 s] ok
+  quod_signing_journal_tests: pending_dtx_reenveloping_is_scoped_to_its_group_test...[0.066 s] ok
+  quod_signing_journal_tests: pending_vote_reclassification_keeps_custody_and_exposed_floor_test...[0.078 s] ok
+  quod_signing_journal_tests: pending_reclassification_cannot_discard_own_material_test...[0.040 s] ok
+  quod_signing_journal_tests: -source_journal_owner_death_recovers_exact_preparation_permission_test_/0-fun-6- (missing)...[0.033 s] ok
+  quod_signing_journal_tests: -source_journal_owner_death_recovers_exact_preparation_permission_test_/0-fun-6- (bound)...[0.035 s] ok
+  quod_signing_journal_tests: -source_journal_owner_death_recovers_exact_preparation_permission_test_/0-fun-6- (signed)...[0.047 s] ok
+  quod_signing_journal_tests: source_enrollment_readiness_and_signing_survive_separate_reopens_test...[0.057 s] ok
+  quod_signing_journal_tests: missing_source_enrollment_can_only_sign_its_own_negative_after_restart_test...[0.044 s] ok
+  quod_signing_journal_tests: source_pending_can_renew_only_its_exact_intent_after_readmission_test...[0.038 s] ok
+  quod_signing_journal_tests: negative_only_manifest_custody_survives_compaction_test...[0.040 s] ok
+  quod_signing_journal_tests: real_qsj4_is_refused_by_name_and_empty_qsj6_opens_test...[0.017 s] ok
+  quod_signing_journal_tests: scanner_recovers_distinct_pending_groups_from_one_lane_test...[0.050 s] ok
+  quod_signing_journal_tests: reconcile_prunes_each_pending_group_independently_test...[0.068 s] ok
+  quod_signing_journal_tests: pending_dtx_population_has_no_compiled_count_limit_test...[1.646 s] ok
+  quod_signing_journal_tests: compaction_orders_pending_groups_canonically_test...[0.085 s] ok
+  quod_signing_journal_tests: superseded_record_version_is_not_accepted_under_current_magic_test...[0.015 s] ok
+  quod_signing_journal_tests: effect_custody_is_durable_idempotent_and_admission_scoped_test...[0.020 s] ok
+  quod_signing_journal_tests: dormant_transaction_requires_durable_binding_before_activation_test...[0.030 s] ok
+  quod_signing_journal_tests: dormant_transaction_activation_record_is_rejected_on_recovery_test...[0.022 s] ok
+  quod_signing_journal_tests: compressed_record_is_rejected_without_mutation_test...[0.012 s] ok
+  quod_signing_journal_tests: unknown_atom_record_is_rejected_without_atom_creation_test...[0.019 s] ok
+  quod_signing_journal_tests: frame_capacity_follows_its_uint32_encoding_test...[0.009 s] ok
+  quod_signing_journal_tests: pending_reference_keeps_manifest_coordinator_across_another_validator_signature_test...[0.039 s] ok
+  [done in 3.318 s]
+=======================================================
+  Failed: 8.  Skipped: 0.  Passed: 215.

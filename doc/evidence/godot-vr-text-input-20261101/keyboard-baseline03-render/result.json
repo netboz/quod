@@ -1,0 +1,77 @@
+{
+  "label": "keyboard-baseline03-render",
+  "qualification_phase": "keyboard",
+  "passed": false,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-baseline02-manifest.json",
+  "manifest_sha256": "db62bf1d7011b8dc99c615676d41df7abde0484b30b28842090a0e2202b01959",
+  "sources": {
+    "doc/evidence/godot-vr-text-input-20261101/run.py": "d94f0817576b0a4223da9b4f4ff8ca5ce722823aff5eeb1b1414f2714fabbcea",
+    "doc/evidence/godot-vr-text-input-20261101/hashes.py": "5ff4d575ee8888935af2a9ca44915d2deaeb8a49363150dd75b7656e65fdf6eb",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9"
+  },
+  "reader_errors": [],
+  "children": {
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-keyboard-baseline02/source/client/godot/dist/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "gl_compatibility",
+        "--rendering-driver",
+        "opengl3",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/keyboard-baseline03-render/identity"
+      ],
+      "true_exit": 1
+    }
+  },
+  "eof": {
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "injected_inputs": {
+    "M4_MODEL": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/priv/explorer/assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94.glb",
+      "sha256": "bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94"
+    },
+    "M4_MAPPING": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/injected-mapping.term",
+      "sha256": "b893f49eda6be9b5e5001ef297f51d4b0d148cf424ab5ef6107e489de94b58da"
+    }
+  },
+  "streams": {
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/keyboard-baseline03-render/client-stdout.raw",
+      "sha256": "ef8b6d9cf02ea730235ba8d027e9a274db1d2a0d802d2cb50b01cbef7f932069",
+      "bytes": 3982,
+      "public_sha256": "a4dd9b18e61bf0732027000dc829ad86319813b7a0f0d97bfe16319b33c389ef"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/keyboard-baseline03-render/client-stderr.raw",
+      "sha256": "643d10ca00a9d9bcfea1da5afa25a90d3e4e25b1f00e5b6d76566b6f31689cae",
+      "bytes": 1827,
+      "public_sha256": "69c5624876cb102bdba9ae969d1e05568cdb97094f01ae76aef6d8bad74fdf7b"
+    }
+  },
+  "diagnostics": [],
+  "client_result_sha256": "d40c7629fb9c9b0dd12f86865503ba579c468825e8c0969640ed1a459ebdacf4",
+  "client_report_passed": false,
+  "checks": [
+    "ordinary native pointer focuses the actual editable spatial field"
+  ],
+  "prior_checks": [],
+  "total_checks": 1,
+  "elapsed_seconds": 2.3964339660014957
+}

@@ -1,0 +1,29 @@
+======================== EUnit ========================
+module 'carrier_admission_checks'
+  carrier_admission_checks: full_material_payload_roundtrip_test...*failed*
+in function carrier_admission_checks:full_material_payload_roundtrip_test/0 (/checks/source/doc/evidence/stage2-presentation-boundaries-20261103/carrier_admission_checks.erl, line 7)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{too_large,goal}}}
+  output:<<"">>
+
+  carrier_admission_checks: journal_frame_has_no_material_subquota_test...*failed*
+in function quod_signing_journal:frame/1 (/checks/source/src/quod_signing_journal.erl, line 930)
+in call from carrier_admission_checks:journal_frame_has_no_material_subquota_test/0 (/checks/source/doc/evidence/stage2-presentation-boundaries-20261103/carrier_admission_checks.erl, line 14)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{signing_journal_frame_too_big,881032}
+  output:<<"">>
+
+  [done in 0.028 s]
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 0.

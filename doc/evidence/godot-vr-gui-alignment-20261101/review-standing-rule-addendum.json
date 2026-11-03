@@ -1,0 +1,49 @@
+{
+  "scope": "standing-rule document addendum after review274/275",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "d08fd7b55a0e89bda53ae67c6133d98b1023520442b985a264ce6593164c4ee5",
+      "size": 8941,
+      "stat_key": [
+        66305,
+        23224898,
+        8941,
+        1793563344942349707,
+        1793563344942349707
+      ]
+    },
+    {
+      "path": "doc/evidence/godot-vr-gui-alignment-20261101/conformance-review-274.md",
+      "sha256": "61fed11b1b29cd6447957d4810cbe0548dddfbb90638a83971e9aebaa1f0dc77",
+      "size": 40474,
+      "stat_key": [
+        66305,
+        28446297,
+        40474,
+        1793563664935375289,
+        1793563664935375289
+      ]
+    },
+    {
+      "path": "nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-result-273.md",
+      "sha256": "533f138203d925817021a5f705cc313d6468e44dc716b3dbfeef48b515bebc75",
+      "size": 6033,
+      "stat_key": [
+        66305,
+        27546373,
+        6033,
+        1793563657781196188,
+        1793563657781196188
+      ]
+    }
+  ],
+  "requirements": 45,
+  "missing_links": [],
+  "prior_document_receipt_preserved": true,
+  "AGENTS_owner": "coordinator; read only by worker",
+  "production_edits": false,
+  "runtime_or_test_launch": false,
+  "freeze_or_acceptance": false,
+  "review_packet_predates_rule": true
+}

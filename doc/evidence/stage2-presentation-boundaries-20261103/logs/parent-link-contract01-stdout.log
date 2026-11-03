@@ -1,0 +1,15 @@
+======================== EUnit ========================
+quod_client_goal_router_tests: remote_large_result_preserves_exact_correlation_test...*failed*
+in function quod_client_goal_router_tests:sent_request/1 (/checks/source/test/quod_client_goal_router_tests.erl, line 575)
+in call from quod_client_goal_router_tests:'-remote_large_result_preserves_exact_correlation_test/0-fun-1-'/5 (/checks/source/test/quod_client_goal_router_tests.erl, line 624)
+in call from quod_client_goal_router_tests:with_router/1 (/checks/source/test/quod_client_goal_router_tests.erl, line 499)
+in call from lists:foreach_1/2 (lists.erl, line 2641)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:{badmatch,{error,{protocol_error,bad_etf}}}
+  output:<<"">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.

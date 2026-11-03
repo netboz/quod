@@ -1,0 +1,722 @@
+{
+  "profile": [
+    {
+      "calls": 285,
+      "predicate": "space_parent_pose(3)",
+      "deref_us": 211
+    },
+    {
+      "calls": 1,
+      "predicate": "client_eidolon_scene(6)",
+      "deref_us": 207
+    },
+    {
+      "calls": 285,
+      "predicate": "space_scene_pose(6)",
+      "deref_us": 386
+    },
+    {
+      "calls": 1,
+      "predicate": "client_space_selection(3)",
+      "deref_us": 306
+    },
+    {
+      "calls": 2565,
+      "predicate": "path_tail(1)",
+      "deref_us": 365
+    },
+    {
+      "calls": 285,
+      "predicate": "scoped_transform(3)",
+      "deref_us": 99
+    },
+    {
+      "calls": 9183,
+      "predicate": "'='(2)",
+      "deref_us": 6030
+    },
+    {
+      "calls": 285,
+      "predicate": "texture_bindings(2)",
+      "deref_us": 29
+    },
+    {
+      "calls": 2286,
+      "predicate": "public_source_query(1)",
+      "deref_us": 2794
+    },
+    {
+      "calls": 1710,
+      "predicate": "turn(1)",
+      "deref_us": 100
+    },
+    {
+      "calls": 571,
+      "predicate": "parent_order(2)",
+      "deref_us": 200269
+    },
+    {
+      "calls": 285,
+      "predicate": "placement(1)",
+      "deref_us": 23
+    },
+    {
+      "calls": 2286,
+      "predicate": "modelling_query(1)",
+      "deref_us": 1661
+    },
+    {
+      "calls": 285,
+      "predicate": "space_occurrence_model(12)",
+      "deref_us": 1248
+    },
+    {
+      "calls": 570,
+      "predicate": "labelled(1)",
+      "deref_us": 1936
+    },
+    {
+      "calls": 285,
+      "predicate": "component_name(1)",
+      "deref_us": 23
+    },
+    {
+      "calls": 1710,
+      "predicate": "offset(1)",
+      "deref_us": 122
+    },
+    {
+      "calls": 1425,
+      "predicate": "scene_text(1)",
+      "deref_us": 98
+    },
+    {
+      "calls": 5130,
+      "predicate": "integer(1)",
+      "deref_us": 317
+    },
+    {
+      "calls": 2328,
+      "predicate": "'$quod_name_normalize'(2)",
+      "deref_us": 301
+    },
+    {
+      "calls": 1714,
+      "predicate": "in_ontology(3)",
+      "deref_us": 2766
+    },
+    {
+      "calls": 9405,
+      "predicate": "digest_hex_codes(2)",
+      "deref_us": 4274
+    },
+    {
+      "calls": 2,
+      "predicate": "space_simulation_domain(4)",
+      "deref_us": 2
+    },
+    {
+      "calls": 571,
+      "predicate": "model_parts(2)",
+      "deref_us": 136210
+    },
+    {
+      "calls": 285,
+      "predicate": "term_digest(2)",
+      "deref_us": 196
+    },
+    {
+      "calls": 1425,
+      "predicate": "model_dimensions(2)",
+      "deref_us": 313
+    },
+    {
+      "calls": 1,
+      "predicate": "space_member(2)",
+      "deref_us": 0
+    },
+    {
+      "calls": 285,
+      "predicate": "'=:='(2)",
+      "deref_us": 45
+    },
+    {
+      "calls": 2286,
+      "predicate": "gui_query(1)",
+      "deref_us": 1703
+    },
+    {
+      "calls": 3,
+      "predicate": "space_instance(2)",
+      "deref_us": 0
+    },
+    {
+      "calls": 286,
+      "predicate": "variant_digest(2)",
+      "deref_us": 883
+    },
+    {
+      "calls": 1710,
+      "predicate": "hex_digit(1)",
+      "deref_us": 116
+    },
+    {
+      "calls": 285,
+      "predicate": "colour(1)",
+      "deref_us": 18
+    },
+    {
+      "calls": 570,
+      "predicate": "geometry(3)",
+      "deref_us": 196
+    },
+    {
+      "calls": 9523,
+      "predicate": "'$quod_direct_isa'(2)",
+      "deref_us": 1394
+    },
+    {
+      "calls": 286,
+      "predicate": "space_exposed_subjects(3)",
+      "deref_us": 7684
+    },
+    {
+      "calls": 1,
+      "predicate": "space_exposure_projection(4)",
+      "deref_us": 55
+    },
+    {
+      "calls": 285,
+      "predicate": "attachment_pose(1)",
+      "deref_us": 43
+    },
+    {
+      "calls": 3462,
+      "predicate": "var(1)",
+      "deref_us": 5246
+    },
+    {
+      "calls": 857,
+      "predicate": "system_source_access(2)",
+      "deref_us": 173
+    },
+    {
+      "calls": 855,
+      "predicate": "model_transform(2)",
+      "deref_us": 254
+    },
+    {
+      "calls": 859,
+      "predicate": "term_variables(2)",
+      "deref_us": 810
+    },
+    {
+      "calls": 285,
+      "predicate": "term_hex_digest(2)",
+      "deref_us": 267
+    },
+    {
+      "calls": 286,
+      "predicate": "space_scene_parts(8)",
+      "deref_us": 11484
+    },
+    {
+      "calls": 12,
+      "predicate": "material_limit_override(3)",
+      "deref_us": 0
+    },
+    {
+      "calls": 1437,
+      "predicate": "sort(2)",
+      "deref_us": 5089
+    },
+    {
+      "calls": 4,
+      "predicate": "material_default_limit(3)",
+      "deref_us": 1
+    },
+    {
+      "calls": 287,
+      "predicate": "entity_eidolons(4)",
+      "deref_us": 182
+    },
+    {
+      "calls": 1731,
+      "predicate": "'$quod_isa_requires_closure'(2)",
+      "deref_us": 167
+    },
+    {
+      "calls": 3136,
+      "predicate": "'=<'(2)",
+      "deref_us": 252
+    },
+    {
+      "calls": 14129,
+      "predicate": "nonvar(1)",
+      "deref_us": 1904
+    },
+    {
+      "calls": 18240,
+      "predicate": "digest_hex_digit(2)",
+      "deref_us": 10479
+    },
+    {
+      "calls": 27421,
+      "predicate": "member(2)",
+      "deref_us": 355694
+    },
+    {
+      "calls": 1453,
+      "predicate": "'$quod_owner_name'(3)",
+      "deref_us": 330
+    },
+    {
+      "calls": 1425,
+      "predicate": "sized(2)",
+      "deref_us": 269
+    },
+    {
+      "calls": 287,
+      "predicate": "class_eidolons(4)",
+      "deref_us": 165
+    },
+    {
+      "calls": 7149,
+      "predicate": "'\\\\=='(2)",
+      "deref_us": 604
+    },
+    {
+      "calls": 4001,
+      "predicate": "can_invoke(4)",
+      "deref_us": 6234
+    },
+    {
+      "calls": 576,
+      "predicate": "instance_of(2)",
+      "deref_us": 109
+    },
+    {
+      "calls": 4572,
+      "predicate": "'::'(2)",
+      "deref_us": 3009
+    },
+    {
+      "calls": 1,
+      "predicate": "unique_solution(1)",
+      "deref_us": 0
+    },
+    {
+      "calls": 1140,
+      "predicate": "mark_kind(1)",
+      "deref_us": 110
+    },
+    {
+      "calls": 858,
+      "predicate": "length(2)",
+      "deref_us": 9455
+    },
+    {
+      "calls": 4,
+      "predicate": "material_limit(3)",
+      "deref_us": 0
+    },
+    {
+      "calls": 1,
+      "predicate": "model(2)",
+      "deref_us": 250
+    },
+    {
+      "calls": 857,
+      "predicate": "system_source_target(2)",
+      "deref_us": 57
+    },
+    {
+      "calls": 2,
+      "predicate": "attribute(3)",
+      "deref_us": 0
+    },
+    {
+      "calls": 570,
+      "predicate": "model_geometry(3)",
+      "deref_us": 237
+    },
+    {
+      "calls": 2000,
+      "predicate": "system_ontology(2)",
+      "deref_us": 254
+    },
+    {
+      "calls": 285,
+      "predicate": "space_subject_binding(3)",
+      "deref_us": 97
+    },
+    {
+      "calls": 2924,
+      "predicate": "member_eq(2)",
+      "deref_us": 289
+    },
+    {
+      "calls": 286,
+      "predicate": "eidolon(3)",
+      "deref_us": 64
+    },
+    {
+      "calls": 1,
+      "predicate": "physics_control(4)",
+      "deref_us": 0
+    },
+    {
+      "calls": 4845,
+      "predicate": "'>='(2)",
+      "deref_us": 351
+    },
+    {
+      "calls": 1,
+      "predicate": "space_contains(2)",
+      "deref_us": 0
+    },
+    {
+      "calls": 2286,
+      "predicate": "rendering_query(1)",
+      "deref_us": 1563
+    },
+    {
+      "calls": 286,
+      "predicate": "scene_vocabulary(2)",
+      "deref_us": 161
+    },
+    {
+      "calls": 1453,
+      "predicate": "'$quod_isa_path'(3)",
+      "deref_us": 351
+    },
+    {
+      "calls": 571,
+      "predicate": "every_mark(1)",
+      "deref_us": 108290
+    },
+    {
+      "calls": 1427,
+      "predicate": "prolog_introspection(2)",
+      "deref_us": 285
+    },
+    {
+      "calls": 570,
+      "predicate": "well_formed_mark(1)",
+      "deref_us": 367
+    },
+    {
+      "calls": 855,
+      "predicate": "refers(1)",
+      "deref_us": 162
+    },
+    {
+      "calls": 570,
+      "predicate": "geometry_field(3)",
+      "deref_us": 80
+    },
+    {
+      "calls": 2881,
+      "predicate": "isa(2)",
+      "deref_us": 447
+    },
+    {
+      "calls": 285,
+      "predicate": "ontology_predicate(2)",
+      "deref_us": 123
+    },
+    {
+      "calls": 858,
+      "predicate": "composition_owner(1)",
+      "deref_us": 405
+    },
+    {
+      "calls": 570,
+      "predicate": "available_parent(2)",
+      "deref_us": 2247
+    },
+    {
+      "calls": 285,
+      "predicate": "'$quod_program_source'(2)",
+      "deref_us": 189
+    },
+    {
+      "calls": 570,
+      "predicate": "shape(3)",
+      "deref_us": 209
+    },
+    {
+      "calls": 286,
+      "predicate": "entity_scene(3)",
+      "deref_us": 64
+    },
+    {
+      "calls": 863,
+      "predicate": "class_eidolon(4)",
+      "deref_us": 173
+    },
+    {
+      "calls": 1,
+      "predicate": "current_principal(1)",
+      "deref_us": 0
+    },
+    {
+      "calls": 1995,
+      "predicate": "hex(1)",
+      "deref_us": 2002
+    },
+    {
+      "calls": 5731,
+      "predicate": "current_ontology_identity(2)",
+      "deref_us": 1128
+    },
+    {
+      "calls": 570,
+      "predicate": "geometry_binding(3)",
+      "deref_us": 212
+    },
+    {
+      "calls": 2857,
+      "predicate": "root_public_goal(1)",
+      "deref_us": 1181
+    },
+    {
+      "calls": 2039,
+      "predicate": "'=='(2)",
+      "deref_us": 219
+    },
+    {
+      "calls": 570,
+      "predicate": "appearance(3)",
+      "deref_us": 111
+    },
+    {
+      "calls": 855,
+      "predicate": "fraction(1)",
+      "deref_us": 51
+    },
+    {
+      "calls": 857,
+      "predicate": "system_source_query(1)",
+      "deref_us": 1176
+    },
+    {
+      "calls": 1,
+      "predicate": "well_formed_scene(1)",
+      "deref_us": 828
+    },
+    {
+      "calls": 855,
+      "predicate": "'>'(2)",
+      "deref_us": 68
+    },
+    {
+      "calls": 285,
+      "predicate": "'\\\\='(2)",
+      "deref_us": 257
+    },
+    {
+      "calls": 285,
+      "predicate": "space_entity_model(3)",
+      "deref_us": 224
+    },
+    {
+      "calls": 2,
+      "predicate": "agent_key(3)",
+      "deref_us": 0
+    },
+    {
+      "calls": 41325,
+      "predicate": "is(2)",
+      "deref_us": 11447
+    },
+    {
+      "calls": 2286,
+      "predicate": "measure_query(1)",
+      "deref_us": 2366
+    },
+    {
+      "calls": 857,
+      "predicate": "ontology_inspect(2)",
+      "deref_us": 559
+    },
+    {
+      "calls": 855,
+      "predicate": "placed(1)",
+      "deref_us": 2512
+    },
+    {
+      "calls": 286,
+      "predicate": "modelling_vocabulary(2)",
+      "deref_us": 38
+    },
+    {
+      "calls": 570,
+      "predicate": "geometry_constraint(2)",
+      "deref_us": 101
+    },
+    {
+      "calls": 287,
+      "predicate": "entity_eidolon_mode(2)",
+      "deref_us": 79
+    },
+    {
+      "calls": 2870,
+      "predicate": "'$quod_known_class'(1)",
+      "deref_us": 339
+    },
+    {
+      "calls": 1,
+      "predicate": "client_eidolon(3)",
+      "deref_us": 0
+    },
+    {
+      "calls": 285,
+      "predicate": "place_model(5)",
+      "deref_us": 222
+    },
+    {
+      "calls": 2000,
+      "predicate": "prolog_query(1)",
+      "deref_us": 1114
+    },
+    {
+      "calls": 2000,
+      "predicate": "lens_query(1)",
+      "deref_us": 1123
+    },
+    {
+      "calls": 285,
+      "predicate": "surfaced(1)",
+      "deref_us": 54
+    },
+    {
+      "calls": 2565,
+      "predicate": "'=\\\\='(2)",
+      "deref_us": 249
+    },
+    {
+      "calls": 19950,
+      "predicate": "'<'(2)",
+      "deref_us": 122369
+    },
+    {
+      "calls": 1,
+      "predicate": "space_contents_projection(2)",
+      "deref_us": 0
+    },
+    {
+      "calls": 856,
+      "predicate": "space_placement(3)",
+      "deref_us": 261
+    },
+    {
+      "calls": 285,
+      "predicate": "local_path(1)",
+      "deref_us": 49
+    },
+    {
+      "calls": 27154,
+      "predicate": "'$quod_isa_semantics'(1)",
+      "deref_us": 11555
+    },
+    {
+      "calls": 285,
+      "predicate": "scoped_id(3)",
+      "deref_us": 49
+    },
+    {
+      "calls": 1731,
+      "predicate": "'$quod_transitive_isa'(2)",
+      "deref_us": 216
+    },
+    {
+      "calls": 68854,
+      "predicate": "append(3)",
+      "deref_us": 1326579
+    },
+    {
+      "calls": 859,
+      "predicate": "term_variables(3)",
+      "deref_us": 793
+    },
+    {
+      "calls": 857,
+      "predicate": "prolog_inspect(3)",
+      "deref_us": 221
+    },
+    {
+      "calls": 570,
+      "predicate": "place_parts(3)",
+      "deref_us": 550
+    },
+    {
+      "calls": 4560,
+      "predicate": "binary_codes(2)",
+      "deref_us": 8179
+    }
+  ],
+  "work": {
+    "calls": [],
+    "watched": [
+      [
+        "quod_foreign_projection",
+        "start_monitor",
+        4
+      ],
+      [
+        "quod_committed_projection",
+        "apply_entry",
+        3
+      ],
+      [
+        "quod_physics_native",
+        "install",
+        3
+      ],
+      [
+        "quod_physics_native",
+        "install_hinges",
+        2
+      ],
+      [
+        "quod_physics_native",
+        "new_world",
+        3
+      ],
+      [
+        "quod_ledger_store",
+        "fold",
+        5
+      ],
+      [
+        "quod_ledger_store",
+        "open",
+        3
+      ],
+      [
+        "file",
+        "write",
+        2
+      ],
+      [
+        "file",
+        "pwrite",
+        3
+      ],
+      [
+        "file",
+        "sync",
+        1
+      ],
+      [
+        "file",
+        "datasync",
+        1
+      ]
+    ]
+  },
+  "wall_us": 14576504,
+  "cpu_ms": 14633,
+  "engine_md5": "kdvVY3m/3b+MhxSEBMdhMw=="
+}

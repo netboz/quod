@@ -1,0 +1,86 @@
+{
+  "client/godot/ScenePanel.cs": {
+    "sha256": "c828b2fc972bef98ba059cd17c502f04d56b714440ab54c7eb386bbf05160cf7",
+    "stat_key": [
+      66305,
+      23514195,
+      21018,
+      1793546502668068780,
+      1793546502668068780
+    ],
+    "mode": 33188,
+    "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/ScenePanel.cs"
+  },
+  "client/godot/Core/Scene.cs": {
+    "sha256": "f95971b172b696ab5166c7daccaf60720072950fd42449f371825171b471a220",
+    "stat_key": [
+      66305,
+      23514194,
+      5573,
+      1793468235121615653,
+      1793468235121615653
+    ],
+    "mode": 33188,
+    "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/Core/Scene.cs"
+  },
+  "client/godot/Main.cs": {
+    "sha256": "f29a35a0d8e7e6afcd0fa88ef3866a7ee15e1901a2884159de2d5997e85e30f4",
+    "stat_key": [
+      66305,
+      23512511,
+      44451,
+      1793547456468356276,
+      1793547456468356276
+    ],
+    "mode": 33188,
+    "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/Main.cs"
+  },
+  "client/godot/QuestionHub.cs": {
+    "sha256": "029f0aaf6d5ac26b1d4c26f0a98399b2fef8ee6ac172d7f626d56910ead4c2bb",
+    "stat_key": [
+      66305,
+      23512512,
+      11405,
+      1793535332239347797,
+      1793535332239347797
+    ],
+    "mode": 33188,
+    "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/QuestionHub.cs"
+  },
+  "client/godot/FormPanel.cs": {
+    "sha256": "8d19a51d76b9d01a8aa719702431368d5cf91e8b4b6b69e7341067498ea596f5",
+    "stat_key": [
+      66305,
+      23512508,
+      18707,
+      1793537712755754726,
+      1793537712755754726
+    ],
+    "mode": 33188,
+    "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/FormPanel.cs"
+  },
+  "client/godot/README.md": {
+    "sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+    "stat_key": [
+      66305,
+      23513097,
+      21393,
+      1793547941127949680,
+      1793547941127949680
+    ],
+    "mode": 33188,
+    "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/README.md"
+  },
+  "nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-273.md": {
+    "sha256": "eac3ed65ba063c68f3c8ac3ddc3e05fde78a4fbea5eca2d61a2713a5c1ef82c2",
+    "stat_key": [
+      66305,
+      27537155,
+      8019,
+      1793562300733086823,
+      1793562300733086823
+    ],
+    "mode": 33188,
+    "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-273.md"
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "checkpoint": 266,
+  "external_state": "Yan explicitly reported I restarted steam VR",
+  "restart_observation": "_build/godot-m4-r2-coordinator-20261029/vr-restarted-runtime-266.json",
+  "opportunity_passed": false,
+  "ready_announced": false,
+  "participant_interval_started": false,
+  "native_admission_seconds": 30,
+  "blocker": {
+    "initialized": true,
+    "running": true,
+    "adapter_running": true,
+    "session_state": "Synchronized",
+    "can_render": false,
+    "xr_frames": 0,
+    "stereo_views": 2,
+    "draws": 2,
+    "runtime_system": {
+      "XRRuntimeName": "SteamVR/OpenXR",
+      "XRRuntimeVersion": "2.18.4",
+      "OpenXRSystemName": "SteamVR/OpenXR : lighthouse",
+      "OpenXRVendorID": "10462"
+    },
+    "head": {
+      "tracked": true,
+      "confidence": "High"
+    },
+    "sources": [
+      {
+        "hand": "left",
+        "profile": "/interaction_profiles/none",
+        "tracked": false,
+        "neutral": false
+      },
+      {
+        "hand": "right",
+        "profile": "/interaction_profiles/none",
+        "tracked": false,
+        "neutral": false
+      }
+    ],
+    "router": {
+      "available": true,
+      "revision": "0",
+      "digest": "EWOaAaDhlG1m-sE4f_1thzMcbIf5ANlDI7k0M0eAYk4",
+      "choices": {},
+      "sources": [
+        {
+          "id": "1",
+          "hand": "left",
+          "profile": "unsupported",
+          "tracked": false,
+          "bindings": [],
+          "reason": "No unambiguous supported profile/components."
+        },
+        {
+          "id": "2",
+          "hand": "right",
+          "profile": "unsupported",
+          "tracked": false,
+          "bindings": [],
+          "reason": "No unambiguous supported profile/components."
+        }
+      ]
+    },
+    "models_settled": true,
+    "metrics": {
+      "Running": true,
+      "Subscriptions": 14,
+      "sources": 2,
+      "appearances": 2,
+      "MenuRedraws": 0,
+      "LateCallbacks": 0,
+      "captures": 0,
+      "DriveRequests": 0,
+      "StopRequests": 0,
+      "SnapRequests": 0,
+      "TeleportRequests": 0,
+      "resources": {
+        "Acquisitions": 0,
+        "Releases": 0,
+        "Decodes": 0,
+        "InstancesCreated": 0,
+        "InstancesReleased": 0,
+        "NodesBuilt": 0,
+        "TexturesDecoded": 0,
+        "LiveTemplates": 0,
+        "LiveLeases": 0
+      }
+    },
+    "signed_world": true,
+    "operation_available": true,
+    "expired": false,
+    "expires_ms": 1793556495685,
+    "remaining_auth_ms": 862348,
+    "workspace_visible": true,
+    "window_focus": false,
+    "blocked": false
+  },
+  "runtime_cause": "unestablished",
+  "production_or_driver_changed": false,
+  "companion_rebuilt": false,
+  "test_or_payload_audit_repeated": false,
+  "reused_companion_manifest": "doc/evidence/godot-steamvr-opportunity-20261101/inputs/client-steamvr263-companion01-manifest.json",
+  "reused_supervision_regression": "steamvr264-supervision-regression02;15 checks/child0",
+  "marker_prefix": "VR263 denotes unchanged observer source only",
+  "focus_requests": 0,
+  "owned_closed": {
+    "client_pty": 51479,
+    "fixture_pty": 44777,
+    "engine_pid": 3817208,
+    "incarnation": [
+      2050,
+      3300918,
+      20393498
+    ],
+    "mapped": {
+      "pid": 3817208,
+      "incarnation": [
+        2050,
+        3300918,
+        20393498
+      ],
+      "address": "0x55f62bcd2cc0"
+    }
+  },
+  "closure": {
+    "client_exit": 1,
+    "client_wrapper_exit": 1,
+    "client_eof": {
+      "stdout": true,
+      "stderr": true
+    },
+    "client_reader_errors": [],
+    "failure": "native admission deadline",
+    "finish_reason": "native_admission_failure",
+    "retirement_failure": null,
+    "fixture_exit": 0,
+    "fixture_wrapper_exit": 0,
+    "fixture_eof": {
+      "stdout": true,
+      "stderr": true
+    },
+    "fixture_reader_errors": []
+  },
+  "boundaries": {
+    "old_pending_profiles_untouched": true,
+    "no_replay": true,
+    "no_automated_enter_leave_preview_save": true,
+    "no_runtime_or_settings_change": true,
+    "no_subsequent_opportunity": true
+  },
+  "new_private_receipts": {
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr266-human01/invocation.json": {
+      "sha256": "d23372bd406de0fed6f6d4bb2b72f2f514b067aa8d555a2ce67e13e7fb0047bd",
+      "bytes": 4593,
+      "mode": "0o100600"
+    },
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr266-human01/preparation.json": {
+      "sha256": "0cc9a71dfc116a36cd89a9b3b51d8aa5e217b1af157b45f14dc17e25648e7e38",
+      "bytes": 1361,
+      "mode": "0o100600"
+    },
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr266-human01/stdout.raw": {
+      "sha256": "6a3e3c43f968c63585883dac9fff07b921ab0327807c3d5e2645cf4248d86371",
+      "bytes": 185198,
+      "mode": "0o100600"
+    },
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr266-human01/stderr.raw": {
+      "sha256": "7c29303ed6df5342203e68744bf50a2fe4cb3aa659ed726253c6f3b13a5870c4",
+      "bytes": 6499,
+      "mode": "0o100600"
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "profile": [
+    {
+      "calls": 285,
+      "predicate": "quod_common_primitives(term_digest_2,3)",
+      "deref_us": 134
+    },
+    {
+      "calls": 285,
+      "predicate": "quod_common_primitives(program_source_2,3)",
+      "deref_us": 40
+    },
+    {
+      "calls": 56217,
+      "predicate": "erlog_int(check_goal,5)",
+      "deref_us": 24930
+    },
+    {
+      "calls": 4001,
+      "predicate": "quod_ask(guarded_ask,5)",
+      "deref_us": 1434
+    },
+    {
+      "calls": 18376,
+      "predicate": "erlog_bips(term_test_prove_body,5)",
+      "deref_us": 578
+    },
+    {
+      "calls": 855,
+      "predicate": "quod_common_primitives(binary_codes_2,3)",
+      "deref_us": 2089
+    },
+    {
+      "calls": 86095,
+      "predicate": "erlog_int(findall_list,4)",
+      "deref_us": 8033
+    },
+    {
+      "calls": 477351,
+      "predicate": "erlog_int(prove_goal,3)",
+      "deref_us": 2555812
+    },
+    {
+      "calls": 4572,
+      "predicate": "quod_ask(ask_2,3)",
+      "deref_us": 2126
+    },
+    {
+      "calls": 286,
+      "predicate": "quod_common_primitives(variant_digest_2,3)",
+      "deref_us": 429
+    },
+    {
+      "calls": 84083,
+      "predicate": "erlog_int(dderef_list,2)",
+      "deref_us": 6793
+    },
+    {
+      "calls": 3149,
+      "predicate": "quod_proof_scope(drive,3)",
+      "deref_us": 5520
+    },
+    {
+      "calls": 5,
+      "predicate": "quod_proof_scope('-bindings/1-fun-0-',3)",
+      "deref_us": 994
+    }
+  ],
+  "work": {
+    "calls": [],
+    "watched": [
+      [
+        "quod_foreign_projection",
+        "start_monitor",
+        4
+      ],
+      [
+        "quod_committed_projection",
+        "apply_entry",
+        3
+      ],
+      [
+        "quod_physics_native",
+        "install",
+        3
+      ],
+      [
+        "quod_physics_native",
+        "install_hinges",
+        2
+      ],
+      [
+        "quod_physics_native",
+        "new_world",
+        3
+      ],
+      [
+        "quod_ledger_store",
+        "fold",
+        5
+      ],
+      [
+        "quod_ledger_store",
+        "open",
+        3
+      ],
+      [
+        "file",
+        "write",
+        2
+      ],
+      [
+        "file",
+        "pwrite",
+        3
+      ],
+      [
+        "file",
+        "sync",
+        1
+      ],
+      [
+        "file",
+        "datasync",
+        1
+      ]
+    ]
+  },
+  "wall_us": 17222287,
+  "cpu_ms": 17319,
+  "engine_md5": "e/AMW8q7IrmRp+lSv7P1jg=="
+}

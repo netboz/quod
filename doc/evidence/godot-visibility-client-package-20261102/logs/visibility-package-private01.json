@@ -1,0 +1,61 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tools/package.py",
+    "--manifest",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-visibility-20261102/inputs/client-visibility-product01-manifest.json",
+    "--manifest-sha256",
+    "40276e0371d70153f701eb15883e06c05ca97fe4ec21f78b4079cb79615b3bda",
+    "--extras",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/visibility-package-inputs01/extras.json",
+    "--output",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-visibility-linux-x86_64-private01.tar.gz",
+    "--receipt",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/inputs/visibility-package-private01.json"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "4d0287e7d3820abaa324554f7a5f90c412b62c4ecf627c42be8fc61e6dd60e6f",
+    "hashes.py": "d5130192218b1a6061181f38f934eec273340bc4f142d6d11ee4a1edce65722e",
+    "inspect_package.py": "0b7d60a537959b2714ebebee6bf0fd7ab8b192a937a293c5f2a34d87c4d65257",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "isolation_probe.py": "4b2c086e7db0323965692ac7abdd7a8fbadb6a145e7309611897a5d5be38abf0",
+    "journey.py": "7470c650bc7332188349efbad35a75fb5fda6bc2577124dd8ac589562391703d",
+    "ordinary_launch.py": "7140354863b67923bf859d69db9755619b8566d5f04043e5585df7a1b26a89fa",
+    "package_checks.py": "1892fd8f086e582de9887b5cc4f842f716d5d5cbce89928d957074e5da89ccf9",
+    "package_current.py": "404ce8482eedccd6d890d488ee5897872695542838b110230a5a4bf09b0a0869",
+    "prepare.py": "c57438fd1bbe3068b9cca10fc25930c9ba6e04eaac1bc4595947fd7f478dccca",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "20e9c82a75895e0bd0bad08fba727c7d43aa6bbfd231983dd36e48d40e84eb44",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-02T16:00:23Z",
+  "elapsed_seconds": 17.497772693634033,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/visibility-package-private01/stdout.raw",
+      "sha256": "1de457b047d4110574f00e56aa424c9bce611003c4feecd76b3d06eab6778df0",
+      "bytes": 320
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/visibility-package-private01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/logs/visibility-package-private01-stdout.log",
+      "sha256": "1de457b047d4110574f00e56aa424c9bce611003c4feecd76b3d06eab6778df0",
+      "bytes": 320
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-visibility-client-package-20261102/logs/visibility-package-private01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

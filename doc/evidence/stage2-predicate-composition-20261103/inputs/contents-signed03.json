@@ -1,0 +1,77 @@
+{
+  "passed": false,
+  "children": {
+    "server": {
+      "command": [
+        "python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-predicate-composition-20261103/serve.py",
+        "contents-signed03",
+        "--stage",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+        "--profile",
+        "test",
+        "--qualified",
+        "--clean-manifest",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source-manifest.json",
+        "--presentation-source",
+        "--affected-wire",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/space-name-owner03.json"
+      ],
+      "true_exit": 0
+    },
+    "client": {
+      "command": [
+        "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+        "--headless",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--path",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/contents02/source/client/godot",
+        "--",
+        "--qualification",
+        "--profile",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/contents-signed03/profile",
+        "--node",
+        "https://127.0.0.1:35811",
+        "--ca",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/server-contents-signed03/backend-ca.pem"
+      ],
+      "true_exit": 1
+    }
+  },
+  "reader_errors": [],
+  "hardware": false,
+  "build_label": "contents02",
+  "failure": "AssertionError: client failure",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "streams": {
+    "client-stderr.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/contents-signed03/client-stderr.raw",
+      "sha256": "1b369f2a00a111296abc224138df0f24bbe936b68bd3f598d88e65650d1b81b4",
+      "bytes": 4636
+    },
+    "client-stdout.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/contents-signed03/client-stdout.raw",
+      "sha256": "dd42c511d105d8cb257caae9f7b9a15e73b0368501a89c9c11039203ae6f0dc3",
+      "bytes": 130591
+    },
+    "server-stdout.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/contents-signed03/server-stdout.raw",
+      "sha256": "463364eb57b3a9a41c03b58826db3c1fbcc6f4b56166467df2308f111ffa7661",
+      "bytes": 129
+    },
+    "server-stderr.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-composition/contents-signed03/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

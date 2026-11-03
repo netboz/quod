@@ -1,0 +1,14 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS ordinary native pointer focuses the actual editable spatial field
+PASS actual focused spatial field raster retained
+PASS focusing an editable spatial native field exposes the adjacent keyboard
+PASS native shift-arrow selection owns the Unicode range and its caret
+<private fixture/client diagnostic>
+PASS virtual AZERTY key replaces native Unicode selection through the existing draft event
+PASS Backspace uses the native caret and delete owner
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

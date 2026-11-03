@@ -1,0 +1,28 @@
+PASS delegated authority does not queue an early begin before PREPARED
+PASS artifact-only preparation provides no launch/begin authorization
+PASS PREPARED without an exact mapped binding does not begin
+PASS local delegated mapped PREPARED dispatches one begin without parent round trip
+PASS local delegation preserves original preparation and authentic expiry
+PASS refresh withdrawal/reacceptance and repeated READY neither finish nor restart any bound
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS wrong pid refuses the exact owned mapping
+PASS wrong incarnation refuses the exact owned mapping
+PASS wrong address refuses the exact owned mapping
+PASS wrong executable dev/inode/start component 0 refuses dispatch
+PASS wrong executable dev/inode/start component 1 refuses dispatch
+PASS wrong executable dev/inode/start component 2 refuses dispatch
+PASS unmapped window refuses begin
+PASS ambiguous mapped address refuses begin
+PASS all mapping refusals delivered no begin or domain command
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS late begin at preparation_failure only dispatches one normal finish
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS late begin at auth_expired only dispatches one normal finish
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS stop before begin cannot revive or replay setup
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS mapped snapshot that reaches the original cutoff cannot send a late begin
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS original participant1800 cutoff keeps exactly one owned finish
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+OWNED_COMMANDS_PASS {"checks": 27, "real_owner": "owned_commands.OwnedCommands + supervision.Supervision", "real_pipe_children": 7, "runtime_or_application_or_window": false, "host_input": false, "signals": 0, "eof": true}

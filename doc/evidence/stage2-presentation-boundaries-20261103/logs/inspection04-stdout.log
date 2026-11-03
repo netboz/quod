@@ -1,0 +1,14 @@
+======================== EUnit ========================
+quod_lens_tests: exact_predicate_inspection_preserves_full_sorted_catalogue_test...*timed out*
+in function erlog_int:functor/1 (/work/_checkouts/erlog/src/erlog_int.erl, line 1250)
+in call from erlog_int:well_form_body/4 (/work/_checkouts/erlog/src/erlog_int.erl, line 1300)
+in call from erlog_int:well_form_body/4 (/work/_checkouts/erlog/src/erlog_int.erl, line 1269)
+in call from quod_erlog_db_local_prove:follower_clause/3 (/work/src/quod_erlog_db_local_prove.erl, line 908)
+in call from quod_erlog_db_local_prove:follower_clauses/3 (/work/src/quod_erlog_db_local_prove.erl, line 887)
+in call from quod_erlog_db_local_prove:follower_clauses/3 (/work/src/quod_erlog_db_local_prove.erl, line 888)
+in call from quod_erlog_db_local_prove:append_followers/2 (/work/src/quod_erlog_db_local_prove.erl, line 882)
+in call from quod_erlog_db_local_prove:add_followers/3 (/work/src/quod_erlog_db_local_prove.erl, line 864)
+undefined
+=======================================================
+  Failed: 0.  Skipped: 0.  Passed: 0.
+One or more tests were cancelled.

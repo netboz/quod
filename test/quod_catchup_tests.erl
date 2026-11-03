@@ -1,5 +1,6 @@
 -module(quod_catchup_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 -include("quod_transport_limits.hrl").
@@ -440,7 +441,7 @@ with_evidence_archive(F, Fun) ->
     end.
 
 consume_evidence_sender(Store, Sender, Receiver, Acc) ->
-    {ok, Parts, Next} = quod_catchup:transfer_page(Store, Sender),
+    {ok, Parts, Next} = quod_catchup:transfer_page(Store, Sender, unlimited),
     End = case Next of done -> done; _ -> more end,
     {ok, Received} = quod_catchup:evidence_accept(Receiver, Parts,
                                                 quod_ledger_store:last(Store), End),
@@ -480,8 +481,8 @@ era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_() 
             Before = quod_dtx_phase_index:stats(I),
             Send = quod_catchup:transfer_open(SourceStore, 2, 2),
             try
-                %% Sparse proofs use the same bounded pages through the local
-                %% byte adapter, whose continuation is not a wire nonce.
+                %% The borrowed local view has no enclosing transport frame; its
+                %% complete proof still uses the same verification owner.
                 {ok, _} = application:ensure_all_started(gproc),
                 true = quod_reg:reg({quod_simplex, Ns}),
                 {ok, Reader} = quod_ledger_store:open_ro_snapshot(
@@ -498,7 +499,7 @@ era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_() 
                     PageResult
                 end,
                 try
-                    ?assertMatch({ok, ok, 2, {{local, _}, 1}},
+                    ?assertMatch({ok, ok, 2, done},
                         quod_foreign_log:local_view_fetch(View, Reader, Query,
                             Deadline, fun(_, _, _) -> ok end)),
                     {ok, Evidence} = quod_foreign_log:fetch_evidence_pages(
@@ -513,7 +514,7 @@ era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_() 
                 end,
                 quod_ledger_store:with_proof_stage(filename:join(Dir, "interrupted"), fun(Stage) ->
                     {ok, T} = quod_catchup:transfer_begin(Binding, 2, P, I, wrapped, Stage),
-                    {ok, [{group, 2, 2} | Page], More} = quod_catchup:transfer_page(SourceStore, Send),
+                    {ok, [{group, 2, 2} | Page], More} = fixture_transfer_page(SourceStore, Send),
                     ?assertNotEqual(done, More),
                     ?assertEqual({error, incomplete_transfer}, quod_catchup:transfer_accept(T, Page, done)),
                     ?assertEqual(1, quod_ledger_store:last(Target)),
@@ -543,11 +544,15 @@ era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_() 
         after file:del_dir_r(Dir) end
     end}.
 
+fixture_transfer_page(Store, Send) ->
+    %% Deliberately small test envelope forces the existing cursor to retain
+    %% a partially streamed group without constructing multi-gigabyte fixtures.
+    quod_catchup:transfer_page(Store, Send, {65536, 65536}, [], 0).
+
 transfer_all_pages(Store, Send, Receive, Count) ->
-    {ok, Parts, Next} = quod_catchup:transfer_page(Store, Send),
-    ?assert(length(Parts) =< ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
-    {ok, Wire} = quod_safe_term:encode_canonical(Parts, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-    {ok, Decoded} = quod_safe_term:decode_wrapped(Wire, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+    {ok, Parts, Next} = fixture_transfer_page(Store, Send),
+    {ok, Wire} = quod_safe_term:encode_canonical(Parts, ?QUOD_LINK_PAYLOAD_CAPACITY),
+    {ok, Decoded} = quod_safe_term:decode_wrapped(Wire, ?QUOD_LINK_PAYLOAD_CAPACITY),
     Payload = case Decoded of [{group, 2, 2} | Rest] -> Rest; _ -> Decoded end,
     {Body, End} = case Next of
         done -> ?assertEqual(end_group, lists:last(Payload)),
@@ -580,11 +585,11 @@ era_transfer_batches_groups_in_one_page_instead_of_one_round_trip_per_entry_test
         try
             ?assertMatch({ok, [{group, 2, 2}, {entry, _}, {proof, _}, end_group,
                                {group, 3, 3}, {entry, _}, {proof, _}, end_group], done},
-                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 100))),
+                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 100), unlimited)),
             ?assertMatch({ok, [{group, 2, 2}, {entry, _}, {proof, _}, end_group], done},
-                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 2))),
+                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 2, 2), unlimited)),
             ?assertEqual({ok, [], done},
-                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 4, 4))),
+                quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 4, 4), unlimited)),
             %% The second block deliberately repeats the first author sequence.
             %% Verification of a later group must preserve the context of the
             %% successfully appended prefix, including its current raw handle.
@@ -592,7 +597,7 @@ era_transfer_batches_groups_in_one_page_instead_of_one_round_trip_per_entry_test
             {ok, Target} = quod_ledger_store:open(Ns, filename:join(Dir, "receiver")),
             try
                 {ok, WholePage, done} = quod_catchup:transfer_page(Store,
-                    quod_catchup:transfer_open(Store, 1, 3)),
+                    quod_catchup:transfer_open(Store, 1, 3), unlimited),
                 quod_ledger_store:with_proof_stage(filename:join(Dir, "range-stage"), fun(Stage) ->
                     Range = quod_catchup:range_begin(maps:get(identity, F), 3, wrapped, Stage,
                         Target, quod_simplex:history_projection(maps:get(identity, F)), Index),
@@ -626,7 +631,7 @@ era_transfer_wire_binds_credit_request_and_opaque_continuation_test() ->
              {history_page3, Grant, Req, [end_group], 100, done, Next},
              {history_error3, Grant, Req, not_ready, Next}],
     lists:foreach(fun(Term) ->
-        Wire = quod_catchup:encode_frame(Ns, Term),
+        {ok, Wire} = quod_catchup:encode_frame(Ns, Term),
         ?assertMatch({ok, Term, _}, quod_catchup:decode_frame(Ns, Wire)),
         ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(<<"other">>, Wire))
     end, Terms),
@@ -634,12 +639,12 @@ era_transfer_wire_binds_credit_request_and_opaque_continuation_test() ->
            {history_request3, Grant, Req, {continue, {disk_offset, 100}, 1}},
            {history_page3, Grant, Req, [end_group], 100, {{local, sender}, 1}, Next},
            {history_page3, Grant, Req, [end_group], 100, done, Grant},
-           {history_page3, Grant, Req, lists:duplicate(?QUOD_MAX_FOREIGN_PAGE_ENTRIES + 1, end_group),
+           {history_page3, Grant, Req, improper,
             100, done, Next},
            {blocks_req, Grant, Req, 2, 3}],
     lists:foreach(fun(Term) ->
-        {ok, Inner} = quod_safe_term:encode_canonical(Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-        {ok, Wire} = quod_safe_term:encode_canonical({catchup, 3, Ns, Inner}, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+        {ok, Inner} = quod_safe_term:encode_canonical(Term, ?QUOD_LINK_PAYLOAD_CAPACITY),
+        {ok, Wire} = quod_safe_term:encode_canonical({catchup, 3, Ns, Inner}, ?QUOD_LINK_PAYLOAD_CAPACITY),
         ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(Ns, Wire))
     end, Bad).
 
@@ -731,7 +736,7 @@ transfer_does_not_reauthenticate_the_previous_material_test() ->
         {module, crypto} = code:ensure_loaded(crypto),
         {{ok, Parts, done}, {call_count, Rows}} = tprof:profile(fun() ->
             {ok, Store} = quod_ledger_store:open_ro_snapshot(Snapshot),
-            try quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 3, 5))
+            try quod_catchup:transfer_page(Store, quod_catchup:transfer_open(Store, 3, 5), unlimited)
             after quod_ledger_store:close(Store) end
         end, #{type => call_count, report => return,
                pattern => [{crypto, verify, 5}], timeout => 5000}),
@@ -756,7 +761,7 @@ transfer_ranges_test_() ->
             try
                 Read = fun(From, To) ->
                     {ok, Parts, done} = quod_catchup:transfer_page(Store,
-                        quod_catchup:transfer_open(Store, From, To)),
+                        quod_catchup:transfer_open(Store, From, To), unlimited),
                     [quod_ledger:entry_view(E) || {entry, B} <- Parts,
                          {ok, E} <- [quod_ledger:decode_entry(B)]]
                 end,
@@ -772,9 +777,8 @@ transfer_ranges_test_() ->
          end)]
      end}.
 
-%% The byte budget caps the response so it fits one quod_link frame (1 MiB) — a window of large blocks is
-%% returned as a shorter prefix (the joiner loops for the rest), never an oversized frame that kills the link.
-byte_cap_test() ->
+%% Regression input exceeds both former page and link quotas.
+complete_large_local_page_test() ->
     Dir = filename:join("/tmp", "quod_catchup_big_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
     Ns  = <<"catchup:big">>,
     Big = binary:copy(<<0>>, 200 * 1024),   %% ~200 KiB payload per entry
@@ -790,32 +794,32 @@ byte_cap_test() ->
               || I <- lists:seq(1, 8)],      %% 8 × ~200 KiB = ~1.6 MiB total, over the ~900 KiB budget
         {ok, S1} = quod_ledger_store:append(S0, {none, Es}),
         {ok, Parts, More} = quod_catchup:transfer_page(S1,
-            quod_catchup:transfer_open(S1, 1, 1000)),
-        ?assertNotEqual(done, More),
+            quod_catchup:transfer_open(S1, 1, 1000), unlimited),
+        ?assertEqual(done, More),
         Served = [B || {entry, B} <- Parts],
         ok = quod_ledger_store:close(S1),
         ?assert(length(Served) >= 1),      %% always makes progress
-        ?assert(length(Served) < 8),       %% but byte-capped below the full window
+        ?assertEqual(8, length(Served)),       %% every requested entry is present
         Bytes = lists:sum([byte_size(Blob) || Blob <- Served]),
-        ?assert(Bytes < 1024 * 1024)       %% the served entries fit under quod_link's 1 MiB frame cap
+        ?assert(Bytes > 1024 * 1024)       %% no silent truncation at the former link quota
     after
         _ = file:del_dir_r(Dir)
     end.
 
-count_cap_serves_a_contiguous_prefix_test() ->
+complete_catalogue_has_no_part_count_quota_test() ->
     Dir = filename:join("/tmp", "quod_catchup_count_" ++
                         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     Ns = <<"catchup:count">>,
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     try
-        Height = ?QUOD_MAX_FOREIGN_PAGE_ENTRIES + 10,
+        Height = ?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES + 10,
         Entries = [entry(I, {batch, [tx(I)]}, 0, none) || I <- lists:seq(1, Height)],
         {ok, Store} = quod_ledger_store:append(Store0, {none, Entries}),
         {ok, Parts, More} = quod_catchup:transfer_page(Store,
-            quod_catchup:transfer_open(Store, 1, Height)),
-        ?assertNotEqual(done, More),
-        ?assertEqual(?QUOD_MAX_FOREIGN_PAGE_ENTRIES, length(Parts)),
-        ?assertEqual(lists:seq(1, ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
+            quod_catchup:transfer_open(Store, 1, Height), unlimited),
+        ?assertEqual(done, More),
+        ?assertEqual(Height + 2, length(Parts)),
+        ?assertEqual(lists:seq(1, Height),
                      [quod_ledger:entry_index(E) || {entry, B} <- Parts,
                          {ok, E} <- [quod_ledger:decode_entry(B)]])
     after
@@ -851,21 +855,21 @@ canonical_outer_and_inner_frames_are_exact_test() ->
 
 page_count_bytes_and_frame_headroom_test() ->
     Ns = <<"catchup:bounds">>, Grant = <<1:128>>, ReqId = <<2:128>>, Next = <<3:128>>,
-    AtCount = lists:duplicate(?QUOD_MAX_FOREIGN_PAGE_ENTRIES, end_group),
+    AtCount = lists:duplicate(?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES, end_group),
     Page = fun(Parts) -> {history_page3, Grant, ReqId, Parts, 9, done, Next} end,
     ?assertMatch({ok, _, _}, quod_catchup:decode_frame(Ns, raw_frame(Ns, Page(AtCount)))),
-    ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(
+    ?assertMatch({ok, _, _}, quod_catchup:decode_frame(
       Ns, raw_frame(Ns, Page([end_group | AtCount])))),
     {ok, EmptyPart} = quod_safe_term:encode_canonical({entry, <<>>}, 1024),
-    Limit = ?QUOD_MAX_FOREIGN_PAGE_BYTES - byte_size(EmptyPart),
+    Limit = ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES - byte_size(EmptyPart),
     AtBytes = [{entry, binary:copy(<<0>>, Limit)}],
-    Frame = quod_catchup:encode_frame(Ns, Page(AtBytes)),
-    ?assert(byte_size(Frame) < ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+    {ok, Frame} = quod_catchup:encode_frame(Ns, Page(AtBytes)),
+    ?assert(byte_size(Frame) < ?QUOD_LINK_PAYLOAD_CAPACITY),
     ?assertMatch({ok, _, _}, quod_catchup:decode_frame(Ns, Frame)),
-    ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(
+    ?assertMatch({ok, _, _}, quod_catchup:decode_frame(
       Ns, raw_frame(Ns, Page([{entry, binary:copy(<<0>>, Limit + 1)}])))),
-    ?assertEqual({error, frame_too_large}, quod_catchup:decode_frame(
-      Ns, binary:copy(<<0>>, ?QUOD_TRANSPORT_MAX_FRAME_BYTES + 1))).
+    ?assertEqual({error, bad_frame}, quod_catchup:decode_frame(
+      Ns, binary:copy(<<0>>, 1024 * 1024 + 1))).
 
 foreign_response_keeps_unknown_vocabulary_opaque_test() ->
     Ns = <<"catchup:opaque-response">>,
@@ -883,7 +887,7 @@ foreign_response_keeps_unknown_vocabulary_opaque_test() ->
                           block_bytes = BlockBytes, cert = none}),
     {ok, Blob} = quod_ledger:encode_entry(Entry),
     Grant = <<1:128>>, ReqId = <<2:128>>, Next = <<3:128>>,
-    Frame = quod_catchup:encode_frame(
+    {ok, Frame} = quod_catchup:encode_frame(
       Ns, {history_page3, Grant, ReqId, [{entry, Blob}], 1, done, Next}),
     ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)),
     {ok, {history_page3, Grant, ReqId, [{entry, Received}], 1, done, Next}, _} =
@@ -1107,7 +1111,7 @@ era_observer_worker_installs_shared_group_before_credit_ack_test() ->
     Dir = filename:join("/tmp", "quod-observer-worker-" ++
         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
     Parent = self(),
-    Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
                     [named_table, protected, set]),
     true = ets:insert(Table, {anchor, Anchor}),
     true = quod_reg:reg({quod_prolog, Ns}),
@@ -1306,14 +1310,14 @@ transfer_link(Endpoint, Client, Ns, Binding, Grant, Pending) ->
             Client ! {catchup_credit, self(), Ref, Grant},
             transfer_link(Endpoint, Client, Ns, Ref, Grant, Pending);
         {request_page, Client, Binding, Grant, Request, Query} when Pending =:= none ->
-            Frame = quod_catchup:encode_frame(Ns, {history_request3, Grant, Request, Query}),
+            {ok, Frame} = quod_catchup:encode_frame(Ns, {history_request3, Grant, Request, Query}),
             {ok, {history_request3, Grant, Request, Decoded}, _} = quod_catchup:decode_frame(Ns, Frame),
             Op = make_ref(),
             Endpoint ! {catchup_request, self(), Op, Decoded, quod_time:mono_ms()},
             transfer_link(Endpoint, Client, Ns, Binding, Grant, {Op, Request});
         {complete_page, Endpoint, Op, {ok, Parts, Height, More}} when element(1, Pending) =:= Op ->
             {Op, Request} = Pending, Next = crypto:strong_rand_bytes(16),
-            Frame = quod_catchup:encode_frame(Ns, {history_page3, Grant, Request, Parts, Height, More, Next}),
+            {ok, Frame} = quod_catchup:encode_frame(Ns, {history_page3, Grant, Request, Parts, Height, More, Next}),
             {ok, {history_page3, Grant, Request, Payload, Height, More, Next}, _} =
                 quod_catchup:decode_frame(Ns, Frame),
             Endpoint ! {catchup_page_sent, self(), Op},
@@ -1638,9 +1642,17 @@ with_transfer_endpoint(Fun) ->
         {ok, S1} = quod_ledger_store:append(S0,
             {none, [quod_ledger:entry(1, maps:get(genesis, F), none)]}),
         {ok, S2} = quod_ledger_store:append(S1, {Source, [Entry]}),
+        {ok, Parts, done} = quod_catchup:transfer_page(S2,
+            quod_catchup:transfer_open(S2, 2, 2), unlimited),
+        Half = lists:sublist(Parts, length(Parts) div 2),
+        {ok, HalfFrame} = quod_catchup:encode_frame(Ns,
+            {history_page3, <<0:128>>, <<0:128>>, Half, 2, {<<0:128>>, 1}, <<1:128>>}),
         ok = quod_ledger_store:close(S2),
         with_endpoint_source(Dir, Ns, Anchor, 2,
-          fun(C) -> Fun(C#{fixture => F, entry => Entry}) end)
+          fun(C) ->
+              ok = gen_server:call(maps:get(endpoint, C),
+                                   {test_page_capacity, byte_size(HalfFrame)}),
+              Fun(C#{fixture => F, entry => Entry}) end)
     after file:del_dir_r(Dir) end.
 
 with_endpoint_source(Dir, Ns, Anchor, Height, Fun) ->
@@ -1878,3 +1890,17 @@ contact_candidates_test() ->
 reader_for_operation(Endpoint, Op) ->
     [Row] = [R || R = #{operation := Operation} <- maps:values(readers(Endpoint)), Operation =:= Op],
     Row.
+
+terminal_frame_lookahead_preserves_every_part_test() ->
+    Part = {entry, <<1,2,3>>}, End = end_group,
+    Size = fun quod_catchup:part_body_size/1,
+    More = Size(Part) - 1, Done = Size(Part) + Size(End),
+    ?assertEqual({ok, [Part, End], done},
+        quod_catchup:test_transfer_parts([Part, End], {More, Done})),
+    Prefix = {group, 1, 1}, Parts = [Prefix, Part, End],
+    Allowances = {Size(Prefix) + More, Size(Prefix) + Done - 1},
+    {ok, [Prefix], Retained} = quod_catchup:test_transfer_parts(Parts, Allowances),
+    ?assertEqual({ok, [Part, End], done},
+        quod_catchup:transfer_page(undefined, Retained, {More, Done}, [], 0)),
+    ?assertEqual({error, frame_unrepresentable},
+        quod_catchup:test_transfer_parts([Part, End], {More, Done - 1})).

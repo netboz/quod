@@ -1,5 +1,6 @@
 -module(quod_receiver_decode_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
@@ -126,9 +127,9 @@ failed_page_does_not_publish_or_retain_a_partial_context_test() ->
     end).
 
 page_count_limit_still_precedes_decoding_test() ->
-    {Tx, _, _} = signed(), Count = ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
+    {Tx, _, _} = signed(), Count = ?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES,
     Parts = [{entry, entry_bytes(Tx, I)} || I <- lists:seq(2, Count + 1)],
-    ?assert(lists:sum([byte_size(B) || {entry, B} <- Parts]) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+    ?assert(lists:sum([byte_size(B) || {entry, B} <- Parts]) =< ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES),
     F = quod_ct:protocol_fixture(<<"receiver:limit">>),
     Path = filename:join("/tmp", "quod-receiver-limit-" ++
         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),

@@ -416,7 +416,7 @@ load_receipts(Dir) ->
                     Path = filename:join(Dir, Name),
                     {ok, Bytes} = file:read_file(Path),
                     {ok, {custody_receipt, 1, Scope, Receipt}} =
-                        quod_safe_term:decode(Bytes, receipt_max_bytes()),
+                        quod_safe_term:decode(Bytes, unlimited),
                     {ok, Bytes} = receipt_bytes(Scope, Receipt),
                     Path = receipt_path(Scope, Dir),
                     false = maps:is_key(Scope, Acc),
@@ -436,14 +436,10 @@ receipt_bytes(Scope = {<<_:256>>, ScopeBytes}, Receipt = #{store := {B, <<_:512>
     case {quod_client_goal:request_identity(B), quod_client_goal:request_identity(R),
           quod_durable_term:decode_goal(Fence)} of
         {{ok, _}, {ok, _}, {ok, _}} ->
-            quod_safe_term:encode_canonical({custody_receipt, 1, Scope, Receipt}, receipt_max_bytes());
+            quod_safe_term:encode_canonical({custody_receipt, 1, Scope, Receipt}, unlimited);
         _ -> {error, invalid_custody_receipt}
     end;
 receipt_bytes(_, _) -> {error, invalid_custody_receipt}.
-
-receipt_max_bytes() ->
-    %% Two signed requests, one bounded retirement goal and two exact identities.
-    2 * ?QUOD_CLIENT_GOAL_REQUEST_BYTES + 3 * ?QUOD_MAX_TOPLEVEL_GOAL_BYTES.
 
 receipt_path(Scope, Dir) ->
     Id = crypto:hash(sha256, term_to_binary(Scope, [deterministic])),

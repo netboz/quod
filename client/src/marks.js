@@ -88,6 +88,10 @@ function readMark(term) {
   })
 }
 
+function allowance(term) {
+  return term?.type === 'atom' && term.value === 'unlimited' ? Infinity : whole(term, 'resource allowance')
+}
+
 function readTerrain(term) {
   const [profile, palette, view, resources] = args(term, 'terrain_geometry', 4)
   oneOf(profile, ['qvt1'], 'terrain profile')
@@ -99,7 +103,7 @@ function readTerrain(term) {
     previous = value
     return Object.freeze([value, readMaterial(surface)])
   })
-  const limits = args(resources, 'resources', 5).map(n => whole(n, 'terrain allowance'))
+  const limits = args(resources, 'resources', 5).map(allowance)
   if (limits.some(n => n <= 0)) throw new Error('invalid terrain allowance')
   const viewDistance = args(view, 'view_distance', 3).map(n => whole(n, 'view distance'))
   if (viewDistance[0] <= 0 || viewDistance[1] <= 0 || viewDistance[2] < viewDistance[1] ||
@@ -125,7 +129,7 @@ function readMesh(term) {
   const origin = args(pivot, 'pivot', 3).map(n => whole(n, 'asset pivot'))
   const [direction] = args(facing, 'front', 1)
   const front = oneOf(direction, ['-z', '+z', '+x', '-x'], 'asset front')
-  const allowed = args(resources, 'resources', 7).map(n => whole(n, 'mesh allowance'))
+  const allowed = args(resources, 'resources', 7).map(allowance)
   if (allowed.some(n => n <= 0)) throw new Error('invalid mesh allowance')
   return Object.freeze({ digest, profile: 'gltf2-static-v1', scale: permille / 1000,
     bounds: Object.freeze(bounds), pivot: Object.freeze(origin), front,

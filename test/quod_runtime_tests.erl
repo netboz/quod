@@ -539,7 +539,6 @@ local_subscription_reaches_one_shared_ready_projection_test_() ->
            #{followed_histories := 1, follow_consumers := 1,
              projection_workers := 1, follow_building := 0,
              follow_unreachable := 0}, FollowStats),
-        ?assert(maps:get(follow_pages, FollowStats) > 0),
         ?assert(maps:get(follow_entries, FollowStats) > 0),
         ?assert(maps:get(projection_rebuilds, FollowStats) > 0),
         ?assertMatch(

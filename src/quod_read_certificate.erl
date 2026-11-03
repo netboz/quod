@@ -22,7 +22,6 @@ All validators must use the same statement version and verification rules.
 -define(CERTIFICATE_VERSION, 3).
 -define(VOTE_VERSION, 3).
 -define(VOTE_DOMAIN, <<"quod.read.certificate">>).
--define(MAX_CERTIFICATE_BYTES, ?QUOD_MAX_DTX_BODY_BYTES).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type signed_row() :: {<<_:256>>, <<_:512>>}.
@@ -73,12 +72,10 @@ new(Target, ProofId, PlanDigest, AnchorRef, CommitteeId, Signatures) ->
 -spec binding(certificate()) -> {ok, map()} | error.
 binding(
   {quod_read_certificate, ?CERTIFICATE_VERSION, Target, ProofId,
-   PlanDigest, AnchorRef, CommitteeId, Signatures} = Certificate) ->
+   PlanDigest, AnchorRef, CommitteeId, Signatures}) ->
     case statement(Target, ProofId, PlanDigest, AnchorRef, CommitteeId) of
         {ok, Statement} ->
-            case quod_quorum:canonical_signatures(Signatures) andalso
-                 erlang:external_size(Certificate) =<
-                     ?MAX_CERTIFICATE_BYTES of
+            case quod_quorum:canonical_signatures(Signatures) of
                 true ->
                     {ok, #{target => Target, proof_id => ProofId,
                            plan_digest => PlanDigest,
@@ -127,8 +124,8 @@ encode(Certificate) ->
 -spec decode(binary()) ->
           {ok, certificate()} | {error, invalid_read_certificate | too_large}.
 decode(Blob)
-  when is_binary(Blob), byte_size(Blob) =< ?MAX_CERTIFICATE_BYTES ->
-    case quod_safe_term:decode(Blob, ?MAX_CERTIFICATE_BYTES) of
+  when is_binary(Blob) ->
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, Certificate} ->
             case valid_shape(Certificate) andalso
                  term_to_binary(Certificate, [deterministic]) =:= Blob of

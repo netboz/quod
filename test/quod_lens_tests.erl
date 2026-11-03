@@ -11,7 +11,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_vm_limits.hrl").
 
 %% The components this ontology's own release actually has, in miniature: two
 %% licences whose copyleft stops at the file, one that stops at the library's
@@ -103,22 +102,15 @@ an_undeclared_group_refuses_the_view_test() ->
         fails({satisfied, {distinct_colours, <<"family">>}, Unknown}, St)
     end).
 
-the_scene_bound_is_its_own_test() ->
+complete_lens_preserves_rows_and_labels_test() ->
     with_lens(fun(St) ->
-        ?assertEqual([256], solutions({'N'}, {lens_limit, <<"marks">>, {'N'}}, St)),
-        Rows = [row(N, <<"gpl">>, 3, <<"a">>) || N <- lists:seq(1, 257)],
-        fails({satisfied, {within, <<"marks">>}, Rows}, St),
-        holds({satisfied, {within, <<"marks">>}, tl(Rows)}, St)
+        Label = binary:copy(<<"long-name">>, 20),
+        Rows = [row(N, <<"gpl">>, 3, Label) || N <- lists:seq(1, 600)],
+        [Marks] = solutions({'M'}, {laid_out, <<"reach_columns">>, <<"work_licences">>, Rows, {'M'}}, St),
+        ?assertEqual(600, length(Marks)),
+        ?assertEqual([Label], lists:usort([label_of(M)||M<-Marks])),
+        holds({well_formed_scene, Marks},St)
     end).
-
-%% The lens never produces more marks, or longer labels, than `quod:gui`
-%% accepts. Each ontology owns its own bound; this is the check that the two
-%% agree, so neither has to restate the other's number.
-the_lens_bounds_sit_inside_the_presentation_bounds_test() ->
-    Lens = terms(lens_source()),
-    Present = terms(rendering_source()),
-    ?assertEqual(true, limit_of(Lens, lens_limit, <<"marks">>) =< limit_of(Present, limit, <<"scene">>)),
-    ?assertEqual(true, limit_of(Lens, lens_limit, <<"label">>) =< limit_of(Present, limit, <<"label">>)).
 
 %% --- the authored lens, end to end ------------------------------------------
 %% `quod:licence` ships the rules, not anybody's parts list, so each of these
@@ -171,23 +163,6 @@ a_value_nobody_declared_is_shown_absent_not_as_zero_test() ->
 the_view_is_a_scene_quod_rendering_accepts_test() ->
     Marks = with_work(?PARTS, fun(St) -> view(<<"quod">>, St) end),
     with_present(fun(Present) -> holds({well_formed_scene, Marks}, Present) end).
-
-%% Every generated binary stays clear of the 32-byte width at which the signed
-%% reply renderer reads a binary as an Ed25519 key. Domain text a descriptor
-%% carries unchanged — an entity name — is the domain's business; what this
-%% ontology mints is bounded here.
-generated_text_is_short_test() ->
-    with_work(?PARTS, fun(St) ->
-        lists:foreach(
-          fun({mark, Id, _Kind, _Size, _T, {surface, Colour, _M, _R, _E, _Textures}, Label, _D}) ->
-              ?assert(byte_size(Id) =< 16),
-              ?assertEqual(7, byte_size(Colour)),
-              case Label of
-                  {label, Text, _Placement} -> ?assert(byte_size(Text) =< 24);
-                  unlabelled -> ok
-              end
-          end, view(<<"quod">>, St))
-    end).
 
 the_layout_is_deterministic_and_grouped_test() ->
     with_work(?PARTS, fun(St) ->
@@ -295,26 +270,26 @@ the_class_view_is_derived_test() ->
     with_lens(fun(St) ->
         holds({isa, lens, thing}, St),
         ?assertEqual([<<"ontology_source">>, <<"predicate_source">>,
-                      <<"ontology_policy">>, <<"ontology_interfaces">>, <<"ontology_routes">>, <<"work_licences">>],
+                      <<"ontology_policy">>, <<"ontology_interfaces">>, <<"ontology_routes">>, <<"work_licences">>, <<"ontology_graph">>],
                      solutions({'L'}, {instance_of, lens, {'L'}}, St)),
-        ?assertEqual(lists:duplicate(5, <<"source_text">>) ++ [<<"reach_columns">>],
+        ?assertEqual(lists:duplicate(5, <<"source_text">>) ++ [<<"reach_columns">>, <<"ontology_graph">>],
                      solutions({'E'}, {instance_of, encoding, {'E'}}, St)),
         ?assertEqual([<<"family">>, <<"reach">>],
                      lists:sort(solutions({'M'},
                                           {attribute, <<"work_licences">>, measure, {'M'}},
                                           St))),
-        ?assertEqual(5, length(solutions({'R'},
+        ?assertEqual(4, length(solutions({'R'},
                                          {attribute, <<"reach_columns">>, requires, {'R'}},
                                          St)))
     end).
 
-ontology_marks_keep_the_exact_owner_and_do_not_become_spaces_test() ->
+ontology_marks_keep_the_exact_owner_and_reflected_space_role_test() ->
     with_lens(fun(St) ->
         Target = {ontology_ref, <<"private:ontology">>, <<91:256>>},
         ?assertEqual([{depicts, <<"private:ontology">>, <<91:256>>, Target}],
             solutions({'D'}, {subject, <<"view:owner">>, Target, {'D'}}, St)),
         holds({isa, ontology, thing}, St),
-        fails({isa, ontology, space}, St)
+        holds({isa, ontology, space}, St)
     end).
 
 vocabulary_fits_the_genesis_budget_test() ->
@@ -340,13 +315,9 @@ terms(Path) ->
         _ -> quod_committed_projection:read_terms(Path)
     end.
 
-limit_of(Terms, Predicate, What) ->
-    [Max] = [N || {P, W, N} <- Terms, P =:= Predicate, W =:= What],
-    Max.
-
 row(Thing, Group, Rank, Text) -> {row, Thing, Group, Rank, Text}.
 
-%% One solution of view/3 is the whole bounded list of descriptors.
+%% One solution of view/3 is the whole list of descriptors.
 view(Work, St) ->
     [Marks] = solutions({'M'}, {view, <<"work_licences">>, [Work], {'M'}}, St),
     Marks.
@@ -412,3 +383,23 @@ load_source(Source, St) ->
 
 load_terms(Terms, #est{db = Db0} = St) ->
     St#est{db = lists:foldl(fun erlog_int:assertz_clause/2, Db0, Terms)}.
+
+
+exact_predicate_inspection_preserves_full_sorted_catalogue_test() ->
+    with_lens(fun(St) ->
+        io:format(user,"INSPECTION_ENGINE_READY~n",[]),
+        [Catalogue] = solutions({'C'}, {prolog_introspection,predicates,{'C'}}, St),
+        io:format(user,"INSPECTION_CATALOGUE_COUNT ~p~n",[length(Catalogue)]),
+        Expected = [{predicate,P,I} || {P,I} <- lists:zip(Catalogue,lists:seq(0,length(Catalogue)-1))],
+        ?assertEqual([Expected],solutions({'Rows'},
+            {prolog_introspection,{predicate,{'_'}},{'Rows'}}, St)),
+        io:format(user,"INSPECTION_COMPLETE_ENUMERATION~n",[]),
+        lists:foreach(fun({predicate,Indicator,Index}) ->
+            ?assertEqual([[{predicate,Indicator,Index}]],solutions({'Rows'},
+                {prolog_introspection,{predicate,Indicator},{'Rows'}}, St)),
+            ?assertEqual([[Indicator]],solutions({'Rows'},
+                {prolog_introspection,{predicates,Indicator},{'Rows'}}, St))
+        end,Expected),
+        ?assertEqual([[]],solutions({'Rows'},
+            {prolog_introspection,{predicate,{'/',never_defined_predicate,2}},{'Rows'}},St))
+    end).

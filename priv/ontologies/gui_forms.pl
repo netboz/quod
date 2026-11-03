@@ -26,6 +26,8 @@ no_follow(gui_bind_fields/4).
 no_follow(gui_match_fixed/2).
 no_follow(gui_tree_active/2).
 no_follow(gui_local_id/1).
+no_follow(gui_semantic_tree/2).
+no_follow(gui_semantic_children/2).
 
 gui_schema(Form, Revision, Tree) :-
     gui_definition(Form, Revision, Tree, _, _).
@@ -71,8 +73,20 @@ gui_compile(Form, Revision, Tree, Fields, Submit, Contract) :-
     gui_fixed_values(Fields, Form, Tree, Fixed),
     findall(C, gui_validation_context(Form, C), Contexts),
     term_variables(Contexts, []), sort(Contexts, Context),
-    variant_digest(schema(1, ontology_ref(Ns, Anchor), Tree,
+    gui_semantic_tree(Tree, Semantic),
+    variant_digest(schema(1, ontology_ref(Ns, Anchor), Semantic,
                           binding(Fields, Declaration), Fixed, Context), Revision).
+
+%% Appearance changes invalidate the installed projection, never a valid
+%% submission baseline. Every behavioral property remains in this digest.
+gui_semantic_tree(component(Id, Kind, Properties, Children),
+                  component(Id, Kind, Semantic, Descendants)) :-
+    findall(property(Key, Value),
+            (member(property(Key, Value), Properties), Key \== appearance), Semantic),
+    gui_semantic_children(Children, Descendants).
+gui_semantic_children([], []).
+gui_semantic_children([Child | Rest], [Semantic | Tail]) :-
+    gui_semantic_tree(Child, Semantic), gui_semantic_children(Rest, Tail).
 
 gui_submission(submit(Control, Goal), submit(Control, Goal), question, []).
 gui_submission(submit(Control, Goal, operation(Permission, Results)),

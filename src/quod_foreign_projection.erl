@@ -159,8 +159,7 @@ advance_requested(Height, Head,
         _ when Height =:= Applied ->
             publish_ready(Head, S);
         _ ->
-            Resnapshot = S#s.resnapshot orelse Applied =:= 0 orelse
-                         Height - Applied > ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
+            Resnapshot = S#s.resnapshot orelse Applied =:= 0,
             S1 = S#s{target_height = Height, target_head = Head, projection_id = none,
                      from_height = Applied, changed = [],
                      publications = case Resnapshot of
@@ -177,7 +176,7 @@ materialize_turn(S = #s{identity = {Ns, _Anchor}, view = View,
                         projection = Projection0,
                         target_height = Target}) ->
     From = quod_committed_projection:applied(Projection0) + 1,
-    To = min(Target, From + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
+    To = Target,
     case quod_ledger_store:open_ro_snapshot(maps:get(snapshot, View)) of
         {ok, Store} ->
             Result = try quod_catchup:read_blocks(Store, From, To)

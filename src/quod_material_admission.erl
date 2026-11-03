@@ -58,7 +58,7 @@ valid_limits(Kind, Rows) ->
     Keys = case Kind of
                founding -> [canonical_bytes, symbols];
                plan -> [canonical_bytes, operations, reads, symbols];
-               proof -> [heap_bytes]
+               proof -> [answer_bytes, heap_bytes]
            end,
     Pairs = [{Resource, Limit} || {limit, Resource, Limit} <- Rows,
                 Limit =:= unlimited orelse (is_integer(Limit) andalso Limit >= 0)],

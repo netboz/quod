@@ -249,7 +249,7 @@ export function validateGlb(input, allowed) {
 
 export function checkGlbCosts(costs, allowed) {
   requireProfile(Array.isArray(allowed) && allowed.length === COSTS.length &&
-    allowed.every(n => Number.isSafeInteger(n) && n > 0), 'invalid resource allowance')
+    allowed.every(n => n === Infinity || Number.isSafeInteger(n) && n > 0), 'invalid resource allowance')
   costs.forEach((cost, i) => requireProfile(cost <= allowed[i],
     `${COSTS[i]} exceeded: ${cost} > ${allowed[i]}`))
 }

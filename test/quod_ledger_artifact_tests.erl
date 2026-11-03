@@ -1,5 +1,6 @@
 -module(quod_ledger_artifact_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
@@ -35,7 +36,7 @@ block_shape_reuses_one_bounded_payload_encoding_test() ->
                    Block#block{timestamp = 77}, Block#block{payload = {batch, []}},
                    Block#block{block_bytes = <<>>}]).
 
-block_binding_owns_the_payload_limit_test() ->
+block_binding_preserves_exact_large_payload_test() ->
     F = fixture(quod_ledger), {Ns, Anchor} = Binding = maps:get(binding, F),
     Make = fun(Size) ->
         Base = maps:get(transaction, F),
@@ -45,20 +46,19 @@ block_binding_owns_the_payload_limit_test() ->
         {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Tx1, maps:get(signer, F)),
         {ok, Blob} = quod_transaction:encode_ledger_transaction(Tx),
         Wire = {batch, [{transaction, Blob}]},
-        {ok, PayloadBytes} = quod_safe_term:encode_canonical(Wire, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
+        {ok, PayloadBytes} = quod_safe_term:encode_canonical(Wire, unlimited),
         {Tx, Wire, byte_size(PayloadBytes)}
     end,
     {_, _, Overhead} = Make(0),
     lists:foreach(fun(Extra) ->
-        {Tx, Wire, Size} = Make(?MAX_BLOCK_BYTES - Overhead + Extra),
-        ?assertEqual(?MAX_BLOCK_BYTES + Extra, Size),
+        {Tx, Wire, Size} = Make(?LEGACY_MAX_BLOCK_BYTES - Overhead + Extra),
+        ?assertEqual(?LEGACY_MAX_BLOCK_BYTES + Extra, Size),
         Era = maps:get(era, F), Max = (1 bsl 64) - 1,
         Root = {Era, Max - 1, maps:get(anchor, F)},
         Bytes = canonical({quod_block, 3, Era, Max, Root, Max, Wire, Max}),
-        ?assert(byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
         Block = #block{era = Era, slot = Max, parent = Root, height = Max, payload = {batch, [Tx]}, timestamp = Max, block_bytes = Bytes},
-        ?assertEqual(Extra =:= 0, quod_ledger:valid_block_view(Block)),
-        ?assertEqual(Extra =:= 0, quod_simplex:well_formed_block(Block))
+        ?assert(quod_ledger:valid_block_view(Block)),
+        ?assert(quod_simplex:well_formed_block(Block))
     end, [0, 1]).
 
 checked_constructors_reject_changed_views_test() ->

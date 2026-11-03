@@ -267,7 +267,7 @@ start_fake_child(Ns, Config, S = #fake{children = Children}) ->
             fun() ->
                 true = quod_reg:reg({quod_ns, Ns}),
                 Table = binary_to_atom(
-                          <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+                          quod_simplex:genesis_table_name(Ns), utf8),
                 _ = ets:new(Table, [named_table, protected, set]),
                 true = ets:insert(Table, {anchor, Anchor}),
                 Parent ! {fake_child_ready, self()},

@@ -1,0 +1,26 @@
+{
+  "revision": "79b3874617a4eb9f76d5089a3fc908667e605e8a",
+  "local_source": "/home/yan/src/quod/_build/default/lib/erlog",
+  "fetch": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "From /home/yan/src/quod/_build/default/lib/erlog\n * branch            79b3874617a4eb9f76d5089a3fc908667e605e8a -> FETCH_HEAD\n"
+  },
+  "metadata_alignment": {
+    "exit": 0,
+    "stdout": "Unstaged changes after reset:\nM\tebin/erlog.app\n",
+    "stderr": ""
+  },
+  "before": {
+    "ebin/erlog.app": "f9af2784db9ee5492c146c8347a3575f6389604b0f64cb2d6f0a29e340508707",
+    "src/erlog_scan.erl": "f7b56a3fab505dfc84fcdec913dbeea23522bc0aaad4ed17ab964ea5f98ad883",
+    "src/erlog_int.erl": "bc15ba1b92616bb2ceff70ffae5fa22a8000bd482f422ebb289d2335656e6f33"
+  },
+  "after": {
+    "ebin/erlog.app": "f9af2784db9ee5492c146c8347a3575f6389604b0f64cb2d6f0a29e340508707",
+    "src/erlog_scan.erl": "f7b56a3fab505dfc84fcdec913dbeea23522bc0aaad4ed17ab964ea5f98ad883",
+    "src/erlog_int.erl": "bc15ba1b92616bb2ceff70ffae5fa22a8000bd482f422ebb289d2335656e6f33"
+  },
+  "working_files_unchanged": true,
+  "remote_network": false
+}

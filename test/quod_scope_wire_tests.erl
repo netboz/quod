@@ -1,6 +1,8 @@
 -module(quod_scope_wire_tests).
+-include("retired_presentation_sizes.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_proof_limits.hrl").
 
@@ -249,7 +251,7 @@ answer_binding_protocol_error_round_trips_test() ->
     {ok, Encoded} = quod_scope_wire:encode_event(Event),
     ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Encoded)).
 
-seal_operations_round_trip_and_stay_bounded_test() ->
+seal_operations_round_trip_without_material_subquota_test() ->
     SealCommand = command(scope_seal),
     {ok, EncodedCommand} = quod_scope_wire:encode_command(SealCommand),
     ?assertEqual({ok, SealCommand},
@@ -263,8 +265,8 @@ seal_operations_round_trip_and_stay_bounded_test() ->
     ?assertEqual({ok, Sealed}, quod_scope_wire:decode_response(EncodedSealed)),
     Oversized = event(
                   {plan_sealed,
-                   <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>, 1}),
-    ?assertEqual({error, {too_large, plan}},
+                   <<0:(?LEGACY_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>, 1}),
+    ?assertMatch({ok, _},
                  quod_scope_wire:encode_event(Oversized)),
     %% The seal failure vocabulary is part of the closed public catalog.
     lists:foreach(
@@ -289,7 +291,7 @@ seal_operations_round_trip_and_stay_bounded_test() ->
        quod_scope_wire:encode_event(
          event({scope_error, {non_transactional_dependency, not_a_functor}}))).
 
-manifest_attestation_payloads_are_canonical_and_bounded_test() ->
+manifest_attestation_payloads_are_canonical_test() ->
     Manifest = manifest(),
     Attestation = attestation(),
     ManifestBlob = payload(manifest, Manifest),
@@ -300,24 +302,24 @@ manifest_attestation_payloads_are_canonical_and_bounded_test() ->
     ?assertEqual(
        {ok, Attestation},
        quod_scope_wire:decode_payload(attestation, AttestationBlob)),
-    ?assertEqual(
-       {error, {too_large, manifest}},
+    ?assertMatch(
+       {ok, _},
        quod_scope_wire:encode_command(
          command(
            {scope_attest,
-            <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))),
-    ?assertEqual(
-       {error, {too_large, attestation}},
+            <<0:(?LEGACY_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))),
+    ?assertMatch(
+       {ok, _},
        quod_scope_wire:encode_event(
          event(
            {plan_attested,
-            <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))),
-    ?assertEqual(
-       {error, {too_large, read_certificate}},
+            <<0:(?LEGACY_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))),
+    ?assertMatch(
+       {ok, _},
        quod_scope_wire:encode_event(
          event(
            {reads_certified,
-            <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))).
+            <<0:(?LEGACY_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))).
 
 read_certificate_scope_results_use_the_closed_error_catalog_test() ->
     Command = command(certify_reads),
@@ -349,42 +351,38 @@ group_effect_binding_is_exact_and_bounded_test() ->
     {ok, AckEncoded} = quod_scope_wire:encode_event(Ack),
     ?assertEqual({ok, Ack}, quod_scope_wire:decode_response(AckEncoded)).
 
-operation_effect_submission_crosses_scope_at_shared_bound_test() ->
+operation_effect_submission_crosses_scope_without_subquota_test() ->
     SubmissionBlob =
-        <<0:?QUOD_MAX_OPERATION_SUBMISSION_BYTES/unit:8>>,
+        <<0:?LEGACY_QUOD_MAX_OPERATION_SUBMISSION_BYTES/unit:8>>,
     Command = command({bind_operation_effect, SubmissionBlob}),
     {ok, Encoded} = quod_scope_wire:encode_command(Command),
     %% This is the regression: the old independent 128 KiB envelope rejected
     %% an artifact accepted by the transaction codec before it reached the
     %% authenticated target-side decoder.
     ?assert(byte_size(Encoded) > (128 * 1024)),
-    ?assert(byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES),
+    ?assert(byte_size(Encoded) =< ?LEGACY_SCOPE_WIRE_MAX_ENVELOPE_BYTES),
     ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Encoded)),
     OversizedBlob = <<SubmissionBlob/binary, 0>>,
     Oversized = command({bind_operation_effect, OversizedBlob}),
-    ?assertEqual(
-       {error, {too_large, operation_submission}},
+    ?assertMatch(
+       {ok, _},
        quod_scope_wire:encode_command(Oversized)),
-    %% A peer cannot bypass the field owner by writing the ETF directly.
-    ?assertEqual(
-       {error, {too_large, operation_submission}},
+    %% Canonical peer encoding carries the same complete opaque submission.
+    ?assertMatch(
+       {ok, _},
        quod_scope_wire:decode_request(raw_frame(Oversized))).
 
-scope_namespace_uses_directory_bound_test() ->
-    MaxNamespace =
-        binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
-    AtLimit = command_with_binding(
-                {scope_open, node, []}, binding_with_origin(MaxNamespace)),
-    ?assertMatch({ok, _}, quod_scope_wire:encode_command(AtLimit)),
-    OversizedNamespace = <<MaxNamespace/binary, "n">>,
-    TooLarge = command_with_binding(
-                 {scope_open, node, []},
-                 binding_with_origin(OversizedNamespace)),
-    ?assertEqual(
-       {error, {protocol_error, bad_identity}},
-       quod_scope_wire:encode_command(TooLarge)).
+scope_namespace_preserves_exact_identity_without_subquota_test() ->
+    lists:foreach(fun(Size) ->
+        Namespace = binary:copy(<<"n">>, Size),
+        Command = command_with_binding({scope_open, node, []}, binding_with_origin(Namespace)),
+        {ok, Blob} = quod_scope_wire:encode_command(Command),
+        ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Blob))
+    end, [1024, 1025]),
+    Empty = command_with_binding({scope_open, node, []}, binding_with_origin(<<>>)),
+    ?assertEqual({error, {protocol_error, bad_identity}}, quod_scope_wire:encode_command(Empty)).
 
-submit_operations_round_trip_and_stay_bounded_test() ->
+submit_operations_round_trip_without_material_subquota_test() ->
     {ok, GoalBlob} = quod_durable_term:encode_goal({goal, ok}),
     {ok, ResultBlob} = quod_durable_term:encode_result(#{'X' => ok}),
     Submit = command(
@@ -403,17 +401,17 @@ submit_operations_round_trip_and_stay_bounded_test() ->
     {ok, EncodedOpaque} = quod_scope_wire:encode_command(OpaqueSubmit),
     ?assertEqual(
        {ok, OpaqueSubmit}, quod_scope_wire:decode_request(EncodedOpaque)),
-    ?assertEqual(
-       {error, {too_large, plan}},
+    ?assertMatch(
+       {ok, _},
        quod_scope_wire:encode_command(
          command({submit_plan,
-                  <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>,
+                  <<0:(?LEGACY_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>,
                   GoalBlob, ResultBlob, payload(foreign_reads, []), []}))),
-    ?assertEqual(
-       {error, {too_large, result}},
+    ?assertMatch(
+       {ok, _},
        quod_scope_wire:encode_command(
          command({submit_plan, <<"p">>, GoalBlob,
-                  <<0:(?QUOD_MAX_DURABLE_RESULT_BYTES + 1)/unit:8>>,
+                  <<0:(?LEGACY_MAX_DURABLE_RESULT_BYTES + 1)/unit:8>>,
                   payload(foreign_reads, []), []}))),
     ?assertEqual(
        {error, {protocol_error, bad_payload}},
@@ -499,10 +497,13 @@ opaque_goal_symbol_survives_scope_codec_test() ->
     ?assertException(error, badarg, binary_to_existing_atom(Symbol, utf8)).
 
 payload_byte_bounds_are_exact_test() ->
-    exact_payload_boundary(goal, ?QUOD_MAX_NESTED_GOAL_BYTES),
-    exact_payload_boundary(answer, ?QUOD_MAX_PROOF_ANSWER_BYTES),
+    lists:foreach(fun(Kind) ->
+        Value = binary:copy(<<"x">>, ?LEGACY_SCOPE_WIRE_MAX_ENVELOPE_BYTES + 1),
+        {ok, Blob} = quod_scope_wire:encode_payload(Kind, Value),
+        ?assertEqual({ok, Value}, quod_scope_wire:decode_payload(Kind, Blob))
+    end, [goal, answer]),
     exact_failure_reason_payload_boundary(),
-    exact_payload_boundary(erlog_error, ?ERLOG_MAX_FAILURE_REASON_BYTES),
+    exact_payload_boundary(erlog_error, ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
     ?assertEqual(
        {ok, [{because, no_clause}]},
        quod_scope_wire:decode_payload(
@@ -517,18 +518,16 @@ exact_failure_reason_payload_boundary() ->
     Reasons = failure_reason_stack_at_wire_limit(),
     {ok, AtLimit} = quod_scope_wire:encode_payload(
                       failure_reasons, Reasons),
-    ?assertEqual(?ERLOG_MAX_FAILURE_REASONS_BYTES, byte_size(AtLimit)),
+    ?assertEqual(?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES, byte_size(AtLimit)),
     ?assertEqual(
        {ok, Reasons},
        quod_scope_wire:decode_payload(failure_reasons, AtLimit)),
     Prefix = lists:droplast(Reasons),
     Last = lists:last(Reasons),
     TooLarge = Prefix ++ [<<Last/binary, 0>>],
+    ?assertMatch({ok, _}, quod_scope_wire:encode_payload(failure_reasons, TooLarge)),
     ?assertEqual(
-       {error, {too_large, failure_reasons}},
-       quod_scope_wire:encode_payload(failure_reasons, TooLarge)),
-    ?assertEqual(
-       {error, {too_large, failure_reasons}},
+       {error, {protocol_error, bad_payload}},
        quod_scope_wire:decode_payload(
          failure_reasons, <<AtLimit/binary, 0>>)),
     ?assertEqual(
@@ -536,22 +535,21 @@ exact_failure_reason_payload_boundary() ->
        quod_scope_wire:decode_payload(
          failure_reasons, payload(failure_reasons, []))).
 
-scope_envelope_byte_bound_is_exact_and_predecode_test() ->
-    AtLimit = <<0:?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES/unit:8>>,
-    %% At the exact byte boundary decoding is attempted and rejects the bytes
-    %% as ETF. One byte more is rejected before any decode.
+large_malformed_scope_envelope_still_fails_closed_test() ->
+    AtLimit = <<0:?LEGACY_SCOPE_WIRE_MAX_ENVELOPE_BYTES/unit:8>>,
+    %% Retired quota sizes do not preempt canonical malformed-input refusal.
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
        quod_scope_wire:decode_request(AtLimit)),
     ?assertEqual(
-       {error, {too_large, scope_envelope}},
+       {error, {protocol_error, bad_etf}},
        quod_scope_wire:decode_request(
          <<AtLimit/binary, 0>>)).
 
 outer_safe_etf_and_version_are_fail_closed_test() ->
     Command = {scope_command,
                binding_with_origin(
-                 binary:copy(<<"x">>, ?DIRECTORY_MAX_NAMESPACE_BYTES)),
+                 binary:copy(<<"x">>, 1024)),
                1, id(1), 30000, {scope_open, node, []}},
     {ok, Encoded} = quod_scope_wire:encode_command(Command),
     ?assertEqual(
@@ -573,7 +571,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, lists:seq(1, 11)),
+      end, lists:seq(1, 13)),
     WrongDomain = term_to_binary({<<"other.scope">>, 5, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
@@ -820,11 +818,9 @@ exact_payload_boundary(Kind, MaxBytes) ->
     {ok, AtLimit} = quod_scope_wire:encode_payload(Kind, Term),
     ?assertEqual(MaxBytes, byte_size(AtLimit)),
     ?assertEqual({ok, Term}, quod_scope_wire:decode_payload(Kind, AtLimit)),
+    ?assertMatch({ok, _}, quod_scope_wire:encode_payload(Kind, <<Term/binary, "x">>)),
     ?assertEqual(
-       {error, {too_large, Kind}},
-       quod_scope_wire:encode_payload(Kind, <<Term/binary, "x">>)),
-    ?assertEqual(
-       {error, {too_large, Kind}},
+       {error, {protocol_error, bad_payload}},
        quod_scope_wire:decode_payload(Kind, <<AtLimit/binary, 0>>)).
 
 reason_wire_size(Reason) ->
@@ -843,15 +839,15 @@ reason_binary_at_wire_size(Size) ->
     Binary.
 
 failure_reason_stack_at_wire_limit() ->
-    MaxReason = reason_binary_at_wire_size(?ERLOG_MAX_FAILURE_REASON_BYTES),
+    MaxReason = reason_binary_at_wire_size(?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
     Prefix = lists:duplicate(7, MaxReason),
     BaseSize = reason_stack_wire_size(Prefix ++ [<<>>]),
-    Growth = ?ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
+    Growth = ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
     true = Growth >= 0,
     Last = binary:copy(<<"s">>, Growth),
-    true = reason_wire_size(Last) =< ?ERLOG_MAX_FAILURE_REASON_BYTES,
+    true = reason_wire_size(Last) =< ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES,
     Reasons = Prefix ++ [Last],
-    ?ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
+    ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
     Reasons.
 
 payload(Kind, Term) ->
@@ -895,7 +891,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 13, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 14, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(

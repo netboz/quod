@@ -15,7 +15,6 @@ space_query(have_part(_, _)).
 space_query(class_eidolon(_, _, _, _)).
 space_query(eidolon(_, _, _)).
 space_query(Goal) :- public_source_query(Goal).
-isa(space, thing).
 isa(physical_space, space).
 
 %% Interior lengths are independent of the exterior model and resource policy.
@@ -109,13 +108,6 @@ space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)),
                    placed(Destination, transform(NearX,Y,Z,RX,RY,RZ))) :-
     NearX is X + 1000.
 
-space_instance(Space, Class) :-
-    %% Bind the more selective side of this join first. Open catalogues start
-    %% at the requested ancestry; exact subjects need only their own classes.
-    findall(instance(Space,Class),
-        (nonvar(Space) -> instance_of(Direct,Space),isa(Direct,Class)
-        ; isa(Direct,Class),instance_of(Direct,Space)),Raw),
-    sort(Raw,Distinct),member(instance(Space,Class),Distinct).
 
 space_subject(Entity, Subject) :-
     (instance_of(_, Entity) -> Subject = instance(Entity)
@@ -130,8 +122,6 @@ space_authorized(Entity, Name, Other, Mode) :-
 
 %% Display membership is many-to-many. The destination owns this fact;
 %% a class or a nested space is an anchored subject, never a copied definition.
-space_contains(Space, Subject) :- space_member(Space, Subject).
-space_contains(Space, Subject) :- space_placement(Space, Subject, _).
 
 space_contain(Space, Subject) :-
     term_variables([Space, Subject], []),
@@ -281,7 +271,6 @@ space_change_physics(Space, Subject, Change) :-
 %% Composition supplies policy and the physical lifecycle consequence. No
 %% missing hook silently skips constraint/checkpoint or pending-work cleanup.
 space_physical_change(_, _, _) :- fail.
-space_simulation_domain(_,_,_,_) :- fail.
 
 %% Representation edits compare their exact source values. A destination's
 %% installed physical component changes in this same transaction, if present.
@@ -435,16 +424,11 @@ gui_form(space_travel_form(Agent,Expected,Before,After),[],
 
 %% Pure space depiction, composed with the space vocabulary and ordinary
 %% entity Eidolons. Membership and physical bindings stay with their owners.
-entity_scene(Space, Mode, appearance(Space, Style, Space, Transform, Eidolons)) :-
-    space_instance(Space, space), attribute(Space, transform, Transform),
-    attribute(Space, exterior, Style),
-    member(Mode, [playing, edition]), entity_eidolons(Space, Mode, Style, Eidolons).
 class_eidolon(space,Mode,Style,recipe(Ns,Anchor,Recipe)) :-
     member(Mode,[playing,edition]), space_exterior_recipe(Style,Recipe),
     current_ontology_identity(Ns,Anchor).
 space_exterior_recipe(solid,space).
 space_exterior_recipe(wireframe,space_wireframe).
-space_exterior_recipe(contents,space_contents).
 space_exterior(solid).
 space_exterior(wireframe).
 space_exterior(contents).
@@ -453,131 +437,16 @@ space_exterior_available(contents,_).
 space_exterior_available(wireframe,box(_,_,_)).
 space_exterior_available(wireframe,infinite) :- fail_with_reason(space_exterior_unavailable(wireframe,infinite)).
 %% A half-metre exterior depicts even an infinite interior with finite geometry.
-eidolon(space, _,
+eidolon(space, Space,
     [part(<<"space">>, box(500,500,500), transform(0,0,0,0,0,0),
-          surface(<<"#6A90D9">>, 0, 700, 0, []), unlabelled, depicts_nothing)]).
+          surface(<<"#6A90D9">>, 0, 700, 0, []), Label, depicts_nothing)]) :-
+    client_subject_label(Space,Label).
 eidolon(space_wireframe, Space,
     [part(<<"extent">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
-          surface(<<"#6A90D9">>,0,700,1000,[]),unlabelled,depicts_nothing)]) :-
+          surface(<<"#6A90D9">>,0,700,1000,[]),Label,depicts_nothing)]) :-
+    client_subject_label(Space,Label),
     attribute(Space,dimensions,box(X,Y,Z)),
     unique_solution(measure_vocabulary(Ns,Anchor)),
     space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D).
 space_millimetres(Ns,Anchor,q(Value,Unit),Length) :-
     in_ontology(Ns,Anchor,convert(Value,Unit,<<"mm">>,Length)).
-%% Contents is a recipe result, not a substitute mesh. The source owns the
-%% complete permitted subject set and physical bindings in its own frame.
-eidolon(space_contents, Space, contents(Exposure)) :-
-    space_contents_projection(Space,Exposure).
-
-space_contents_projection(Space,exposure(Frame,Revision,Subjects)) :-
-    space_instance(Space,space), current_ontology_identity(Ns,A),
-    Frame = entity_ref(Ns,A,Space),
-    findall(Subject,space_contains(Space,Subject),Raw), sort(Raw,Unique),
-    space_exposed_subjects(Unique,Space,Subjects),
-    variant_digest(contents(Frame,Subjects),Revision).
-space_exposed_subjects([],_,[]).
-space_exposed_subjects([Subject|Rest],Space,[exposed(Subject,Relation,Binding)|Subjects]) :-
-    Subject = entity_ref(_,_,_), term_variables(Subject,[]),
-    findall(R,space_placement(Space,Subject,R),Assignments),
-    (Assignments = [] -> Relation = display
-    ; Assignments = [Assignment], Relation = placement(Assignment)),
-    space_subject_binding(Space,Subject,Selected),
-    (Selected = body_pose(_,_), space_simulation_domain(Space,World,_,_) ->
-        Binding = in_frame(World,Selected)
-    ; Binding = Selected),
-    space_exposed_subjects(Rest,Space,Subjects).
-
-world_view(Space, Mode, Marks) :-
-    space_projection(Space,Mode,Marks,_).
-
-%% The ordinary view and portable exposure receipt use one projection. Budget
-%% comes from the pinned scene policy; there is no recursion/depth constant.
-space_projection(Space,Mode,scene(Marks,Exposures)) :-
-    space_projection(Space,Mode,Marks,Exposures).
-space_projection(Space,Mode,Marks,Exposures) :-
-    member(Mode,[playing,edition]),
-    space_contents_projection(Space,exposure(Frame,_,Subjects)),
-    unique_solution(modelling_vocabulary(Ns,A)),
-    in_ontology(Ns,A,limit(<<"scene">>,Allowance)),
-    integer(Allowance), Allowance >= 0,
-    (space_simulation_domain(Space,World,_,_) -> true; World = none),
-    space_scene_parts(Subjects,Mode,[interior(Frame)],
-        [representation(Frame,contents(Mode))],none,role(physical,World),Allowance,_,Parts,Exposures),
-    in_ontology(Ns,A,model(Parts,Marks)).
-
-space_scene_parts([],_,_,_,_,_,Remaining,Remaining,[],[]).
-space_scene_parts([exposed(Subject,Relation,Binding)|Rest],Mode,Path,Seen,Parent,Role,
-                  Available,Remaining,Parts,Exposures) :-
-    (Available > 0 -> Next is Available - 1
-    ; fail_with_reason(space_exposure_allowance)),
-    Subject = entity_ref(Ns,A,Entity),
-    in_ontology(Ns,A,entity_scene(Entity,Mode,Scene)),
-    (Scene = hidden -> Placed = [], Current = [], After = Next
-    ; Scene = appearance(Id,Style,Context,Layout,Eidolons),
-      append(Path,[edge(Subject,Id)],OccurrencePath),
-      term_hex_digest(OccurrencePath,Occurrence),
-      findall(Recipe,member(eidolon(Mode,Style,Recipe),Eidolons),Recipes),
-      (Style == contents ->
-          (Recipes = [Selected],
-           space_entity_model([Selected],Context,contents(exposure(Subject,ContentRevision,Subjects))) ->
-              Model = contents(exposure(Subject,ContentRevision,Subjects))
-          ; fail_with_reason(space_contents_unavailable(Subject)))
-      ; space_entity_model(Recipes,Context,Model)),
-      variant_digest(selected(Recipes,Context,Model),Revision),
-      Role = role(ParentUse,World),
-      (ParentUse == physical, Relation = placement(_) -> Use = physical; Use = display),
-      space_scene_pose(Use,World,Subject,Binding,Layout,Pose), NextRole = role(Use,World),
-      space_parent_pose(Parent,Pose,At),
-      space_occurrence_model(Model,Mode,OccurrencePath,Seen,Occurrence,NextRole,Next,After,
-                             Local,Children,Descendants,Frame,Allowed,Status),
-      modelling_vocabulary(MNs,MA),
-      in_ontology(MNs,MA,
-            place_model(Occurrence,At,depicts(Ns,A,Entity),Local,Here)),
-      append(Here,Children,Placed),
-      Current = [exposure(Occurrence,OccurrencePath,Subject,selected(Recipes,Revision,Use),
-                          Frame,Allowed,Pose,Status)|Descendants]),
-    space_scene_parts(Rest,Mode,Path,Seen,Parent,Role,After,Remaining,Tail,Others),
-    append(Placed,Tail,Parts), append(Current,Others,Exposures).
-
-space_scene_pose(Use,World,_,in_frame(Selected,body_pose(B,R)),_,Pose) :-
-    (Selected == World -> true; fail_with_reason(incompatible_physics_view(Selected,World))),
-    (Use == physical -> Pose = body_pose(B,R)
-    ; Use == display, Pose = body_frame_pose(B,R)).
-space_scene_pose(physical,_,_,body_pose(B,R),_,body_pose(B,R)).
-space_scene_pose(physical,_,_,source_layout,Layout,Layout).
-space_scene_pose(display,World,Subject,source_layout,Layout,Pose) :-
-    (World = world_ref(Ns,A,W) ->
-        in_ontology(Ns,A,physics_appearance_binding(W,Subject,Binding)),
-        (Binding = none -> Pose = Layout; Binding = body_pose(B,R),Pose = body_frame_pose(B,R))
-    ; Pose = Layout).
-
-space_occurrence_model(contents(exposure(Frame,_,Subjects)),Mode,Path,Seen,Occurrence,Role,
-                       Available,Remaining,Local,Children,Exposures,Frame,Subjects,Status) :-
-    Key = representation(Frame,contents(Mode)),
-    (member_eq(Key,Seen) ->
-        Status = cycle, Remaining = Available, Children = [], Exposures = [],
-        space_eidolon_status(<<"Contents cycle">>,Local)
-    ; Status = contents, Local = [],
-      space_scene_parts(Subjects,Mode,Path,[Key|Seen],Occurrence,Role,Available,Remaining,Children,Exposures)).
-space_occurrence_model(Model,_,_,_,_,_,Available,Available,Model,[],[],none,[],model) :-
-    Model \= contents(_).
-
-space_parent_pose(none,Pose,Pose).
-space_parent_pose(Parent,Pose,relative(Parent,Pose)) :- Parent \== none.
-
-space_subject_binding(Space,Subject,Binding) :-
-    (space_placement(Space,Subject,Assignment), space_simulation_domain(Space,World,_,Path) ->
-        World = world_ref(Ns,A,W),
-        in_ontology(Ns,A,physics_scene_binding(W,Path,Subject,Assignment,Binding))
-    ; space_placement(Space,Subject,Assignment), space_instance(Space,physical_space) ->
-        findall(binding(B,R),physics_body_definition(Space,B,R,_,_,live(Subject,Assignment,_,_)),
-                [binding(Body,Revision)]), Binding = body_pose(Body,Revision)
-    ; Binding = source_layout).
-
-space_entity_model([recipe(Ns,A,Recipe)],Context,Model) :-
-    in_ontology(Ns,A,eidolon(Recipe,Context,Model)).
-space_entity_model([],_,Parts) :- space_eidolon_status(<<"No matching eidolon">>,Parts).
-space_entity_model([_,_|_],_,Parts) :- space_eidolon_status(<<"Choose an eidolon">>,Parts).
-space_eidolon_status(Text,
-    [part(<<"eidolon-status">>,group,transform(0,0,0,0,0,0),
-          no_surface,label(Text,<<"above">>),depicts_nothing)]).

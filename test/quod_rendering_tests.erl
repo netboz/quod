@@ -1,15 +1,14 @@
 -module(quod_rendering_tests).
 
-%% The `quod:gui` ontology (priv/ontologies/gui_scene.pl): the bounded
+%% The `quod:gui` ontology (priv/ontologies/gui_scene.pl): the
 %% mark vocabulary a renderer is given. What is checked here is that the schema
 %% actually refuses a malformed descriptor — a missing field, a reordered one, a
-%% colour that is not one, a label that is too long, a float where a whole
+%% colour that is not one, an invalid label placement, a float where a whole
 %% number belongs — and that marks and the things they depict keep separate
 %% identities.
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_vm_limits.hrl").
 
 kinds_declare_their_fields_in_order_test() ->
     with_rendering(fun(St) ->
@@ -86,7 +85,7 @@ the_schema_refuses_a_malformed_descriptor_test() ->
         fails({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, -5}])}, St),
         fails({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, 1.5}])}, St),
         fails({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, {'/', 3, 2}}])}, St),
-        fails({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, 100001}])}, St),
+        holds({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, 100001}])}, St),
         fails({well_formed_mark,
                sized(<<"capsule">>, [{f, <<"diameter">>, 460},
                                       {f, <<"height">>, 459}])}, St),
@@ -116,11 +115,11 @@ transforms_are_whole_millimetres_and_degrees_test() ->
                      unlabelled, depicts_nothing}
                 end,
         holds({well_formed_mark, Moved(-1000000)}, St),
-        fails({well_formed_mark, Moved(1000001)}, St),
+        holds({well_formed_mark, Moved(1000001)}, St),
         fails({well_formed_mark, Moved(0.5)}, St)
     end).
 
-materials_and_labels_are_bounded_test() ->
+materials_are_typed_and_labels_complete_test() ->
     with_rendering(fun(St) ->
         Surfaced = fun(Material) ->
                        {mark, <<"m1">>, <<"sphere">>, [{f, <<"diameter">>, 100}],
@@ -140,7 +139,7 @@ materials_and_labels_are_bounded_test() ->
                         {surface, <<"#F9C80E">>, 0, 900, 0, []}, Label, depicts_nothing}
                    end,
         holds({well_formed_mark, Labelled({label, text(24), <<"above">>})}, St),
-        fails({well_formed_mark, Labelled({label, text(25), <<"above">>})}, St),
+        holds({well_formed_mark, Labelled({label, text(1025), <<"above">>})}, St),
         fails({well_formed_mark, Labelled({label, <<>>, <<"above">>})}, St),
         fails({well_formed_mark, Labelled({label, <<"here">>, <<"left">>})}, St),
         fails({well_formed_mark, Labelled({label, <<"here">>})}, St)
@@ -203,7 +202,7 @@ policy_test() ->
         lists:foreach(fun(Goal) -> holds({can_invoke, Goal, anyone, [], ns}, St) end,
                       [{mark_kind, {'K'}},
                        {well_formed_mark, box(<<"m1">>)},
-                       {limit, <<"label">>, {'N'}},
+                       {well_formed_scene, [box(<<"m1">>)]},
                        {instance_of, geometry, {'K'}}]),
         Change = {assertz, {mark_kind, <<"cone">>}},
         fails({can_invoke, Change, anyone, [], ns}, St),
@@ -298,18 +297,18 @@ mesh_geometry_is_typed_and_resource_policy_owned_test() ->
         SmallAsset = setelement(5, Asset, SmallFrame),
         holds({well_formed_mark, setelement(4, Mark,
             setelement(4, SmallAsset, {scale, 100000}))}, St),
-        fails({well_formed_mark, setelement(4, Mark,
+        holds({well_formed_mark, setelement(4, Mark,
             setelement(4, SmallAsset, {scale, 100001}))}, St),
         fails({well_formed_mark, setelement(4, Mark,
             setelement(5, Asset, {frame, {aabb, 1, 0, 0, 0, 100, 100},
                                   {pivot, 0, 0, 0}, {front, <<"-z">>}}))}, St),
-        fails({well_formed_mark, setelement(4, Mark,
+        holds({well_formed_mark, setelement(4, Mark,
             setelement(6, Asset, {resources, 8000001, 1000, 100, 100, 10, 2, 1000}))}, St),
         fails({well_formed_mark, setelement(6, Mark,
             {surface, <<"#FFFFFF">>, 0, 1000, 0, []})}, St)
     end).
 
-terrain_descriptor_is_body_bound_and_bounded_test() ->
+terrain_descriptor_is_body_bound_and_allocated_test() ->
     with_rendering(fun(St) ->
         Geometry = {terrain_geometry,<<"qvt1">>,[{material,9,{surface,<<"#447722">>,0,900,0,[]}}],
                     {view_distance,4000,1000,2000},
@@ -322,8 +321,34 @@ terrain_descriptor_is_body_bound_and_bounded_test() ->
         fails({well_formed_mark,setelement(4,Mark,[])},St),
         fails({well_formed_mark,setelement(4,Mark,setelement(3,Geometry,
             [{material,9,{surface,<<"#447722">>,0,900,0,[]}},{material,9,{surface,<<"#FFFFFF">>,0,900,0,[]}}]))},St),
-        fails({well_formed_mark,setelement(4,Mark,setelement(5,Geometry,
+        holds({well_formed_mark,setelement(4,Mark,setelement(5,Geometry,
             {resources,500000,1000000,20000,10000,1025}))},St)
+    end).
+
+lobby_terrain_recipe_uses_shared_unallocated_resources_test() ->
+    {ok,Source}=file:read_file("priv/ontologies/lobby_worlds.pl"),
+    with_committed_rendering(Source,fun(_,St) ->
+        [Resources]=solutions({'R'},{world_render_resources,{'R'}},St),
+        Geometry={terrain_geometry,<<"qvt1">>,[{material,9,{surface,<<"#447722">>,0,900,0,[]}}],
+                  {view_distance,100001,1000,2000},Resources},
+        holds({well_formed_mark,{mark,<<"ground">>,<<"terrain">>,Geometry,{body_pose,4,2},
+              terrain_surfaces,unlabelled,{depicts,<<"world">>,<<7:256>>,land}}},St)
+    end).
+
+complete_scenes_and_authored_resources_test() ->
+    with_rendering(fun(St) ->
+        Marks = [box(integer_to_binary(N)) || N <- lists:seq(1, 600)],
+        holds({well_formed_scene, Marks}, St),
+        fails({well_formed_scene, [hd(Marks)|Marks]}, St),
+        holds({well_formed_mark, box(text(300))}, St),
+        M = mesh_mark(), A = element(4,M),
+        holds({well_formed_mark,setelement(4,M,setelement(6,A,
+            {resources,unlimited,unlimited,unlimited,unlimited,unlimited,unlimited,unlimited}))},St),
+        fails({well_formed_mark,setelement(4,M,setelement(6,A,
+            {resources,0,unlimited,unlimited,unlimited,unlimited,unlimited,unlimited}))},St),
+        holds({gui_properties,[{property,max_bytes,optional}],[],[]},St),
+        holds({gui_value,text_area,[{property,required,false}],text(4097)},St),
+        fails({gui_value,text_area,[{property,required,false},{property,max_bytes,4096}],text(4097)},St)
     end).
 
 mesh_mark() ->

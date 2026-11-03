@@ -46,14 +46,6 @@ cleanup removes only abandoned files of this exact session-file family.
 -define(HISTORY_DOMAIN, quod_dtx_phase_history).
 -define(HISTORY_VERSION, 2). %% Atomic Vote/Resolve/Complete, immutable v4 references
 -define(MAX_GROUP_RECORDS, 3).
-%% A history stores at most one certified reference for each fixed phase.  A
-%% reference combines a body-bounded finality proof with an identity whose
-%% namespace is itself bounded by the signed control envelope.  The fixed
-%% allowance covers hashes, counters, map/list framing and the ETF header.
--define(MAX_HISTORY_BYTES,
-        (?MAX_GROUP_RECORDS *
-           (?QUOD_MAX_DTX_BODY_BYTES + ?QUOD_MAX_DTX_CONTROL_BYTES + 512)
-         + 4096)).
 
 -record(index, {
           table :: term(),
@@ -85,6 +77,7 @@ cleanup removes only abandoned files of this exact session-file family.
 -spec open(file:filename_all(), binary()) ->
           {ok, index()} | {error, index_error()}.
 open(LedgerDir, Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
+    ok = quod_ledger_store:check_namespace_layout(LedgerDir, Ns),
     Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
     case filelib:ensure_path(Dir) of
         ok -> open_unique(Dir, ?OPEN_ATTEMPTS);
@@ -399,6 +392,7 @@ cleanup(_LedgerDir, _Ns) ->
 -spec cleanup(file:filename_all(), binary(), [index()]) ->
           ok | {error, index_error()}.
 cleanup(LedgerDir, Ns, Retained) when is_binary(Ns), byte_size(Ns) > 0 ->
+    ok = quod_ledger_store:check_namespace_layout(LedgerDir, Ns),
     Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
     case retained_cleanup_paths(Dir, Retained) of
         {ok, Keep} ->
@@ -531,13 +525,8 @@ stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
             error -> 0
         end,
     NewBytes = Bytes - OldBytes + HistoryBytes,
-    case HistoryBytes =< ?MAX_HISTORY_BYTES of
-        true ->
-            {ok, Delta#delta{rows = Rows#{GroupId => {History, HistoryBytes}},
-                             bytes = NewBytes}};
-        false ->
-            {error, bad_phase_index_delta}
-    end.
+    {ok, Delta#delta{rows = Rows#{GroupId => {History, HistoryBytes}},
+                     bytes = NewBytes}}.
 
 -doc "Install one fully previewed window delta after its ledger sink succeeds.".
 -spec commit_delta(index(), delta()) -> ok | {error, index_error()}.
@@ -636,7 +625,7 @@ encode_delta_rows(
     Blob = encode_history(History),
     Bytes = byte_size(Blob),
     Total = Bytes0 + Bytes,
-    case Bytes =:= StoredBytes andalso Bytes =< ?MAX_HISTORY_BYTES of
+    case Bytes =:= StoredBytes of
         true ->
             Row = {{group, GroupId}, Blob},
             encode_delta_rows(
@@ -694,9 +683,8 @@ dets_lookup(Table, Key) ->
 encode_history(History) ->
     term_to_binary({?HISTORY_DOMAIN, ?HISTORY_VERSION, History}, [deterministic]).
 
-decode_history(Blob, GroupId) when is_binary(Blob),
-                          byte_size(Blob) =< ?MAX_HISTORY_BYTES ->
-    case quod_safe_term:decode_wrapped(Blob, ?MAX_HISTORY_BYTES) of
+decode_history(Blob, GroupId) when is_binary(Blob) ->
+    case quod_safe_term:decode_wrapped(Blob, unlimited) of
         {ok, {?HISTORY_DOMAIN, ?HISTORY_VERSION, #{group_id := GroupId} = History}} ->
             case quod_atomic:valid_group_history(History) of
                 true -> {ok, History};

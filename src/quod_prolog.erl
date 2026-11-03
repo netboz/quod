@@ -117,8 +117,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 %% is a short FIXED budget (default 2000 ms — on the order of the consensus Δ_timeout, `?DELTA_MS` ~1 s in
 %% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
 -define(DEFAULTS, #{node_id => undefined, transaction_ttl_ms => 30000,
-                    validation_ttl_ms => ?QUOD_VALIDATION_TTL_MS, max_proof_workers => 64,
-                    max_scope_workers => 64, proof_timeout_ms => 300000,
+                    validation_ttl_ms => ?QUOD_VALIDATION_TTL_MS, max_proof_workers => unlimited,
+                    max_scope_workers => unlimited, proof_timeout_ms => 300000,
                     scope_timeout_ms => 300000,
                     scope_step_timeout_ms => 30000,
                     outcome_backend => disk}).
@@ -311,8 +311,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             projection_failure = none :: none | term(),
             ttl       = 30000 :: pos_integer(),
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
-            max_proof_workers = 64 :: pos_integer(),
-            max_scope_workers = 64 :: pos_integer(),
+            max_proof_workers = unlimited :: pos_integer() | unlimited,
+            max_scope_workers = unlimited :: pos_integer() | unlimited,
             proof_timeout_ms = 300000 :: pos_integer(),
             scope_timeout_ms = 300000 :: pos_integer(),
             scope_step_timeout_ms = 30000 :: pos_integer(),
@@ -1003,6 +1003,9 @@ stats(Ns) ->
 
 namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1']}]).
 
+worker_allowance(_Name, unlimited) -> unlimited;
+worker_allowance(Name, Value) -> positive_limit(Name, Value).
+
 positive_limit(_Name, Value) when is_integer(Value), Value > 0 -> Value;
 positive_limit(Name, Value) -> error({bad_config, {Name, Value}}).
 
@@ -1046,8 +1049,8 @@ init({Ns, Config}) ->
     Cfg  = maps:merge(?DEFAULTS, Config),
     Self = maps:get(node_id, Cfg),
     Signer = configured_signer(Self, Cfg),
-    MaxProofWorkers = positive_limit(max_proof_workers, maps:get(max_proof_workers, Cfg)),
-    MaxScopeWorkers = positive_limit(
+    MaxProofWorkers = worker_allowance(max_proof_workers, maps:get(max_proof_workers, Cfg)),
+    MaxScopeWorkers = worker_allowance(
                         max_scope_workers,
                         maps:get(max_scope_workers, Cfg)),
     case engine_anchor(Ns, Signer, Cfg) of
@@ -1115,7 +1118,7 @@ handle_call({checkpoint_and_release_proof_snapshot, Ref, OutcomeRef},
                    max_proof_workers = Max}) ->
     case maps:get(Ref, Workers, undefined) of
         #proof_worker{pid = Pid, timer = KillRef} = Worker
-          when map_size(Waiting) < Max ->
+          when (Max =:= unlimited orelse map_size(Waiting) < Max) ->
             %% The derivation budget ends here. Consensus may legitimately
             %% resolve after it; killing the owner now would turn an unknown
             %% outcome into a false definite failure and make retries unsafe.
@@ -1138,7 +1141,7 @@ handle_call(
          max_proof_workers = Max}) ->
     case maps:get(Ref, Workers, undefined) of
         #proof_worker{pid = Pid, timer = KillRef} = Worker
-          when map_size(Waiting) < Max ->
+          when (Max =:= unlimited orelse map_size(Waiting) < Max) ->
             case quod_effect_journal:bind_transaction(
                    Effect, Change, OutcomeRef) of
                 ok ->
@@ -2386,6 +2389,7 @@ scope_capacity_available(
     scope_capacity_available(
       Max, map_size(Workers), pending_remote_scope_count(Remote)).
 
+scope_capacity_available(unlimited, _Active, _Pending) -> true;
 scope_capacity_available(Max, Active, Pending) ->
     Active + Pending < Max.
 
@@ -2928,7 +2932,7 @@ start_remote_scope_session(
   Scope,
   S = #s{scope_workers = Workers, max_scope_workers = Max}) ->
     case {binding_admission_reason(Binding, S),
-          map_size(Workers) < Max} of
+          (Max =:= unlimited orelse map_size(Workers) < Max)} of
         {ok, true} ->
             start_admitted_remote_scope_session(
               Binding, ReturnLink, Scope, S);
@@ -3924,8 +3928,8 @@ activate_dtx_handoff(
            handoff = #dtx_handoff{
                         state = dormant, group_ref = GroupRef,
                         intent_id = IntentId}} = Worker
-          when map_size(Waiting) < Max,
-               map_size(GroupWaiters) < Max ->
+          when (Max =:= unlimited orelse map_size(Waiting) < Max),
+               (Max =:= unlimited orelse map_size(GroupWaiters) < Max) ->
             _ = erlang:cancel_timer(KillRef),
             Worker1 = Worker#proof_worker{
                         checkpoint = GroupRef, handoff = none},
@@ -4035,7 +4039,7 @@ admit_public_cursor(Owner, CallRef, _CursorId, _Goal, _Request,
 admit_public_cursor(Owner, CallRef, _CursorId, _Goal, _Request,
                     S = #s{workers = Workers,
                            max_proof_workers = Max})
-  when map_size(Workers) >= Max ->
+  when Max =/= unlimited, map_size(Workers) >= Max ->
     reply_client({async, Owner, CallRef}, {error, busy}),
     {noreply, S};
 admit_public_cursor(
@@ -4079,7 +4083,7 @@ admit_public_proof_ready(Kind, Goal, From, Request,
                    S = #s{workers = Workers,
                           max_proof_workers = Max}) ->
     case proof_operation_gate(Request, S) of
-        {new, S1} when map_size(Workers) < Max ->
+        {new, S1} when (Max =:= unlimited orelse map_size(Workers) < Max) ->
             {noreply, spawn_proof(Kind, Goal, From, Request, S1)};
         {new, S1} ->
             reply_client(From, {error, busy}),
@@ -5547,7 +5551,7 @@ retain_group_waiter(
                         caller_mref = CallerMRef,
                         from = From, timer = ProofTimer} = Worker,
           Waiting1}, false}
-          when map_size(GroupWaiters) < Max ->
+          when (Max =:= unlimited orelse map_size(GroupWaiters) < Max) ->
             _ = erlang:cancel_timer(ProofTimer),
             demonitor(WorkerMRef, [flush]),
             Timer = erlang:send_after(Ttl, self(),

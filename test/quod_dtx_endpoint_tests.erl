@@ -1,6 +1,8 @@
 -module(quod_dtx_endpoint_tests).
+-include("retired_presentation_sizes.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 
 owner_errors_use_the_wire_refusal_vocabulary_test() ->
     Id = <<77:128>>,
@@ -15,43 +17,23 @@ owner_errors_use_the_wire_refusal_vocabulary_test() ->
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 -include("quod_transport_limits.hrl").
--include("quod_term_limits.hrl").
 
-outcome_binding_depth_includes_its_transport_frame_test() ->
+outcome_binding_depth_roundtrips_through_transport_test() ->
     Ns = <<"quod:endpoint">>,
-    %% The binding list admits this value, but the response adds a tuple,
-    %% status map and inner frame above it. Refuse before emitting a frame
-    %% that the remote endpoint cannot decode.
-    Depths = [?QUOD_MAX_TERM_DEPTH - 5, ?QUOD_MAX_TERM_DEPTH - 4,
-              ?QUOD_MAX_TERM_DEPTH - 2],
-    lists:foreach(fun(Depth) ->
-        Value = lists:foldl(fun(_, Acc) -> {nested, Acc} end,
-                            leaf, lists:seq(1, Depth)),
-        Bindings = [{<<"X">>, Value}],
-        ?assertMatch({ok, _}, quod_wire_term:encode(Bindings)),
-        Status = #{status => committed, height => 11,
-                   ref => transaction_ref(), bindings => Bindings},
-        Response = {outcome, id(1), outcome_target(), digest(7), 12, Status},
-        case Depth of
-            D when D =:= ?QUOD_MAX_TERM_DEPTH - 5 ->
-                {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
-                ?assertEqual({ok, Response, []},
-                             quod_dtx_endpoint:decode_response(Ns, Frame));
-            _ ->
-                ?assertEqual({error, {protocol_error, bad_etf}},
-                             quod_dtx_endpoint:encode_response(Ns, Response, []))
-        end
-    end, Depths).
+    Value = lists:foldl(fun(_, Acc) -> {nested, Acc} end, leaf, lists:seq(1, 96)),
+    Bindings = [{<<"X">>, Value}],
+    Status = #{status => committed, height => 11,
+               ref => transaction_ref(), bindings => Bindings},
+    Response = {outcome, id(1), outcome_target(), digest(7), 12, Status},
+    {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
+    ?assertEqual({ok, Response, []}, quod_dtx_endpoint:decode_response(Ns, Frame)).
 
 channel_and_wire_bounds_are_fixed_test() ->
     Ns = <<"quod:endpoint">>,
     ?assertEqual(
        term_to_binary({quod_dtx, Ns}, [deterministic]),
        quod_dtx_endpoint:channel(Ns)),
-    ?assertEqual(?QUOD_MAX_FOREIGN_PAGE_BYTES,
-                 ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES),
-    ?assert(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES <
-            ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
+    ?assertEqual((1 bsl 32) - 1, ?QUOD_LINK_PAYLOAD_CAPACITY).
 
 trace_carrier_is_transport_only_and_never_changes_correlation_test() ->
     Ns = <<"quod:endpoint">>,
@@ -498,10 +480,10 @@ malformed_and_noncanonical_frames_fail_closed_test() ->
        {error, {protocol_error, bad_etf}},
        quod_dtx_endpoint:decode_request(Ns, <<131, 80, 0, 0, 0, 1, 0>>)),
     ?assertEqual(
-       {error, {too_large, dtx_endpoint}},
+       {error, {protocol_error, bad_etf}},
        quod_dtx_endpoint:decode_request(
          Ns,
-         <<0:(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES + 1)/unit:8>>)),
+         <<0:(?LEGACY_QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES + 1)/unit:8>>)),
 
     CompressedRecord = term_to_binary(binary_to_term(record_blob(), [safe]), [compressed]),
     ?assertMatch(<<131, 80, _/binary>>, CompressedRecord),
@@ -515,12 +497,12 @@ malformed_and_noncanonical_frames_fail_closed_test() ->
         ?assertNot(quod_dtx_endpoint:correlates(Request,
                      {accepted, id(1), record_blob_digest(), accepted_ref()}))
     end, [CompressedRecord, TrailingRecord]),
-    ?assertEqual(
-       {error, {too_large, record}},
+    ?assertMatch(
+       {ok, _},
        quod_dtx_endpoint:encode_request(
          Ns,
          {submit, id(1),
-          <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}, [])).
+          <<0:(?LEGACY_MAX_DTX_BODY_BYTES + 1)/unit:8>>}, [])).
 
 committed_outcome_preserves_unknown_binding_symbols_test() ->
     {Ns, _} = outcome_target(),

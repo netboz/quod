@@ -1,4 +1,5 @@
 -module(quod_dtx_tests).
+-include("retired_presentation_sizes.hrl").
 
 %% Slice-4 sealing: signed local plans, invocation transcripts, and the
 %% live-bridge gate (`m:quod_dtx`), driven through real proof sessions over a
@@ -10,7 +11,6 @@
 -include("quod_ledger.hrl").
 -include("quod_client_goal_limits.hrl").
 -include("quod_proof_limits.hrl").
--include("quod_vm_limits.hrl").
 
 -define(NS, <<"quod:dtx">>).
 
@@ -386,10 +386,10 @@ large_goal_seals_and_roundtrips_test() ->
         after quod_proof_session:stop(Session) end
     end).
 
-decode_is_bounded_and_shape_checked_test() ->
-    ?assertEqual({error, {too_large, plan}},
+decode_is_canonical_and_shape_checked_test() ->
+    ?assertEqual({error, {protocol_error, bad_payload}},
                  quod_dtx:decode(
-                   <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>)),
+                   <<0:(?LEGACY_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>)),
     ?assertMatch({error, {protocol_error, bad_payload}},
                  quod_dtx:decode(<<"not etf">>)),
     ?assertMatch({error, {protocol_error, bad_payload}},
@@ -731,7 +731,7 @@ transcript_population_uses_the_complete_plan_envelope_test() ->
     Goal = {pad, binary:copy(<<$p>>, 6000)},
     try
         %% A real session retains every invocation beyond the old component
-        %% quota; the complete sealed plan owns the encoded byte ceiling.
+        %% quota; the complete sealed plan uses its pinned material policy.
         [ok = open(Session, <<I:128>>, Goal) || I <- lists:seq(1, 65)],
         {Entries, _} = quod_proof_session:transcript(Session),
         ?assertEqual(65, length(Entries)),
@@ -743,32 +743,49 @@ transcript_population_uses_the_complete_plan_envelope_test() ->
         {SealedEntries, _} = quod_proof_session:transcript(Session),
         ?assertEqual(SealedEntries, quod_ct:plan_material(transcript, Decoded)),
         %% Include a material read so admission examines the complete plan.
-        Extra = ?QUOD_MAX_PLAN_ENVELOPE_BYTES div 6000 + 1,
+        Extra = ?LEGACY_MAX_PLAN_ENVELOPE_BYTES div 6000 + 1,
         [ok = open(Session, <<I:128>>, Goal) || I <- lists:seq(66, 65 + Extra)],
-        ?assertEqual({error, {too_large, plan}},
-                     quod_dtx:seal_session(Session, bind()))
+        {ok, LargerPlan} = quod_dtx:seal_session(Session, bind()),
+        {ok, LargerBytes} = quod_dtx:encode(LargerPlan),
+        ?assert(byte_size(LargerBytes) > ?LEGACY_MAX_PLAN_ENVELOPE_BYTES),
+        ?assertEqual({ok, LargerPlan}, quod_dtx:decode(LargerBytes))
     after
         quod_proof_session:stop(Session)
     end.
 
-oversized_goal_is_refused_before_invocation_exists_test() ->
+binary_heavy_nested_goal_uses_complete_plan_admission_test() ->
     Session = session([]),
-    Id = <<3:128>>,
+    Value = binary:copy(<<$p>>,160000),
+    Goal = {assertz,{large_value,Value}},
     try
-        ?assertEqual({error, {too_large, goal}},
-                     open(Session, Id, {pad, binary:copy(<<$p>>,
-                         ?QUOD_MAX_NESTED_GOAL_BYTES + 1)})),
-        ?assertEqual({error, unknown_invocation},
-                     quod_proof_session:next(Session, Id)),
-        ?assertEqual({[], 0}, quod_proof_session:transcript(Session))
-    after
-        quod_proof_session:stop(Session)
-    end.
+        {_Id,{solution,_}} = first(Session,Goal),
+        {ok,Plan} = quod_dtx:seal_session(Session,bind()),
+        {ok,Bytes} = quod_dtx:encode(Plan),
+        {ok,Decoded} = quod_dtx:decode(Bytes),
+        {Entries,_} = quod_proof_session:transcript(Session),
+        ?assertEqual(Entries,quod_ct:plan_material(transcript,Decoded)),
+        [{_,_,Blob,allowed,1,_,active}] = Entries,
+        ?assertEqual({ok,Goal},quod_wire_term:decode_canonical(Blob,?LEGACY_MAX_PLAN_ENVELOPE_BYTES))
+    after quod_proof_session:stop(Session) end.
+
+binary_heavy_cancel_and_malformed_goal_preserve_transcript_lifecycle_test() ->
+    Session = session([]), Id = <<3:128>>, BadId = <<4:128>>,
+    Goal = {pad,binary:copy(<<$p>>,160000)},
+    try
+        ?assertEqual({error,{protocol_error,bad_payload}},open(Session,BadId,{pad,self()})),
+        ?assertEqual({error,unknown_invocation},quod_proof_session:next(Session,BadId)),
+        ?assertEqual({[],0},quod_proof_session:transcript(Session)),
+        ok = open(Session,Id,Goal),
+        ok = quod_proof_session:cancel(Session,Id),
+        ?assertEqual({error,unknown_invocation},quod_proof_session:next(Session,Id)),
+        ?assertMatch({[{Id,_,_,allowed,0,_,cancelled}],_},quod_proof_session:transcript(Session)),
+        ?assertEqual([],quod_proof_session:local_changes(Session))
+    after quod_proof_session:stop(Session) end.
 
 denied_transcript_keeps_request_and_never_executes_it_test() ->
     Session = session([]),
     InvocationId = <<19:128>>,
-    RequestedGoal = {assertz, {must_not_run, true}},
+    RequestedGoal = {assertz, {must_not_run, binary:copy(<<$d>>,160000)}},
     try
         ok = quod_proof_session:open(
                Session, InvocationId, RequestedGoal, denied, ctx(),
@@ -925,13 +942,13 @@ failed_material_proof_aborts_without_sealing_test() ->
 %% Manifest and atomic control boundaries
 %% ------------------------------------------------------------------
 
-maximum_signed_request_is_preserved_by_transaction_and_vote_test() ->
+large_signed_request_is_preserved_by_transaction_and_vote_test() ->
     Goal = <<"assertz(saved(ok)).">>,
     GoalText =
         <<(binary:copy(
-             <<" ">>, ?QUOD_CLIENT_GOAL_TEXT_BYTES - byte_size(Goal)))/binary,
+             <<" ">>, 140 * 1024 - byte_size(Goal)))/binary,
           Goal/binary>>,
-    Ns = binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
+    Ns = binary:copy(<<"n">>, 1024),
     Target = {Ns, key(221)},
     Fixture = quod_ct:signed_atomic_fixture(
                 #{target => Target, goal_text => GoalText}),
@@ -950,8 +967,8 @@ maximum_signed_request_is_preserved_by_transaction_and_vote_test() ->
     ?assert(quod_atomic:requires_network_identity(Material)),
     ?assertMatch({ok, _}, quod_atomic:encode_record(Vote)),
     Request = maps:get(request, Fixture),
-    ?assertEqual(
-       {error, {too_large, goal_text}},
+    ?assertMatch(
+       {ok, _},
        quod_client_goal:encode(
          Request#{goal_text => <<GoalText/binary, " ">>})).
 
@@ -1583,7 +1600,7 @@ assert_symbols_absent(Names) ->
 
 with_proof_gate(Fun) ->
     Namespace = <<"quod:dtx-guard-test">>,
-    Table = 'quod_simplex_genesis_quod:dtx-guard-test',
+    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:dtx-guard-test">>), utf8),
     Tab = ets:new(Table, [named_table, protected, set]),
     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},

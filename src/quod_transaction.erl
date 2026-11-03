@@ -310,13 +310,12 @@ encode_evidence(CertifiedRef, #transaction{} = Transaction) ->
         true ->
             case encode_ledger_transaction(Transaction) of
                 {ok, TransactionBytes} ->
-                    %% Evidence is one transport frame, not a new semantic
-                    %% quota.  Reuse the existing durable-operation envelope
-                    %% bound so this codec and its only carrier cannot disagree.
+                    %% The endpoint admits its complete envelope. This codec
+                    %% validates exact evidence without a nested byte quota.
                     case quod_safe_term:encode_canonical(
                            {quod_transaction_evidence, 2,
                             CertifiedRef, TransactionBytes},
-                           ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
+                           unlimited) of
                         {ok, Blob} -> {ok, Blob};
                         {error, too_large} -> {error, too_large};
                         {error, bad_term} -> {error, bad_remote_evidence}
@@ -331,12 +330,11 @@ encode_evidence(CertifiedRef, #transaction{} = Transaction) ->
 -spec decode_evidence(binary()) ->
           {ok, term(), #transaction{}} | {error, bad_remote_evidence}.
 decode_evidence(Blob)
-  when is_binary(Blob),
-       byte_size(Blob) =< ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES ->
+  when is_binary(Blob) ->
     case {quod_safe_term:validate_canonical(
-            Blob, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES),
+            Blob, unlimited),
           quod_safe_term:decode(
-            Blob, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES)} of
+            Blob, unlimited)} of
         {ok, {ok, {quod_transaction_evidence, 2, CertifiedRef,
                    TransactionBytes}}}
           when is_binary(TransactionBytes) ->
@@ -837,7 +835,7 @@ semantic_id_parts(Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
            {?ID_DOMAIN, ?ID_VERSION, Ns, Anchor, Origin, ProofId,
             PlanDigest, Goal, Result, DiffBytes, ReadCheckBytes, EffectsBytes,
             RequestAuth, AuthTranscript, Role},
-           ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES) of
+           unlimited) of
         {ok, Canonical} -> {ok, crypto:hash(sha256, Canonical)};
         {error, _} -> error
     end.
@@ -880,8 +878,7 @@ transaction_bytes({TargetNs, TargetAnchor, AuthorAdmission},
           canonical_foreign_reads(ForeignReads),
           valid_role_fields({TargetNs, TargetAnchor}, Transaction)} of
         {{ok, MaterialWire, EffectsWire}, {ok, EvidenceWire},
-         {ok, ForeignReads}, true}
-          when byte_size(EffectsWire) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
+         {ok, ForeignReads}, true} ->
             case quod_effect:validate_transaction(
                    TargetNs, TargetAnchor, Author, Effects) of
                 true ->
@@ -912,7 +909,7 @@ canonical_bytes(TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
        TxId, Origin, ProofId, PlanDigest, Goal, Result, MaterialWire,
        EffectsWire, Role, Evidence, ForeignReads, RequestAuth, AuthTranscript,
        Author, AuthorSeq, SubmittedAt},
-      ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES).
+      unlimited).
 
 encode_material(Diff, ReadCheck, Effects)
   when is_list(Diff), is_map(ReadCheck), is_list(Effects) ->
@@ -994,11 +991,8 @@ sign(Binding, Transaction, Identity) ->
           {error, term()}.
 sign_submission(Binding, Transaction, Identity) ->
     case signing_material(Binding, Transaction, Identity) of
-        {ok, Signed, Author, Signature, Canonical}
-          when byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+        {ok, Signed, Author, Signature, Canonical} ->
             {ok, Signed, {submit, Author, Signature, Canonical}};
-        {ok, _Signed, _Author, _Signature, _Canonical} ->
-            {error, too_large};
         {error, _} = Error ->
             Error
     end.
@@ -1014,7 +1008,7 @@ signing_material(
     case bytes(Binding, Transaction) of
         {ok, Canonical} ->
             case quod_safe_term:validate_canonical(
-                   Canonical, ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES) of
+                   Canonical, unlimited) of
                 ok ->
                     Signature = quod_identity:sign(Canonical, Identity),
                     {ok,
@@ -1046,7 +1040,6 @@ verify({TargetNs, TargetAnchor, AuthorAdmission} = Binding,
        is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES ->
     is_binary(SignedBytes)
-        andalso byte_size(SignedBytes) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES
         andalso authenticated_signature(Transaction)
         andalso case bytes(Binding, Transaction) of
                     {ok, SignedBytes} -> true;
@@ -1076,9 +1069,7 @@ submission(Binding, #transaction{author = Author, sig = Signature} = Transaction
   when is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES ->
     case Transaction#transaction.signed_bytes of
-        Canonical when is_binary(Canonical),
-                       byte_size(Canonical) =<
-                           ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+        Canonical when is_binary(Canonical) ->
             case bytes(Binding, Transaction) of
                 {ok, Canonical} ->
                     {ok, {submit, Author, Signature, Canonical}};
@@ -1087,8 +1078,6 @@ submission(Binding, #transaction{author = Author, sig = Signature} = Transaction
                 {error, _} = Error ->
                     Error
             end;
-        Canonical when is_binary(Canonical) ->
-            {error, too_large};
         _ ->
             {error, unsigned_or_malformed}
     end;
@@ -1145,8 +1134,7 @@ only operation permitted before the inner transaction is decoded.
 verify_submission({submit, Author, Signature, Canonical})
   when is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES,
-       is_binary(Canonical),
-       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+       is_binary(Canonical) ->
     quod_identity:verify(Signature, Canonical, Author);
 verify_submission(_Submission) ->
     false.
@@ -1213,12 +1201,7 @@ encode_ledger_transaction_size_term(Term) ->
     end.
 
 encode_ledger_transaction_term(Term) ->
-    case quod_safe_term:encode_canonical(
-           Term, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES) of
-        {ok, Blob} -> {ok, Blob};
-        {error, too_large} -> {error, too_large};
-        {error, bad_term} -> {error, bad_term}
-    end.
+    quod_safe_term:encode_canonical(Term, unlimited).
 
 encode_genesis_transaction(
   #transaction{tx_id = TxId, role = application, evidence = none,
@@ -1259,7 +1242,6 @@ admission and freshness checks remain the consuming verifier's responsibility.
 decode_ledger_transaction(Blob, SymbolMode,
                           #decoded_transactions{completed = Completed} = Context)
   when is_binary(Blob),
-       byte_size(Blob) =< ?QUOD_MAX_OPERATION_SUBMISSION_BYTES,
        (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
     Key = {Blob, SymbolMode},
     case maps:find(Key, Completed) of
@@ -1277,7 +1259,7 @@ decode_ledger_transaction(_Blob, _SymbolMode, _Context) ->
 
 decode_ledger_record(Blob, SymbolMode, Context) ->
     case decode_canonical_term(
-           Blob, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES, SymbolMode) of
+           Blob, unlimited, SymbolMode) of
         {ok, {quod_genesis_transaction, 1, TxId, Origin,
               DiffBytes, Author}}
           when is_binary(TxId), is_binary(DiffBytes), is_binary(Author) ->
@@ -1293,7 +1275,7 @@ decode_ledger_record(Blob, SymbolMode, Context) ->
 
 decode_genesis_transaction(TxId, Origin, DiffBytes, Author, SymbolMode) ->
     case quod_wire_term:decode_canonical(
-           DiffBytes, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES) of
+           DiffBytes, unlimited) of
         {ok, Diff0} when is_list(Diff0) ->
             case materialize_decoded(Diff0, SymbolMode) of
                 {ok, Diff} ->
@@ -1333,8 +1315,7 @@ decode_verified_submission(
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission),
        is_binary(Author), is_binary(Signature),
-       is_binary(Canonical),
-       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+       is_binary(Canonical) ->
     decoded_result(decode_verified_submission(
       Binding, {submit, Author, Signature, Canonical}, materialized, decode_context()));
 decode_verified_submission(_Binding, _Submission) ->
@@ -1347,7 +1328,6 @@ decode_verified_submission(
        is_binary(AuthorAdmission),
        is_binary(Author), is_binary(Signature),
        is_binary(Canonical),
-       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES,
        (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
     case decode_canonical_transaction(Binding, Canonical, SymbolMode, Context) of
         {ok, Transaction = #transaction{author = Author}, Next} ->
@@ -1375,8 +1355,7 @@ reinterprets the carried bytes; public encoders still validate native views.
 decode_canonical_transaction(
   {TargetNs, TargetAnchor, AuthorAdmission} = Binding, Canonical)
   when is_binary(TargetNs), is_binary(TargetAnchor),
-       is_binary(AuthorAdmission), is_binary(Canonical),
-       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+       is_binary(AuthorAdmission), is_binary(Canonical) ->
     decoded_result(decode_canonical_transaction(Binding, Canonical, materialized, decode_context()));
 decode_canonical_transaction(_Binding, _Canonical) ->
     {error, malformed_submission}.
@@ -1385,10 +1364,9 @@ decode_canonical_transaction(
   {TargetNs, TargetAnchor, AuthorAdmission} = Binding, Canonical, SymbolMode, Context)
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission), is_binary(Canonical),
-       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES,
        (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
     case decode_canonical_term(
-           Canonical, ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES, SymbolMode) of
+           Canonical, unlimited, SymbolMode) of
         {ok,
          {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
           TxId, Origin, ProofId,
@@ -1451,12 +1429,11 @@ decoded_result({error, _} = Error) -> Error.
                  role := term(), request_auth := term()}} |
           {error, malformed_submission}.
 decode_submission_metadata(Canonical)
-  when is_binary(Canonical),
-       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+  when is_binary(Canonical) ->
     case {quod_safe_term:validate_canonical(
-            Canonical, ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES),
+            Canonical, unlimited),
           quod_safe_term:decode(
-            Canonical, ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES)} of
+            Canonical, unlimited)} of
         {ok, {ok,
          {?DOMAIN, ?VERSION, Ns, <<_:256>> = Anchor,
           <<_:256>> = Admission, <<_:256>> = TxId,
@@ -1468,7 +1445,7 @@ decode_submission_metadata(Canonical)
           when is_binary(Ns), is_integer(Sequence), Sequence >= 0 ->
             case {term_to_binary(Decoded, [deterministic]) =:= Canonical,
                   quod_wire_term:decode_canonical(
-                    EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES)} of
+                    EffectsWire, unlimited)} of
                 {true, {ok, Effects}} when is_list(Effects) ->
                     {ok, #{target => {Ns, Anchor}, admission => Admission,
                            tx_id => TxId, effects => Effects,
@@ -1491,7 +1468,7 @@ just to decide whether an unrelated item is wanted.
 """.
 -spec matches_selection(term(), binary() | #transaction{}) -> boolean().
 matches_selection(Selection, Blob) when is_binary(Blob) ->
-    case decode_canonical_term(Blob, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES, wrapped) of
+    case decode_canonical_term(Blob, unlimited, wrapped) of
         {ok, {submit, _, _, Canonical}} ->
             case decode_submission_metadata(Canonical) of
                 {ok, #{tx_id := Id, role := Role, request_auth := Auth}} ->
@@ -1560,11 +1537,7 @@ operation_submission_context(Submission) ->
         {ok, Claim} ->
             Blob = term_to_binary(Submission, [deterministic]),
             {ok, Plans} = claim_plans(Claim),
-            case byte_size(Blob) =< ?QUOD_MAX_OPERATION_SUBMISSION_BYTES of
-                true -> {ok, Blob, Claim,
-                         [P || {P, _} <- Plans, quod_dtx:effects_count(P) =:= 1]};
-                false -> {error, invalid_operation_submission}
-            end;
+            {ok, Blob, Claim, [P || {P, _} <- Plans, quod_dtx:effects_count(P) =:= 1]};
         {error, _} = Error -> Error
     end.
 
@@ -1580,10 +1553,9 @@ operation_submission_context(Submission) ->
              cancel_digest := <<_:256>>}} |
           {error, invalid_operation_submission}.
 decode_operation_submission(Blob, Target)
-  when is_binary(Blob),
-       byte_size(Blob) =< ?QUOD_MAX_OPERATION_SUBMISSION_BYTES ->
+  when is_binary(Blob) ->
     case quod_safe_term:decode(
-           Blob, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES) of
+           Blob, unlimited) of
         {ok, Submission = {submit, _, _, _}} ->
             case term_to_binary(Submission, [deterministic]) =:= Blob of
                 true -> operation_submission(Submission, Target);
@@ -1742,7 +1714,7 @@ foreign_reads_from_material(Material) ->
 
 -doc "Encode the canonical certificate list carried by a scope submission.".
 -spec encode_foreign_reads([term()]) ->
-          {ok, binary()} | {error, bad_foreign_reads | too_large}.
+          {ok, binary()} | {error, bad_foreign_reads}.
 encode_foreign_reads(ForeignReads) ->
     case canonical_foreign_reads(ForeignReads) of
         {ok, Canonical} ->
@@ -1751,10 +1723,7 @@ encode_foreign_reads(ForeignReads) ->
                     Blob = term_to_binary(
                              {quod_foreign_reads, 1,
                               lists:reverse(RevBlobs)}, [deterministic]),
-                    case byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES of
-                        true -> {ok, Blob};
-                        false -> {error, too_large}
-                    end;
+                    {ok, Blob};
                 error ->
                     {error, bad_foreign_reads}
             end;
@@ -1764,10 +1733,10 @@ encode_foreign_reads(ForeignReads) ->
 
 -doc "Decode the canonical certificate list carried by a scope submission.".
 -spec decode_foreign_reads(binary()) ->
-          {ok, [term()]} | {error, bad_foreign_reads | too_large}.
+          {ok, [term()]} | {error, bad_foreign_reads}.
 decode_foreign_reads(Blob)
-  when is_binary(Blob), byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES ->
-    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_BODY_BYTES) of
+  when is_binary(Blob) ->
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, {quod_foreign_reads, 1, CertificateBlobs}}
           when is_list(CertificateBlobs) ->
             case decode_read_certificates(CertificateBlobs, []) of
@@ -1785,8 +1754,6 @@ decode_foreign_reads(Blob)
             end;
         _ -> {error, bad_foreign_reads}
     end;
-decode_foreign_reads(Blob) when is_binary(Blob) ->
-    {error, too_large};
 decode_foreign_reads(_) ->
     {error, bad_foreign_reads}.
 
@@ -1858,9 +1825,9 @@ operation_origin(_) -> invalid.
 
 decode_material(MaterialWire, EffectsWire, SymbolMode) ->
     case {quod_wire_term:decode_canonical(
-            MaterialWire, ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES),
+            MaterialWire, unlimited),
           quod_wire_term:decode_canonical(
-            EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES)} of
+            EffectsWire, unlimited)} of
         {{ok, {Diff0, ReadPairs0}}, {ok, Effects0}}
           when is_list(Diff0), is_list(ReadPairs0), is_list(Effects0) ->
             case quod_read_set:valid_pairs(ReadPairs0) of

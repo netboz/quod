@@ -1,6 +1,7 @@
 -module(quod_quorum_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ingress_limits.hrl").
 
 threshold_matches_simplex_rule_test() ->
@@ -8,34 +9,34 @@ threshold_matches_simplex_rule_test() ->
                  [{N, quod_quorum:threshold(N)} || N <- [1, 3, 4, 7, 64]]).
 
 committee_and_signature_bounds_are_shared_test() ->
-    Members = [<<N:256>> || N <- lists:seq(1, ?MAX_VALIDATORS)],
-    ?assertEqual({ok, ?MAX_VALIDATORS},
+    Members = [<<N:256>> || N <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
+    ?assertEqual({ok, ?LEGACY_MAX_VALIDATORS},
                  quod_quorum:committee_size(Members)),
-    ?assertEqual(error,
+    ?assertEqual({ok, ?LEGACY_MAX_VALIDATORS + 1},
                  quod_quorum:committee_size(Members ++ [<<0:256>>])),
     ?assertEqual(error,
                  quod_quorum:committee_size([<<1:256>>, <<1:256>>])),
     ?assertEqual({ok, 2},
                  quod_quorum:committee_size([<<2:256>>, <<1:256>>])),
     Rows = [{Member, <<0:512>>} || Member <- Members],
-    ?assert(quod_quorum:valid_signature_list(Rows, ?MAX_VALIDATORS)),
+    ?assert(quod_quorum:valid_signature_list(Rows, ?LEGACY_MAX_VALIDATORS)),
     ?assertNot(
        quod_quorum:valid_signature_list(
-         Rows ++ [{<<0:256>>, <<0:512>>}], ?MAX_VALIDATORS)).
+         Rows ++ [{<<0:256>>, <<0:512>>}], ?LEGACY_MAX_VALIDATORS)).
 
 honest_threshold_has_one_arithmetic_owner_test() ->
     ?assertEqual([1, 1, 2, 3, 22],
                  [quod_quorum:honest_threshold(N) || N <- [1, 3, 4, 7, 64]]).
 
 canonical_certificate_rows_share_shape_order_and_duplicate_rules_test() ->
-    Rows = [{<<N:256>>, <<N:512>>} || N <- lists:seq(1, ?MAX_VALIDATORS)],
+    Rows = [{<<N:256>>, <<N:512>>} || N <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
     [A, B | _] = Rows,
     ?assert(quod_quorum:canonical_signatures([A])),
     ?assert(quod_quorum:canonical_signatures(Rows)),
+    ?assert(quod_quorum:canonical_signatures(Rows ++ [{<<999:256>>, <<999:512>>}])),
     lists:foreach(fun(Invalid) ->
         ?assertNot(quod_quorum:canonical_signatures(Invalid))
-    end, [[], [A, A], [B, A], [A | invalid], [invalid], [{<<1>>, <<2>>}],
-          Rows ++ [{<<999:256>>, <<999:512>>}]]).
+    end, [[], [A, A], [B, A], [A | invalid], [invalid], [{<<1>>, <<2>>}]]).
 
 honest_signature_rows_are_bounded_once_test() ->
     {Pub, Identity} = identity(), Bytes = <<"one-signature-shape-pass">>,

@@ -185,7 +185,6 @@ handle_info({physics_resource_ack,Pid,Ref,Token,Ack},
                 false -> V
             end;
         {{terrain_chunks,Token,complete},complete} -> V#{terrain_complete => true,credit => true};
-        {{terrain_chunks,Token,{through,Index}},{through,Index}} -> V#{credit => true};
         _ -> V
     end,
     {noreply,deliver_frame(S#s{viewer = Next})};
@@ -914,15 +913,10 @@ deliver_resources(S = #s{spec = Spec},V,Expected,Frame,Previous) ->
                 {ok,[]} when Requests =:= [] -> deliver_pose(S#s{viewer = V#{terrain_source => SourceKey}},Frame,Previous);
                 {ok,Rows} ->
                     Token = crypto:strong_rand_bytes(32),
-                    case quod_terrain_wire:admit(Token,Interest,Rows) of
-                        ok ->
-                            send_view_resource({terrain_manifest,Token,Interest,[maps:remove(payload,R) || R <- Rows]},V),
-                            S#s{viewer = V#{terrain_source => SourceKey,terrain_snapshot => Rows,
-                                terrain_token => Token,terrain_complete => false,terrain_wanted => [],
-                                delivery => {terrain_manifest,Token},credit => false}};
-                        {error,Reason} ->
-                            send_view_resource({terrain_unavailable,Reason},V),clear_viewer(S)
-                    end;
+                    send_view_resource({terrain_manifest,Token,Interest,[maps:remove(payload,R) || R <- Rows]},V),
+                    S#s{viewer = V#{terrain_source => SourceKey,terrain_snapshot => Rows,
+                        terrain_token => Token,terrain_complete => false,terrain_wanted => [],
+                        delivery => {terrain_manifest,Token},credit => false}};
                 {error,Reason} ->
                     send_view_resource({terrain_unavailable,Reason},V),clear_viewer(S)
             end
@@ -936,12 +930,8 @@ deliver_resource_snapshot(S,V,Frame,Previous) ->
             Wanted = maps:from_keys(maps:get(terrain_wanted,V),true),
             Chunks = [{I,maps:get(payload,Row)} || Row = #{index := I} <- maps:get(terrain_snapshot,V),
                                                  is_map_key(I,Wanted)],
-            {Batch,Remaining} = quod_terrain_wire:batch(Token,Chunks),
-            Complete = Remaining =:= [],
-            Ack = case Complete of true -> complete; false -> {through,element(1,lists:last(Batch))} end,
-            send_view_resource({terrain_chunks,Token,Batch,Complete},V),
-            S#s{viewer = V#{delivery => {terrain_chunks,Token,Ack},
-                            terrain_wanted => [I || {I,_} <- Remaining],credit => false}}
+            send_view_resource({terrain_chunks,Token,Chunks,true},V),
+            S#s{viewer = V#{delivery => {terrain_chunks,Token,complete},credit => false}}
     end.
 
 send_view_resource(Message,#{pid := Pid,ref := Ref}) ->
@@ -974,8 +964,8 @@ terrain_snapshot(Requests,Spec,Source,Focus) ->
                                  [0,0,0,0,0],Selected),
             true = length(Allowed) =:= 5,
             lists:foreach(fun({Name,A,L}) ->
-                true = is_integer(L) andalso L >= 0,
-                case A =< L of
+                true = L =:= unlimited orelse (is_integer(L) andalso L >= 0),
+                case L =:= unlimited orelse A =< L of
                     true -> ok;
                     false -> throw(iolist_to_binary(io_lib:format(
                         "Terrain ~s: required ~B, allowance ~B. Reduce viewing distance.",[Name,A,L])))

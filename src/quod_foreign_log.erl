@@ -95,8 +95,6 @@ system is introduced.
 -define(CACHE_VERSION, 7). %% signed material heights in archive and era authority
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
--define(MANIFEST_RESERVE_BYTES, 4096).
--define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
 -define(MAX_CHANGED_HEADS, ?QUOD_MAX_CHANGED_HEADS).
 -define(TRACE_STAGE_ACTIVE, {?MODULE, trace_stage_active}).
 
@@ -289,7 +287,6 @@ system is introduced.
           total_bytes = 0 :: non_neg_integer(),
           projection_bytes = 0 :: non_neg_integer(),
           follow_wakes = 0 :: non_neg_integer(),
-          follow_pages = 0 :: non_neg_integer(),
           follow_entries = 0 :: non_neg_integer(),
           follow_bytes = 0 :: non_neg_integer(),
           follow_coalesced = 0 :: non_neg_integer(),
@@ -302,7 +299,6 @@ system is introduced.
           max_follow_lag = 0 :: non_neg_integer(),
           bootstrap_accepted = 0 :: non_neg_integer(),
           bootstrap_rejected = 0 :: non_neg_integer(),
-          bootstrap_evicted = 0 :: non_neg_integer(),
           page_bindings = #{} :: #{term() => #page_binding{}},
           page_contacts = #{} :: #{term() => reference()},
           page_openings = #{} :: #{reference() => reference()},
@@ -767,7 +763,7 @@ local_view_fetch(View, Store, Query, Deadline, Consume) ->
                            _ -> quod_catchup:open_history_transfer(Store, View, Query)
                        end,
                 Page = case Open of
-                           {ok, Sender} -> quod_catchup:transfer_page(Store, Sender);
+                           {ok, Sender} -> quod_catchup:transfer_page(Store, Sender, unlimited);
                            {error, _} = Error -> Error
                        end,
                 case Page of
@@ -1034,7 +1030,7 @@ empty_stats() ->
       follow_consumers => 0, followed_histories => 0,
       projection_workers => 0, projection_bytes => 0,
       follow_building => 0, follow_unreachable => 0,
-      follow_wakes => 0, follow_pages => 0,
+      follow_wakes => 0,
       follow_entries => 0, follow_bytes => 0, follow_coalesced => 0,
       follow_resnapshots => 0,
       projection_rebuilds => 0, max_follow_lag => 0,
@@ -1059,6 +1055,7 @@ init(Opts) ->
             %% worker shutdown removes its generation directory; clearing the
             %% dedicated parent here also reclaims anything left by an
             %% untrappable kill before this owner restarted.
+            Histories = retained_histories(Root),
             cleanup_projection_dirs(Root),
             true = quod_reg:subscribe({runtime, quod_ontology:root_ns()}),
             TransportMonitor = quod_reg:monitor_name({transport, node}, follow),
@@ -1068,7 +1065,7 @@ init(Opts) ->
             %% Catalogue manifests only. Each retained identity is initialized
             %% by its existing exclusive writer, before queued request work.
             %% The node owner remains responsive while those writers do I/O.
-            {ok, initialize_retained_histories(S0)};
+            {ok, initialize_retained_histories(Histories, S0)};
         false ->
             {stop, bad_foreign_log_config}
     end.
@@ -1117,7 +1114,6 @@ handle_call(stats, _From, S) ->
                                                reachability =
                                                    {unreachable, _}} <- Followed]),
               follow_wakes => S#s.follow_wakes,
-              follow_pages => S#s.follow_pages,
               follow_entries => S#s.follow_entries,
               follow_bytes => S#s.follow_bytes,
               follow_coalesced => S#s.follow_coalesced,
@@ -1129,8 +1125,7 @@ handle_call(stats, _From, S) ->
               max_follow_lag => S#s.max_follow_lag,
               bootstrap_candidates => bootstrap_candidate_count(S),
               bootstrap_accepted => S#s.bootstrap_accepted,
-              bootstrap_rejected => S#s.bootstrap_rejected,
-              bootstrap_evicted => S#s.bootstrap_evicted},
+              bootstrap_rejected => S#s.bootstrap_rejected},
     {reply, Reply, S};
 handle_call({follow, Identity, Interest}, From, S0) ->
     {noreply, add_follow(Identity, Interest, From, S0)};
@@ -2366,7 +2361,7 @@ validate_reference_request(Ref, Phase) ->
 
 normalize_entry_hint(Entry) ->
     case quod_ledger:hint_bytes(Entry) of
-        {ok, Bytes} when byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES -> Entry;
+        {ok, _Bytes} -> Entry;
         _ -> none
     end.
 
@@ -2376,7 +2371,6 @@ validate_route_request(
    <<_:256>>, <<_:256>>, Proof} = Ref,
   Phase, TimeoutMs)
   when is_binary(Ns), byte_size(Ns) > 0,
-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
        is_integer(Slot), Slot > 0,
        is_binary(Proof), byte_size(Proof) > 0,
        is_integer(TimeoutMs), TimeoutMs > 0,
@@ -2398,7 +2392,6 @@ validate_local_request(
   when is_pid(Owner), is_integer(Height), Height >= 0,
        is_integer(Applied), Applied >= 0, Applied =< Height,
        is_binary(Ns), byte_size(Ns) > 0,
-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
        is_integer(Slot), Slot > 0,
        is_binary(Proof), byte_size(Proof) > 0 ->
     case valid_local_timeout(TimeoutMs) andalso valid_phase(Phase)
@@ -2443,8 +2436,7 @@ valid_request_contact(_) ->
     false.
 
 valid_identity({Ns, <<_:256>>})
-  when is_binary(Ns), byte_size(Ns) > 0,
-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
+  when is_binary(Ns), byte_size(Ns) > 0 ->
     true;
 valid_identity(_) ->
     false.
@@ -2454,7 +2446,6 @@ validate_reference(Ref) ->
         {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
          <<_:256>>, <<_:256>>, Proof}
           when is_binary(Ns), byte_size(Ns) > 0,
-               byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
                is_integer(Slot), Slot > 0,
                is_binary(Proof), byte_size(Proof) > 0 ->
             case quod_dtx:validate_certified_ref(Ref) of
@@ -2466,27 +2457,26 @@ validate_reference(Ref) ->
     end.
 
 normalize_route_candidates(Routes) when is_list(Routes) ->
-    normalize_route_candidates(Routes, 0, []);
+    normalize_route_candidates(Routes, []);
 normalize_route_candidates(_) ->
     error.
 
-normalize_route_candidates([], _Count, Acc) ->
+normalize_route_candidates([], Acc) ->
     {ok, lists:reverse(Acc)};
 normalize_route_candidates(
-  [{<<_:256>> = Peer, Endpoints0} | Rest], Count, Acc)
-  when is_list(Endpoints0), Count < ?MAX_VALIDATORS ->
+  [{<<_:256>> = Peer, Endpoints0} | Rest], Acc)
+  when is_list(Endpoints0) ->
     Endpoints = lists:uniq(Endpoints0),
     case Endpoints0 =:= Endpoints andalso Endpoints =/= [] andalso
-         length(Endpoints) =< 2 andalso
          lists:all(fun quod_quic:valid_endpoint/1, Endpoints) andalso
          not lists:keymember(Peer, 1, Acc) of
         true ->
             normalize_route_candidates(
-              Rest, Count + 1, [{Peer, Endpoints} | Acc]);
+              Rest, [{Peer, Endpoints} | Acc]);
         false ->
             error
     end;
-normalize_route_candidates(_, _Count, _Acc) ->
+normalize_route_candidates(_, _Acc) ->
     error.
 
 selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
@@ -2521,9 +2511,7 @@ route_candidates(#{request := Request, live := Live, supplied := Supplied,
     end.
 
 discovery_route_candidates(Request, Live, Supplied, Bootstrap) ->
-    Routes = lists:sublist(
-               stable_unique_routes(Request ++ Live ++ Supplied ++ Bootstrap),
-               ?MAX_VALIDATORS),
+    Routes = stable_unique_routes(Request ++ Live ++ Supplied ++ Bootstrap),
     [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
 
 %% Fetching bytes and trusting an answer are different operations. Certified
@@ -2568,18 +2556,15 @@ remember_bootstrap_candidate(Identity, PeerKey, Endpoint, S0) ->
         true ->
             S1 = ensure_bootstrap_history(Identity, S0),
             H0 = maps:get(Identity, S1#s.histories),
-            {Hints, Evicted} = put_bootstrap_hint(
+            Hints = put_bootstrap_hint(
                                  PeerKey, Endpoint,
-                                 H0#history.bootstrap_hints,
-                                 history_authority(H0)),
+                                 H0#history.bootstrap_hints),
             H1 = H0#history{bootstrap_hints = Hints,
                             last_used = quod_time:mono_ms()},
             S2 = put_history(
                    Identity, H1,
                    S1#s{bootstrap_accepted =
-                            S1#s.bootstrap_accepted + 1,
-                        bootstrap_evicted =
-                            S1#s.bootstrap_evicted + Evicted}),
+                            S1#s.bootstrap_accepted + 1}),
             hibernate_history(
               Identity, wake_follow(Identity, S2))
     end.
@@ -2592,45 +2577,9 @@ ensure_bootstrap_history(Identity, S = #s{histories = Histories})
 ensure_bootstrap_history(Identity, S) ->
     ensure_history(Identity, S).
 
-put_bootstrap_hint(PeerKey, Endpoint, Hints0, Projection) ->
-    WithoutPeer = [{Peer, Ep} || {Peer, Ep} <- Hints0,
-                                  Peer =/= PeerKey],
-    Hints1 = [{PeerKey, Endpoint} | WithoutPeer],
-    case length(Hints1) =< ?MAX_CURRENT_ROUTE_HINTS of
-        true -> {Hints1, 0};
-        false ->
-            Committee = case is_map(Projection) of
-                            true -> quod_simplex:history_committee(Projection);
-                            false -> []
-                        end,
-            {evict_oldest_unprotected(Hints1, Committee), 1}
-    end.
-
-evict_oldest_unprotected(Hints, ProtectedKeys) ->
-    Reversed = lists:reverse(Hints),
-    case drop_first(
-           fun({Peer, _Endpoint}) ->
-                   not lists:member(Peer, ProtectedKeys)
-           end, Reversed) of
-        {ok, Kept} -> lists:reverse(Kept);
-        %% Defensive only: an overflow list cannot be entirely protected
-        %% while committees are bounded below the hint cap. If that invariant
-        %% ever changes, refuse the newest contact rather than evicting a
-        %% current committee member.
-        none -> tl(Hints)
-    end.
-
-drop_first(_Predicate, []) ->
-    none;
-drop_first(Predicate, [Item | Rest]) ->
-    case Predicate(Item) of
-        true -> {ok, Rest};
-        false ->
-            case drop_first(Predicate, Rest) of
-                {ok, Kept} -> {ok, [Item | Kept]};
-                none -> none
-            end
-    end.
+put_bootstrap_hint(PeerKey, Endpoint, Hints0) ->
+    WithoutPeer = [{Peer, Ep} || {Peer, Ep} <- Hints0, Peer =/= PeerKey],
+    [{PeerKey, Endpoint} | WithoutPeer].
 
 %% `entry` asks this same exact-reference verifier to accept either content or
 %% a DTX control. Read certificates bind the last material ledger entry, whose
@@ -4269,13 +4218,7 @@ record_follow_progress(RequestRef, Meta, S0) when is_map(Meta) ->
                     Height = maps:get(height, Meta, OldHeight),
                     Bytes = maps:get(bytes, Meta, OldBytes),
                     Entries = max(0, Height - OldHeight),
-                    Pages = case Entries of
-                                0 -> 0;
-                                _ -> (Entries + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
-                                     div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES
-                            end,
-                    S0#s{follow_pages = S0#s.follow_pages + Pages,
-                         follow_entries = S0#s.follow_entries + Entries,
+                    S0#s{follow_entries = S0#s.follow_entries + Entries,
                          follow_bytes = S0#s.follow_bytes + max(0, Bytes - OldBytes)};
                 undefined -> S0
             end;
@@ -5672,7 +5615,7 @@ follow_identity(Owner, RequestRef, Identity, Sources, Root,
                                   FetchFun, Deadline, Context) of
                 {{ok, #{slot := Tip, route_candidates := Routes}}, Evidence} ->
                     Remaining = max(0, Deadline - quod_time:mono_ms()),
-                    Target = min(Tip, Cursor#verified_cursor.height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+                    Target = Tip,
                     Fallback = [{Peer, [Endpoint]} || {Peer, Endpoint} <-
                                    history_fallback_sources(Sources, Routes)],
                     case advance_snapshot_to_height(Routes ++ Fallback, Owner, RequestRef,
@@ -5706,8 +5649,8 @@ follow_borrowed_local_view(Owner, RequestRef, Identity = {Ns, _}, Tip, SourceVie
     end.
 
 follow_local_snapshot(Owner, RequestRef, LocalPeer, Tip, Identity,
-                      Root, FetchFun, PageTimeout, Cursor = #verified_cursor{height = Height}) ->
-    Target = min(Tip, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+                      Root, FetchFun, PageTimeout, Cursor = #verified_cursor{}) ->
+    Target = Tip,
     case advance_snapshot_to_height(
            [{LocalPeer, [local]}], Owner, RequestRef, Identity, Cursor,
            Root, Target, FetchFun, PageTimeout) of
@@ -5863,7 +5806,7 @@ open_replayed_cache_raw(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Hei
                 {ok, Projection} ->
                     %% Replaying this explicit startup verifies an older checkpoint at
                     %% its own group boundary and preserves every complete suffix group.
-                    case write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) of
+                    case write_checkpoint(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs, Height, Projection) of
                         ok -> {ok, Store, Height, Projection, PhaseIndex};
                         {error, _} -> close_cache(Store, PhaseIndex, cache_io)
                     end;
@@ -6012,7 +5955,7 @@ checkpoint_range(_Before, #verified_cursor{height = Height, projection = Project
                  Identity, Root, Owner, RequestRef) ->
     try
         ok = persistence_stage(checkpoint_write,
-               fun() -> write_checkpoint(Root, Identity, cache_namespace(Identity),
+               fun() -> write_checkpoint(Owner, RequestRef, Root, Identity, cache_namespace(Identity),
                                          Height, Projection) end),
         Bytes = cache_persisted_bytes(Root, cache_namespace(Identity)),
         ok = persistence_stage(cache_accounting,
@@ -6057,10 +6000,9 @@ persist_verified_group(
     %% No mutation precedes reservation. After append is attempted, any
     %% failure invalidates the cursor, including failures after durable I/O.
     StoredBytes = quod_ledger_store:group_size(Proof, Entries),
-    Reservation = StoredBytes + ?QUOD_MAX_FOREIGN_PAGE_BYTES,
     case valid_projection(Projection, Identity) andalso
          persistence_reservation(measure_foreign_stage(cache_accounting,
-           fun() -> gen_server:call(Owner, {reserve_page, RequestRef, Reservation}) end)) of
+           fun() -> gen_server:call(Owner, {reserve_page, RequestRef, StoredBytes}) end)) of
         ok ->
             try
                 {ok, NextBatch} = persistence_stage(ledger_append,
@@ -6402,7 +6344,7 @@ advance_snapshot_to_height(_Sources, _Owner, _RequestRef, _Identity,
 advance_snapshot_to_height(Sources, Owner, RequestRef, Identity,
                            Cursor = #verified_cursor{height = Height},
                            Root, Target, FetchFun, PageTimeout) ->
-    PageTarget = min(Target, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+    PageTarget = Target,
     case advance_snapshot_sources(Sources, Owner, RequestRef, Identity, Cursor,
                                   Root, PageTarget, FetchFun, PageTimeout) of
         {ok, Next = #verified_cursor{height = NextHeight}} when NextHeight > Height ->
@@ -6686,18 +6628,19 @@ file_bytes(Path) ->
     end.
 
 ensure_manifest(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs) ->
+    ok = quod_ledger_store:check_namespace_layout(Root, CacheNs),
     Path = manifest_path(Root, CacheNs),
     Expected = {quod_foreign_log_cache, ?CACHE_VERSION,
                 Ns, Anchor, CacheNs},
-    case read_small_term(Path) of
+    case read_cache_term(Path) of
         {ok, Expected} -> ok;
         {error, enoent} ->
+            Blob = term_to_binary(Expected, [deterministic]),
             case gen_server:call(
                    Owner,
-                   {reserve_page, RequestRef, ?MANIFEST_RESERVE_BYTES}) of
+                   {reserve_page, RequestRef, byte_size(Blob)}) of
                 ok ->
-                    atomic_write(
-                      Path, term_to_binary(Expected, [deterministic]));
+                    atomic_write(Path, Blob);
                 {error, _} ->
                     {error, cache_unavailable}
             end;
@@ -6708,19 +6651,19 @@ ensure_manifest(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs) ->
             {error, corrupt_manifest}
     end.
 
-write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) ->
+write_checkpoint(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs, Height, Projection) ->
     Bytes = cache_log_bytes(Root, CacheNs),
     Term = {quod_foreign_log_checkpoint, ?CACHE_VERSION,
             Ns, Anchor, Height, Bytes, checkpoint_projection(Projection)},
     Blob = term_to_binary(Term, [deterministic]),
-    case byte_size(Blob) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
-        true -> atomic_write(checkpoint_path(Root, CacheNs), Blob);
-        false -> {error, checkpoint_too_large}
+    case gen_server:call(Owner, {reserve_page, RequestRef, byte_size(Blob)}) of
+        ok -> atomic_write(checkpoint_path(Root, CacheNs), Blob);
+        {error, _} -> {error, cache_unavailable}
     end.
 
 load_checkpoint(Root, Identity = {Ns, Anchor}, CacheNs, Store) ->
     Path = checkpoint_path(Root, CacheNs),
-    case read_small_term(Path) of
+    case read_cache_term(Path) of
         {ok, {quod_foreign_log_checkpoint, ?CACHE_VERSION,
               Ns, Anchor, Height, StoredBytes, Projection}}
           when is_integer(StoredBytes), StoredBytes >= 0 ->
@@ -6736,22 +6679,14 @@ load_checkpoint(Root, Identity = {Ns, Anchor}, CacheNs, Store) ->
         _ -> {error, corrupt_checkpoint}
     end.
 
-read_small_term(Path) ->
-    case file:read_file_info(Path) of
-        {ok, Info} when element(2, Info) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES ->
-            case file:read_file(Path) of
-                {ok, Bin} ->
-                    %% Read the version even when a superseded projection
-                    %% names symbols no longer loaded by this code. Wrapped
-                    %% decoding proves canonical bytes without atom creation.
-                    case quod_safe_term:decode_wrapped(
-                           Bin, ?QUOD_MAX_FOREIGN_PAGE_BYTES) of
-                        {ok, Term} -> {ok, Term};
-                        {error, _} -> {error, bad_term}
-                    end;
-                {error, Reason} -> {error, Reason}
+read_cache_term(Path) ->
+    case file:read_file(Path) of
+        {ok, Bin} ->
+            %% Canonical wrapped decoding does not create historical atoms.
+            case quod_safe_term:decode_wrapped(Bin, unlimited) of
+                {ok, Term} -> {ok, Term};
+                {error, _} -> {error, bad_term}
             end;
-        {ok, _} -> {error, too_large};
         {error, Reason} -> {error, Reason}
     end.
 
@@ -6787,20 +6722,26 @@ atomic_write(Path, Blob) ->
 %% reconstruction runs under the existing per-identity writer custody, not
 %% inside this mailbox and not on the first proof request. F6 will replace
 %% this counted startup replay with bound-save restoration plus a suffix.
-initialize_retained_histories(S0 = #s{root = Root}) ->
+%% Inspect every retained manifest before any projection cleanup or reader
+%% start. A later legacy directory must not be discovered after earlier writes.
+retained_histories(Root) ->
     case file:list_dir(Root) of
         {ok, Names} ->
-            lists:foldl(fun(Name, S) ->
+            lists:flatmap(fun(Name) ->
                 case load_history_dir(Root, filename:join(Root, Name)) of
-                    {ok, H = #history{identity = Identity, bytes = Bytes}} ->
-                        S1 = put_history(Identity, H, S#s{total_bytes = S#s.total_bytes + Bytes}),
-                        start_history_initialization(Identity, startup, S1);
-                    error -> S
+                    {ok, H} -> [H];
+                    error -> []
                 end
-            end, S0, Names);
-        {error, enoent} -> S0;
+            end, Names);
+        {error, enoent} -> [];
         {error, Reason} -> error({foreign_history_catalogue, Reason})
     end.
+
+initialize_retained_histories(Histories, S0) ->
+    lists:foldl(fun(H = #history{identity = Identity, bytes = Bytes}, S) ->
+        S1 = put_history(Identity, H, S#s{total_bytes = S#s.total_bytes + Bytes}),
+        start_history_initialization(Identity, startup, S1)
+    end, S0, Histories).
 
 start_history_initialization(Identity, Cause, S0) ->
     {ok, S1} = start_distinct_worker(none, Identity, infinity,
@@ -6855,12 +6796,12 @@ resume_history_initializations(S0) ->
     end, S0, S0#s.histories).
 
 load_history_dir(Root, Dir) ->
-    case read_small_term(filename:join(Dir, ?MANIFEST)) of
+    case read_cache_term(filename:join(Dir, ?MANIFEST)) of
         {ok, {quod_foreign_log_cache, ?CACHE_VERSION,
               Ns, <<_:256>> = Anchor, <<_:256>> = CacheNs}}
-          when is_binary(Ns), byte_size(Ns) > 0,
-               byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
+          when is_binary(Ns), byte_size(Ns) > 0 ->
             Identity = {Ns, Anchor},
+            ok = quod_ledger_store:check_namespace_layout(Root, CacheNs),
             Bytes = cache_persisted_bytes(Root, CacheNs),
             case CacheNs =:= cache_namespace(Identity) andalso
                 cache_dir(Root, CacheNs) =:= Dir of
@@ -6920,12 +6861,8 @@ valid_projection(
     dtx := Dtx, dtx_lanes := DtxLanes} = Projection,
   ExpectedIdentity)
   when is_map(Routes), is_map(Admissions), is_map(Sequences),
-       is_map(DtxLanes),
-       map_size(Routes) =< ?MAX_VALIDATORS,
-       map_size(Admissions) =< ?MAX_VALIDATORS,
-       map_size(Sequences) =< ?MAX_VALIDATORS,
-       map_size(DtxLanes) =< ?MAX_VALIDATORS ->
-    bounded_committee(Committee, 0) andalso
+       is_map(DtxLanes) ->
+    quod_quorum:committee_size(Committee) =/= error andalso
         valid_validator_routes(Routes, Committee) andalso
         (CommitteeId =:= undefined orelse
          (is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32)) andalso
@@ -6966,7 +6903,7 @@ valid_committee_view_rows([]) -> true;
 valid_committee_view_rows(
   [{Start, Committee, <<_:256>>, Routes} | Rest])
   when is_integer(Start), Start > 0, is_map(Routes) ->
-    bounded_committee(Committee, 0) andalso
+    quod_quorum:committee_size(Committee) =/= error andalso
         valid_validator_routes(Routes, Committee) andalso
         valid_committee_view_rows(Rest, Start);
 valid_committee_view_rows(_) -> false.
@@ -6976,7 +6913,7 @@ valid_committee_view_rows(
   [{Start, Committee, <<_:256>>, Routes} | Rest], PreviousStart)
   when is_integer(Start), Start > 0, Start < PreviousStart,
        is_map(Routes) ->
-    bounded_committee(Committee, 0) andalso
+    quod_quorum:committee_size(Committee) =/= error andalso
         valid_validator_routes(Routes, Committee) andalso
         valid_committee_view_rows(Rest, Start);
 valid_committee_view_rows(_, _) -> false.
@@ -7004,11 +6941,6 @@ valid_validator_routes(Routes, Committee) ->
          (_Key, _Endpoint, _Valid) ->
               false
       end, true, Routes).
-
-bounded_committee([], _Count) -> true;
-bounded_committee([<<_:256>> | Rest], Count) when Count < ?MAX_VALIDATORS ->
-    bounded_committee(Rest, Count + 1);
-bounded_committee(_, _Count) -> false.
 
 valid_dtx_target(
   #{target := Identity, generation := Generation}, Identity)

@@ -125,7 +125,7 @@ start_refused_source(Dir, #{identity := Identity = {Ns, Anchor}}, Chain, VoteRef
     Parent = self(),
     {Pid, Monitor} = spawn_monitor(fun() ->
         true = quod_reg:reg({quod_simplex, Ns}),
-        Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+        Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
         Table = ets:new(Table, [named_table, protected, set]),
         ets:insert(Table, {anchor, Anchor}),
         {ok, Store0} = quod_ledger_store:open(Ns, Dir),
@@ -656,7 +656,7 @@ setup() ->
         brahms => #{}}),
     Ns = <<"signed-read:",
            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     %% Public only inside this fixture: the anchor-race test must mutate the
     %% fake Simplex identity from its EUnit worker process.
     Table = ets:new(Table, [named_table, public, set]),

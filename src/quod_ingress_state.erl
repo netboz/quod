@@ -2,7 +2,7 @@
 -moduledoc """
 Pure state and routing policy for consensus ingress.
 
-The module owns the bounded parked queue and one canonical snapshot
+The module owns the parked queue and one canonical snapshot
 of the consensus facts that routing is allowed to inspect.  It performs no
 signing, decoding, I/O, tracing, replies, or consensus mutation.  Callers
 execute the returned routing decision and publish a new view when those effects
@@ -47,9 +47,6 @@ can change.  A new source with identical canonical facts updates
 
 -export_type([state/0]).
 
--define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).
--define(MAX_INGRESS_PER_AUTHOR, 64).
-
 -type pass() :: entry | drain.
 -type route_origin() ::
         local
@@ -57,7 +54,7 @@ can change.  A new source with identical canonical facts updates
       | {relayed, term(), slot()}.
 -type park_cause() :: barrier | fifo | awaiting_turn.
 -type route_decision() ::
-        {reject, bad_change | too_large | stale_seq}
+        {reject, bad_change | stale_seq}
       | redirect
       | {park, park_cause()}
       | {collect, slot()}
@@ -94,7 +91,7 @@ can change.  A new source with identical canonical facts updates
 -record(request, {
     change :: #transaction{},
     membership = unknown :: unknown | boolean(),
-    item_bytes = unknown :: unknown | pos_integer()
+    item_bytes = unknown :: unknown | invalid | pos_integer()
 }).
 
 -record(item, {
@@ -163,20 +160,17 @@ prepare_request(
                membership = unknown,
                item_bytes = unknown},
   Membership) when is_boolean(Membership) ->
-    SignedBytes =
-        case quod_transaction:encoded_ledger_transaction_size(Change) of
-            {ok, Size} -> Size;
-            {error, _} -> ?MAX_BLOCK_BYTES + 1
-        end,
-    Request#request{
-      membership = Membership,
-      item_bytes = ?BATCH_ENVELOPE_BYTES + SignedBytes};
+    ItemBytes = case quod_transaction:encoded_ledger_transaction_size(Change) of
+        {ok, Size} -> ?BATCH_ENVELOPE_BYTES + Size;
+        {error, _} -> invalid
+    end,
+    Request#request{membership = Membership, item_bytes = ItemBytes};
 prepare_request(Request = #request{
                             membership = Membership,
                             item_bytes = ItemBytes},
                 Membership)
   when is_boolean(Membership),
-       is_integer(ItemBytes), ItemBytes > 0 ->
+       (ItemBytes =:= invalid orelse (is_integer(ItemBytes) andalso ItemBytes > 0)) ->
     Request.
 
 -spec request_change(request()) -> #transaction{}.
@@ -226,7 +220,7 @@ custody_fingerprint(
     {Key, Ready}.
 
 -spec enqueue(term(), term(), request(), integer(), state()) ->
-          {ok, pos_integer(), state()} | full.
+          {ok, pos_integer(), state()}.
 enqueue(Context, Waiter,
         Request = #request{
                     change = #transaction{author = Author},
@@ -239,30 +233,23 @@ enqueue(Context, Waiter,
   when is_boolean(Membership), is_integer(ItemBytes), ItemBytes > 0,
        is_integer(Anchor) ->
     PerAuthor = maps:get(Author, Authors, 0),
-    case Count >= ?MAX_INGRESS_TXS
-         orelse Bytes + ItemBytes > ?MAX_INGRESS_BYTES
-         orelse PerAuthor >= ?MAX_INGRESS_PER_AUTHOR of
-        true ->
-            full;
-        false ->
-            Item = #item{
-                      context = Context,
-                      waiter = Waiter,
-                      request = Request,
-                      anchor = Anchor},
-            Depth = Count + 1,
-            {ok, Depth,
-             State#state{
-               queue = queue:in(Item, Queue),
-               count = Depth,
-               bytes = Bytes + ItemBytes,
-               authors = Authors#{Author => PerAuthor + 1},
-               wake_revision =
-                   case PerAuthor of
-                       0 -> WakeRevision + 1;
-                       _ -> WakeRevision
-                   end}}
-    end;
+    Item = #item{
+              context = Context,
+              waiter = Waiter,
+              request = Request,
+              anchor = Anchor},
+    Depth = Count + 1,
+    {ok, Depth,
+     State#state{
+       queue = queue:in(Item, Queue),
+       count = Depth,
+       bytes = Bytes + ItemBytes,
+       authors = Authors#{Author => PerAuthor + 1},
+       wake_revision =
+           case PerAuthor of
+               0 -> WakeRevision + 1;
+               _ -> WakeRevision
+           end}};
 enqueue(_Context, _Waiter, _Request, _Anchor, _State) ->
     erlang:error(badarg).
 
@@ -349,8 +336,8 @@ route_request(Pass, local, Request, Validate, View, QueueCount) ->
                     {{reject, bad_change}, Request};
                 {valid, Membership} ->
                     case prepare_for_route(Request, Membership) of
-                        {too_large, Prepared} ->
-                            {{reject, too_large}, Prepared};
+                        {invalid, Prepared} ->
+                            {{reject, bad_change}, Prepared};
                         {ok, Prepared} ->
                             Decision = case Capability of
                                 hold -> {park, awaiting_turn};
@@ -382,8 +369,8 @@ route_request(Pass, custody,
                         current ->
                             case prepare_for_route(
                                    Request, Membership) of
-                                {too_large, Prepared} ->
-                                    {{reject, too_large}, Prepared};
+                                {invalid, Prepared} ->
+                                    {{park, awaiting_turn}, Prepared};
                                 {ok, Prepared} ->
                                     {place(Pass, custody, Prepared,
                                            View, QueueCount),
@@ -399,8 +386,8 @@ route_request(Pass, Origin = {relayed, Era, TargetSlot},
             {{reject, bad_change}, Request};
         {valid, Membership} ->
             case prepare_for_route(Request, Membership) of
-                {too_large, Prepared} ->
-                    {{reject, too_large}, Prepared};
+                {invalid, Prepared} ->
+                    {{reject, bad_change}, Prepared};
                 {ok, Prepared} ->
                     case relay_target_open_view(
                            Era, TargetSlot, View) of
@@ -422,9 +409,9 @@ route_request(Pass, Origin = {relayed, Era, TargetSlot},
 
 prepare_for_route(Request, Membership) ->
     Prepared = prepare_request(Request, Membership),
-    case oversized(Prepared) of
-        true -> {too_large, Prepared};
-        false -> {ok, Prepared}
+    case Prepared#request.item_bytes of
+        invalid -> {invalid, Prepared};
+        _ -> {ok, Prepared}
     end.
 
 place(_Pass, _Origin, _Request,
@@ -542,22 +529,10 @@ admissible_for(drain, Request, View, _QueueCount) ->
     admissible_without_queue(Request, View).
 
 admissible_without_queue(
-  #request{membership = Membership, item_bytes = ItemBytes},
+  #request{membership = Membership},
   #view{membership_open = MembershipOpen, collecting = Collecting}) ->
-    SignedBytes = ItemBytes - ?BATCH_ENVELOPE_BYTES,
-    (not Membership orelse MembershipOpen)
-        andalso
-          case Collecting of
-              none ->
-                  true;
-              {_Slot, _Count, Bytes} ->
-                  not Membership
-                      andalso
-                        Bytes + SignedBytes =< ?MAX_BLOCK_BYTES
-          end.
-
-oversized(#request{item_bytes = Bytes}) ->
-    Bytes > ?MAX_BLOCK_BYTES.
+    (not Membership orelse MembershipOpen) andalso
+        (Collecting =:= none orelse not Membership).
 
 custody_sequence_status(
   #request{change = #transaction{author = Author, author_seq = Seq}},

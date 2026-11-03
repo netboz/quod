@@ -101,21 +101,25 @@ envelope, joint decoded vocabulary (including transcript goals), operations
 and read entries. Counts do not depend on which atoms a VM already knows.
 Admission is enforced by the sealing proposer under the existing trusted
 validator execution boundary. Validators enforce the sealed policy reads and
-encoding bounds; material decoding retains VM headroom checks. This is not a
-new resource sandbox for arbitrary traffic from admitted committee members.
-The full enclosing transaction, block and transport still have encoding
-capacity checks. Their shared material capacity fits both the existing scope
-carrier and the history page with a full-committee compact witness; accepted
-canonical bytes are unchanged. Decoding accepted history does not reapply current admission
-policy. It still validates the wire alphabet and real VM atom-table headroom.
+encoding constraints. This is not a resource sandbox for arbitrary traffic
+from admitted committee members. Materialization checks actual VM atom-table
+capacity before allocating new names; this precheck does not reserve capacity
+against unrelated concurrent VM allocation. Explicit finite client vocabulary
+allowances remain enforced by the authentication owner.
+The complete transport envelope and store record retain their actual encoded
+length constraints. History readers retain one captured cursor and stream
+complete frames with exact continuation tokens; partial finality groups are
+never installed. Decoding accepted history does not reapply current admission
+policy. It still validates the wire alphabet and canonical identity bindings.
 Retained vote selections distinguish read and write reservation changes.
 Shared policy readers do not invalidate each other's unchanged selections;
 an overlapping writer still invalidates readers and writers through the
 existing installed-change notification.
 
 The same committed policy selects `material_limit(proof, heap_bytes, Limit)`
-when an actual proof session starts, for both origin and selected scopes.
-The bootstrap source explicitly selects `unlimited`; an owner may supply a
+and `material_limit(proof, answer_bytes, Limit)` when an actual proof session
+starts, for both origin and selected scopes. The bootstrap source explicitly
+selects `unlimited` for both; an owner may supply a
 nonnegative byte allowance through `material_limit_override/3`. The worker
 checks its existing heap before installing the VM's hard kill limit. Initial
 refusals report `material_limit(proof, heap_bytes, Actual, Limit)`; a later
@@ -126,6 +130,25 @@ not make an untouched scope a transaction participant. A staged increase
 does not enlarge its own running proof, and a policy-changing plan must leave
 a valid final policy. Zero can close the proof lane; there is no repair bypass.
 Local committed-policy selectors do not change their owner's process limit.
+
+Answer allocation measures the canonical atom-safe payload of one computed
+answer, excluding its transport envelope and retained ground inputs. The
+producing proof checks before exposing the solution; a receiving proof checks
+against its own pinned allowance before unification. Peer policy or a staged
+increase cannot enlarge that receiving allowance. Atom and opaque-symbol
+spellings have the same canonical quantity. Refusals report
+`material_limit(proof, answer_bytes, Actual, Limit)`; zero refuses every nonempty
+answer. Selection happens once per proof session and its exact policy reads
+join the existing OCC/seal validation, including validation of policy changes.
+Existing cancellation and owner-incarnation fences retire invalidated work.
+
+Scope wire v14 removes the separate 64 KiB answer allocation. Its codec still
+checks the existing complete scope envelope and enclosing transport capacities;
+`too_large(answer)` denotes a payload that cannot fit that carrier, separately
+from a policy refusal. The version boundary rejects v13 and all older scope
+frames, with no compatibility lane. This source change authorizes no deployment
+or rewrite of a founded ontology. Compatible runtime owners and the current
+material policy are required together for a fresh deployment.
 
 Proof scopes, invocations, proxies, answers and distributed savepoints have
 no separate population ceilings in Erlang. Their retained state uses the
@@ -142,8 +165,9 @@ ordering, uniqueness and complete message bounds still apply. Computed answers r
 ground arguments are represented by distinct fresh variables and recovered by
 unification with the caller's retained invocation; replies do not echo input
 payloads. Output variables retain their resolved values and aliases, including
-unbound aliases. The existing wire alphabet, answer byte bound, sequence and
-backtracking semantics are unchanged. The synchronous native adapter uses the
+unbound aliases. The existing wire alphabet, sequence and backtracking semantics
+are unchanged. Answer allocation uses committed policy and carrier safety checks
+above. The synchronous native adapter uses the
 same unifier to return its fully resolved retained call. Invocation
 transcripts record every exact call before execution and share the complete sealed
 plan's encoding bound, rather than an independent component allowance.
@@ -218,3 +242,33 @@ requires its own authority. Retained time alone does not provide a certified
 negative operation outcome: the exact request, source, network and prefix absence
 checks above are also required. `expired` authorizes no replay of an uncertain
 request; it only supplies a dependency for an ordinary ontology transition.
+
+
+Proof and scope worker admission uses the existing ontology-engine owner and
+configured allowances. The built-in population default is unlimited; explicit
+positive finite settings still govern active/pending scopes, derivation workers
+and retained completion waiters. Capacity release, exact operation deduplication,
+worker monitors and original deadlines are unchanged. This is not an aggregate
+memory reservation or a new proof-resource policy.
+
+
+## Namespace storage representation
+
+Namespace/genesis pairs remain exact authenticated identities. Shared store
+paths and the existing feed/genesis ETS names use the deterministic namespace
+key `ns.` followed by SHA256 hex. That key is a representation, never authority.
+The dot keeps the layout disjoint from the prior raw-base64url component.
+
+Store lifecycle entry and stopped-outcome reads refuse an existing prior-layout
+path explicitly. Simplex preflights both configured ledger and signing roots
+before creating either store. Foreign-cache startup inspects all manifests
+before projection cleanup or writer launch, so a retained legacy cache cannot
+be silently skipped. Preflight performs exact path metadata reads; ordinary
+retained readers continue using their existing handles.
+
+This is a storage format break. A deployment requires a separately approved
+preservation/cutover procedure covering both roots, signing journals, ledger
+archives, outcome indexes, phase indexes and foreign cache manifests. There is
+no runtime fallback, automatic migration, deletion or replacement founding.
+The raw signed namespace and encoded link channel retain their distinct uint16
+length representations; neither may wrap or truncate a namespace.

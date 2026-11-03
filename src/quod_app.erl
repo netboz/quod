@@ -412,8 +412,8 @@ build_ns_config(Content) ->
     Base = #{node_id    => Self,
              mode       => maps:get(mode, Content),
              role       => maps:get(role, Content, member),
-             max_proof_workers => maps:get(max_proof_workers, Content, 64),
-             max_scope_workers => maps:get(max_scope_workers, Content, 64),
+             max_proof_workers => maps:get(max_proof_workers, Content, unlimited),
+             max_scope_workers => maps:get(max_scope_workers, Content, unlimited),
              proof_timeout_ms => maps:get(proof_timeout_ms, Content, 300000),
              transaction_ttl_ms =>
                  maps:get(transaction_ttl_ms, Content, 30000),

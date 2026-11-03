@@ -212,6 +212,8 @@ resident_union_is_bounded_before_box_enumeration_test() ->
     B = {chunk_box,{chunk_v1,0,0,0},{chunk_v1,2,0,0}},
     ?assertEqual({ok,[{chunk_v1,X,0,0} || X <- lists:seq(-1,2)]},
         quod_voxel:resident_chunks([{chunk_v1,0,0,0}],[A,B],{chunk_limits,4})),
+    ?assertEqual(quod_voxel:resident_chunks([], [A,B], {chunk_limits,4}),
+        quod_voxel:resident_chunks([], [A,B], {chunk_limits,unlimited})),
     ?assertEqual({error,{voxel_allowance,resident_chunks,4,3}},
         quod_voxel:resident_chunks([],[A,B],{chunk_limits,3})),
     Huge = 1 bsl 100,

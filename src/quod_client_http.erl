@@ -18,12 +18,6 @@ signature validation.
 
 -include("quod_client_goal_limits.hrl").
 
--define(MAX_AUTH_BODY, 4096).
-%% Encoded request plus optional GroupRef: JSON can escape each namespace
-%% byte as six characters; its remaining fields are four fixed hex digests.
--define(MAX_SIGNED_GOAL_BODY,
-        ((((?QUOD_CLIENT_GOAL_REQUEST_BYTES + 2) div 3) * 4) + 1024 +
-         6 * ?DIRECTORY_MAX_NAMESPACE_BYTES + 512)).
 
 init(Req0, State)
   when State =:= signed_goal_read; State =:= signed_goal_control; State =:= signed_goal_execute;
@@ -66,7 +60,7 @@ dispatch(Req0, {vault_read, AllowedPeers} = State) ->
     case quod_identity:pubkey_of_cert(cowboy_req:cert(Req0)) of
         {ok, Peer} ->
             case lists:member(Peer, AllowedPeers) of
-                true -> post_json(Req0, State, ?MAX_SIGNED_GOAL_BODY,
+                true -> post_json(Req0, State,
                                   fun(Body, _Req) -> vault_read(Body, Peer) end);
                 false -> {ok, json_reply(403, #{error => provider_not_authorized}, Req0), State}
             end;
@@ -93,20 +87,20 @@ dispatch(Req0, explorer_index) ->
             {ok, explorer_index_reply(Req0), explorer_index}
     end;
 dispatch(Req0, auth_challenge) ->
-    post_json(Req0, auth_challenge, ?MAX_AUTH_BODY, fun auth_challenge/2);
+    post_json(Req0, auth_challenge, fun auth_challenge/2);
 dispatch(Req0, auth_complete) ->
-    post_json(Req0, auth_complete, ?MAX_AUTH_BODY, fun auth_complete/2);
+    post_json(Req0, auth_complete, fun auth_complete/2);
 dispatch(Req0, signed_goal_read) ->
-    post_json(Req0, signed_goal_read, ?MAX_SIGNED_GOAL_BODY,
+    post_json(Req0, signed_goal_read,
               fun(Body, Req) -> signed_goal(read, Body, Req) end);
 dispatch(Req0, signed_goal_control) ->
-    post_json(Req0, signed_goal_control, ?MAX_SIGNED_GOAL_BODY,
+    post_json(Req0, signed_goal_control,
               fun(Body, Req) -> signed_goal(control, Body, Req) end);
 dispatch(Req0, signed_goal_execute) ->
-    post_json(Req0, signed_goal_execute, ?MAX_SIGNED_GOAL_BODY,
+    post_json(Req0, signed_goal_execute,
               fun(Body, Req) -> signed_goal(execute, Body, Req) end);
 dispatch(Req0, {signed_instruction, Action} = State) ->
-    post_json(Req0, State, ?MAX_SIGNED_GOAL_BODY,
+    post_json(Req0, State,
       fun(Body, Req) ->
           with_signed_request(Body, fun(Session, Bytes, Signature) ->
               signed_goal_result(quod_client_goal_ingress:instruction(
@@ -114,10 +108,10 @@ dispatch(Req0, {signed_instruction, Action} = State) ->
           end)
       end);
 dispatch(Req0, signed_goal_cursor) ->
-    post_json(Req0, signed_goal_cursor, ?MAX_SIGNED_GOAL_BODY,
+    post_json(Req0, signed_goal_cursor,
               fun(Body, Req) -> signed_goal(cursor, Body, Req) end);
 dispatch(Req0, signed_goal_outcome) ->
-    post_json(Req0, signed_goal_outcome, ?MAX_SIGNED_GOAL_BODY,
+    post_json(Req0, signed_goal_outcome,
               fun signed_goal_outcome/2);
 dispatch(Req0, signed_cursor_next) ->
     cursor_command(Req0, <<"POST">>, next);
@@ -140,15 +134,15 @@ explorer_index_reply(Req0) ->
     end.
 
 %% The handler is given both the decoded body and the request so every signed
-%% route shares this one bounded JSON admission path.
-post_json(Req0, State, MaxBody, Handler) ->
+%% route shares this one JSON decoding path.
+post_json(Req0, State, Handler) ->
     case cowboy_req:method(Req0) of
         <<"POST">> ->
             {Code, Reply, Req} = quod_trace:with_span(
               quod_trace:context(), <<"quod.client.http_body">>, internal,
               #{},
               fun(SpanCtx) ->
-                  Result = read_json(Req0, MaxBody, Handler),
+                  Result = read_json(Req0, Handler),
                   _ = quod_trace:result(SpanCtx, Result),
                   Result
               end),
@@ -161,12 +155,12 @@ post_json(Req0, State, MaxBody, Handler) ->
             {ok, json_reply(405, #{error => method_not_allowed}, Req0), State}
     end.
 
-read_json(Req0, MaxBody, Handler) ->
-    case cowboy_req:read_body(Req0, #{length => MaxBody}) of
-        %% `length` is only the chunk size cowboy waits for, not a limit: a body
-        %% that arrives in one piece is delivered whole however large it is. The
-        %% cap is this size check, not the read option.
-        {ok, Body, Req} when byte_size(Body) =< MaxBody ->
+read_json(Req0, Handler) ->
+    %% Preserve Cowboy's existing 15000 ms body-read period as one absolute
+    %% deadline across streamed chunks; auto mode has no aggregate byte quota.
+    Deadline = erlang:monotonic_time(millisecond) + 15000,
+    case read_body(Req0, Deadline, []) of
+        {ok, Body, Req} ->
             Decoded = quod_trace:with_span(
               quod_trace:context(), <<"quod.client.json_decode">>, internal,
               #{'quod.http.body_bytes' => byte_size(Body)},
@@ -178,10 +172,22 @@ read_json(Req0, MaxBody, Handler) ->
               #{},
               fun(_SpanCtx) -> Handler(Decoded, Req) end),
             {Code, Reply, Req};
-        {ok, _Oversized, Req} ->
-            {413, #{error => body_too_large}, Req};
-        {more, _Partial, Req} ->
-            {413, #{error => body_too_large}, Req}
+        {timeout, Req} ->
+            {408, #{error => request_timeout}, Req}
+    end.
+
+read_body(Req0, Deadline, Chunks) ->
+    Remaining = Deadline - erlang:monotonic_time(millisecond),
+    case Remaining > 0 of
+        false -> {timeout, Req0};
+        true ->
+            try cowboy_req:read_body(Req0, #{length => auto, period => infinity,
+                                           timeout => Remaining}) of
+                {ok, Body, Req} ->
+                    {ok, iolist_to_binary(lists:reverse([Body | Chunks])), Req};
+                {more, Body, Req} -> read_body(Req, Deadline, [Body | Chunks])
+            catch exit:timeout -> {timeout, Req0}
+            end
     end.
 
 %% Discovery exposes the existing root catalogue, never a second service list
@@ -243,8 +249,7 @@ decode_outcome_selector(#{<<"ns">> := Ns, <<"anchor">> := Anchor,
                           <<"coordinator">> := Coordinator,
                           <<"coordinator_admission">> := Admission,
                           <<"group_id">> := Id} = Ref)
-  when map_size(Ref) =:= 5, is_binary(Ns), byte_size(Ns) > 0,
-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
+  when map_size(Ref) =:= 5, is_binary(Ns), byte_size(Ns) > 0 ->
     case [decode_digest_hex(B) || B <- [Anchor, Coordinator, Admission, Id]] of
         [{ok, A}, {ok, C}, {ok, D}, {ok, G}] -> {ok, {group, Ns, A, C, D, G}};
         _ -> error
@@ -271,7 +276,7 @@ with_signed_request(#{<<"session_id">> := SessionId64} = Body, Fun)
 with_signed_request(#{<<"request">> := Request64,
                       <<"signature">> := Signature64}, Fun)
   when is_function(Fun, 2) ->
-    case {decode_b64url_bounded(Request64, ?QUOD_CLIENT_GOAL_REQUEST_BYTES),
+    case {decode_b64url(Request64),
           decode_b64url(Signature64, 64)} of
         {{ok, RequestBytes}, {ok, Signature}} -> Fun(RequestBytes, Signature);
         _ -> {400, #{error => invalid_signed_goal_request}}
@@ -301,7 +306,7 @@ cursor_command(Req0, Method, Command) ->
             case decode_b64url(cowboy_req:binding(id, Req0), 32) of
                 {ok, CursorId} ->
                     {Code, Reply, Req} = read_json(
-                      Req0, ?MAX_AUTH_BODY,
+                      Req0,
                       fun(Body, Request) ->
                           signed_cursor_command(
                             Body, CursorId, Command, Request)
@@ -483,7 +488,8 @@ auth_reply({error, _}) ->
 
 %% Strict url-safe base64 (OTP's own): unlike a hand-rolled alphabet swap it
 %% refuses standard-alphabet input, so one request has exactly one encoding.
-decode_b64url(Bin, Size) when is_binary(Bin), byte_size(Bin) =< 256 ->
+decode_b64url(Bin, Size) when is_binary(Bin),
+                                 byte_size(Bin) =:= (Size * 8 + 5) div 6 ->
     try base64:decode(Bin, #{mode => urlsafe, padding => false}) of
         <<Bytes:Size/binary>> -> {ok, Bytes};
         _ -> error
@@ -491,15 +497,12 @@ decode_b64url(Bin, Size) when is_binary(Bin), byte_size(Bin) =< 256 ->
     end;
 decode_b64url(_, _) -> error.
 
-decode_b64url_bounded(Bin, MaxBytes)
-  when is_binary(Bin), is_integer(MaxBytes), MaxBytes >= 0,
-       byte_size(Bin) =< ((MaxBytes + 2) div 3) * 4 ->
+decode_b64url(Bin) when is_binary(Bin) ->
     try base64:decode(Bin, #{mode => urlsafe, padding => false}) of
-        Bytes when byte_size(Bytes) =< MaxBytes -> {ok, Bytes};
-        _ -> error
+        Bytes -> {ok, Bytes}
     catch error:_ -> error
     end;
-decode_b64url_bounded(_, _) -> error.
+decode_b64url(_) -> error.
 
 b64url(Bytes) -> base64:encode(Bytes, #{mode => urlsafe, padding => false}).
 

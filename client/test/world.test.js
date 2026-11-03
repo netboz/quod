@@ -275,6 +275,8 @@ test('input variants preserve typed drafts and reject malformed selections', () 
   assert.deepEqual({ ...form.values }, { notes: '', count: '-2', agree: 'false', power: 'false', mode: 'mode(a)', items: '[]' })
   const draft = { notes: 'one\ntwo', count: '7', agree: 'true', power: 'false', mode: 'mode(b)', items: '[item(b),item(a)]' }
   const reference = { namespace: 'responder', anchor: new Uint8Array(32), question: atom('question') }
+  const unrestricted = readGuiQuestionForm(projection.replace('property(max_bytes,12)', 'property(readonly,false)'))
+  assert.ok(guiQuestionSubmission(reference, unrestricted, { ...draft, notes: 'x'.repeat(5000) }).includes('x'.repeat(5000)))
   const goal = guiQuestionSubmission(reference, form, draft)
   const terms = readTerm(goal.slice(goal.indexOf('gui_submit('), -2)).args[3].items
   assert.equal(new TextDecoder().decode(terms[0].args[1].value), draft.notes)
@@ -319,4 +321,23 @@ test('tables, images and transient containers stay inside the common descriptor 
     'property(headings,[<<"A">>,<<"B">>])', `property(options,[option(a,${cells})])`])])
   assert.throws(() => readGuiView(table('[<<"one">>]')), /column count/)
   assert.throws(() => readGuiView(table('<<"not cells">>')), /table cells/)
+})
+
+
+test('source workspace binding is authored data for ordinary subjects and exact owners', () => {
+  const target = { namespace: 'notes', anchor: new Uint8Array(32).fill(7) }
+  const ontology = ontologySubject(target)
+  const tools = ontologySubject({ namespace: 'quod:gui', anchor: new Uint8Array(32).fill(8) }).entity
+  for (const entity of [atom('document'), compound('predicate', [readTerm("'/'(likes,2)")])]) {
+    const subject = { ...ontology, entity }
+    for (const selection of [atom('all'), readTerm("'/'(likes,2)")]) {
+      const parts = [compound('prolog_editor', [selection]), ontology.entity, entity, tools, readTerm(FORM)]
+      const decoded = readEidolonRepresentation(renderTerm(compound('workspace', parts)), subject)
+      assert.equal(decoded.controller, 'prolog_editor')
+      assert.deepEqual(decoded.workspace.selection, selection)
+      assert.deepEqual(decoded.workspace.target, target)
+      assert.throws(() => readEidolonRepresentation(renderTerm(compound('workspace', parts)), { ...subject, entity: atom('another') }))
+      assert.throws(() => readEidolonRepresentation(renderTerm(compound('workspace', parts)), { ...subject, anchor: new Uint8Array(32) }))
+    }
+  }
 })

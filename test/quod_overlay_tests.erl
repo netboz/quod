@@ -426,7 +426,7 @@ assert_read_only_rejects(C, Goal) ->
 
 with_proof_gate(Fun) ->
     Namespace = <<"quod:overlay-guard-test">>,
-    Table = 'quod_simplex_genesis_quod:overlay-guard-test',
+    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:overlay-guard-test">>), utf8),
     Tab = ets:new(Table, [named_table, protected, set]),
     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},

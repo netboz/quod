@@ -1,7 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 
-import { PROLOG_TERM_LIMITS } from '../src/protocol-limits.js'
 import { readTerm, readList } from '../src/prolog-read.js'
 import { readMarks } from '../src/marks.js'
 
@@ -14,6 +13,9 @@ test('terrain descriptors bind generated resources to an anchored physical body'
   assert.deepEqual(terrain.body, { id: '4', revision: '2' })
   assert.deepEqual(terrain.size, { profile: 'qvt1', viewDistance: [4000, 1000, 2000], palette: [[9, { colour: '#447722', metallic: 0, roughness: 0.9, emission: 0, textures: [] }]],
     allowed: [500000, 1000000, 20000, 10000], chunks: 64 })
+  const [unallocated] = readMarks(`[${mark.replace('resources(500000,1000000,20000,10000,64)', 'resources(unlimited,unlimited,unlimited,unlimited,unlimited)')}]`)
+  assert.deepEqual(unallocated.size.allowed, Array(4).fill(Infinity))
+  assert.equal(unallocated.size.chunks, Infinity)
   assert.throws(() => readMarks(`[${mark.replace('body_pose(4,2)', 'transform(0,0,0,0,0,0)')}]`), /anchored body/)
   assert.throws(() => readMarks(`[${mark.replace('resources(500000', 'resources(0')}]`), /terrain allowance/)
   assert.throws(() => readMarks(`[${mark.replace('view_distance(4000,1000,2000)', 'view_distance(4000,2000,1000)')}]`), /view distance/)
@@ -153,9 +155,8 @@ test('the reader accepts what the renderer writes and nothing more', () => {
   }
 })
 
-test('the reader enforces the shared structural-depth boundary', () => {
-  const outside = PROLOG_TERM_LIMITS.depth + 1
-  assert.throws(() => readTerm('f('.repeat(outside) + 'a' + ')'.repeat(outside)), /deeply nested/)
+test('the reader preserves values beyond the retired depth quota', () => {
+  assert.doesNotThrow(() => readTerm('f('.repeat(96) + 'a' + ')'.repeat(96)))
 })
 
 test('the lens is asked by its flat binary name, with the dot the grammar needs',
@@ -218,4 +219,14 @@ test('mesh marks carry typed digest, local frame, scale and asset surfaces', () 
     mark.replace('asset_surfaces', 'no_surface'),
     mark.replace('resources(8000000', 'resources(0'),
   ]) assert.throws(() => readMarks(`[${invalid}]`))
+})
+
+test('complete large scene preserves long names, labels and coordinates', () => {
+  const label = 'full descriptive name '.repeat(20), ns = 'namespace'.repeat(10)
+  const mark = i => `mark(<<"${'id'.repeat(150)}${i}">>,<<"box">>,[f(<<"width">>,100001),f(<<"height">>,10),f(<<"depth">>,10)],transform(1000001,0,0,0,0,0),surface(<<"#FFFFFF">>,0,900,0,[]),label(<<"${label}">>,<<"above">>),depicts(<<"${ns}">>,item(${i})))`
+  const marks = readMarks(`[${Array.from({length: 600}, (_, i) => mark(i)).join(',')}]`)
+  assert.equal(marks.length, 600)
+  assert.equal(marks[599].label.text, label)
+  assert.equal(marks[599].depicts.ontology, ns)
+  assert.equal(new Set(marks.map(m => m.id)).size, 600)
 })

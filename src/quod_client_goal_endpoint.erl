@@ -22,11 +22,6 @@ ACL, transactions, and outcomes remain with their existing owners.
 -define(VERSION, 1).
 -define(CHANNEL, quod_client_goal_v1).
 
--if(?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES >=
-    ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
--error("client-goal endpoint envelope must stay below the transport frame bound").
--endif.
-
 -type request_id() :: <<_:?QUOD_CLIENT_GOAL_REQUEST_ID_BITS>>.
 -type cursor_id() :: <<_:256>>.
 -type cursor_binding() :: none | cursor_id().
@@ -64,7 +59,7 @@ encode(Inner, Direction) ->
             Envelope = term_to_binary(
                          {?DOMAIN, ?VERSION, InnerBlob}, [deterministic]),
             case byte_size(Envelope) =<
-                 ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES of
+                 ?QUOD_LINK_PAYLOAD_CAPACITY of
                 true -> {ok, Envelope};
                 false -> too_large()
             end;
@@ -85,9 +80,9 @@ route_response(Envelope) -> decode(Envelope, routed_response).
 
 decode(Envelope, Direction)
   when is_binary(Envelope),
-       byte_size(Envelope) =< ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES ->
+       byte_size(Envelope) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
     case quod_safe_term:decode(
-           Envelope, ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES) of
+           Envelope, ?QUOD_LINK_PAYLOAD_CAPACITY) of
         {ok, {?DOMAIN, ?VERSION, InnerBlob} = Outer}
           when is_binary(InnerBlob) ->
             case term_to_binary(Outer, [deterministic]) =:= Envelope of
@@ -111,7 +106,7 @@ decode(_Envelope, _Direction) ->
 
 decode_inner(InnerBlob, Direction) ->
     case quod_safe_term:decode(
-           InnerBlob, ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES) of
+           InnerBlob, ?QUOD_LINK_PAYLOAD_CAPACITY) of
         {ok, Inner} ->
             case term_to_binary(Inner, [deterministic]) =:= InnerBlob of
                 false -> protocol_error(non_canonical);
@@ -167,8 +162,7 @@ validate_opaque_result(RequestId, ResultBlob) ->
     end.
 
 valid_result_blob(Blob) ->
-    is_binary(Blob) andalso
-        byte_size(Blob) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES.
+    is_binary(Blob).
 
 validate_request(
   {submit, RequestId, RequestBytes, Signature, CursorId, TraceCarrier}) ->
@@ -227,8 +221,7 @@ validate_result_response(RequestId, ResultBlob) ->
     end.
 
 valid_signed_request(RequestBytes)
-  when is_binary(RequestBytes),
-       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
+  when is_binary(RequestBytes) ->
     case quod_client_goal:decode(RequestBytes) of
         {ok, _Request} -> true;
         {error, _} -> false
@@ -236,8 +229,7 @@ valid_signed_request(RequestBytes)
 valid_signed_request(_) -> false.
 
 valid_signed_request_blob(RequestBytes) ->
-    is_binary(RequestBytes) andalso
-        byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES.
+    is_binary(RequestBytes).
 
 valid_signature(<<_:512>>) -> true;
 valid_signature(_) -> false.

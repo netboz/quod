@@ -277,6 +277,34 @@ signed_goal_materialization_leaves_data_opaque_test() ->
          ?assertError(badarg, binary_to_existing_atom(Data, utf8))
       end).
 
+self_scoped_request_materializes_and_charges_callable_test() ->
+    {PublicKey, _} = quod_identity:generate(),
+    Ns = <<"request:self">>,
+    {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(
+        Ns, <<71:256>>, <<"person(self_symbol).">>, 2),
+    {ok, #{reference := {agent_instance_ref, Ns, _, {person, self_symbol}}}} =
+        quod_agent_ref:decode(AgentRef),
+    Limit = #{window_ms => 60000, max_total => 8,
+              max_per_key => 1, max_keys => 8},
+    Head = unique_symbol(<<"self_scoped_head_">>),
+    Next = unique_symbol(<<"self_scoped_head_">>),
+    Data = {'$quod_symbol', <<"self_scoped_data">>},
+    Goal = fun(Name) ->
+        {'::', Ns, {assertz, {{'$quod_symbol', <<":-">>},
+                             {{'$quod_symbol', Name}, Data}, true}}}
+    end,
+    with_auth(#{max_materialized_atoms => 1024,
+                symbol_signing_key_limit => Limit,
+                symbol_peer_limit => Limit}, fun() ->
+        {ok, _, {'::', Ns, {assertz, {':-', {Callable, Data}, true}}}} =
+            quod_client_auth:materialize_request(PublicKey, ?PEER, AgentRef, Goal(Head)),
+        ?assert(is_atom(Callable)),
+        ?assertEqual(Head, atom_to_binary(Callable, utf8)),
+        ?assertEqual({error, client_goal_rate_limited},
+            quod_client_auth:materialize_request(PublicKey, ?PEER, AgentRef, Goal(Next))),
+        ?assertError(badarg, binary_to_existing_atom(Next, utf8))
+    end).
+
 signed_request_materializes_origin_but_not_remote_goal_test() ->
     {PublicKey, _} = quod_identity:generate(),
     AgentClass = unique_symbol(<<"request_agent_class_">>),
@@ -445,3 +473,19 @@ restore_rate_policy({ok, Value}) ->
     application:set_env(quod, client_rate_limits, Value);
 restore_rate_policy(undefined) ->
     application:unset_env(quod, client_rate_limits).
+
+default_auth_tables_retain_more_than_256_entries_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    {ok, Pid} = quod_client_auth:start_link(#{network_id => ?NETWORK, node_key => ?NODE}),
+    try
+        KeyPair = quod_identity:generate(),
+        Pending = [signed_challenge(KeyPair, <<N:256>>) || N <- lists:seq(1, 257)],
+        Sessions = [begin
+            {ok, #{session_id := Id}} = quod_client_auth:complete_challenge(C, Sig), Id
+        end || {C, Sig} <- Pending],
+        ?assertEqual(257, length(lists:usort(Sessions))),
+        lists:foreach(fun(Id) -> ?assertMatch({ok, _}, quod_client_auth:session(Id)) end, Sessions),
+        lists:foreach(fun({C, Sig}) ->
+            ?assertEqual({error, invalid_challenge}, quod_client_auth:complete_challenge(C, Sig))
+        end, Pending)
+    after stop_auth(Pid) end.

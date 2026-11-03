@@ -23,3 +23,6 @@ material_default_limit(plan, reads, 1024).
 %% Each proof selects its pinned committed ontology's allowance. Historical
 %% verification does not re-admit already accepted material under today's policy.
 material_default_limit(proof, heap_bytes, unlimited).
+%% One computed answer's canonical atom-safe payload, before its transport
+%% envelope. Producer and receiving proof each use their own committed policy.
+material_default_limit(proof, answer_bytes, unlimited).

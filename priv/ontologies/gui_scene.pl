@@ -7,7 +7,7 @@
 %%
 %% A mark is a visual occurrence. It is not the thing it shows: several marks
 %% may depict one entity, and a mark may depict nothing at all. Keeping the two
-%% identities apart is what lets a bounded scene tree show a domain graph that
+%% identities apart is what lets a scene tree show a domain graph that
 %% is not a tree, and what lets selection resolve through the entity rather
 %% than through a mesh name.
 %%
@@ -24,10 +24,9 @@
 %% is a binary. Only the predicates and the descriptor functors are symbolic.
 %%
 %% Model:
-%%   mark_kind(Kind)                    one of the bounded geometries
+%%   mark_kind(Kind)                    one of the supported geometries
 %%   geometry_field(Kind, At, Field)    the fields that kind takes, in order
 %%   placement(Placement)               where a label sits on its mark
-%%   limit(What, Max)                   the bound a descriptor may not exceed
 %%
 %% The descriptor:
 %%   mark(Id, Kind, Size, Transform, Material, Label, Depicts)
@@ -44,7 +43,7 @@
 %%
 %% Asked:
 %%   well_formed_mark(+Mark)            one descriptor against its schema
-%%   well_formed_scene(+Marks)          a bounded list with distinct ids
+%%   well_formed_scene(+Marks)          a list with distinct ids
 %%   depicted(+Marks, ?Id, ?Ns, ?Thing) which mark shows what
 %%
 %% Interactive subjects carry the exact history anchor. The client proves that
@@ -54,14 +53,13 @@
 rendering_query(mark_kind(_)).
 rendering_query(geometry_field(_, _, _)).
 rendering_query(placement(_)).
-rendering_query(limit(_, _)).
 rendering_query(well_formed_mark(_)).
 rendering_query(well_formed_scene(_)).
 rendering_query(depicted(_, _, _, _)).
 rendering_query(depicted(_, _, _, _, _)).
 
 %% --- the geometries -----------------------------------------------------------
-%% Seven bounded parameterized shapes, a transform group and an asset mesh.
+%% Parameterized shapes, a transform group and an asset mesh.
 %% Primitive fields are declared once, in order, so the client never has to
 %% know that a box's three numbers happen to be width, height and depth.
 
@@ -99,35 +97,11 @@ placement(<<"above">>).
 placement(<<"centre">>).
 placement(<<"below">>).
 
-%% --- the bounds ---------------------------------------------------------------
-%% Every bound a descriptor is held to, in one place, readable by whoever
-%% produces descriptors so no producer has to guess or keep its own copy.
-%%
-%% `label` is deliberately short. A label is display text, never an identity —
-%% the identity is in `depicts` — so a producer may shorten one to fit.
-
-limit(<<"scene">>, 512).
-%% Structural occurrence paths include their instance and named parts.
-limit(<<"mark_id">>, 256).
-limit(<<"label">>, 24).
-limit(<<"ontology">>, 64).
-limit(<<"extent">>, 100000).
-limit(<<"offset">>, 1000000).
-limit(<<"mesh_scale">>, 100000).
-%% Asset allowances are ontology policy. The client checks measured GLB costs.
-limit(<<"mesh_transfer_bytes">>, 8000000).
-limit(<<"mesh_geometry_bytes">>, 16000000).
-limit(<<"mesh_vertices">>, 250000).
-limit(<<"mesh_triangles">>, 250000).
-limit(<<"mesh_nodes">>, 1024).
-limit(<<"mesh_materials">>, 256).
-limit(<<"mesh_pixels">>, 16000000).
-
 %% --- a descriptor against its schema ------------------------------------------
 
-%% well_formed_mark(+Mark): every part is present, declared, and within bounds.
+%% well_formed_mark(+Mark): every part is present and conforms to its declared type.
 well_formed_mark(mark(Id, Kind, Size, Transform, Material, Label, Depicts)) :-
-    bounded_text(Id, <<"mark_id">>),
+    scene_text(Id),
     mark_kind(Kind),
     findall(Field, geometry_field(Kind, _, Field), Fields),
     geometry(Kind, Fields, Size),
@@ -143,8 +117,6 @@ sized([], []).
 sized([Field | Fields], [f(Field, Extent) | Rest]) :-
     integer(Extent),
     Extent > 0,
-    limit(<<"extent">>, Max),
-    Extent =< Max,
     sized(Fields, Rest).
 
 %% Twelve edges cost the same at any extent. Interior dimensions are not a
@@ -165,32 +137,28 @@ geometry(<<"mesh">>, [],
                                         pivot(PX, PY, PZ), front(Front)),
                     resources(Transfer, Geometry, Vertices, Triangles, Nodes, Materials, Pixels))) :-
     binary_codes(Digest, Bytes), length(Bytes, 64), digest_hex(Bytes),
-    integer(Scale), Scale > 0, limit(<<"mesh_scale">>, MaxScale), Scale =< MaxScale,
+    integer(Scale), Scale > 0,
     offset(MinX), offset(MinY), offset(MinZ),
     offset(MaxX), offset(MaxY), offset(MaxZ),
     MinX < MaxX, MinY < MaxY, MinZ < MaxZ,
     offset(PX), offset(PY), offset(PZ),
-    mesh_extent(MinX, MaxX, PX, Scale),
-    mesh_extent(MinY, MaxY, PY, Scale),
-    mesh_extent(MinZ, MaxZ, PZ, Scale),
     member(Front, [<<"-z">>, <<"+z">>, <<"+x">>, <<"-x">>]),
-    resource(Transfer, <<"mesh_transfer_bytes">>),
-    resource(Geometry, <<"mesh_geometry_bytes">>),
-    resource(Vertices, <<"mesh_vertices">>),
-    resource(Triangles, <<"mesh_triangles">>),
-    resource(Nodes, <<"mesh_nodes">>),
-    resource(Materials, <<"mesh_materials">>),
-    resource(Pixels, <<"mesh_pixels">>).
+    resource(Transfer),
+    resource(Geometry),
+    resource(Vertices),
+    resource(Triangles),
+    resource(Nodes),
+    resource(Materials),
+    resource(Pixels).
 geometry(<<"terrain">>, [], terrain_geometry(<<"qvt1">>,Palette,
          view_distance(Distance,Prefetch,Retention),resources(Transfer,Geometry,Vertices,Triangles,Chunks))) :-
     integer(Distance), Distance > 0, integer(Prefetch), Prefetch > 0,
     integer(Retention), Retention >= Prefetch,
-    limit(<<"extent">>,Far), Distance+Retention =< Far,
-    Palette = [_|_], length(Palette,Materials), resource(Materials,<<"mesh_materials">>),
+    Palette = [_|_], length(Palette,Materials), resource(Materials),
     terrain_palette(Palette,-1),
-    resource(Transfer,<<"mesh_transfer_bytes">>), resource(Geometry,<<"mesh_geometry_bytes">>),
-    resource(Vertices,<<"mesh_vertices">>), resource(Triangles,<<"mesh_triangles">>),
-    resource(Chunks,<<"mesh_nodes">>).
+    resource(Transfer), resource(Geometry),
+    resource(Vertices), resource(Triangles),
+    resource(Chunks).
 geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, Kind \== <<"wire_box">>, sized(Fields, Size).
 
 terrain_palette([],_).
@@ -205,14 +173,10 @@ geometry_binding(Kind,_,_) :- Kind \== <<"terrain">>.
 terrain_pose(body_pose(_,_)).
 terrain_pose(relative(_,body_pose(_,_))).
 
-resource(Allowed, Name) :-
-    integer(Allowed), Allowed > 0, limit(Name, Maximum), Allowed =< Maximum.
-
-mesh_extent(Min, Max, Pivot, Scale) :-
-    limit(<<"extent">>, Maximum), Bound is Maximum * 1000,
-    Span is (Max - Min) * Scale, Span =< Bound,
-    Low is abs((Min - Pivot) * Scale), Low =< Bound,
-    High is abs((Max - Pivot) * Scale), High =< Bound.
+%% Each signed appearance may supply an explicit allocation. There is no
+%% second global ceiling over the resource owner's authored allowance.
+resource(unlimited).
+resource(Allowed) :- integer(Allowed), Allowed > 0.
 
 %% These two shapes have relationships between their dimensions which field
 %% validation alone cannot express. A capsule's total height contains both
@@ -234,18 +198,13 @@ placed(transform(X, Y, Z, RX, RY, RZ)) :-
     offset(X), offset(Y), offset(Z),
     turn(RX), turn(RY), turn(RZ).
 placed(relative(Parent, Transform)) :-
-    bounded_text(Parent, <<"mark_id">>),
+    scene_text(Parent),
     attachment_pose(Transform).
 attachment_pose(transform(X,Y,Z,RX,RY,RZ)) :- placed(transform(X,Y,Z,RX,RY,RZ)).
 attachment_pose(body_pose(Body, Revision)) :- placed(body_pose(Body, Revision)).
 attachment_pose(body_frame_pose(Body, Revision)) :- placed(body_frame_pose(Body, Revision)).
 
-offset(V) :-
-    integer(V),
-    limit(<<"offset">>, Max),
-    V =< Max,
-    Least is 0 - Max,
-    V >= Least.
+offset(V) :- integer(V).
 
 turn(V) :- integer(V), V >= 0, V < 360.
 
@@ -295,7 +254,7 @@ hex_digit(Code) :- Code >= 65, Code =< 70.
 
 labelled(unlabelled).
 labelled(label(Text, Placement)) :-
-    bounded_text(Text, <<"label">>),
+    scene_text(Text),
     placement(Placement).
 
 %% A mark that shows a domain thing names the ontology it belongs to and the
@@ -303,30 +262,23 @@ labelled(label(Text, Placement)) :-
 %% ground plane — says so rather than inventing a subject.
 refers(depicts_nothing).
 refers(depicts(Ontology, Thing)) :-
-    bounded_text(Ontology, <<"ontology">>),
+    scene_text(Ontology),
     term_variables(Thing, []).
 refers(depicts(Ontology, Anchor, Thing)) :-
     refers(depicts(Ontology, Thing)),
     binary_codes(Anchor, Bytes), length(Bytes, 32).
 
-bounded_text(Text, What) :-
-    binary_codes(Text, Codes),
-    length(Codes, Count),
-    Count > 0,
-    limit(What, Max),
-    Count =< Max.
+scene_text(Text) :- binary_codes(Text, [_|_]).
 
 %% --- a scene ------------------------------------------------------------------
 
-%% well_formed_scene(+Marks): a bounded list of well-formed marks whose ids are
+%% well_formed_scene(+Marks): a list of well-formed marks whose ids are
 %% distinct. Nothing here requires the subjects to be distinct: several marks
 %% depicting one entity is ordinary, and forbidding it would forbid showing the
 %% same thing twice.
 well_formed_scene(Marks) :-
     term_variables(Marks, []),
-    limit(<<"scene">>, Max),
     length(Marks, Count),
-    Count =< Max,
     every_mark(Marks),
     findall(Id, member(mark(Id, _, _, _, _, _, _), Marks), Ids),
     sort(Ids, Distinct),

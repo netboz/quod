@@ -26,7 +26,6 @@ parked until the proof deadline.
 -define(WIRE_DOMAIN, <<"quod.agent.identity.wire", 0>>).
 -define(WIRE_VERSION, 2).
 -define(CHANNEL, <<"quod.agent.identity">>).
--define(MAX_WIRE_BYTES, (?QUOD_CLIENT_GOAL_REQUEST_BYTES + 32768)).
 
 -type statement() ::
         {agent_identity_v1, <<_:256>>, {binary(), <<_:256>>},
@@ -99,7 +98,7 @@ certificate(Statement, Signatures, RouteHints) ->
 validate_certificate(
   {agent_identity_certificate_v1, Statement, Signatures, RouteHints}) ->
     valid_statement(Statement) andalso
-        quod_quorum:valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
+        quod_quorum:valid_signature_list(Signatures, unlimited) andalso
         quod_foreign_log:valid_route_candidates(RouteHints);
 validate_certificate(_Certificate) -> false.
 
@@ -150,7 +149,6 @@ encode_request(
   {agent_identity_request, <<_:128>>, <<_:256>>,
    RequestBytes, <<_:512>>, NotAfter} = Request)
   when is_binary(RequestBytes),
-       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES,
        is_integer(NotAfter), NotAfter >= 0 ->
     encode_wire(request, Request);
 encode_request(_Request) -> {error, invalid_request}.
@@ -175,12 +173,9 @@ decode_response(Bytes) -> decode_wire(response, Bytes).
 encode_wire(Kind, Value) ->
     Encoded = term_to_binary(
                 {?WIRE_DOMAIN, ?WIRE_VERSION, Kind, Value}, [deterministic]),
-    case byte_size(Encoded) =< ?MAX_WIRE_BYTES of
-        true -> {ok, Encoded};
-        false -> {error, invalid_request}
-    end.
+    {ok, Encoded}.
 
-decode_wire(Kind, Bytes) when is_binary(Bytes), byte_size(Bytes) =< ?MAX_WIRE_BYTES ->
+decode_wire(Kind, Bytes) when is_binary(Bytes) ->
     try binary_to_term(Bytes, [safe]) of
         {?WIRE_DOMAIN, ?WIRE_VERSION, Kind, Value} ->
             validate_decoded(Kind, Value);

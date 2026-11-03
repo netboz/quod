@@ -1,0 +1,44 @@
+
+%% Diagnostic-only event aggregation: no term bodies, arguments or keys retained.
+observe_gc(Fun) ->
+    Collector=spawn_link(fun()->gc_events(#{},#{},0) end),
+    Trace=trace:session_create(renewal_gc,Collector,[]),
+    trace:process(Trace,all,true,[garbage_collection,monotonic_timestamp]),
+    trace:process(Trace,Collector,false,[garbage_collection]),
+    try
+        Result=Fun(),
+        trace:process(Trace,all,false,[garbage_collection]),
+        Delivered=trace:delivered(Trace,all),
+        receive {trace_delivered,all,Delivered}->ok after 5000->error(gc_trace_timeout) end,
+        Ref=make_ref(),Collector!{finish,self(),Ref},
+        Report=receive {gc_report,Ref,Data}->Data after 5000->error(gc_report_timeout) end,
+        {Result,Report}
+    after trace:session_destroy(Trace),unlink(Collector),exit(Collector,kill) end.
+
+gc_events(Open,Rows,Other) ->
+    receive
+        {trace_ts,Pid,Tag,Info,Ts} when is_integer(Ts) ->
+            case Tag of
+                gc_minor_start -> gc_begin(Pid,minor,Info,Ts,Open,Rows,Other);
+                gc_major_start -> gc_begin(Pid,major,Info,Ts,Open,Rows,Other);
+                gc_minor_end -> gc_end(Pid,minor,Ts,Open,Rows,Other);
+                gc_major_end -> gc_end(Pid,major,Ts,Open,Rows,Other);
+                _ -> gc_events(Open,Rows,Other+1)
+            end;
+        {finish,From,Ref} ->
+            From!{gc_report,Ref,#{open_events=>maps:size(Open),other_events=>Other,
+                processes=>[V#{pid=>list_to_binary(pid_to_list(P))}||{P,V}<-maps:to_list(Rows)]}};
+        _ -> gc_events(Open,Rows,Other+1)
+    end.
+gc_begin(Pid,Kind,Info,Ts,Open,Rows,Other) ->
+    Row=maps:get(Pid,Rows,#{minor_count=>0,major_count=>0,minor_us=>0,major_us=>0,max_heap_words=>0}),
+    Heap=proplists:get_value(heap_size,Info,0)+proplists:get_value(old_heap_size,Info,0),
+    gc_events(Open#{{Pid,Kind}=>Ts},Rows#{Pid=>Row#{max_heap_words=>max(Heap,maps:get(max_heap_words,Row))}},Other).
+gc_end(Pid,Kind,Ts,Open,Rows,Other) ->
+    case maps:take({Pid,Kind},Open) of
+        {Start,Rest} ->
+            Row=maps:get(Pid,Rows),{Count,Time}=case Kind of minor->{minor_count,minor_us};major->{major_count,major_us} end,
+            Next=Row#{Count=>maps:get(Count,Row)+1,Time=>maps:get(Time,Row)+erlang:convert_time_unit(Ts-Start,native,microsecond)},
+            gc_events(Rest,Rows#{Pid=>Next},Other);
+        error -> gc_events(Open,Rows,Other+1)
+    end.

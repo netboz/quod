@@ -1,5 +1,6 @@
 -module(quod_genesis_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
@@ -44,27 +45,27 @@ genesis_source_validation_test() ->
          Base#{genesis_diff => [
                   {assert, {{valid_prefix, ok}, true}} | improper_tail]})).
 
-founding_committee_cap_test() ->
+founding_committee_has_no_population_quota_test() ->
     Self = <<0:256>>,
-    Members = [<<I:256>> || I <- lists:seq(1, ?MAX_VALIDATORS)],
+    Members = [<<I:256>> || I <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
     AtLimit = (base_config(Self))#{committee => lists:sublist(
                                                   Members,
-                                                  ?MAX_VALIDATORS - 1)},
+                                                  ?LEGACY_MAX_VALIDATORS - 1)},
     AboveLimit = (base_config(Self))#{committee => Members},
     ?assertEqual(ok, quod_simplex:test_valid_config(AtLimit)),
     ?assertEqual(
-       {error, {committee_too_large, ?MAX_VALIDATORS + 1}},
+       ok,
        quod_simplex:test_valid_config(AboveLimit)).
 
 genesis_configuration_does_not_readmit_retained_content_test() ->
     Self = <<0:256>>,
     Base = base_config(Self),
     %% Configuration is also inspected on resume, where the source is ignored.
-    %% Only a fresh founding's complete encoded envelope determines capacity.
-    AboveEnvelope = sized_diff(?MAX_BLOCK_BYTES + 1),
+    %% Retained source is not readmitted; fresh founding keeps its complete material.
+    AboveEnvelope = sized_diff(?LEGACY_MAX_BLOCK_BYTES + 1),
     ?assertEqual(ok, quod_simplex:test_valid_genesis_source(
                        Base#{genesis_diff => AboveEnvelope})),
-    ?assertMatch({error, _}, quod_simplex:prepare_genesis(
+    ?assertMatch({ok, _, _}, quod_simplex:prepare_genesis(
                    Base#{genesis_diff => AboveEnvelope}, <<"genesis:oversized">>, Self)).
 
 generated_genesis_source_equivalence_test() ->
@@ -125,18 +126,17 @@ genesis_rejects_a_second_or_malformed_predicate_manifest_test() ->
        quod_simplex:genesis_predicate_manifest(
          Genesis0#transaction{diff = [Malformed | Diff0]})).
 
-complete_genesis_keeps_block_bound_test() ->
+complete_genesis_retains_all_authored_material_test() ->
     Self = <<0:256>>,
     Ns = <<"genesis:complete-bound">>,
     Incarnation = <<16#6b:256>>,
-    InitialDiff = sized_diff(?MAX_BLOCK_BYTES - 64 * 1024),
-    %% Initial content alone fits the carrier. The generated
-    %% committee fact pushes the complete transaction above the block limit.
+    InitialDiff = sized_diff(?LEGACY_MAX_BLOCK_BYTES - 64 * 1024),
+    %% Include generated committee facts beyond the historical block quota.
     OversizedHost = binary:copy(<<"h">>, 70 * 1024),
     Config =
         (base_config(Self))#{
           committee => [{<<1:256>>, OversizedHost, 14567}],
           genesis_diff => InitialDiff},
-    ?assertThrow(
-       {genesis_failed, invalid_generated_genesis},
+    ?assertMatch(
+       #transaction{},
        quod_simplex:test_genesis_tx(Config, Ns, Self, Incarnation)).

@@ -16,7 +16,8 @@ cursor continuation lives only in `quod_client_cursor`.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([test_start_link/1, test_start_link/2, test_submit/10, test_cursor/5, test_stats/1,
-         test_cursor_target_result/1, test_submit_target_result/2]).
+         test_cursor_target_result/1, test_submit_target_result/2,
+         test_send_result/3, test_send_response/2]).
 -endif.
 
 -type owner() :: {session, <<_:256>>, <<_:256>>} |
@@ -63,6 +64,9 @@ test_submit(Router, Route, Owner, Evidence, RequestBytes, Signature,
 
 test_cursor(Router, Owner, CursorId, Command, TimeoutMs) ->
     call(Router, {cursor, Owner, CursorId, Command, TimeoutMs}).
+
+test_send_result(Link, Request, Result) -> send_result(Link, Request, Result).
+test_send_response(Link, Response) -> send_response(Link, Response).
 
 test_stats(Router) ->
     owner_stats(sys:get_state(Router)).
@@ -611,23 +615,15 @@ send_result(Link, {cursor, RequestId, CursorId, _}, Result) ->
     send_result_response(
       Link, {cursor_result, RequestId, CursorId, Result}).
 
-send_result_response(Link, {Kind, RequestId, Result}) ->
-    case quod_client_result:encode(Result) of
-        {ok, Blob} -> send_response(Link, {Kind, RequestId, Blob});
-        {error, _} ->
-            {ok, Blob} = quod_client_result:encode(
-                           {error, result_too_large}),
-            send_response(Link, {Kind, RequestId, Blob})
-    end;
-send_result_response(Link, {Kind, RequestId, CursorId, Result}) ->
-    case quod_client_result:encode(Result) of
-        {ok, Blob} ->
-            send_response(Link, {Kind, RequestId, CursorId, Blob});
-        {error, _} ->
-            {ok, Blob} = quod_client_result:encode(
-                           {error, result_too_large}),
-            send_response(Link, {Kind, RequestId, CursorId, Blob})
-    end.
+send_result_response(Link, Response) ->
+    Index = tuple_size(Response),
+    Blob = case quod_client_result:encode(element(Index, Response)) of
+        {ok, Encoded} -> Encoded;
+        {error, invalid_result} ->
+            {ok, Error} = quod_client_result:encode({error, proof_unavailable}),
+            Error
+    end,
+    send_response(Link, setelement(Index, Response, Blob)).
 
 preexecution_reply(RequestId, client_goal_rate_limited) ->
     {refused, RequestId, rate_limited};
@@ -655,6 +651,15 @@ preexecution_reply(RequestId, _Reason) ->
 send_response(Link, Response) ->
     case quod_client_goal_endpoint:encode_response(Response) of
         {ok, Frame} -> quod_link:send_ordered(Link, Frame);
+        {error, {too_large, client_goal_endpoint}}
+          when element(1, Response) =:= result;
+               element(1, Response) =:= cursor_result ->
+            %% This is a delivery refusal, never permission to execute again.
+            %% Keep the exact request/cursor correlation on the error result.
+            {ok, Blob} = quod_client_result:encode({error, result_too_large}),
+            Refusal = setelement(tuple_size(Response), Response, Blob),
+            {ok, Frame} = quod_client_goal_endpoint:encode_response(Refusal),
+            quod_link:send_ordered(Link, Frame);
         {error, _} -> ok
     end.
 

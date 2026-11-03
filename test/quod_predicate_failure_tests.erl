@@ -1,7 +1,6 @@
 -module(quod_predicate_failure_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_ingress_limits.hrl").
 
 %% These contracts cannot be violated by signed ingress: it creates the scope
 %% and staging authority itself. Exercise their real overlay owners directly,
@@ -89,12 +88,6 @@ committee_refusal_reasons_test() ->
             {remove,Key},proof_state(Base),#{})),
         ?assertMatch({fail,_},quod_proof_session:run_first(
             {remove,<<2:256>>},proof_state(Base),#{}))
-    end),
-    Facts = [{peer_admitted,<<I:256>>,<<"host">>,1,<<I:256>>}
-             || I <- lists:seq(1,?MAX_VALIDATORS)],
-    with_state(Facts,fun(Base) ->
-        assert_reason(committee_full,quod_proof_session:run_first(
-            {admit,<<0:256>>,<<"host">>,1},proof_state(Base),#{}))
     end).
 
 missing_ontology_anchor_reason_test() ->

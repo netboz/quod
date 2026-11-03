@@ -1,0 +1,13 @@
+{
+  "sessionId": "d6eadafb-da2f-42a9-b847-532c118cabc5",
+  "title": "Renewal correction review",
+  "provider": "claude-code",
+  "model": "claude-code:fable",
+  "worktreeId": null,
+  "worktreePath": null,
+  "worktreeMode": "none",
+  "createdBySessionId": "99296dee-12c9-405a-aa21-fc7798258324",
+  "queuedInitialPrompt": true,
+  "parentSessionId": "99296dee-12c9-405a-aa21-fc7798258324",
+  "effortLevel": "high"
+}

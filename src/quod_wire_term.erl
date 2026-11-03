@@ -1,17 +1,15 @@
 -module(quod_wire_term).
 -moduledoc """
-Bounded, atom-safe encoding for Prolog values crossing an untrusted peer boundary.
+Atom-safe encoding for Prolog values crossing an untrusted peer boundary.
 
 Atoms are carried as UTF-8 binaries. Decoding reuses an existing VM atom when one is
 already known; otherwise it returns the opaque `{'$quod_symbol', Binary}` value. The
 opaque value re-encodes as the original atom symbol, so a relay can pass a
 target-owned symbol through without allocating an atom. The authenticated
-target explicitly materializes its bounded callable symbols before execution.
+target explicitly materializes its callable symbols before execution.
 
-Only Prolog's data shapes are accepted. The containing protocol bounds bytes;
-structural depth and symbol size bound nesting and individual names. Traversal
-is linear in that bounded representation, with no second population quota. A list spine is iterative structure,
-not nesting; its elements and an improper tail still increase structural depth.
+Only Prolog's data shapes are accepted. The owning protocol supplies any byte
+allowance; this codec does not choose a population, nesting or symbol quota.
 
 Failure-reason stacks add one shared canonical contract on top of that alphabet.
 Scope completion and durable abort Decisions both use the same encoder/decoder, so a
@@ -24,22 +22,18 @@ payload. New work is admitted by Prolog policy; historical materialization
 checks the real VM headroom without re-admitting accepted history.
 """.
 
--include("quod_vm_limits.hrl").
--include("quod_term_limits.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([encode/1, decode/1,
          encode_canonical/1, decode_canonical/2,
          encode_bindings/2, decode_bindings/2,
-         materialize_symbols/1, materialize_goal_symbols/1,
+         materialize_symbols/1, materialize_goal_symbols/1, materialize_goal_symbols/2,
          normalize_answer_symbols/2,
-         goal_symbol_names/1, symbol_names/1,
+         goal_symbol_names/1, goal_symbol_names/2, symbol_names/1,
          is_symbol/1, callable_functor/1,
          is_ground/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
-
--define(MAX_SYMBOL_BYTES, 1024).
 
 -type wire() :: term().
 
@@ -47,7 +41,7 @@ checks the real VM headroom without re-admitting accepted history.
 -spec is_symbol(term()) -> boolean().
 is_symbol(Atom) when is_atom(Atom) -> true;
 is_symbol({'$quod_symbol', Binary})
-  when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES -> true;
+  when is_binary(Binary) -> true;
 is_symbol(_) -> false.
 
 -doc "Return a callable's functor without materializing an opaque symbol.".
@@ -82,14 +76,14 @@ is_ground(_) ->
 
 -spec encode(term()) -> {ok, wire()} | {error, bad_term}.
 encode(Term) ->
-    case encode(Term, 0) of
+    case encode_value(Term) of
         {ok, Wire} -> {ok, Wire};
         error -> {error, bad_term}
     end.
 
 -spec decode(wire()) -> {ok, term()} | {error, bad_term}.
 decode(Wire) ->
-    case decode(Wire, 0) of
+    case decode_value(Wire) of
         {ok, Term} -> {ok, Term};
         error -> {error, bad_term}
     end.
@@ -123,10 +117,11 @@ encode_canonical(Term) ->
     end.
 
 -doc "Safely decode one bounded, canonical wire binary without allocating atoms.".
--spec decode_canonical(term(), non_neg_integer()) ->
+-spec decode_canonical(term(), non_neg_integer() | unlimited) ->
           {ok, term()} | {error, bad_term | too_large}.
 decode_canonical(Blob, MaxBytes)
-  when is_binary(Blob), is_integer(MaxBytes), MaxBytes >= 0 ->
+  when is_binary(Blob),
+       (MaxBytes =:= unlimited orelse (is_integer(MaxBytes) andalso MaxBytes >= 0)) ->
     case quod_safe_term:decode(Blob, MaxBytes) of
         {ok, Wire} ->
             case canonical(Wire) =:= Blob of
@@ -140,16 +135,16 @@ decode_canonical(_Blob, _MaxBytes) ->
     {error, bad_term}.
 
 -doc "Encode canonical named bindings under the caller's owning byte allowance.".
--spec encode_bindings(map(), non_neg_integer()) ->
+-spec encode_bindings(map(), non_neg_integer() | unlimited) ->
           {ok, binary()} | {error, bad_term | invalid_result | too_large}.
 encode_bindings(Bindings, MaxBytes) when is_map(Bindings),
-                                        is_integer(MaxBytes), MaxBytes >= 0 ->
+                                        (MaxBytes =:= unlimited orelse (is_integer(MaxBytes) andalso MaxBytes >= 0)) ->
     case binding_pairs(Bindings) of
         {ok, Pairs} ->
             case valid_bindings(Pairs, none) of
                 true ->
                     case encode_canonical(Pairs) of
-                        {ok, Blob} when byte_size(Blob) =< MaxBytes -> {ok, Blob};
+                        {ok, Blob} when MaxBytes =:= unlimited; byte_size(Blob) =< MaxBytes -> {ok, Blob};
                         {ok, _} -> {error, too_large};
                         {error, _} = Error -> Error
                     end;
@@ -160,7 +155,7 @@ encode_bindings(Bindings, MaxBytes) when is_map(Bindings),
 encode_bindings(_, _) -> {error, invalid_result}.
 
 -doc "Decode canonical named bindings without allocating atoms or choosing a resource allowance.".
--spec decode_bindings(term(), non_neg_integer()) ->
+-spec decode_bindings(term(), non_neg_integer() | unlimited) ->
           {ok, [{binary(), term()}]} | {error, bad_term | invalid_result | too_large}.
 decode_bindings(Blob, MaxBytes) ->
     case decode_canonical(Blob, MaxBytes) of
@@ -213,18 +208,21 @@ materialize_symbols(Term) ->
 %% opaque: a relay must not turn an arbitrary caller datum into a target atom.
 -spec materialize_goal_symbols(term()) ->
           {ok, term()} |
-          {error, malformed_material | too_many_new_atoms | atom_limit}.
-materialize_goal_symbols(Goal) ->
-    case collect_goal_symbols(Goal, #{}) of
-        {ok, Symbols}
-          when map_size(Symbols) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS ->
+          {error, malformed_material | atom_limit}.
+materialize_goal_symbols(Goal) -> materialize_goal_symbols(Goal, undefined).
+
+%% Only an authenticated owner may supply its canonical namespace. Self-scoped
+%% goals execute in that same owner; foreign inner callables remain deferred.
+-spec materialize_goal_symbols(term(), binary() | undefined) ->
+          {ok, term()} | {error, malformed_material | atom_limit}.
+materialize_goal_symbols(Goal, Owner) ->
+    case collect_goal_symbols(Goal, #{}, Owner) of
+        {ok, Symbols} ->
             Names = lists:sort(maps:keys(Symbols)),
             case materialize_symbol_names(Names) of
-                ok -> {ok, replace_goal_symbols(Goal)};
+                ok -> {ok, replace_goal_symbols(Goal, Owner)};
                 {error, _} = Error -> Error
             end;
-        {ok, _TooMany} ->
-            {error, too_many_new_atoms};
         error ->
             {error, malformed_material}
     end.
@@ -237,8 +235,12 @@ performs the identical callable-position walk but never creates an atom.
 """.
 -spec goal_symbol_names(term()) ->
           {ok, [binary()]} | {error, malformed_material}.
-goal_symbol_names(Goal) ->
-    case collect_goal_symbols(Goal, #{}) of
+goal_symbol_names(Goal) -> goal_symbol_names(Goal, undefined).
+
+-spec goal_symbol_names(term(), binary() | undefined) ->
+          {ok, [binary()]} | {error, malformed_material}.
+goal_symbol_names(Goal, Owner) ->
+    case collect_goal_symbols(Goal, #{}, Owner) of
         {ok, Symbols} -> {ok, lists:sort(maps:keys(Symbols))};
         error -> {error, malformed_material}
     end.
@@ -252,14 +254,11 @@ symbol_names(Term) ->
     end.
 
 collect_symbol_names({'$quod_symbol', Binary}, Symbols)
-  when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
+  when is_binary(Binary) ->
     {ok, Symbols#{Binary => true}};
 collect_symbol_names(Atom, Symbols) when is_atom(Atom) ->
     Binary = atom_to_binary(Atom, utf8),
-    case byte_size(Binary) =< ?MAX_SYMBOL_BYTES of
-        true -> {ok, Symbols#{Binary => true}};
-        false -> error
-    end;
+    {ok, Symbols#{Binary => true}};
 collect_symbol_names(Tuple, Symbols) when is_tuple(Tuple) ->
     collect_symbol_names_list(tuple_to_list(Tuple), Symbols);
 collect_symbol_names([Head | Tail], Symbols0) ->
@@ -284,7 +283,7 @@ collect_symbol_names_list([Value | Rest], Symbols0) ->
     end.
 
 retained_symbol_representations({'$quod_symbol', Name}, Acc)
-  when is_binary(Name), byte_size(Name) =< ?MAX_SYMBOL_BYTES ->
+  when is_binary(Name) ->
     Acc#{Name => {'$quod_symbol', Name}};
 retained_symbol_representations(Tuple, Acc)
   when is_tuple(Tuple), tuple_size(Tuple) =:= 1 ->
@@ -308,7 +307,7 @@ retained_symbol_representations(_Value, Acc) ->
     Acc.
 
 normalize_retained_symbols({'$quod_symbol', Name}, Representations)
-  when is_binary(Name), byte_size(Name) =< ?MAX_SYMBOL_BYTES ->
+  when is_binary(Name) ->
     maps:get(Name, Representations, {'$quod_symbol', Name});
 normalize_retained_symbols(Tuple, _Representations)
   when is_tuple(Tuple), tuple_size(Tuple) >= 1,
@@ -342,7 +341,7 @@ materialize_symbol_names(Names) ->
     end.
 
 materialize_valid_symbol_names(Names) ->
-    case atom_headroom(length(Names)) of
+    case atom_headroom(length([N || N <- Names, not existing_symbol(N)])) of
         true ->
             try
                 _ = [binary_to_atom(Name, utf8) || Name <- Names],
@@ -356,8 +355,12 @@ materialize_valid_symbol_names(Names) ->
     end.
 
 atom_headroom(NewAtoms) ->
-    erlang:system_info(atom_count) + NewAtoms + ?QUOD_ATOM_SAFETY_MARGIN <
+    erlang:system_info(atom_count) + NewAtoms =<
         erlang:system_info(atom_limit).
+
+existing_symbol(Name) ->
+    try binary_to_existing_atom(Name, utf8), true
+    catch error:badarg -> false end.
 
 collect_new_symbols({'$quod_symbol', Name}, Acc) when is_binary(Name) ->
     {ok, Acc#{Name => true}};
@@ -410,189 +413,198 @@ replace_symbols([]) ->
 replace_symbols(Term) ->
     Term.
 
-collect_goal_symbols({'$quod_symbol', Name}, Acc) when is_binary(Name) ->
+collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
     {ok, Acc#{Name => true}};
-collect_goal_symbols(Tuple, _Acc)
+collect_goal_symbols(Tuple, _Acc, Owner)
   when is_tuple(Tuple), tuple_size(Tuple) >= 1,
        element(1, Tuple) =:= '$quod_symbol' ->
     error;
-collect_goal_symbols(Tuple, Acc) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+collect_goal_symbols(Tuple, Acc, Owner) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
     case element(1, Tuple) of
         {'$quod_symbol', Name} when is_binary(Name) ->
-            collect_opaque_goal_positions(Name, Tuple, Acc#{Name => true});
+            collect_opaque_goal_positions(Name, Tuple, Acc#{Name => true}, Owner);
         Marker when is_tuple(Marker), tuple_size(Marker) >= 1,
                     element(1, Marker) =:= '$quod_symbol' -> error;
-        ',' -> collect_goal_positions(Tuple, [2, 3], Acc);
-        ';' -> collect_goal_positions(Tuple, [2, 3], Acc);
-        '->' -> collect_goal_positions(Tuple, [2, 3], Acc);
-        '\\+' -> collect_goal_positions(Tuple, [2], Acc);
-        'not' -> collect_goal_positions(Tuple, [2], Acc);
-        once -> collect_goal_positions(Tuple, [2], Acc);
-        call -> collect_goal_positions(Tuple, [2], Acc);
-        independent when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc);
-        transaction when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc);
-        findall -> collect_goal_positions(Tuple, [3], Acc);
-        bagof -> collect_goal_positions(Tuple, [3], Acc);
-        setof -> collect_goal_positions(Tuple, [3], Acc);
-        asserta -> collect_clause_symbol(Tuple, 2, Acc);
-        assertz -> collect_clause_symbol(Tuple, 2, Acc);
-        retract -> collect_clause_symbol(Tuple, 2, Acc);
-        retractall -> collect_clause_symbol(Tuple, 2, Acc);
-        '::' -> collect_selector_symbol(Tuple, 2, Acc);
+        ',' -> collect_goal_positions(Tuple, [2, 3], Acc, Owner);
+        ';' -> collect_goal_positions(Tuple, [2, 3], Acc, Owner);
+        '->' -> collect_goal_positions(Tuple, [2, 3], Acc, Owner);
+        '\\+' -> collect_goal_positions(Tuple, [2], Acc, Owner);
+        'not' -> collect_goal_positions(Tuple, [2], Acc, Owner);
+        once -> collect_goal_positions(Tuple, [2], Acc, Owner);
+        call -> collect_goal_positions(Tuple, [2], Acc, Owner);
+        independent when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc, Owner);
+        transaction when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc, Owner);
+        findall -> collect_goal_positions(Tuple, [3], Acc, Owner);
+        bagof -> collect_goal_positions(Tuple, [3], Acc, Owner);
+        setof -> collect_goal_positions(Tuple, [3], Acc, Owner);
+        asserta -> collect_clause_symbol(Tuple, 2, Acc, Owner);
+        assertz -> collect_clause_symbol(Tuple, 2, Acc, Owner);
+        retract -> collect_clause_symbol(Tuple, 2, Acc, Owner);
+        retractall -> collect_clause_symbol(Tuple, 2, Acc, Owner);
+        '::' -> collect_selector_symbol(Tuple, 2, Acc, Owner);
         _ -> {ok, Acc}
     end;
-collect_goal_symbols(_Goal, Acc) ->
+collect_goal_symbols(_Goal, Acc, Owner) ->
     {ok, Acc}.
 
 %% Parser V2 deliberately keeps every source identifier opaque. Once an
 %% opaque callable names one of Prolog's goal-bearing built-ins, its executable
 %% positions still need the same walk as the already-materialized spelling.
 %% Unknown callables keep ordinary arguments opaque.
-collect_opaque_goal_positions(<<"once">>, Tuple, Acc) ->
-    collect_goal_positions(Tuple, [2], Acc);
-collect_opaque_goal_positions(<<"call">>, Tuple, Acc) ->
-    collect_goal_positions(Tuple, [2], Acc);
-collect_opaque_goal_positions(<<"independent">>, Tuple, Acc) when tuple_size(Tuple) =:= 2 ->
-    collect_goal_positions(Tuple, [2], Acc);
-collect_opaque_goal_positions(<<"transaction">>, Tuple, Acc) when tuple_size(Tuple) =:= 2 ->
-    collect_goal_positions(Tuple, [2], Acc);
-collect_opaque_goal_positions(<<"not">>, Tuple, Acc) ->
-    collect_goal_positions(Tuple, [2], Acc);
-collect_opaque_goal_positions(<<"findall">>, Tuple, Acc) ->
-    collect_goal_positions(Tuple, [3], Acc);
-collect_opaque_goal_positions(<<"bagof">>, Tuple, Acc) ->
-    collect_goal_positions(Tuple, [3], Acc);
-collect_opaque_goal_positions(<<"setof">>, Tuple, Acc) ->
-    collect_goal_positions(Tuple, [3], Acc);
-collect_opaque_goal_positions(<<"asserta">>, Tuple, Acc) ->
-    collect_clause_symbol(Tuple, 2, Acc);
-collect_opaque_goal_positions(<<"assertz">>, Tuple, Acc) ->
-    collect_clause_symbol(Tuple, 2, Acc);
-collect_opaque_goal_positions(<<"retract">>, Tuple, Acc) ->
-    collect_clause_symbol(Tuple, 2, Acc);
-collect_opaque_goal_positions(<<"retractall">>, Tuple, Acc) ->
-    collect_clause_symbol(Tuple, 2, Acc);
-collect_opaque_goal_positions(_Name, _Tuple, Acc) ->
+collect_opaque_goal_positions(<<"::">>, Tuple, Acc, Owner) ->
+    collect_selector_symbol(Tuple, 2, Acc, Owner);
+collect_opaque_goal_positions(<<"once">>, Tuple, Acc, Owner) ->
+    collect_goal_positions(Tuple, [2], Acc, Owner);
+collect_opaque_goal_positions(<<"call">>, Tuple, Acc, Owner) ->
+    collect_goal_positions(Tuple, [2], Acc, Owner);
+collect_opaque_goal_positions(<<"independent">>, Tuple, Acc, Owner) when tuple_size(Tuple) =:= 2 ->
+    collect_goal_positions(Tuple, [2], Acc, Owner);
+collect_opaque_goal_positions(<<"transaction">>, Tuple, Acc, Owner) when tuple_size(Tuple) =:= 2 ->
+    collect_goal_positions(Tuple, [2], Acc, Owner);
+collect_opaque_goal_positions(<<"not">>, Tuple, Acc, Owner) ->
+    collect_goal_positions(Tuple, [2], Acc, Owner);
+collect_opaque_goal_positions(<<"findall">>, Tuple, Acc, Owner) ->
+    collect_goal_positions(Tuple, [3], Acc, Owner);
+collect_opaque_goal_positions(<<"bagof">>, Tuple, Acc, Owner) ->
+    collect_goal_positions(Tuple, [3], Acc, Owner);
+collect_opaque_goal_positions(<<"setof">>, Tuple, Acc, Owner) ->
+    collect_goal_positions(Tuple, [3], Acc, Owner);
+collect_opaque_goal_positions(<<"asserta">>, Tuple, Acc, Owner) ->
+    collect_clause_symbol(Tuple, 2, Acc, Owner);
+collect_opaque_goal_positions(<<"assertz">>, Tuple, Acc, Owner) ->
+    collect_clause_symbol(Tuple, 2, Acc, Owner);
+collect_opaque_goal_positions(<<"retract">>, Tuple, Acc, Owner) ->
+    collect_clause_symbol(Tuple, 2, Acc, Owner);
+collect_opaque_goal_positions(<<"retractall">>, Tuple, Acc, Owner) ->
+    collect_clause_symbol(Tuple, 2, Acc, Owner);
+collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
     {ok, Acc}.
 
 %% A clause passed to a database-update predicate contains executable syntax:
 %% its head is a callable and a rule body is a goal.  Ordinary arguments of
 %% that head remain opaque data, exactly like arguments of any other goal.
-collect_clause_symbol(Tuple, Position, Acc)
+collect_clause_symbol(Tuple, Position, Acc, Owner)
   when Position =< tuple_size(Tuple) ->
-    collect_clause_symbols(element(Position, Tuple), Acc);
-collect_clause_symbol(_Tuple, _Position, _Acc) ->
+    collect_clause_symbols(element(Position, Tuple), Acc, Owner);
+collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
     error.
 
-collect_clause_symbols({':-', Head, Body}, Acc) ->
-    case collect_goal_symbols(Head, Acc) of
-        {ok, Acc1} -> collect_goal_symbols(Body, Acc1);
+collect_clause_symbols({{'$quod_symbol', <<":-">>}, Head, Body}, Acc, Owner) ->
+    collect_clause_symbols({':-',Head,Body},Acc, Owner);
+collect_clause_symbols({':-', Head, Body}, Acc, Owner) ->
+    case collect_goal_symbols(Head, Acc, Owner) of
+        {ok, Acc1} -> collect_goal_symbols(Body, Acc1, Owner);
         error -> error
     end;
-collect_clause_symbols(Clause, Acc) ->
-    collect_goal_symbols(Clause, Acc).
+collect_clause_symbols(Clause, Acc, Owner) ->
+    collect_goal_symbols(Clause, Acc, Owner).
 
-%% The current ontology owns the route selector but not the selected
-%% ontology's inner goal. Materialize only the selector here; the target will
-%% perform the same goal walk after it authenticates and opens that scope.
-collect_selector_symbol(Tuple, Position, Acc)
+%% The selector belongs to this scope. Only a selector for the authenticated
+%% current owner also owns its inner goal; a foreign destination admits its own.
+collect_selector_symbol(Tuple, Position, Acc, Owner)
   when Position =< tuple_size(Tuple) ->
-    collect_new_symbols(element(Position, Tuple), Acc);
-collect_selector_symbol(_Tuple, _Position, _Acc) ->
-    error.
+    case collect_new_symbols(element(Position, Tuple), Acc) of
+        {ok, Acc1} when tuple_size(Tuple) =:= 3, is_binary(Owner) ->
+            case quod_ontology_name:flatten(element(Position, Tuple)) of
+                Owner -> collect_goal_symbols(element(3, Tuple), Acc1, Owner);
+                _ -> {ok, Acc1}
+            end;
+        Result -> Result
+    end;
+collect_selector_symbol(_Tuple, _Position, _Acc, _Owner) -> error.
 
-collect_goal_positions(_Tuple, [], Acc) ->
+collect_goal_positions(_Tuple, [], Acc, Owner) ->
     {ok, Acc};
-collect_goal_positions(Tuple, [Position | Rest], Acc) ->
+collect_goal_positions(Tuple, [Position | Rest], Acc, Owner) ->
     case Position =< tuple_size(Tuple) of
         true ->
-            case collect_goal_symbols(element(Position, Tuple), Acc) of
-                {ok, Acc1} -> collect_goal_positions(Tuple, Rest, Acc1);
+            case collect_goal_symbols(element(Position, Tuple), Acc, Owner) of
+                {ok, Acc1} -> collect_goal_positions(Tuple, Rest, Acc1, Owner);
                 error -> error
             end;
         false ->
             error
     end.
 
-replace_goal_symbols({'$quod_symbol', Name}) ->
+replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
     binary_to_existing_atom(Name, utf8);
-replace_goal_symbols(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+replace_goal_symbols(Tuple, Owner) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
     case element(1, Tuple) of
         {'$quod_symbol', Name} ->
             %% Re-enter after replacing the callable so a V2 spelling such as
             %% opaque assertz(opaque_head(...)) receives the same executable-
             %% position treatment as an already-materialized assertz/1.
             replace_goal_symbols(
-              setelement(1, Tuple, binary_to_existing_atom(Name, utf8)));
-        ',' -> replace_goal_positions(Tuple, [2, 3]);
-        ';' -> replace_goal_positions(Tuple, [2, 3]);
-        '->' -> replace_goal_positions(Tuple, [2, 3]);
-        '\\+' -> replace_goal_positions(Tuple, [2]);
-        'not' -> replace_goal_positions(Tuple, [2]);
-        once -> replace_goal_positions(Tuple, [2]);
-        call -> replace_goal_positions(Tuple, [2]);
-        independent when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2]);
-        transaction when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2]);
-        findall -> replace_goal_positions(Tuple, [3]);
-        bagof -> replace_goal_positions(Tuple, [3]);
-        setof -> replace_goal_positions(Tuple, [3]);
-        asserta -> replace_clause_symbol(Tuple, 2);
-        assertz -> replace_clause_symbol(Tuple, 2);
-        retract -> replace_clause_symbol(Tuple, 2);
-        retractall -> replace_clause_symbol(Tuple, 2);
-        '::' -> replace_selector_symbol(Tuple, 2);
+              setelement(1, Tuple, binary_to_existing_atom(Name, utf8)), Owner);
+        ',' -> replace_goal_positions(Tuple, [2, 3], Owner);
+        ';' -> replace_goal_positions(Tuple, [2, 3], Owner);
+        '->' -> replace_goal_positions(Tuple, [2, 3], Owner);
+        '\\+' -> replace_goal_positions(Tuple, [2], Owner);
+        'not' -> replace_goal_positions(Tuple, [2], Owner);
+        once -> replace_goal_positions(Tuple, [2], Owner);
+        call -> replace_goal_positions(Tuple, [2], Owner);
+        independent when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2], Owner);
+        transaction when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2], Owner);
+        findall -> replace_goal_positions(Tuple, [3], Owner);
+        bagof -> replace_goal_positions(Tuple, [3], Owner);
+        setof -> replace_goal_positions(Tuple, [3], Owner);
+        asserta -> replace_clause_symbol(Tuple, 2, Owner);
+        assertz -> replace_clause_symbol(Tuple, 2, Owner);
+        retract -> replace_clause_symbol(Tuple, 2, Owner);
+        retractall -> replace_clause_symbol(Tuple, 2, Owner);
+        '::' -> replace_selector_symbol(Tuple, 2, Owner);
         _ -> Tuple
     end;
-replace_goal_symbols(Goal) ->
+replace_goal_symbols(Goal, Owner) ->
     Goal.
 
-replace_clause_symbol(Tuple, Position) when Position =< tuple_size(Tuple) ->
+replace_clause_symbol(Tuple, Position, Owner) when Position =< tuple_size(Tuple) ->
     setelement(Position, Tuple,
-               replace_clause_symbols(element(Position, Tuple)));
-replace_clause_symbol(Tuple, _Position) ->
+               replace_clause_symbols(element(Position, Tuple), Owner));
+replace_clause_symbol(Tuple, _Position, Owner) ->
     Tuple.
 
-replace_clause_symbols({':-', Head, Body}) ->
-    {':-', replace_goal_symbols(Head), replace_goal_symbols(Body)};
-replace_clause_symbols(Clause) ->
-    replace_goal_symbols(Clause).
+replace_clause_symbols({{'$quod_symbol', <<":-">>}, Head, Body}, Owner) ->
+    replace_clause_symbols({':-',Head,Body}, Owner);
+replace_clause_symbols({':-', Head, Body}, Owner) ->
+    {':-', replace_goal_symbols(Head, Owner), replace_goal_symbols(Body, Owner)};
+replace_clause_symbols(Clause, Owner) ->
+    replace_goal_symbols(Clause, Owner).
 
-replace_selector_symbol(Tuple, Position) when Position =< tuple_size(Tuple) ->
-    setelement(Position, Tuple, replace_symbols(element(Position, Tuple)));
-replace_selector_symbol(Tuple, _Position) ->
-    Tuple.
+replace_selector_symbol(Tuple, Position, Owner) when Position =< tuple_size(Tuple) ->
+    Selected = setelement(Position, Tuple, replace_symbols(element(Position, Tuple))),
+    case is_binary(Owner) andalso tuple_size(Tuple) =:= 3 andalso
+         quod_ontology_name:flatten(element(Position, Tuple)) =:= Owner of
+        true -> setelement(3, Selected, replace_goal_symbols(element(3, Tuple), Owner));
+        false -> Selected
+    end;
+replace_selector_symbol(Tuple, _Position, _Owner) -> Tuple.
 
-replace_goal_positions(Tuple, Positions) ->
+replace_goal_positions(Tuple, Positions, Owner) ->
     lists:foldl(
       fun(Position, Acc) ->
               setelement(Position, Acc,
-                         replace_goal_symbols(element(Position, Acc)))
+                         replace_goal_symbols(element(Position, Acc), Owner))
       end, Tuple, Positions).
 
 -doc "Encode one complete, possibly-empty Erlog failure-reason stack.".
 -spec encode_failure_reasons(term()) ->
-          {ok, binary()} | {error, bad_term | too_large}.
+          {ok, binary()} | {error, bad_term}.
 encode_failure_reasons(Reasons) ->
-    case validate_failure_reasons(Reasons, 0) of
+    case validate_failure_reasons(Reasons) of
         ok -> encode_failure_reason_stack(Reasons);
         {error, _} = Error -> Error
     end.
 
 -doc "Decode and re-canonicalize one complete Erlog failure-reason stack.".
 -spec decode_failure_reasons(term()) ->
-          {ok, [term()]} | {error, bad_term | too_large}.
-decode_failure_reasons(Blob)
-  when is_binary(Blob),
-       byte_size(Blob) =< ?ERLOG_MAX_FAILURE_REASONS_BYTES ->
-    case quod_safe_term:decode(Blob, ?ERLOG_MAX_FAILURE_REASONS_BYTES) of
+          {ok, [term()]} | {error, bad_term}.
+decode_failure_reasons(Blob) when is_binary(Blob) ->
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, Wire} -> decode_failure_reason_wire(Blob, Wire);
-        {error, too_large} -> {error, too_large};
         {error, _} -> {error, bad_term}
     end;
-decode_failure_reasons(Blob) when is_binary(Blob) ->
-    {error, too_large};
-decode_failure_reasons(_) ->
-    {error, bad_term}.
+decode_failure_reasons(_) -> {error, bad_term}.
 
 -doc "Return whether a full stack satisfies the canonical Quod wire contract.".
 -spec valid_failure_reason_stack(term()) -> boolean().
@@ -602,48 +614,28 @@ valid_failure_reason_stack(Reasons) ->
         {error, _} -> false
     end.
 
-validate_failure_reasons([], _Count) ->
-    ok;
-validate_failure_reasons([_ | _], Count)
-  when Count >= ?ERLOG_MAX_FAILURE_REASONS ->
-    {error, too_large};
-validate_failure_reasons([Reason | Rest], Count) ->
+validate_failure_reasons([]) -> ok;
+validate_failure_reasons([Reason | Rest]) ->
     case validate_failure_reason(Reason) of
-        ok -> validate_failure_reasons(Rest, Count + 1);
+        ok -> validate_failure_reasons(Rest);
         {error, _} = Error -> Error
     end;
-validate_failure_reasons(_, _Count) ->
-    {error, bad_term}.
+validate_failure_reasons(_) -> {error, bad_term}.
 
 validate_failure_reason(Reason) ->
-    %% The bounded structural pass runs first, so the portability walk below
-    %% never traverses an application term beyond the codec's depth bound.
     case encode(Reason) of
-        {ok, Wire} ->
+        {ok, _Wire} ->
             case erlog_int:valid_failure_reason(Reason) of
-                true ->
-                    case byte_size(canonical(Wire)) =<
-                         ?ERLOG_MAX_FAILURE_REASON_BYTES of
-                        true -> ok;
-                        false -> {error, too_large}
-                    end;
-                false ->
-                    {error, bad_term}
+                true -> ok;
+                false -> {error, bad_term}
             end;
-        {error, bad_term} ->
-            {error, bad_term}
+        {error, bad_term} -> {error, bad_term}
     end.
 
 encode_failure_reason_stack(Reasons) ->
     case encode(Reasons) of
-        {ok, Wire} ->
-            Blob = canonical(Wire),
-            case byte_size(Blob) =< ?ERLOG_MAX_FAILURE_REASONS_BYTES of
-                true -> {ok, Blob};
-                false -> {error, too_large}
-            end;
-        {error, bad_term} ->
-            {error, bad_term}
+        {ok, Wire} -> {ok, canonical(Wire)};
+        {error, bad_term} -> {error, bad_term}
     end.
 
 decode_failure_reason_wire(Blob, Wire) ->
@@ -668,68 +660,57 @@ decode_canonical_failure_reason_wire(Blob, Wire) ->
 canonical(Term) ->
     term_to_binary(Term, [deterministic]).
 
-encode(_Term, Depth)
-  when Depth > ?QUOD_MAX_TERM_DEPTH -> error;
-encode({'$quod_symbol', Binary}, _Depth)
-  when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
+encode_value({'$quod_symbol', Binary})
+  when is_binary(Binary) ->
     {ok, {0, Binary}};
-encode(Atom, _Depth) when is_atom(Atom) ->
+encode_value(Atom) when is_atom(Atom) ->
     Binary = atom_to_binary(Atom, utf8),
-    case byte_size(Binary) =< ?MAX_SYMBOL_BYTES of
-        true -> {ok, {0, Binary}};
-        false -> error
-    end;
-encode(Binary, _Depth) when is_binary(Binary) ->
+    {ok, {0, Binary}};
+encode_value(Binary) when is_binary(Binary) ->
     {ok, {1, Binary}};
-encode(Integer, _Depth) when is_integer(Integer) ->
+encode_value(Integer) when is_integer(Integer) ->
     {ok, {2, Integer}};
-encode(Float, _Depth) when is_float(Float) ->
+encode_value(Float) when is_float(Float) ->
     {ok, {3, Float}};
-encode(Tuple, Depth) when is_tuple(Tuple) ->
-    case encode_list(tuple_to_list(Tuple), Depth + 1, []) of
+encode_value(Tuple) when is_tuple(Tuple) ->
+    case encode_list(tuple_to_list(Tuple), []) of
         {ok, Items} -> {ok, {4, Items}};
         error -> error
     end;
-encode([], _Depth) ->
+encode_value([]) ->
     {ok, {5}};
-encode([Head | Tail], Depth) ->
-    case encode(Head, Depth + 1) of
+encode_value([Head | Tail]) ->
+    case encode_value(Head) of
         {ok, Head1} ->
-            case encode_list_tail(Tail, Depth) of
+            case encode_value(Tail) of
                 {ok, Tail1} -> {ok, {6, Head1, Tail1}};
                 error -> error
             end;
         error -> error
     end;
-encode(_, _) -> error.
+encode_value(_) -> error.
 
-encode_list_tail([], Depth) -> encode([], Depth);
-encode_list_tail([_ | _] = Tail, Depth) -> encode(Tail, Depth);
-encode_list_tail(Tail, Depth) -> encode(Tail, Depth + 1).
-
-encode_list([], _Depth, Acc) -> {ok, lists:reverse(Acc)};
-encode_list([Head | Tail], Depth, Acc) ->
-    case encode(Head, Depth) of
-        {ok, Head1} -> encode_list(Tail, Depth, [Head1 | Acc]);
+encode_list([], Acc) -> {ok, lists:reverse(Acc)};
+encode_list([Head | Tail], Acc) ->
+    case encode_value(Head) of
+        {ok, Head1} -> encode_list(Tail, [Head1 | Acc]);
         error -> error
     end.
 
-decode(_Wire, Depth)
-  when Depth > ?QUOD_MAX_TERM_DEPTH -> error;
-decode({0, Binary}, _Depth)
-  when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
+decode_value({0, Binary})
+  when is_binary(Binary) ->
     Term = try binary_to_existing_atom(Binary, utf8)
            catch error:badarg -> {'$quod_symbol', Binary}
            end,
     {ok, Term};
-decode({1, Binary}, _Depth) when is_binary(Binary) ->
+decode_value({1, Binary}) when is_binary(Binary) ->
     {ok, Binary};
-decode({2, Integer}, _Depth) when is_integer(Integer) ->
+decode_value({2, Integer}) when is_integer(Integer) ->
     {ok, Integer};
-decode({3, Float}, _Depth) when is_float(Float) ->
+decode_value({3, Float}) when is_float(Float) ->
     {ok, Float};
-decode({4, Items}, Depth) when is_list(Items) ->
-    case decode_list(Items, Depth + 1, []) of
+decode_value({4, Items}) when is_list(Items) ->
+    case decode_list(Items, []) of
         %% This tuple is the in-memory representation of an opaque symbol;
         %% its only canonical wire representation is tag 0 above.  Rejecting
         %% the tuple spelling here makes decode_canonical/2 itself enforce the
@@ -739,28 +720,24 @@ decode({4, Items}, Depth) when is_list(Items) ->
         {ok, Terms} -> {ok, list_to_tuple(Terms)};
         error -> error
     end;
-decode({5}, _Depth) ->
+decode_value({5}) ->
     {ok, []};
-decode({6, Head, Tail}, Depth) ->
-    case decode(Head, Depth + 1) of
+decode_value({6, Head, Tail}) ->
+    case decode_value(Head) of
         {ok, Head1} ->
-            case decode_list_tail(Tail, Depth) of
+            case decode_value(Tail) of
                 {ok, Tail1} -> {ok, [Head1 | Tail1]};
                 error -> error
             end;
         error -> error
     end;
-decode(_, _) -> error.
+decode_value(_) -> error.
 
-decode_list_tail({5} = Tail, Depth) -> decode(Tail, Depth);
-decode_list_tail({6, _, _} = Tail, Depth) -> decode(Tail, Depth);
-decode_list_tail(Tail, Depth) -> decode(Tail, Depth + 1).
-
-decode_list([], _Depth, Acc) -> {ok, lists:reverse(Acc)};
-decode_list([Head | Tail], Depth, Acc) ->
-    case decode(Head, Depth) of
-        {ok, Head1} -> decode_list(Tail, Depth, [Head1 | Acc]);
+decode_list([], Acc) -> {ok, lists:reverse(Acc)};
+decode_list([Head | Tail], Acc) ->
+    case decode_value(Head) of
+        {ok, Head1} -> decode_list(Tail, [Head1 | Acc]);
         error -> error
     end;
-decode_list(_ImproperTail, _Depth, _Acc) ->
+decode_list(_ImproperTail, _Acc) ->
     error.

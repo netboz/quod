@@ -368,7 +368,7 @@ with_live_admission(Fun) ->
             true = quod_reg:reg({quod_simplex, Ns}),
             Domain = quod_simplex:consensus_domain(Ns, Anchor),
             {ok, OwnerJournal} = quod_signing_journal:recover(Ns, Domain, Dir),
-            Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+            Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
             _ = ets:new(Table, [named_table, protected, set]),
             true = ets:insert(Table, {anchor, Anchor}),
             Parent ! {owner_ready, self()},

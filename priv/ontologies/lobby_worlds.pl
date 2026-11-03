@@ -137,17 +137,9 @@ world_palette(Palette) :-
 space_member(W,entity_ref(Ns,A,world_sky(W))) :-
     lobby_terrain_world(W),current_ontology_identity(Ns,A).
 
-%% Allocate within the selected renderer's authored policy. The proof retains
-%% these dependencies; a larger physical-world allowance is not a view budget.
-world_render_resources(resources(Transfer,Geometry,Vertices,Triangles,Chunks)) :-
-    world_render_limit(<<"mesh_transfer_bytes">>,Transfer),
-    world_render_limit(<<"mesh_geometry_bytes">>,Geometry),
-    world_render_limit(<<"mesh_vertices">>,Vertices),
-    world_render_limit(<<"mesh_triangles">>,Triangles),
-    world_render_limit(<<"mesh_nodes">>,Chunks).
-world_render_limit(Resource,Limit) :-
-    findall(ontology_ref(N,A),rendering_vocabulary(N,A),[ontology_ref(Ns,Anchor)]),
-    in_ontology(Ns,Anchor,limit(Resource,Limit)).
+%% Visual demand uses the existing finite viewing window and physical resource
+%% admission. No independent default presentation quota is imposed on it.
+world_render_resources(resources(unlimited,unlimited,unlimited,unlimited,unlimited)).
 
 %% Viewing policy scales with ground detail: the initial window spans the same
 %% number of chunks, including its prefetch and retained border.

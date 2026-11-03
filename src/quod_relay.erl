@@ -131,8 +131,7 @@ valid_wire({relay_submit, SubmissionId, AttemptId, Era, TargetSlot,
        TargetSlot =< 16#FFFFFFFFFFFFFFFF,
        is_binary(Author), byte_size(Author) =:= 32,
        is_binary(Signature), byte_size(Signature) =:= 64,
-       is_binary(Canonical),
-       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+       is_binary(Canonical) ->
     quod_trace:valid_carrier(TraceCarrier);
 valid_wire({relay_result, SubmissionId, AttemptId, Era,
             TargetSlot, Result})

@@ -26,7 +26,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          committed_state/1, read_only_state/1, local_changes/1, effects/1,
          prepared_effect/2, sealed_plan/1, effect_reservation/1,
          signer_from_state/1,
-         read_set/1, absorb_read_set/2, proof_policy_reads/1,
+         read_set/1, absorb_read_set/2, proof_policy_reads/1, admit_answer/2,
          live_bridges/1, transcript/1, signer/1,
          seal/2, attest/2,
          dirty/1,
@@ -49,6 +49,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
           %% Admission reads join a material plan; they do not make an
           %% otherwise untouched scope a transaction participant.
           proof_policy_reads = #{} :: map(),
+          proof_limits = none :: none | quod_material_admission:limits(),
           signer = none :: quod_identity:signer() | none,
           invocations = #{} :: #{term() => invocation_state()},
           %% Invocation ids are transcript identities, not reusable worker
@@ -100,7 +101,7 @@ start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
     Handle = #session_ref{owner = self(), id = make_ref()},
     ScopeId = session_scope_id(OverlayOpts),
     Metadata = maps:get(proof_context, OverlayOpts, undefined),
-    PolicyReads = execution_budget(Metadata, Committed),
+    {ProofLimits, PolicyReads} = execution_budget(Metadata, Committed),
     PrivateContext = {session_ref, Handle, Metadata},
     Wrapped = quod_erlog_db_local_prove:wrap_state(
                 Committed, OverlayOpts#{proof_context => PrivateContext}),
@@ -111,16 +112,17 @@ start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
                                        read_only = maps:get(read_only, OverlayOpts, false),
                                        current = Wrapped,
                                        proof_policy_reads = PolicyReads,
+                                       proof_limits = ProofLimits,
                                        signer = Signer,
                                        record_transcript = RecordTranscript}),
     Handle.
 
 %% Only actual proof workers install process limits. Local committed-policy
 %% selectors use the same interpreter without changing their owner's process.
-execution_budget(undefined, _Committed) -> #{};
+execution_budget(undefined, _Committed) -> {none, #{}};
 execution_budget(_Metadata, Committed) ->
     case quod_material_admission:policy(proof, Committed) of
-        {ok, #{heap_bytes := Limit}, Reads} ->
+        {ok, #{heap_bytes := Limit} = Limits, Reads} ->
             WordBytes = erlang:system_info(wordsize),
             {total_heap_size, Words} = process_info(self(), total_heap_size),
             case quod_material_admission:check(proof, #{heap_bytes => Words * WordBytes},
@@ -129,10 +131,32 @@ execution_budget(_Metadata, Committed) ->
                     MaxWords = case Limit of unlimited -> 0; _ -> Limit div WordBytes end,
                     _ = process_flag(max_heap_size,
                                      #{size => MaxWords, kill => true, error_logger => true}),
-                    Reads;
+                    {Limits, Reads};
                 {error, Reason} -> throw({quod_ask_error, Reason})
             end;
         {error, Reason} -> throw({quod_ask_error, Reason})
+    end.
+
+-doc "Admit a produced or received answer against this proof's pinned policy.".
+-spec admit_answer(session() | tuple(), term()) -> ok | {error, term()}.
+admit_answer(#est{} = St, Answer) ->
+    admit_answer(state_handle(St), Answer);
+admit_answer(Handle, Answer) ->
+    State = get_session(Handle),
+    case check_state_access(State) of
+        ok -> admit_answer_bytes(State#session_state.proof_limits, Answer);
+        {error, _} = Error -> Error
+    end.
+
+%% Internal committed-policy selectors have no proof execution allocation;
+%% recursively selecting their own policy would not have a committed owner.
+admit_answer_bytes(none, _Answer) -> ok;
+admit_answer_bytes(Limits, Answer) ->
+    case quod_wire_term:encode_canonical(Answer) of
+        {ok, Bytes} ->
+            quod_material_admission:check(
+              proof, #{answer_bytes => byte_size(Bytes)}, Limits);
+        {error, bad_term} -> {error, {protocol_error, bad_payload}}
     end.
 
 -doc "Stop a session and release its one shared read-set table. Idempotent.".
@@ -224,15 +248,14 @@ record_invocation(
   InvocationId, RequestedGoal, Verdict, Context) ->
     Chain = quod_predicates:ctx_chain(Context),
     case quod_wire_term:encode_canonical(RequestedGoal) of
-        {ok, RequestedGoalBin}
-          when byte_size(RequestedGoalBin) =< ?QUOD_MAX_NESTED_GOAL_BYTES ->
+        {ok, RequestedGoalBin} ->
             Entry = {InvocationId, Chain, RequestedGoalBin, Verdict},
             {ok, State#session_state{
                    transcript_rev = [Entry | Entries],
                    answers = Answers#{InvocationId =>
                        {0, ?TRANSCRIPT_DIGEST_SEED, active}}}};
-        _ ->
-            {error, {too_large, goal}}
+        {error, bad_term} ->
+            {error, {protocol_error, bad_payload}}
     end.
 
 -doc "Derive one answer from an invocation, rebased onto the latest staged view.".
@@ -821,9 +844,16 @@ mark_active(Handle, InvocationId,
         invocations = Invocations#{InvocationId => active}}).
 
 finish_step(Handle, InvocationId, {solution, Solution, Scope}, Selection) ->
-    finish_mutable_step(
-      Handle, InvocationId, Scope, Selection, keep,
-      adopt, {answer, Solution}, {solution, Solution});
+    case admit_answer(Handle, Solution) of
+        ok ->
+            finish_mutable_step(
+              Handle, InvocationId, Scope, Selection, keep,
+              adopt, {answer, Solution}, {solution, Solution});
+        {error, Reason} ->
+            finish_mutable_step(
+              Handle, InvocationId, Scope, Selection, remove,
+              adopt, error, {error, Reason})
+    end;
 finish_step(Handle, InvocationId, {complete, Reasons, Scope}, Selection) ->
     finish_mutable_step(
       Handle, InvocationId, Scope, Selection, remove,

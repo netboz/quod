@@ -49,7 +49,8 @@ materializer_session_case(Dir) ->
         %% A later append cannot expand the already-admitted source snapshot.
         Calls1 = source_calls(Pid),
         ?assertEqual([], full_open_calls(Calls1)),
-        ?assertEqual(2, length([ok || {open_ro_snapshot, _} <- Calls1])),
+        %% The complete admitted local range no longer splits at 256 entries.
+        ?assertEqual(1, length([ok || {open_ro_snapshot, _} <- Calls1])),
         ok = quod_foreign_projection:advance(Pid, Generation, View2),
         ?assertMatch(#{from := 258, height := 259}, ready(Identity, Generation)),
         ?assertMatch({ok, 259, #{}}, read_clauses(

@@ -67,21 +67,12 @@ lens_query(encoding_step(_, _, _, _)).
 lens_query(requires(_, _)).
 lens_query(group_at(_, _)).
 lens_query(group_colour(_, _)).
-lens_query(lens_limit(_, _)).
 lens_query(view(_, _, _)).
 lens_query(diagnosis(_, _, _)).
 
-%% --- the bounds ---------------------------------------------------------------
-%% This ontology's own bounds on what it will produce, not a copy of anyone
-%% else's. They are held below `quod:gui`'s corresponding limits, which the
-%% tests check against that source rather than restating here.
-
-lens_limit(<<"marks">>, 256).
-lens_limit(<<"label">>, 24).
-
 %% --- looking through a lens ---------------------------------------------------
 
-%% view(?Lens, +Parameters, ?Marks): the bounded list of descriptors this lens
+%% view(?Lens, +Parameters, ?Marks): the list of descriptors this lens
 %% and its encoding produce for these parameters. One selection, one layout, one
 %% answer: a caller reads it like any other goal.
 view(Lens, Parameters, Marks) :-
@@ -141,11 +132,6 @@ satisfied(distinct_colours(_Group), Rows) :-
     sort(Colours, Distinct),
     length(Distinct, Count).
 
-satisfied(within(What), Rows) :-
-    length(Rows, Count),
-    lens_limit(What, Max),
-    Count =< Max.
-
 %% An absent value is absent, not out of band. It is shown where `absent/3`
 %% declares, never silently dropped and never counted as a zero.
 within_band(none, _Low, _High) :- !.
@@ -202,7 +188,7 @@ one_mark(row(Thing, Group, Rank, Text), Encoding, Ontology, Depth, Across, Next,
               [f(<<"width">>, Side), f(<<"height">>, High), f(<<"depth">>, Side)],
               transform(X, Y, Z, 0, 0, 0),
               surface(Colour, 0, 900, 0, []),
-              label(Short, <<"above">>),
+              label(Text, <<"above">>),
               Depicts)) :-
     mark_id(Next, Id),
     encoding_extent(Encoding, Side),
@@ -213,7 +199,6 @@ one_mark(row(Thing, Group, Rank, Text), Encoding, Ontology, Depth, Across, Next,
     Z is BackBase + Depth * BackStep,
     Y is High // 2,
     group_colour(Group, Colour),
-    shorten(Text, Short),
     subject(Ontology, Thing, Depicts).
 
 %% The measured channel steps evenly from its base. An absent value sits at the
@@ -245,23 +230,6 @@ digits(Index, Codes) :-
     digits(Quotient, Leading),
     Code is Remainder + 48,
     append(Leading, [Code], Codes).
-
-%% A label is display text, not an identity, so it may be shortened to the
-%% declared bound. Nothing else in a descriptor is.
-shorten(Text, Short) :-
-    binary_codes(Text, Codes),
-    length(Codes, Count),
-    lens_limit(<<"label">>, Max),
-    (   Count =< Max
-    ->  Short = Text
-    ;   leading(Max, Codes, Kept),
-        binary_codes(Short, Kept)
-    ).
-
-leading(0, _Codes, []) :- !.
-leading(Count, [Code | Rest], [Code | Kept]) :-
-    Fewer is Count - 1,
-    leading(Fewer, Rest, Kept).
 
 %% Source is a textual encoding of current knowledge. The default selects all
 %% stored clauses. A predicate lens is an explicit narrower selection, useful
@@ -338,7 +306,6 @@ requires(<<"reach_columns">>, single_valued(<<"reach">>)).
 requires(<<"reach_columns">>, ranked(<<"reach">>, 0, 4)).
 requires(<<"reach_columns">>, ordered(<<"family">>)).
 requires(<<"reach_columns">>, distinct_colours(<<"family">>)).
-requires(<<"reach_columns">>, within(<<"marks">>)).
 
 %% rows(+Lens, +Parameters, -Rows): the selection. Four asks of `quod:licence`,
 %% never one per component: the components, the licences, and what the work may
@@ -449,6 +416,7 @@ prolog_query(prolog_source(_, _)).
 prolog_query(prolog_inspect(_, _, _)).
 prolog_query(prolog_edit_goal(_, _, _, _, _)).
 prolog_query(prolog_clauses(_, _)).
+prolog_query(prolog_workbench_draft(_, _, _)).
 
 %% Explicit interfaces describe callable operations; their declaration grants
 %% no target source-read, invocation, content-edit or policy-edit permission.
@@ -461,6 +429,13 @@ ontology_interface(prolog_edit_goal/5, <<"compile an exact-baseline content or p
 %% The compiler transforms source and goal terms as data. Qualified names in
 %% those terms never authorize implicit argument following by these helpers.
 no_follow(prolog_clauses/2).
+no_follow(prolog_workbench_draft/3).
+no_follow(workbench_fact/1).
+no_follow(workbench_symbol/1).
+no_follow(workbench_change/3).
+no_follow(workbench_remove/3).
+no_follow(workbench_same/2).
+no_follow(workbench_member/2).
 no_follow(prolog_edit_goal/5).
 no_follow(prolog_edit_body/6).
 no_follow(prolog_ordered_clauses/2).
@@ -483,6 +458,45 @@ no_follow(prolog_goal_tree/4).
 
 prolog_clauses(Source, Clauses) :-
     '$quod_program_source'(Clauses, Source).
+
+%% A local source-draft transformation only. The existing guarded compiler and
+%% explicit Preview/Accept retain the original baseline, ACLs and outcome owner.
+%% These edits are raw authored facts; removal is never a cascade/domain delete.
+prolog_workbench_draft(Source, Change, Chunk) :-
+    term_variables([Source, Change], []),
+    '$quod_program_source'(Program, Source),
+    workbench_change(Change, Program, Next),
+    source_chunk_bytes(Bytes), '$quod_source_chunk'(terms(Next), Bytes, Chunk).
+%% The existing source-indicator primitive recognizes wire atom symbols without
+%% allocating them. A not-yet-authored class/name must remain data at this step.
+workbench_symbol(Symbol) :- nonvar(Symbol), '$quod_source_indicator'(Symbol, Symbol/0).
+workbench_fact(isa(C, P)) :- workbench_symbol(C), workbench_symbol(P).
+workbench_fact(instance_of(C, I)) :- workbench_symbol(C), term_variables(I, []).
+workbench_fact(attribute(I, K, V)) :- term_variables([I, K, V], []), workbench_symbol(K).
+workbench_change(add(Fact), Program, Next) :-
+    workbench_fact(Fact), Fact \= instance_of(_, _),
+    (workbench_member(Fact, Program) -> fail_with_reason(fact_already_present)
+    ; append(Program, [Fact], Next)).
+workbench_change(remove(Fact), Program, Next) :-
+    workbench_fact(Fact), workbench_remove(Program, Fact, Next).
+workbench_change(replace(Before, After), Program, Next) :-
+    workbench_fact(Before), workbench_fact(After),
+    functor(Before, Kind, Arity), functor(After, Kind, Arity),
+    After \= instance_of(_, _),
+    (workbench_same(Before, After) -> workbench_member(Before, Program), Next = Program
+    ; workbench_remove(Program, Before, Rest),
+      (workbench_member(After, Rest) -> fail_with_reason(fact_already_present)
+      ; append(Rest, [After], Next))).
+%% Ground wire symbols and their already-materialized atoms name the same fact.
+%% Reuse the source compiler's canonical identity; never allocate input atoms.
+workbench_same(A, B) :-
+    term_variables([A, B], []), prolog_clause(A, CA), prolog_clause(B, CB),
+    term_digest(CA, D), term_digest(CB, D).
+workbench_member(Fact, Program) :- member(Current, Program), workbench_same(Fact, Current), !.
+workbench_remove([Fact | Rest], Expected, Rest) :- workbench_same(Fact, Expected), !.
+workbench_remove([Fact | Rest], Expected, [Fact | Next]) :-
+    workbench_remove(Rest, Expected, Next).
+workbench_remove([], _, _) :- fail_with_reason(fact_not_present).
 
 %% One target inspection path. Catalogued system access is explicit and does
 %% not fall back to an API subset if a retained target lacks the read wrapper.
@@ -681,8 +695,11 @@ prolog_goal_tree(Count, Goals, Rest, (Left, Right)) :-
 
 isa(prolog_editor, eidolon).
 
-eidolon(prolog_editor, subject(Target, Entity),
-        workspace(prolog_editor, Target, Entity, ontology_ref(Tools, ToolsAnchor), View)) :-
+eidolon(prolog_editor, Subject, View) :- eidolon(prolog_editor(all), Subject, View).
+eidolon(prolog_editor(Selection), subject(Target, Entity),
+        workspace(prolog_editor(Selection), Target, Entity, ontology_ref(Tools, ToolsAnchor), View)) :-
+    (Selection == all -> true
+    ; prolog_predicates(Target,Indicators), member(Selection,Indicators)),
     Target = ontology_ref(_, _), term_variables(Target-Entity, []),
     current_ontology_identity(Tools, ToolsAnchor),
     prolog_inspect(Target, presentation, Mode),
@@ -702,3 +719,82 @@ inspection_lens(routes, <<"ontology_routes">>).
 
 prolog_access_view(editable, prolog_editor).
 prolog_access_view(read_only, prolog_source).
+
+%% A graphical encoding of the same inspected ontology. No namespace,
+%% instance or predicate identity is invented by a node or layout occurrence.
+lens(<<"ontology_graph">>, <<"authored classes, memberships and attributes">>).
+encoding(<<"ontology_graph">>, <<"ontology_graph">>, <<"quod:gui">>).
+encoding_layout(<<"ontology_graph">>, <<"ontology_graph">>).
+rows(<<"ontology_graph">>, [Target], [graph(Target, Content)]) :-
+    prolog_inspect(Target, workbench, Content).
+laid_out(Encoding, _, [graph(Target, Content)], Graph) :-
+    encoding_layout(Encoding, <<"ontology_graph">>),
+    workbench_graph(Target, Content, Graph).
+
+eidolon(workbench, subject(Target, Target),
+        workbench(Target, Target, ontology_ref(Tools, Anchor), Graph, Controls, Workspace)) :-
+    current_ontology_identity(Tools, Anchor),
+    prolog_inspect(Target, presentation, Mode), prolog_access_view(Mode, View),
+    gui_view(View, Workspace), view(<<"ontology_graph">>, [Target], Graph),
+    gui_workspace(<<"Ontology workbench">>,
+        [catalogue_selection(node, <<"Class or instance">>),
+         catalogue_selection(fact, <<"Relations and attributes">>),
+         button(new_class, <<"New class">>), button(new_attribute, <<"Add text attribute">>),
+         button(edit_fact, <<"Edit selected fact">>),
+         button(remove_fact, <<"Prepare fact removal (no cascade)">>),
+         button(open_subject, <<"View selected subject / actions">>),
+         text_box(class_name, <<"Class name">>), catalogue_selection(parent, <<"Parent class">>),
+         text_box(attribute_name, <<"Attribute name">>), text_box(attribute_value, <<"Text value">>),
+         button(add_class, <<"Prepare class">>),
+         button(add_attribute, <<"Prepare text attribute">>),
+         button(replace_fact, <<"Prepare replacement">>), button(cancel_edit, <<"Back to inspection">>),
+         button(show_source, <<"Source draft / Preview / Save">>),
+         button(exact_details, <<"Exact selected data / limits">>)], Controls).
+
+workbench_graph(ontology_ref(Ns, A), content(Parents, Members, Attributes),
+                graph(Nodes, Facts, Marks)) :-
+    findall(C, (member(isa(C, _), Parents); member(isa(_, C), Parents);
+                member(instance_of(C, _), Members)), C0), sort(C0, Classes),
+    findall(I, member(instance_of(_, I), Members), I0), sort(I0, Instances),
+    findall(node(class, class_ref(Ns, A, C)), member(C, Classes), CN),
+    findall(node(instance, entity_ref(Ns, A, I)), member(I, Instances), IN),
+    append(CN, IN, Nodes),
+    append(Parents, Members, PM), append(PM, Attributes, Facts),
+    workbench_marks(Nodes, Ns, A, 0, NodeMarks),
+    workbench_links(PM, Nodes, Ns, A, 0, Links), append(NodeMarks, Links, Marks).
+workbench_marks([], _, _, _, []).
+workbench_marks([node(Kind, Ref) | Rest], Ns, A, Index, [Mark | Marks]) :-
+    workbench_position(Index, X, Y),
+    mark_id(Index, Id),
+    (Kind == class -> Shape = <<"box">>, Colour = <<"#F9C80E">>,
+       Sizes = [f(<<"width">>, 800), f(<<"height">>, 500), f(<<"depth">>, 200)], Depicted = Ref
+    ; Shape = <<"sphere">>, Colour = <<"#6A90D9">>,
+      Sizes = [f(<<"diameter">>, 500)], Ref = entity_ref(Ns, A, Depicted)),
+    Ref =.. [_ | RefParts], append(_, [Local], RefParts),
+    '$quod_program_source'([Local], Label),
+    Mark = mark(Id, Shape, Sizes, transform(X, Y, 0, 0, 0, 0),
+                surface(Colour, 0, 900, 0, []), label(Label, <<"above">>), depicts(Ns, A, Depicted)),
+    Next is Index + 1, workbench_marks(Rest, Ns, A, Next, Marks).
+workbench_links([], _, _, _, _, []).
+workbench_links([Fact | Rest], Nodes, Ns, A, Index, Marks) :-
+    (Fact = isa(C, P) -> Left = class_ref(Ns, A, C), Right = class_ref(Ns, A, P), Colour = <<"#F9C80E">>
+    ; Fact = instance_of(C, I), Left = entity_ref(Ns, A, I), Right = class_ref(Ns, A, C), Colour = <<"#6A90D9">>),
+    workbench_index(Nodes, Left, 0, L), workbench_index(Nodes, Right, 0, R),
+    workbench_position(L, X1, Y1), workbench_position(R, X2, Y2),
+    Width is abs(X2 - X1) + 20, Height is abs(Y2 - Y1) + 20,
+    X is (X1 + X2) // 2, Y is (Y1 + Y2) // 2, Z is -200,
+    mark_id(Index, Base), binary_codes(Base, Codes),
+    binary_codes(H, [104 | Codes]), binary_codes(V, [118 | Codes]),
+    Surface = surface(Colour, 0, 900, 0, []),
+    Horizontal = mark(H, <<"box">>, [f(<<"width">>, Width), f(<<"height">>, 20), f(<<"depth">>, 20)],
+                      transform(X, Y1, Z, 0, 0, 0), Surface, unlabelled, depicts_nothing),
+    Vertical = mark(V, <<"box">>, [f(<<"width">>, 20), f(<<"height">>, Height), f(<<"depth">>, 20)],
+                    transform(X2, Y, Z, 0, 0, 0), Surface, unlabelled, depicts_nothing),
+    Next is Index + 1, workbench_links(Rest, Nodes, Ns, A, Next, More),
+    Marks = [Horizontal, Vertical | More].
+workbench_index([node(_, Ref) | _], Ref, Index, Index) :- !.
+workbench_index([_ | Rest], Ref, Index, Result) :-
+    Next is Index + 1, workbench_index(Rest, Ref, Next, Result).
+%% Presentation spacing is independent of source identity and label length.
+workbench_position(Index, X, Y) :-
+    X is (Index mod 6) * 3000, Y is -(Index // 6) * 1200.

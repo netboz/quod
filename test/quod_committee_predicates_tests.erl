@@ -1,5 +1,6 @@
 -module(quod_committee_predicates_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ingress_limits.hrl").
 
@@ -70,12 +71,10 @@ admit_unready_fails_test() ->
     ?assertEqual(fail, with_ready(Ns, Ready,
                                   fun() -> scope(ctx(Ns, kb([])), {admit, Cold, "10.0.0.9", 9000}) end)).
 
-%% The predicate gives an honest caller the same bounded-committee result as
-%% the authoritative proposal/history gate: member 64 can be staged, member
-%% 65 cannot.
-admit_enforces_validator_cap_test() ->
+%% Admission remains governed by readiness and existing permission predicates.
+admit_has_no_validator_population_quota_test() ->
     Ns = <<"cp:cap">>,
-    Members = [<<I:256>> || I <- lists:seq(0, ?MAX_VALIDATORS - 1)],
+    Members = [<<I:256>> || I <- lists:seq(0, ?LEGACY_MAX_VALIDATORS - 1)],
     Candidate = lists:last(Members),
     AtLimitChanges =
         with_ready(
@@ -88,9 +87,9 @@ admit_enforces_validator_cap_test() ->
           end),
     ?assertMatch([{assert, {{peer_admitted, Candidate, "h", 1,
                              Candidate}, _}}], AtLimitChanges),
-    Extra = <<?MAX_VALIDATORS:256>>,
-    ?assertEqual(
-       fail,
+    Extra = <<?LEGACY_MAX_VALIDATORS:256>>,
+    ?assertMatch(
+       [{assert, {{peer_admitted, Extra, "h", 1, Extra}, _}}],
        with_ready(
          Ns, Extra,
          fun() ->

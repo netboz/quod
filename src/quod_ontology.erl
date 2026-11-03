@@ -43,8 +43,6 @@ conveniences around that preparation and execution code.
 -export_type([structural_descriptor/0, prepared_descriptor/0]).
 
 -define(ROOT_NS, <<"quod:root">>).
--define(MAX_NAMESPACE_BYTES, 128).
--define(MAX_ERROR_TERM_BYTES, 4096).
 
 -type creation() ::
         {ok, created | resumed, binary(), binary()} |
@@ -764,8 +762,6 @@ canonical_name(Name) ->
 
 validate_name(<<>>) ->
     {error, invalid_name};
-validate_name(Ns) when byte_size(Ns) > ?MAX_NAMESPACE_BYTES ->
-    {error, invalid_name};
 validate_name(Ns) ->
     try unicode:characters_to_binary(Ns, utf8, utf8) of
         Ns -> {ok, Ns};
@@ -898,8 +894,7 @@ invalid_initial_term(Term) ->
     end.
 
 safe_error_term(Term) ->
-    try erlang:external_size(Term) =< ?MAX_ERROR_TERM_BYTES
-            andalso portable_term(Term)
+    try portable_term(Term)
     catch _:_ -> false
     end.
 

@@ -7,7 +7,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_vm_limits.hrl").
 
 signature_test() ->
     with_measure(fun(St) ->

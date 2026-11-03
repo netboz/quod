@@ -103,9 +103,9 @@ public static class Wire
     {
         byte[] anchor = Identity.Decode(actor.Anchor), ns = Encoding.UTF8.GetBytes(actor.Namespace),
             instance = Encoding.UTF8.GetBytes(actor.InstanceText), text = Encoding.UTF8.GetBytes(goal);
-        // These are the existing wire encoding bounds, not resource budgets.
+        // Exact identity widths; the signed length writes below are checked.
         if (network.Length != 32 || key.Length != 32 || operation.Length != 32 || anchor.Length != 32 ||
-            ns.Length is < 1 or > 255 || instance.Length is < 1 or > 131072 || text.Length is < 1 or > 131072 || mode > 3 || deadline == 0)
+            ns.Length < 1 || instance.Length < 1 || text.Length < 1 || mode > 3 || deadline == 0)
             throw new FormatException("Invalid signed request.");
         using var s = new MemoryStream(); s.Write(Encoding.UTF8.GetBytes("quod.agent.goal.v1\0"));
         s.Write(network); s.Write(key); s.Write(operation);

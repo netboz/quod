@@ -113,7 +113,7 @@ with_targets(Fun) ->
     F = fixture(), Test = self(),
     Targets = [begin
         Pid = spawn(fun() ->
-            Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+            Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
                             [named_table, protected, set]),
             true = ets:insert(Table, {anchor, Anchor}),
             true = quod_reg:reg({quod_simplex, Ns}),

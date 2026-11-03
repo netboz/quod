@@ -87,3 +87,8 @@ test('each measured resource is checked against its authorized allowance', () =>
     assert.throws(() => validateGlb(fixture, allowed), /exceeded/)
   }
 })
+
+test('unallocated presentation still validates and measures the asset', () => {
+  assert.deepEqual(validateGlb(fixture, Array(7).fill(Infinity)).costs, validateGlb(fixture, limits).costs)
+  assert.throws(() => validateGlb(fixture, [Infinity, 1, Infinity, Infinity, Infinity, Infinity, Infinity]), /geometry bytes exceeded/)
+})

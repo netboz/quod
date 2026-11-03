@@ -107,11 +107,8 @@ decode_typed(Bytes) ->
 
 -doc "Decode one exact signed-goal request without parsing or allocating goal symbols.".
 -spec decode(term()) -> {ok, request()} | {error, error_reason()}.
-decode(Bytes)
-  when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
-    decode_bounded(Bytes);
 decode(Bytes) when is_binary(Bytes) ->
-    {error, {too_large, request}};
+    decode_bounded(Bytes);
 decode(_) ->
     {error, invalid_request}.
 
@@ -223,8 +220,7 @@ authorization_transcript(Transcript, Target, GoalBlob)
     case Matches of
         [Entry] ->
             case quod_wire_term:encode_canonical([Entry]) of
-                {ok, Blob}
-                  when byte_size(Blob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES ->
+                {ok, Blob} ->
                     {ok, {agent_goal_v1, Blob}};
                 _ -> error
             end;
@@ -240,11 +236,10 @@ verify_authorization(
                  agent_genesis_anchor := Anchor},
     goal_blob := GoalBlob},
   {agent_goal_v1, Blob})
-  when is_binary(Ns), is_binary(GoalBlob), is_binary(Blob),
-       byte_size(Blob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES ->
+  when is_binary(Ns), is_binary(GoalBlob), is_binary(Blob) ->
     Target = {Ns, Anchor},
     case quod_wire_term:decode_canonical(
-           Blob, ?QUOD_MAX_PLAN_ENVELOPE_BYTES) of
+           Blob, unlimited) of
         {ok, [Entry0]} ->
             case quod_wire_term:materialize_symbols([Entry0]) of
                 {ok, [Entry]} ->
@@ -445,7 +440,7 @@ validate_scalars(Namespace, InstanceText, Mode, NotAfter, GoalText) ->
           valid_instance_text(InstanceText), valid_utf8(GoalText)} of
         {false, _, _, _, _} when is_binary(Namespace),
                              byte_size(Namespace) >
-                                 ?DIRECTORY_MAX_NAMESPACE_BYTES ->
+                                 ((1 bsl 16) - 1) ->
             {error, {too_large, namespace}};
         {false, _, _, _, _} ->
             {error, invalid_request};
@@ -453,7 +448,7 @@ validate_scalars(Namespace, InstanceText, Mode, NotAfter, GoalText) ->
             {error, invalid_request};
         {_, _, _, false, _} when is_binary(InstanceText),
                                   byte_size(InstanceText) >
-                                      ?QUOD_CLIENT_AGENT_INSTANCE_TEXT_BYTES ->
+                                      (1 bsl 32) - 1 ->
             {error, {too_large, agent_instance_text}};
         {_, _, _, false, _} ->
             {error, invalid_request};
@@ -461,7 +456,7 @@ validate_scalars(Namespace, InstanceText, Mode, NotAfter, GoalText) ->
             {error, invalid_request};
         {_, _, _, _, false} when is_binary(GoalText),
                               byte_size(GoalText) >
-                                  ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
+                                  (1 bsl 32) - 1 ->
             {error, {too_large, goal_text}};
         {_, _, _, _, false} ->
             {error, invalid_request};
@@ -471,17 +466,17 @@ validate_scalars(Namespace, InstanceText, Mode, NotAfter, GoalText) ->
 
 valid_instance_text(Text) ->
     is_binary(Text) andalso byte_size(Text) > 0 andalso
-        byte_size(Text) =< ?QUOD_CLIENT_AGENT_INSTANCE_TEXT_BYTES andalso
+        byte_size(Text) =< (1 bsl 32) - 1 andalso
         valid_utf8_bytes(Text).
 
 valid_namespace(Namespace) ->
     is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
-        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES andalso
+        byte_size(Namespace) =< ((1 bsl 16) - 1) andalso
         valid_utf8_bytes(Namespace).
 
 valid_utf8(GoalText) ->
     is_binary(GoalText) andalso byte_size(GoalText) > 0 andalso
-        byte_size(GoalText) =< ?QUOD_CLIENT_GOAL_TEXT_BYTES andalso
+        byte_size(GoalText) =< (1 bsl 32) - 1 andalso
         valid_utf8_bytes(GoalText).
 
 valid_utf8_bytes(Bytes) ->

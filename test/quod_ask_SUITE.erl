@@ -16,6 +16,7 @@
          remote_plain_read_rejects_lying_validator/1,
          remote_scope_solutions/1, remote_scope_trace_parentage/1,
          proof_policy_refusal_local_and_remote/1,
+         answer_policy_producer_consumer_and_signed_change/1,
          remote_scope_symbol_safety/1,
          remote_signed_fresh_nested_symbol/1,
          remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
@@ -75,6 +76,7 @@ all() -> [remote_signed_transaction_savepoints,
           remote_plain_read_rejects_lying_validator,
           remote_scope_solutions, remote_scope_trace_parentage,
           proof_policy_refusal_local_and_remote,
+          answer_policy_producer_consumer_and_signed_change,
           remote_scope_symbol_safety,
           remote_signed_fresh_nested_symbol,
           remote_scope_chain_policy, remote_scope_failure_reasons,
@@ -1053,6 +1055,72 @@ proof_policy_refusal_local_and_remote(Config) ->
                      when Actual > 0,
             peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
     end, [{Target, ?NS}, {Asker, ?ASKER_NS}]).
+
+answer_policy_producer_consumer_and_signed_change(Config) ->
+    Target = ?config(target, Config), Asker = ?config(asker, Config),
+    Ns = <<"answer-policy-target">>, Value = binary:copy(<<"a">>, 80000),
+    Source = filename:join(?config(priv_dir, Config), "answer-policy-target.pl"),
+    ok = file:write_file(Source, [
+        "can_invoke(_Goal, _Principal, _Chain, _Ns).\n",
+        "material_limit_override(proof, answer_bytes, 1000).\n",
+        "answer_value(<<\"", Value, "\">>).\n"]),
+    ok = start_namespace(Target, ?config(target_pub, Config), Ns, Source, [], Config),
+    ok = peer:call(Target, quod_ct, await_applied, [Ns, 1, 10000], 15000),
+    Anchor = peer:call(Target, quod_simplex, genesis_hash, [Ns]),
+    ok = enrollment_route(Asker, ?config(target_pub, Config), ?config(target_addr, Config),
+        [{Ns, Anchor, validator}, {?NS, ?config(target_anchor, Config), validator},
+         {?FOURTH_NS, peer:call(Target, quod_simplex, genesis_hash, [?FOURTH_NS]), validator},
+         {?ROOT_NS, ?config(network_id, Config), validator}]),
+    Goal = {'::', Ns, {answer_value, {'Value'}}},
+    {ok, Canonical} = quod_wire_term:encode_canonical({answer_value, Value}),
+    Actual = byte_size(Canonical),
+    Expected = {error, {material_limit, proof, answer_bytes, Actual, 1000}},
+    %% Same selected producer, direct/cohosted/remote consumers.
+    ?assertEqual(Expected, peer:call(Target, quod_prolog, prove_ro,
+                                    [Ns, {answer_value, {'Value'}}], 15000)),
+    lists:foreach(fun({Peer, Origin}) ->
+        ?assertEqual(Expected, peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
+    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]),
+    %% Raise through the ordinary signed action, under the OLD committed policy.
+    Selector = {'$quod_symbol', Ns},
+    Raise = {'::', Selector, {',', {retract, {material_limit_override, proof, answer_bytes, 1000}},
+                            {assertz, {material_limit_override, proof, answer_bytes, 120000}}}},
+    {ok, RaiseText} = quod_client_goal_parser:format(Raise),
+    {ok, _} = quod_client_goal_parser:parse(RaiseText, 1),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+                 submit_signed_execute(Config, RaiseText)),
+    lists:foreach(fun({Peer, Origin}) ->
+        ?assertMatch({ok, [#{'Value' := Value}], _},
+                     peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
+    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]),
+    %% The outer rule exposes no large binding. Its receiving proof must still
+    %% account for the computed foreign answer before consuming/discarding it.
+    Rule = {':-', answer_seen, {'::', Selector, {answer_value, {0}}}},
+    {ok, RuleText} = quod_client_goal_parser:format({assertz, Rule}),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+                 submit_signed_execute(Config, RuleText)),
+    Session = ?config(client_session, Config),
+    Read = fun() ->
+        {Bytes, Sig} = signed_goal_request(?config(network_id, Config),
+            ?config(agent_pub, Config), ?config(agent_key, Config),
+            ?ASKER_NS, ?config(asker_anchor, Config), maps:get(expires_ms, Session),
+            read, <<"answer_seen.">>),
+        peer:call(Asker, quod_client_goal_ingress, submit,
+            [read, maps:get(session_id, Session), Bytes, Sig, ?config(client_peer, Config)], 60000)
+    end,
+    ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}}, Read()),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+        submit_signed_execute(Config,
+            <<"assertz(material_limit_override(proof, answer_bytes, 1000)).">>)),
+    ?assertEqual(Expected, peer:call(Asker, quod_prolog, prove_ro,
+                                    [?ASKER_NS, answer_seen], 15000)),
+    ?assertMatch({ok, _, {normalized, {read, _, Expected}}}, Read()),
+    %% A remote allowance never grants local capacity. Restore via a new,
+    %% explicitly intended small authorized action, not a replay of the read.
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+        submit_signed_execute(Config,
+            <<"retract(material_limit_override(proof, answer_bytes, 1000)).">>)),
+    ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}}, Read()).
 
 remote_scope_trace_parentage(Config) ->
     Target = ?config(target, Config),

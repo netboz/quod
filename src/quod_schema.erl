@@ -131,9 +131,13 @@ fields(content) ->
     , {ledger_dir,   hoconsc:mk(binary(), #{default => <<"">>})}
     , {seeds,        hoconsc:mk(hoconsc:array(binary()), #{default => []})}
     , {max_proof_workers,
-       hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
+       hoconsc:mk(hoconsc:union([hoconsc:enum([unlimited]), integer()]),
+                  #{default => unlimited, validator => fun(N) -> N =:= unlimited orelse
+                      (is_integer(N) andalso N > 0) end})}
     , {max_scope_workers,
-       hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
+       hoconsc:mk(hoconsc:union([hoconsc:enum([unlimited]), integer()]),
+                  #{default => unlimited, validator => fun(N) -> N =:= unlimited orelse
+                      (is_integer(N) andalso N > 0) end})}
     , {proof_timeout_ms,
        hoconsc:mk(integer(), #{default => 300000, validator => fun(N) -> N > 0 end})}
     , {transaction_ttl_ms,

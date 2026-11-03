@@ -2,7 +2,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
--include("quod_vm_limits.hrl").
 
 -define(ROOT_NS, <<"quod:root">>).
 -define(NODE_NS, <<"quod:node">>).

@@ -1,0 +1,17 @@
+{
+  "question_cell": "374",
+  "answers": {
+    "application": {"type": "singleSelect", "selectedId": "authorize"},
+    "dependency_delivery": {"type": "singleSelect", "selectedId": "authorize_erlog"}
+  },
+  "respondedBy": "desktop",
+  "respondedAt": 1793723618479,
+  "scope": "Apply the three frozen consolidated02 patches and run affected software checks. Limited exception to no-commit authorizes reviewed Erlog-only commit/publication to existing netboz/erlog fork and exact dependency pin after validation; required commit proposal remains. Quod uncommitted. No deployment, migration, deletion or deadline changes.",
+  "patches": {
+    "remaining-owners.patch": "20df667750c420a6a3f95600531cca6c025b964ac39fe5197a75d07b69807ea3",
+    "namespace-admission-CONDITIONAL.patch": "c901aa315e1a06d312021c6764412bfa2bbb026d0a49e8ec6c254a4386d3b235",
+    "erlog-diagnostics.patch": "365222a87f7bce76d6c51e3de92656be805b60bb937f2bb76dc28b7dd33e1eb3"
+  },
+  "prior_automatic_rejection_preserved": "doc/evidence/stage2-presentation-boundaries-20261103/inputs/carrier-edit-rejection01.json",
+  "instruction": "Apply the reviewed patches under this new authority, never replay the rejected broad script. No claim of runtime acceptance from approval or compilation."
+}

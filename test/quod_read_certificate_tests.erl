@@ -1,4 +1,5 @@
 -module(quod_read_certificate_tests).
+-include("retired_presentation_sizes.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_proof_limits.hrl").
@@ -40,40 +41,42 @@ canonical_codec_roundtrips_and_rejects_noncanonical_or_wrong_shape_test() ->
        quod_read_certificate:decode(
          term_to_binary({quod_read_certificate, 99}, [deterministic]))).
 
-codec_bound_is_owned_by_the_dtx_body_limit_test() ->
-    AtLimit = binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES),
+large_malformed_certificate_refuses_by_shape_test() ->
+    AtLimit = binary:copy(<<0>>, ?LEGACY_MAX_DTX_BODY_BYTES),
     AboveLimit = <<AtLimit/binary, 0>>,
-    %% The exact-limit blob reaches decoding and fails only because it is not
-    %% a certificate; the next byte is rejected by the shared byte owner.
+    %% Neither historical byte boundary preempts certificate validation.
     ?assertEqual(
        {error, invalid_read_certificate},
        quod_read_certificate:decode(AtLimit)),
     ?assertEqual(
-       {error, too_large},
+       {error, invalid_read_certificate},
        quod_read_certificate:decode(AboveLimit)).
 
-encoder_bound_is_already_enforced_by_binding_test() ->
+large_certificate_codec_preserves_signature_binding_test() ->
     F = fixture(1), Certificate = certificate(F, maps:get(signers, F)),
     {ok, Blob} = quod_read_certificate:encode(Certificate),
     ?assertEqual(erlang:external_size(Certificate), byte_size(Blob)),
     {Ns, Anchor} = element(3, Certificate),
     Ref = element(6, Certificate),
     Overhead = byte_size(Blob) - 2 * byte_size(Ns),
-    AtNs = binary:copy(<<"n">>, (?QUOD_MAX_DTX_BODY_BYTES - Overhead) div 2),
+    AtNs = binary:copy(<<"n">>, (?LEGACY_MAX_DTX_BODY_BYTES - Overhead) div 2),
     AtRef = setelement(3, Ref, AtNs),
     AtLimit = setelement(6, setelement(3, Certificate, {AtNs, Anchor}), AtRef),
     {ok, AtBytes} = quod_read_certificate:encode(AtLimit),
-    ?assert(byte_size(AtBytes) =< ?QUOD_MAX_DTX_BODY_BYTES),
-    ?assert(byte_size(AtBytes) >= ?QUOD_MAX_DTX_BODY_BYTES - 1),
+    ?assert(byte_size(AtBytes) =< ?LEGACY_MAX_DTX_BODY_BYTES),
+    ?assert(byte_size(AtBytes) >= ?LEGACY_MAX_DTX_BODY_BYTES - 1),
     ?assertEqual({ok, AtBytes}, quod_scope_wire:encode_payload(read_certificate, AtLimit)),
     AboveNs = <<AtNs/binary, "n">>,
     AboveRef = setelement(3, Ref, AboveNs),
     ?assert(quod_dtx:validate_certified_ref(AboveRef)),
     Oversized = setelement(6, setelement(3, Certificate, {AboveNs, Anchor}), AboveRef),
-    ?assertEqual(error, quod_read_certificate:binding(Oversized)),
-    ?assertEqual({error, invalid_read_certificate}, quod_read_certificate:encode(Oversized)),
-    ?assertEqual({error, {protocol_error, bad_payload}},
-                 quod_scope_wire:encode_payload(read_certificate, Oversized)).
+    ?assertMatch({ok, _}, quod_read_certificate:binding(Oversized)),
+    {ok, AboveBytes} = quod_read_certificate:encode(Oversized),
+    ?assertEqual({ok, Oversized}, quod_read_certificate:decode(AboveBytes)),
+    ?assertEqual({ok, AboveBytes},
+                 quod_scope_wire:encode_payload(read_certificate, Oversized)),
+    ?assertNot(quod_read_certificate:verify(
+        Oversized, committee(F), maps:get(committee_id, F))).
 
 every_read_statement_field_is_signature_bound_test() ->
     F = fixture(1),

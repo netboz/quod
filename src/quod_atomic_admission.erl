@@ -20,11 +20,10 @@ Missing material never blocks later ready rows.
 """.
 
 -include("quod_dtx_owner.hrl").
--include("quod_ingress_limits.hrl").
 -export([new/0, reserve/5, activate/3, cancel/3, admit/4, recheck/2,
          selection_key/3, engine_lost/2, parent_applied/3,
          next/3, verdict/4, take/2, take_all/1, detach_waiter/2, contains/2,
-         trace_context/2, counts/1, has_capacity/2]).
+         trace_context/2, counts/1]).
 -export_type([state/0]).
 -ifdef(TEST).
 -export([advance_selection/3]).
@@ -42,7 +41,7 @@ new() -> {#{}, gb_trees:empty()}.
 
 -doc "Reserve sealed source material before private effects bind; do not activate it.".
 -spec reserve(pid(), reference(), quod_atomic:admission_material(), map(), state()) ->
-          {ok, state()} | {error, invalid_dtx_intent | busy}.
+          {ok, state()} | {error, invalid_dtx_intent}.
 reserve(Engine, Token, Material, Trace, Rows = {ById, _}) ->
     Id = group(Material),
     case contains(Id, Rows) orelse lists:any(fun
@@ -50,7 +49,6 @@ reserve(Engine, Token, Material, Trace, Rows = {ById, _}) ->
         (_) -> false
     end, maps:values(ById)) of
         true -> {error, invalid_dtx_intent};
-        false when map_size(ById) >= ?MAX_INGRESS_TXS -> {error, busy};
         false -> {ok, insert(#intent{material = Material,
                     proof = {Engine, Token}, trace = Trace}, Rows)}
     end.
@@ -240,9 +238,6 @@ detach_waiter(Pid, Rows) ->
 -spec contains(binary(), state()) -> boolean().
 contains(Id, {ById, _}) -> maps:is_key(Id, ById).
 
--doc "Bound new volatile groups, not duplicate callers or journal-restored responsibilities.".
--spec has_capacity(binary(), state()) -> boolean().
-has_capacity(Id, {ById, _}) -> maps:is_key(Id, ById) orelse map_size(ById) < ?MAX_INGRESS_TXS.
 
 -doc "Read the original caller context from an existing admission row; never borrow ambient ancestry.".
 -spec trace_context(binary(), state()) -> map().

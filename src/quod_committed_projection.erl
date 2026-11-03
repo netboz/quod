@@ -54,10 +54,8 @@ prepared material all pass through the existing canonical validators.
 new_est() ->
     {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
     Est0 = element(3, Erl),
-    EstReasonBounded = erlog_int:set_failure_reason_policy(
-                         {quod_wire_term, valid_failure_reason_stack}, Est0),
     {succeed, Est1} = erlog_int:prove_goal(
-                        {set_prolog_flag, unknown, fail}, EstReasonBounded),
+                        {set_prolog_flag, unknown, fail}, Est0),
     Est2 = quod_predicates:load(Est1),
     Est3 = quod_ask:load(Est2),
     Est4 = quod_transaction_predicates:load(Est3),

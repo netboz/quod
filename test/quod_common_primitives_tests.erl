@@ -6,8 +6,8 @@
 %% and the contexts where it must refuse (no proof, verdict engines).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_vm_limits.hrl").
 
 -define(NS, <<"test:primitives">>).
 -define(DRAW, '$quod_draw').
@@ -406,7 +406,7 @@ program_source_does_not_allocate_callable_or_data_atoms_test() ->
 program_source_large_draft_still_allocates_no_atoms_test() ->
     Suffix = integer_to_binary(erlang:unique_integer([positive, monotonic])),
     Names = [<<"quod_edit_budget_", Suffix/binary, "_", (integer_to_binary(N))/binary>>
-             || N <- lists:seq(1, ?QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
+             || N <- lists:seq(1, ?LEGACY_QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
     Text = iolist_to_binary([[Name, ".\n"] || Name <- Names]),
     with_authored([], fun(St) ->
         Clauses = value({'Program'}, {'$quod_program_source', {'Program'}, Text}, St),

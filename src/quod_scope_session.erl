@@ -28,7 +28,7 @@ a synchronous call to itself.
          pid/1, scope_id/1, identity/1, failure_reason/2]).
 
 -ifdef(TEST).
--export([test_answer_disposition/1, test_committed_submit_outcome/3,
+-export([test_committed_submit_outcome/3,
          test_await_remote_submit/5,
          test_normalize_read_certificate_result/1]).
 -endif.
@@ -1434,7 +1434,7 @@ trace_invocation(Name, Fun) ->
 handle_open(RequestRef, InvocationId, Goal, Chain, Selection) ->
     Runtime0 = runtime(),
     Reply =
-        case valid_invocation_input(InvocationId, Goal, Chain, Selection) of
+        case valid_invocation_input(InvocationId, Chain, Selection) of
             false -> {error, {protocol_error, request_binding}};
             true ->
                 case maps:is_key(InvocationId, Runtime0#runtime.invocations) of
@@ -1519,10 +1519,7 @@ finish_next(RequestRef, InvocationId, Seq, {solution, Solution}) ->
                  Session,
                  fun() ->
                      Dirty = quod_proof_session:dirty(Session),
-                     case answer_disposition(Solution) of
-                         ok -> {solution_ready, Dirty};
-                         {error, Reason} -> {result_error, Reason}
-                     end
+                     {solution_ready, Dirty}
                  end),
     case Prepared of
         {error, Reason} ->
@@ -1534,10 +1531,7 @@ finish_next(RequestRef, InvocationId, Seq, {solution, Solution}) ->
               invocations = Invocations#{
                 InvocationId => Seq + 1}}),
             Independent = quod_proof_session:independent_intent(Session, InvocationId),
-            send_reply(RequestRef, {solution, Seq, Solution, Dirty, Independent});
-        {result_error, Reason} ->
-            remove_invocation(InvocationId),
-            send_next_error(RequestRef, Reason)
+            send_reply(RequestRef, {solution, Seq, Solution, Dirty, Independent})
     end,
     handled;
 finish_next(RequestRef, InvocationId, Seq, {complete, Reasons}) ->
@@ -1925,7 +1919,7 @@ valid_command(Origin, ProofId, Ref) ->
         _ -> false
     end.
 
-valid_invocation_input(InvocationId, Goal, Chain, Selection) ->
+valid_invocation_input(InvocationId, Chain, Selection) ->
     is_binary(InvocationId) andalso byte_size(InvocationId) =:= 16 andalso
     %% A wire/co-hosted invocation ALWAYS carries its origin, so the chain is
     %% never empty here. This is load-bearing for the genesis host-entry policy:
@@ -1934,18 +1928,7 @@ valid_invocation_input(InvocationId, Goal, Chain, Selection) ->
     %% host-entry default admission.
     is_list(Chain) andalso Chain =/= [] andalso
     lists:all(fun valid_identity/1, Chain) andalso
-    quod_transaction_scope:valid_selection(Selection) andalso
-    erlang:external_size(Goal) =< ?QUOD_MAX_NESTED_GOAL_BYTES.
-
-answer_disposition(Answer) ->
-    case erlang:external_size(Answer) =< ?QUOD_MAX_PROOF_ANSWER_BYTES of
-        true -> ok;
-        false -> {error, {too_large, answer}}
-    end.
-
--ifdef(TEST).
-test_answer_disposition(Answer) -> answer_disposition(Answer).
--endif.
+    quod_transaction_scope:valid_selection(Selection).
 
 valid_identity({Ns, <<_:256>>}) when is_binary(Ns), byte_size(Ns) > 0 -> true;
 valid_identity(_) -> false.

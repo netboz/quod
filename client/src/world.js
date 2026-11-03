@@ -112,7 +112,7 @@ export function readGuiView(binding) {
   requireProjection(root)
   const roles = new Set()
   const contracts = {
-    container: ['layout'], display: [], button: ['image'],
+    container: ['layout', 'appearance'], display: [], button: ['image'],
     text: ['required', 'readonly', 'max_bytes'], number: ['required', 'readonly', 'range', 'unit'],
     boolean: ['required', 'readonly'], choice: ['required', 'readonly', 'options'],
     editor: ['readonly'], bindings: [], catalogue_selection: ['readonly'],
@@ -138,6 +138,11 @@ export function readGuiView(binding) {
       if (!['label', 'help', 'enabled', ...contracts[family ?? field.kind], ...({ selectable_list: ['multiple'], table: ['multiple', 'headings'], image: ['image'], grid: ['columns'], scroll: ['visible_rows'], progress: ['percent'] }[field.kind] ?? [])].includes(key.value)) throw new Error('unsupported GUI property for component kind')
       seen.add(key.value)
       switch (key.value) {
+        case 'appearance':
+          // The browser retains its existing adapter defaults. An authored
+          // appearance needs a capable adapter; never silently drop its data.
+          if (value.type !== 'atom' || value.value !== 'inherit') throw new Error('authored GUI appearance requires a supporting renderer')
+          break
         case 'image':
           if (!(value.type === 'atom' && value.value === 'none')) field.image = readImageAsset(value)
           break
@@ -406,12 +411,17 @@ export function readEidolonRepresentation(binding, subject) {
   const lens = result.functor === 'lens_view'
   const [controller, ...content] = lens ? [null, ...args(result, 'lens_view', 5)] : args(result, 'workspace', 5)
   const [ref, entity, tools, view, parameters] = content
-  if (!lens && (controller.type !== 'atom' || !['prolog_editor', 'proof_console', 'space_library'].includes(controller.value))) throw new Error('unsupported workspace controller')
+  const editor = !lens && controller.type === 'compound' && controller.functor === 'prolog_editor'
+  const selection = editor ? args(controller, 'prolog_editor', 1)[0] : null
+  if (!lens && !editor && (controller.type !== 'atom' || !['proof_console', 'space_library'].includes(controller.value))) throw new Error('unsupported workspace controller')
+  if (selection && !(selection.type === 'atom' && selection.value === 'all') &&
+      !(selection.type === 'compound' && selection.functor === '/' && selection.args.length === 2 &&
+        selection.args[0].type === 'atom' && selection.args[1].type === 'number' && Number.isSafeInteger(selection.args[1].value) && selection.args[1].value >= 0)) throw new Error('invalid source selection')
   const reference = readReference(renderTerm(ref))
   if (reference.namespace !== subject.ontology || b64url(reference.anchor) !== b64url(subject.anchor) ||
       renderTerm(entity) !== renderTerm(subject.entity)) throw new Error('representation target changed')
   const owner = readReference(renderTerm(tools))
-  if (!lens) return { kind: 'workspace', controller: controller.value, workspace: { target: reference, tools: owner, view: readGuiView(renderTerm(view)) } }
+  if (!lens) return { kind: 'workspace', controller: editor ? 'prolog_editor' : controller.value, workspace: { target: reference, tools: owner, selection, view: readGuiView(renderTerm(view)) } }
   if (view.type !== 'binary' || parameters.type !== 'list' || parameters.items.length !== 1 ||
       renderTerm(parameters.items[0]) !== renderTerm(ref)) throw new Error('invalid target lens')
   return { kind: 'lens', target: reference, lens: owner, view: textValue(view), parameters }

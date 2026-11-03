@@ -2669,8 +2669,7 @@ put_applied({Target, Certificate}, S = #state{own_row = Own, snapshot = Snapshot
         {error, Reason} -> {fatal, Reason, S}
     end.
 
-valid_committee(Committee) when is_list(Committee), Committee =/= [],
-                                length(Committee) =< ?MAX_VALIDATORS ->
+valid_committee(Committee) when is_list(Committee), Committee =/= [] ->
     Committee =:= lists:usort(Committee) andalso
         lists:all(
           fun(Key) -> is_binary(Key) andalso byte_size(Key) =:= 32 end,
@@ -2679,7 +2678,7 @@ valid_committee(_) ->
     false.
 
 valid_validator_routes(Routes, Committee)
-  when is_map(Routes), map_size(Routes) =< ?MAX_VALIDATORS ->
+  when is_map(Routes) ->
     lists:all(fun(Key) -> lists:member(Key, Committee) end,
               maps:keys(Routes)) andalso
         maps:fold(

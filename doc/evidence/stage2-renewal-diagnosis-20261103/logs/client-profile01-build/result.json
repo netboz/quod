@@ -1,0 +1,11 @@
+{
+  "command": [
+    "dotnet",
+    "build",
+    "Quod.csproj",
+    "--no-restore"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 5.22111476200007
+}

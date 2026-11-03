@@ -35,6 +35,16 @@ test('ordinary selections are explicit and cannot accept native frames or expire
   assert.throws(() => worldProjection({ ...message, selection: 'nonphysical', expires_ms: '1' }), /expired/)
 })
 
+test('authored place name is presentation, independent of empty contents and authority', () => {
+  const message = { type: 'projection', view: 'named', height: '4',
+    expires_ms: String(Date.now() + 30000), marks: '[]', selection: 'nonphysical' }
+  assert.equal(worldProjection({ ...message, name: 'Library' }).name, 'Library')
+  assert.equal(worldProjection({ ...message, name: null }).name, null)
+  assert.equal(worldProjection({ ...message, name: 'Library' }).marks.length, 0)
+  assert.throws(() => worldProjection({ ...message, name: 42 }), /authored space name/)
+  assert.throws(() => worldProjection({ ...message, name: 'Library', expires_ms: '1' }), /expired/)
+})
+
 test('navigation fences preserve uint64 heights and exact sorted source identities', () => {
   const row = { ns: 'policy', genesis_anchor: Buffer.alloc(32).toString('base64url'), height: '9007199254740993' }
   assert.ok(renderTerm(viewDependencies([row])).includes('9007199254740993'))

@@ -1,0 +1,38 @@
+======================== EUnit ========================
+module 'selection_cost_tests'
+  selection_cost_tests: ordinary_choicepoints_require_no_checkpoint_scan_test...*failed*
+in function selection_cost_tests:'-ordinary_choicepoints_require_no_checkpoint_scan_test/0-fun-3-'/1 (/checks/selection_cost_tests.erl, line 17)
+in call from selection_cost_tests:with_state/1 (/checks/selection_cost_tests.erl, line 65)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertEqual,[{module,selection_cost_tests},
+              {line,17},
+              {expression,"Count"},
+              {expected,0},
+              {value,257}]}
+  output:<<"">>
+
+  selection_cost_tests: nested_checkpoint_mode_keeps_real_pending_tokens_test...[0.018 s] ok
+  selection_cost_tests: finished_and_failed_savepoints_retire_their_checkpoint_choicepoints_test...*failed*
+in function selection_cost_tests:'-finished_and_failed_savepoints_retire_their_checkpoint_choicepoints_test/0-fun-4-'/2 (/checks/selection_cost_tests.erl, line 46)
+in call from lists:foreach_1/2 (lists.erl, line 2641)
+in call from selection_cost_tests:'-finished_and_failed_savepoints_retire_their_checkpoint_choicepoints_test/0-fun-5-'/1 (/checks/selection_cost_tests.erl, line 42)
+in call from quod_transaction_scope:with_invocation/4 (/checks/source/src/quod_transaction_scope.erl, line 88)
+in call from selection_cost_tests:'-finished_and_failed_savepoints_retire_their_checkpoint_choicepoints_test/0-fun-6-'/1 (/checks/selection_cost_tests.erl, line 38)
+in call from selection_cost_tests:with_state/1 (/checks/selection_cost_tests.erl, line 65)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+**error:{assertMatch,[{module,selection_cost_tests},
+              {line,46},
+              {expression,"Tokens"},
+              {pattern,"[ { pending , _ } ]"},
+              {value,[]}]}
+  output:<<"">>
+
+  [done in 0.073 s]
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 1.

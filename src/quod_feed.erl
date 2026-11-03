@@ -117,7 +117,7 @@ the signal is not history evidence and grants no authority.
 -spec progress_signal(binary(), binary()) -> boolean().
 progress_signal(Payload, Ns)
   when is_binary(Payload), is_binary(Ns),
-       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+       byte_size(Payload) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
     case outer_envelope(Payload, Ns) of
         {ok, _Inner} -> true;
         error -> false
@@ -136,7 +136,7 @@ opaque here and return `unknown`.
           {ok, non_neg_integer()} | unknown | error.
 progress_height(Payload, Ns)
   when is_binary(Payload), is_binary(Ns),
-       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+       byte_size(Payload) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
     case outer_envelope(Payload, Ns) of
         {ok, Inner} when byte_size(Inner) =< 64 ->
             try binary_to_term(Inner, [safe]) of
@@ -193,7 +193,7 @@ recipient_unregister_frame(Ns, <<_:256>> = Anchor,
         | error.
 decode_recipient(Payload, Ns)
   when is_binary(Payload), is_binary(Ns),
-       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+       byte_size(Payload) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
     case outer_envelope(Payload, Ns) of
         {ok, Inner} -> decode_recipient_inner(Inner);
         error -> error
@@ -354,7 +354,7 @@ terminate(_Reason, S = #s{ns = Ns, chan = Chan, recipients = Recipients}) ->
 %%%===================================================================
 
 inbound(_Peer, _InLink, Payload, S)
-  when byte_size(Payload) > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+  when byte_size(Payload) > ?QUOD_LINK_PAYLOAD_CAPACITY ->
     drop(oversized, S);   %% drop oversized BEFORE decode — bound binary_to_term memory
 inbound(Peer, InLink, Payload, S0) ->
     case decode_recipient(Payload, S0#s.ns) of
@@ -764,7 +764,7 @@ on_digest(Peer, PeerHi, S0 = #s{ns = Ns, self = Self, chan = Chan}) ->
 %% (peer_ready/3) resolves the SAME name via binary_to_existing_atom, so it can never mint a fresh atom.
 digest_table(Ns) -> binary_to_atom(digest_table_name(Ns), utf8).
 
-digest_table_name(Ns) -> <<"quod_feed_digests_", Ns/binary>>.
+digest_table_name(Ns) -> <<"quod_feed_digests_", (quod_ledger_store:namespace_key(Ns))/binary>>.
 
 %% Record an authenticated digest sender's height. Only real (pubkey) ids are tracked — a no-identity/
 %% test id is an address tuple, which can never be a `peer_ready` admission candidate.
@@ -848,11 +848,9 @@ finish_pull_replay(Owner) ->
 %% degraded) — then this is a no-op, exactly right for a solo/founder node.
 eager_push(Entry, S = #s{ns = Ns, chan = Chan}) ->
     Frame = encode(Ns, {block, Entry}),
-    case byte_size(Frame) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
+    case byte_size(Frame) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
         false ->
-            %% A block whose framed size exceeds quod_link's 1 MiB cap would EXIT the RECEIVER's link
-            %% (not merely be dropped), so we never push it — the pull path (with chunking) carries an
-            %% oversized block. Degenerate, not the common path (same posture as quod_catchup:cap_bytes).
+            %% The complete encoded push must fit the link length field.
             drop(oversized, S);
         true ->
             _ = [quod_quic:send(Peer, Chan, Frame) || Peer <- fanout(quod_brahms:view(Ns))],

@@ -90,8 +90,33 @@ Physical VR keyboard and comfort acceptance remains separate from desktop checks
 Each executing owner derives `instance_of(ontology, ontology_ref(Ns, Anchor))`
 from its existing proof-bound identity. The instance uses ordinary
 `entity_eidolons/2` selection. Catalogue entries and anchored marks carry that
-same term; a mark id remains an occurrence. Ontology membership is independent
-of space membership, spatial placement, ownership and physics policy.
+same term; a mark id remains an occurrence. Ontology reflection supplies space display membership; placement, ownership,
+entry and physics retain their separately governed operations and policy.
+
+A predicate is an ordinary `instance_of(predicate, predicate(Name/Arity))`
+derived from the existing authorized catalogue, including interpreted empty
+definitions. Its external identity is the ordinary
+`entity_ref(Namespace,GenesisAnchor,predicate(Name/Arity))`. The class owns its
+source and visual Eidolons. Ontology display membership derives these references
+through `space_member/2`; the shared space projection composes their occurrences.
+It stores no duplicate predicate registry or containing-space assignment.
+
+Source workspace descriptors carry `prolog_editor(Selection)` as controller data,
+where `Selection` is `all` or one predicate indicator. Any ordinary entity's
+recipe can supply this binding; clients do not dispatch on its domain class.
+The fixed selection remains bound across edits/reorders and cannot silently
+fall back to complete source after denial or absence. The existing guarded
+compiler preserves semantic clause order. Individually selectable clauses and
+identity across deletion/recreation remain outside this contract. Signed
+abolish currently lowers to retractions and can retain an empty definition;
+source text becoming empty alone does not remove a predicate instance.
+
+A class-local recipe may delegate source work to a different exact tool ontology.
+The signed representation authorizes the recipe and binds the target and subject;
+the descriptor names the exact tools namespace and genesis for subsequent signed
+reads and edit preparation. Recipe-owner equality is not an authority check.
+The target's source policy still governs those delegated reads and withdraws the
+workspace when revoked.
 
 The source recipe checks authorized target introspection before returning its
 workspace. Non-system presentation modes are advisory projections of existing

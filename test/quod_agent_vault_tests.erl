@@ -564,7 +564,7 @@ custody_and_signing_through_signed_ingress_and_foreign_scope_test() ->
     end).
 
 start_engine(Ns, Anchor, Identity = #{pubkey := PublicKey}, Modules, Diff, Facts) ->
-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     Table = ets:new(Table, [named_table, set]),
     true = ets:insert(Table, {anchor, Anchor}),
     true = ets:insert(Table, {proof_gate, true, 1, [], PublicKey, [PublicKey], <<9:256>>, #{}}),

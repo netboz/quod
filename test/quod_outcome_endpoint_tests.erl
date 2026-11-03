@@ -471,7 +471,7 @@ with_claim_prolog(Test) ->
       store := Store, node_identity := Signer, claim := Claim,
       certified_claim_ref := ClaimRef}) ->
         stop_process(quod_reg:where({quod_prolog, Ns})),
-        Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
+        Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns)),
                         [named_table, protected]),
         true = ets:insert(Table, {anchor, Anchor}),
         Dir = filename:join("/tmp", binary_to_list(Ns)),
@@ -522,7 +522,7 @@ pending_application_joins_owner(Mode) ->
       store := Store, entry := Entry, node_identity := Signer,
       claim := Claim, certified_claim_ref := ClaimRef, target_ref := TargetRef}) ->
         stop_process(quod_reg:where({quod_prolog, Ns})),
-        Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
+        Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns)),
                         [named_table, protected]),
         true = ets:insert(Table, {anchor, Anchor}),
         {ok, Prolog} = quod_prolog:start_link(Ns, #{node_id => maps:get(pubkey, Signer),

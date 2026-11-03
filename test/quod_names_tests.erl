@@ -10,7 +10,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_vm_limits.hrl").
 
 -define(NS, <<"quod:names">>).
 -define(HALFLING_MALES, 48 * 8).

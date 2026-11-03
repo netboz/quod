@@ -1,0 +1,10 @@
+{
+  "authorization": "ok, can you continue diagnosing renewal performance ?",
+  "erlog_pin": "5cad93c71579f138e053b3bb971c050bf2dacb7c",
+  "production_delta": {
+    "added": 0,
+    "removed": 0
+  },
+  "old_acceptance": "failed",
+  "source_label": "pinned-5cad93c-renewal-diagnosis01"
+}

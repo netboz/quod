@@ -14,8 +14,6 @@ import {
   variable,
 } from '../src/prolog-term.js'
 import { readTerm } from '../src/prolog-read.js'
-import { readFileSync } from 'node:fs'
-import { PROLOG_TERM_LIMITS } from '../src/protocol-limits.js'
 import { encodeGoalRequest } from '../src/signed-client.js'
 
 test('generic terms render ordinary inspectable Prolog text', () => {
@@ -163,12 +161,10 @@ test('current code source distinguishes numeric negatives from unary expressions
   assert.equal(renderTerm(number(-0)), '-0.0')
 })
 
-test('the result reader shares server depth without private list or rendered-text ceilings', () => {
-  const header = readFileSync(new URL('../../include/quod_term_limits.hrl', import.meta.url), 'utf8')
-  assert.equal(PROLOG_TERM_LIMITS.depth, Number(/QUOD_MAX_TERM_DEPTH, (\d+)/.exec(header)[1]))
+test('the result reader preserves deep, long and large values', () => {
   const nested = depth => 'f('.repeat(depth) + 'leaf' + ')'.repeat(depth)
-  assert.doesNotThrow(() => readTerm(nested(PROLOG_TERM_LIMITS.depth)))
-  assert.throws(() => readTerm(nested(PROLOG_TERM_LIMITS.depth + 1)), /deeply nested/)
+  assert.doesNotThrow(() => readTerm(nested(96)))
+  assert.equal(readTerm('a'.repeat(1100)).value, 'a'.repeat(1100))
   assert.equal(readTerm('[' + Array(1200).fill('0').join(',') + ']').items.length, 1200)
   const bytes = readTerm('<<"' + '\\xff\\'.repeat(14000) + '">>')
   assert.equal(bytes.value.length, 14000)

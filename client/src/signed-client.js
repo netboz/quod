@@ -299,13 +299,9 @@ export function encodeGoalRequest({
   const instanceBytes = encoder.encode(agentInstanceText)
   const goalBytes = encoder.encode(goal)
   const deadline = BigInt(notAfterMs)
-  if (goalBytes.length > SIGNED_GOAL_LIMITS.goalTextBytes) {
-    throw new Error(`signed goal text exceeds byte encoding limit (${goalBytes.length} > ${SIGNED_GOAL_LIMITS.goalTextBytes})`)
-  }
   if (modeTag === undefined || namespaceBytes.length < 1 ||
       namespaceBytes.length > SIGNED_GOAL_LIMITS.namespaceBytes ||
       instanceBytes.length < 1 ||
-      instanceBytes.length > SIGNED_GOAL_LIMITS.agentInstanceTextBytes ||
       goalBytes.length < 1 ||
       agentAnchor?.length !== 32 ||
       networkIdentity?.length !== 32 || signingPublicKey?.length !== 32 ||
@@ -372,6 +368,8 @@ export async function postJson(url, body, method = 'POST', { traceparent, signal
       : payload.error
     const error = new Error(message)
     error.status = response.status
+    // Server failure does not certify nonexecution of the signed operation.
+    if (response.status >= 500) error.outcomeUnknown = true
     throw error
   }
   return payload
@@ -415,6 +413,7 @@ function uint16(value) {
 }
 
 function uint32(value) {
+  if (!Number.isInteger(value) || value < 0 || value >= 2 ** 32) throw new Error('length does not fit uint32')
   const bytes = new Uint8Array(4)
   new DataView(bytes.buffer).setUint32(0, value, false)
   return bytes

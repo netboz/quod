@@ -336,7 +336,7 @@ agent_identity_signing_accepts_unrelated_height_advance_test() ->
       signing_key := SigningKey, agent_instance := Instance} = Fixture,
     KeyFact = {agent_key, Instance, SigningKey, active},
     GenesisTable = binary_to_atom(
-                     <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+                     quod_simplex:genesis_table_name(Ns), utf8),
     GenesisTable = ets:new(GenesisTable, [named_table, protected, set]),
     true = ets:insert(
              GenesisTable,
@@ -449,7 +449,7 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
     {Pubkey, Seed} = quod_identity:generate(),
     Anchor = <<51:256>>,
     GenesisTable = binary_to_atom(
-                     <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+                     quod_simplex:genesis_table_name(Ns), utf8),
     GenesisTable = ets:new(GenesisTable, [named_table, protected]),
     true = ets:insert(GenesisTable, {anchor, Anchor}),
     Identity = #{pubkey => Pubkey,
@@ -673,7 +673,7 @@ t_submit_plan_validation({Ns, _}) ->
             KeyedNs = <<Ns/binary, ":keyed">>,
             KeyedAnchor = <<52:256>>,
             GenesisTable = binary_to_atom(
-                             <<"quod_simplex_genesis_", KeyedNs/binary>>,
+                             quod_simplex:genesis_table_name(KeyedNs),
                              utf8),
             GenesisTable = ets:new(
                              GenesisTable, [named_table, protected]),
@@ -2191,3 +2191,27 @@ hist(Ns) -> maps:get(kb_history_predicates, quod_prolog:stats(Ns), 0).
 
 %% apply one more block at the next height (reads the current applied height first).
 ab_next(Ns, Change) -> ab(Ns, quod_prolog:applied(Ns) + 1, Change).
+
+default_proof_owner_retains_65_live_workers_and_releases_capacity_test_() ->
+    {timeout, 60, fun() -> with_native_barrier(fun(Ns) ->
+        Parent = self(),
+        Rows = [begin
+            Tag = make_ref(),
+            Caller = spawn(fun() -> Parent ! {Tag, quod_prolog:execute(Ns, test_local_wait)} end),
+            {Caller, native_waiting(), Tag}
+        end || _ <- lists:seq(1, 65)],
+        try
+            ?assertEqual(65, maps:get(proof_workers, quod_prolog:stats(Ns))),
+            lists:foreach(fun({_Caller, Worker, _Tag}) -> Worker ! release end, Rows),
+            lists:foreach(fun({_Caller, _Worker, Tag}) ->
+                receive {Tag, Result} -> ?assertMatch({ok, _, _}, Result)
+                after 5000 -> error(worker_release_did_not_complete) end
+            end, Rows),
+            %% Replies pass through finish_proof at the engine. A subsequent
+            %% stats call observes processed completion, without polling/sleep.
+            ?assertEqual(0, maps:get(proof_workers, quod_prolog:stats(Ns))),
+            ?assertMatch({ok, _, _}, quod_prolog:execute(Ns, true))
+        after
+            lists:foreach(fun({Caller, Worker, _}) -> Worker ! release, exit(Caller, kill) end, Rows)
+        end
+    end) end}.

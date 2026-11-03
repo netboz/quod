@@ -282,19 +282,15 @@ encode_material(Diff, ReadCheck, Effects, Bridges, Transcript) ->
           quod_wire_term:encode_canonical(Bridges),
           quod_wire_term:encode_canonical(Transcript)} of
         {{ok, DiffBlob}, {ok, ReadCheckBlob}, {ok, EffectsBlob},
-         {ok, BridgesBlob}, {ok, TranscriptBlob}}
-          when byte_size(EffectsBlob) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
+         {ok, BridgesBlob}, {ok, TranscriptBlob}} ->
             {ok, DiffBlob, ReadCheckBlob, EffectsBlob, BridgesBlob,
              TranscriptBlob};
-        {{ok, _}, {ok, _}, {ok, EffectsBlob}, {ok, _}, {ok, _}}
-          when byte_size(EffectsBlob) > ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
-            {error, {too_large, effects}};
         _ ->
-            {error, {too_large, plan}}
+            {error, malformed_material}
     end.
 
 %% A material diff must not rest on live-bridge truth (module doc); the plan
-%% itself must fit the network's fixed bounds before any signature is minted.
+%% itself is admitted by the pinned material policy before signing.
 seal_admissible(Diff, _ReadCheck, Effects, Bridges) ->
     EffectiveBridges = admissibility_bridges(Diff, Bridges),
     case {Diff, Effects, EffectiveBridges} of
@@ -322,8 +318,8 @@ admit_core(Core, Signer, Limits) ->
             none -> {quod_plan, Core, none, none}
         end,
     Bytes = byte_size(deterministic(Template)),
-    case {Bytes =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES, decode_material(Core)} of
-        {true, {ok, Decoded}} ->
+    case decode_material(Core) of
+        {ok, Decoded} ->
             {ok, Names} = quod_wire_term:symbol_names(Decoded),
             Usage = #{canonical_bytes => Bytes, symbols => length(Names),
                       operations => maps:get(diff_ops, Core),
@@ -337,8 +333,7 @@ admit_core(Core, Signer, Limits) ->
                     {ok, setelement(4, Template, Signature)};
                 {error, _} = Error -> Error
             end;
-        {false, _} -> {error, {too_large, plan}};
-        {_, error} -> {error, {protocol_error, bad_payload}}
+        error -> {error, {protocol_error, bad_payload}}
     end.
 
 plan_bytes(Core) ->
@@ -361,14 +356,10 @@ verify({quod_plan, Core, <<_:256>> = Signer, Signature})
 verify(_) ->
     false.
 
--doc "Encode a plan for the scope wire, enforcing the envelope bound.".
--spec encode(plan()) -> {ok, binary()} | {error, {too_large, plan}}.
+-doc "Encode a plan whose material was admitted by the owning proof.".
+-spec encode(plan()) -> {ok, binary()}.
 encode({quod_plan, _Core, _Signer, _Signature} = Plan) ->
-    Encoded = deterministic(Plan),
-    case byte_size(Encoded) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES of
-        true -> {ok, Encoded};
-        false -> {error, {too_large, plan}}
-    end.
+    {ok, deterministic(Plan)}.
 
 -doc """
 Decode and shape-validate an untrusted plan blob.
@@ -379,7 +370,7 @@ ontology that owns their symbols decodes them through `material/1`.
 """.
 -spec decode(binary()) -> {ok, plan()} | {error, term()}.
 decode(Blob) when is_binary(Blob) ->
-    case quod_safe_term:decode(Blob, ?QUOD_MAX_PLAN_ENVELOPE_BYTES) of
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, {quod_plan, Core, Signer, Signature} = Plan} ->
             case deterministic(Plan) =:= Blob andalso valid_core(Core) andalso
                  valid_witness(Signer, Signature) of
@@ -388,8 +379,6 @@ decode(Blob) when is_binary(Blob) ->
             end;
         {ok, _Other} ->
             {error, {protocol_error, bad_payload}};
-        {error, too_large} ->
-            {error, {too_large, plan}};
         {error, _} ->
             {error, {protocol_error, bad_payload}}
     end;
@@ -422,15 +411,10 @@ valid_core(#{target := Target, base_height := BaseHeight,
         is_integer(Generation) andalso Generation >= 0 andalso
         Generation =< ?MAX_UINT64 andalso
         is_binary(Diff) andalso
-        byte_size(Diff) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
         is_binary(ReadCheck) andalso
-        byte_size(ReadCheck) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
         is_binary(Effects) andalso
-        byte_size(Effects) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES andalso
         is_binary(Bridges) andalso
-        byte_size(Bridges) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
-        is_binary(Transcript) andalso
-        byte_size(Transcript) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES;
+        is_binary(Transcript);
 valid_core(_) ->
     false.
 
@@ -569,17 +553,16 @@ decode_material(Core) ->
     end.
 
 decode_material_blob(Blob) ->
-    quod_wire_term:decode_canonical(Blob, ?QUOD_MAX_PLAN_ENVELOPE_BYTES).
+    quod_wire_term:decode_canonical(Blob, unlimited).
 
 attach_transcript_goals([], Acc) ->
     {ok, lists:reverse(Acc)};
 attach_transcript_goals(
   [{InvocationId, Chain, GoalBlob, Verdict, AnswerCount, Digest, Tag} | Rest],
   Acc)
-  when is_binary(GoalBlob),
-       byte_size(GoalBlob) =< ?QUOD_MAX_NESTED_GOAL_BYTES ->
+  when is_binary(GoalBlob) ->
     case quod_wire_term:decode_canonical(
-           GoalBlob, ?QUOD_MAX_NESTED_GOAL_BYTES) of
+           GoalBlob, unlimited) of
         {ok, Goal} ->
             Annotated =
                 {InvocationId, Chain, GoalBlob, Goal, Verdict,
@@ -703,7 +686,6 @@ valid_transcript_entry(
   {<<_:128>>, Chain, GoalBin, Verdict, AnswerCount, <<_:256>>, Tag}) ->
     valid_chain(Chain) andalso
         is_binary(GoalBin) andalso
-        byte_size(GoalBin) =< ?QUOD_MAX_NESTED_GOAL_BYTES andalso
         (Verdict =:= allowed orelse Verdict =:= denied) andalso
         is_integer(AnswerCount) andalso AnswerCount >= 0 andalso
         AnswerCount =< ?QUOD_SCOPE_WIRE_MAX_UINT64 andalso
@@ -735,10 +717,8 @@ new_manifest(#{proof_id := <<_:256>> = ProofId,
                participants := Participants,
                vote_deadline_ms := VoteDeadline} = Input)
   when map_size(Input) =:= 9, is_binary(Goal), is_binary(Result) ->
-    case {byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES,
-          byte_size(Result) =< ?QUOD_MAX_DURABLE_RESULT_BYTES,
-          proper_length(Participants)} of
-        {true, true, {ok, _}} ->
+    case proper_length(Participants) of
+        {ok, _} ->
             case canonical_identity_digest_rows(Participants) of
                 {ok, CanonicalParticipants} ->
                     Manifest =
@@ -747,29 +727,19 @@ new_manifest(#{proof_id := <<_:256>> = ProofId,
                          crypto:hash(sha256, Goal), Result,
                          crypto:hash(sha256, Result), RequestBinding,
                          CanonicalParticipants, VoteDeadline},
-                    case within_body_limit(Manifest) andalso
-                         valid_manifest(Manifest) of
+                    case valid_manifest(Manifest) of
                         true -> {ok, Manifest};
-                        false -> manifest_error(Manifest)
+                        false -> {error, invalid_manifest}
                     end;
                 error ->
                     {error, invalid_manifest}
             end;
-        {false, _, _} ->
-            {error, {too_large, goal}};
-        {_, false, _} ->
-            {error, {too_large, result}};
         _ ->
             {error, invalid_manifest}
     end;
 new_manifest(_) ->
     {error, invalid_manifest}.
 
-manifest_error(Manifest) ->
-    case not within_body_limit(Manifest) of
-        true -> {error, {too_large, dtx_body}};
-        false -> {error, invalid_manifest}
-    end.
 
 -doc "Domain-separated digest signed by every manifest target.".
 -spec manifest_digest(manifest()) -> <<_:256>>.
@@ -784,15 +754,11 @@ manifest_digest_unchecked(Manifest) ->
 
 -doc "Encode one validated manifest for the scope-attestation wire.".
 -spec encode_manifest(manifest()) ->
-          {ok, binary()} | {error, {too_large, manifest} | invalid_manifest}.
+          {ok, binary()} | {error, invalid_manifest}.
 encode_manifest(Manifest) ->
     case valid_manifest(Manifest) of
         true ->
-            Encoded = deterministic(Manifest),
-            case byte_size(Encoded) =< ?QUOD_MAX_DTX_BODY_BYTES of
-                true -> {ok, Encoded};
-                false -> {error, {too_large, manifest}}
-            end;
+            {ok, deterministic(Manifest)};
         false ->
             {error, invalid_manifest}
     end.
@@ -800,15 +766,13 @@ encode_manifest(Manifest) ->
 -doc "Decode one canonical, bounded manifest without allocating ontology atoms.".
 -spec decode_manifest(binary()) -> {ok, manifest()} | {error, term()}.
 decode_manifest(Blob) when is_binary(Blob) ->
-    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_BODY_BYTES) of
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, Manifest} ->
             case deterministic(Manifest) =:= Blob andalso
                  valid_manifest(Manifest) of
                 true -> {ok, Manifest};
                 false -> {error, {protocol_error, bad_payload}}
             end;
-        {error, too_large} ->
-            {error, {too_large, manifest}};
         {error, _} ->
             {error, {protocol_error, bad_payload}}
     end;
@@ -924,15 +888,13 @@ encode_attestation(Attestation) ->
 -doc "Decode one canonical target attestation; verify its plan binding separately.".
 -spec decode_attestation(binary()) -> {ok, attestation()} | {error, term()}.
 decode_attestation(Blob) when is_binary(Blob) ->
-    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_BODY_BYTES) of
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, Attestation} ->
             case deterministic(Attestation) =:= Blob andalso
                  valid_attestation(Attestation) of
                 true -> {ok, Attestation};
                 false -> {error, {protocol_error, bad_payload}}
             end;
-        {error, too_large} ->
-            {error, {too_large, attestation}};
         {error, _} ->
             {error, {protocol_error, bad_payload}}
     end;
@@ -986,8 +948,7 @@ certified_ref(Ns, <<_:256>> = Anchor, Slot, <<_:256>> = BlockHash,
               <<_:256>> = RecordDigest, FinalityProof)
   when is_binary(Ns), byte_size(Ns) > 0,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
-       is_binary(FinalityProof), byte_size(FinalityProof) > 0,
-       byte_size(FinalityProof) =< ?QUOD_MAX_DTX_BODY_BYTES ->
+       is_binary(FinalityProof), byte_size(FinalityProof) > 0 ->
     Ref = {quod_dtx_ref, ?REF_VERSION, Ns, Anchor, Slot, BlockHash,
            RecordDigest, FinalityProof},
     case validate_certified_ref(Ref) of
@@ -1096,8 +1057,7 @@ validate_certified_ref(
    FinalityProof})
   when is_binary(Ns), byte_size(Ns) > 0,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
-       is_binary(FinalityProof), byte_size(FinalityProof) > 0,
-       byte_size(FinalityProof) =< ?QUOD_MAX_DTX_BODY_BYTES ->
+       is_binary(FinalityProof), byte_size(FinalityProof) > 0 ->
     valid_finality_hint(Slot, FinalityProof);
 validate_certified_ref(_) ->
     false.
@@ -1156,8 +1116,8 @@ valid_manifest(
    Goal, <<_:256>> = GoalDigest, Result, <<_:256>> = ResultDigest,
    RequestBinding, Participants, VoteDeadline})
   when is_binary(OriginNs), byte_size(OriginNs) > 0,
-       is_binary(Goal), byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES,
-       is_binary(Result), byte_size(Result) =< ?QUOD_MAX_DURABLE_RESULT_BYTES ->
+       is_binary(Goal),
+       is_binary(Result) ->
     (VoteDeadline =:= none orelse
         (is_integer(VoteDeadline) andalso VoteDeadline > 0 andalso VoteDeadline =< ?MAX_UINT64))
         andalso valid_principal(Principal) andalso
@@ -1337,9 +1297,6 @@ manifest_group_ref(Manifest, <<_:256>> = GroupId) ->
     end;
 manifest_group_ref(_Manifest, _GroupId) ->
     error.
-
-within_body_limit(Term) ->
-    erlang:external_size(Term) =< ?QUOD_MAX_DTX_BODY_BYTES.
 
 proper_length(List) -> proper_length(List, 0).
 proper_length([], Length) -> {ok, Length};

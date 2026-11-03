@@ -172,7 +172,7 @@ chunk_surface(_,_,_) -> {error,invalid_voxel_field}.
 %% its sites, then charge the actual union as overlapping consumers are merged.
 resident_chunks(Initial,Ranges,{chunk_limits,Maximum}) when is_list(Initial),is_list(Ranges) ->
     checked(fun() ->
-        true = allowance(Maximum),
+        true = Maximum =:= unlimited orelse allowance(Maximum),
         Add = fun(C,Acc) ->
             true = chunk_coordinate(C), Next = Acc#{C => true},
             charge(resident_chunks,map_size(Next),Maximum), Next
@@ -314,6 +314,7 @@ hash_cost({Kind,_,_,_}) when Kind =:= relief; Kind =:= volume -> 8;
 hash_cost({biome_relief,_,_,_,_,_}) -> 16;
 hash_cost({caves,_,_,_,_}) -> 8;
 hash_cost(_) -> 0.
+charge(_,_,unlimited) -> ok;
 charge(_,Actual,Limit) when Actual =< Limit -> ok;
 charge(Resource,Actual,Limit) -> throw({voxel_allowance,Resource,Actual,Limit}).
 

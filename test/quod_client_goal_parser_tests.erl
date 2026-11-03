@@ -262,29 +262,21 @@ unknown_symbols_do_not_allocate_atoms_test() ->
     ?assertEqual(Before, After),
     ?assertMatch({{'$quod_symbol', Name}, {'$quod_symbol', Name}}, Goal).
 
-unknown_callable_symbol_budget_is_enforced_test() ->
+unknown_callable_population_remains_atom_free_test() ->
     Prefix = integer_to_binary(erlang:unique_integer([positive])),
     Calls = [iolist_to_binary(
                ["unknown_callable_", Prefix, "_", integer_to_binary(N), "(1)"])
              || N <- lists:seq(1, 65)],
     Text = iolist_to_binary([lists:join(<<",">>, Calls), <<".">>]),
     Before = erlang:system_info(atom_count),
-    ?assertEqual({error, {too_large, goal}}, parse(Text)),
+    ?assertMatch({ok, _}, parse(Text)),
     ?assertEqual(Before, erlang:system_info(atom_count)).
 
-goal_text_and_token_bounds_are_enforced_test() ->
-    Exact = iolist_to_binary(
-              [lists:duplicate(?QUOD_CLIENT_GOAL_TEXT_BYTES - 5, " "),
-               "true."]),
-    ?assertMatch({ok, _}, parse(Exact)),
-    ?assertEqual(
-       {error, {too_large, goal}},
-       quod_client_goal_parser:parse(
-         <<0:(?QUOD_CLIENT_GOAL_TEXT_BYTES + 1)/unit:8>>, 1)),
-    Many = iolist_to_binary(
-             [lists:duplicate(?QUOD_CLIENT_GOAL_MAX_TOKENS + 1, "1,"),
-              "1."]),
-    ?assertEqual({error, {too_large, goal}}, parse(Many)).
+goal_text_and_tokens_have_no_duplicate_quota_test() ->
+    Text = iolist_to_binary([lists:duplicate(140 * 1024, " "), "true."]),
+    ?assertMatch({ok, _}, parse(Text)),
+    Many = iolist_to_binary(["p([", lists:join(",", lists:duplicate(3000, "1")), "])."]),
+    ?assertMatch({ok, _}, parse(Many)).
 
 parser_is_total_on_hostile_bytes_and_truncations_test() ->
     _ = rand:seed(exsplus, {17, 29, 43}),

@@ -1,5 +1,7 @@
 -module(quod_atomic_tests).
+-include("retired_presentation_sizes.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
@@ -206,9 +208,9 @@ reference_enumeration_is_exhaustive_and_shared_with_decoded_material_test() ->
         {ok, Envelope} = quod_atomic:encode_control(Control),
         ?assertEqual({ok, Control}, quod_atomic:decode_control(Envelope)),
         ?assert(quod_atomic:verify_control(quod_atomic:record_target(Record), Control)),
-        ?assert(byte_size(Envelope) =< ?QUOD_MAX_DTX_CONTROL_BYTES),
+        ?assert(byte_size(Envelope) =< ?LEGACY_MAX_DTX_CONTROL_BYTES),
         ?assert(byte_size(term_to_binary({batch, [{dtx, Envelope}]}, [deterministic]))
-                =< ?MAX_BLOCK_BYTES),
+                =< ?LEGACY_MAX_BLOCK_BYTES),
         {{ok, Expected}, {call_time, Auth}} = tprof:profile(fun() ->
             quod_atomic:encoded_reference_requirements(Blob)
         end, #{type => call_time, report => return, set_on_spawn => false,
@@ -216,12 +218,12 @@ reference_enumeration_is_exhaustive_and_shared_with_decoded_material_test() ->
         ?assertEqual([], Auth)
     end, [{Vote, []}, {Resolve, [{vote, R} || {_, R} <- VoteRows]},
           {Complete, [{resolve, R} || {_, R, _} <- CompleteRows]}]),
-    ?assertEqual(?QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
+    ?assertEqual(?LEGACY_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
                  byte_size(term_to_binary({batch, [{dtx, <<>>}]}, [deterministic]))),
-    ?assertEqual(?MAX_BLOCK_BYTES - ?QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
-                 ?QUOD_MAX_DTX_CONTROL_BYTES),
+    ?assertEqual(?LEGACY_MAX_BLOCK_BYTES - ?LEGACY_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
+                 ?LEGACY_MAX_DTX_CONTROL_BYTES),
     ?assertEqual(error, quod_atomic:decode_material(not_binary)),
-    ?assertEqual(error, quod_atomic:decode_material(<<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>)).
+    ?assertEqual(error, quod_atomic:decode_material(<<0:(?LEGACY_MAX_DTX_BODY_BYTES + 1)/unit:8>>)).
 
 optional_hint_selection_never_authenticates_or_admits_a_vote_test() ->
     %% Even malformed group/plan bytes request no foreign references. The
@@ -295,7 +297,7 @@ control_wire_cannot_inject_cached_material_test() ->
     ?assertEqual({error, invalid_control}, quod_atomic:decode_control(
          term_to_binary(setelement(5, Wire, FakeBody), [deterministic]))),
     [?assertEqual({error, invalid_control}, quod_atomic:decode_control(Bad)) ||
-        Bad <- [<<0:(?QUOD_MAX_DTX_CONTROL_BYTES + 1)/unit:8>>,
+        Bad <- [<<0:(?LEGACY_MAX_DTX_CONTROL_BYTES + 1)/unit:8>>,
                 term_to_binary({'not', a, control}), <<Blob/binary, 0>>,
                 term_to_binary(Wire, [compressed])]].
 

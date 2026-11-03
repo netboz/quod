@@ -281,11 +281,6 @@ worker_authored_heap_budget_and_public_local_errors_test() ->
         quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end)
     end,
 
-    ?assertEqual(ok, quod_scope_session:test_answer_disposition(small)),
-    ?assertEqual(
-       {error, {too_large, answer}},
-       quod_scope_session:test_answer_disposition(
-         binary:copy(<<0>>, ?QUOD_MAX_PROOF_ANSWER_BYTES))),
     ok = quod_scope_session:close(Handle),
     receive
         {'DOWN', WorkerMRef, process, Worker, _Reason} -> ok
@@ -295,7 +290,7 @@ worker_authored_heap_budget_and_public_local_errors_test() ->
 
 worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
     Ns = <<"quod:scope-guard-reply">>,
-    Table = 'quod_simplex_genesis_quod:scope-guard-reply',
+    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:scope-guard-reply">>), utf8),
     Tab = ets:new(Table, [named_table, protected, set]),
     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
     ScopeId = id(96),
@@ -1719,3 +1714,29 @@ node_binding(OriginKey, TargetKey, ProofId, ScopeId,
 
 id(N) -> <<N:128>>.
 key(N) -> <<N:256>>.
+
+binary_heavy_nested_scope_preserves_authorization_and_cancellation_test() ->
+    lists:foreach(fun(Allowed) ->
+        Facts = case Allowed of true -> [{can_invoke,{'_'},{'_'},{'_'},{'_'}}]; false -> [] end,
+        {Handle,MRef} = quod_scope_session:start(id(95),key(96),self(),
+            <<"quod:large-nested">>,key(97),0,committed(Facts),self(),
+            #{principal => {node,key(98)},request_binding => none,
+              deadline_ms => quod_time:mono_ms()+5000}),
+        {quod_scope_session,Worker,_,ProofId,SessionRef,_,_} = Handle,
+        Invocation = id(99), Value = binary:copy(<<$v>>,160000),
+        try
+            {ok,Opened} = quod_scope_session:invoke_open(Handle,Invocation,{'=',Value,Value},
+                [{<<"quod:origin">>,key(100)}],quod_transaction_scope:empty_selection()),
+            ?assertEqual({opened,Invocation},receive_scope_reply(Worker,ProofId,SessionRef,Opened)),
+            {ok,Next} = quod_scope_session:invoke_next(Handle,Invocation,1),
+            Reply = receive_scope_reply(Worker,ProofId,SessionRef,Next),
+            case Allowed of
+                true -> ?assertMatch({solution,1,_,_,false},Reply);
+                false -> ?assertMatch({complete,1,[{not_allowed,<<"quod:large-nested">>}|_],false},Reply)
+            end
+        after
+            ok = quod_scope_session:close(Handle),
+            receive {'DOWN',MRef,process,Worker,_} -> ok
+            after 1000 -> error(large_scope_not_retired) end
+        end
+    end,[true,false]).

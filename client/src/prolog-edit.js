@@ -14,14 +14,23 @@ async function query(identity, agent, tools, goal, binding) {
   return readTerm(singleBinding(reply, binding))
 }
 
+function requireSelection(workspace, selection) {
+  const binding = workspace.selection
+  if (binding && formatTerm(binding) !== 'all' && formatTerm(binding) !== formatTerm(selection ?? atom('all')))
+    throw new Error('Source selection differs from the authored workspace binding.')
+}
+
 export async function readCodePredicates(identity, agent, workspace) {
   const result = await query(identity, agent, workspace.tools,
     compound('prolog_predicates', [ontologyTerm(workspace.target), variable('Predicates')]), 'Predicates')
   if (result.type !== 'list' || result.tail !== null) throw new Error('invalid predicate list')
+  if (workspace.selection && formatTerm(workspace.selection) !== 'all' && !result.items.some(item => formatTerm(item) === formatTerm(workspace.selection)))
+    throw new Error('The selected source lens is no longer available.')
   return result.items
 }
 
 export async function readCodeSource(identity, agent, workspace, indicator) {
+  requireSelection(workspace, indicator)
   const result = await query(identity, agent, workspace.tools,
     compound('prolog_source', [ontologyTerm(workspace.target), indicator, variable('Source')]), 'Source')
   if (result.type !== 'binary') throw new Error('invalid source text')
@@ -31,11 +40,13 @@ export async function readCodeSource(identity, agent, workspace, indicator) {
 // One signed cursor owns the snapshot for every chunk. Publish the assembled
 // text only after exhaustion; an interrupted read is never a complete view.
 export async function readCodeState(identity, agent, workspace, signal) {
+  requireSelection(workspace, null)
   return readTextProjection(identity, agent, workspace.tools,
     compound('prolog_source', [ontologyTerm(workspace.target), variable('Source')]), 'Source', signal)
 }
 
 export async function prepareCodeEdit(identity, agent, workspace, indicator, baseline, source) {
+  requireSelection(workspace, indicator)
   const result = await query(identity, agent, workspace.tools,
     compound('prolog_edit_goal', [ontologyTerm(workspace.target), indicator ?? atom('all'),
       text(baseline), text(source), variable('Edit')]), 'Edit')

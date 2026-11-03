@@ -5801,7 +5801,7 @@ voxel_signed_view_delivers_only_bound_resident_chunks_test_() ->
             end)
     end,{view_distance,4000,1000,2000},{resources,20000,60000,2000,1000,3},[]) end}.
 
-voxel_signed_view_batches_large_resident_selection_test_() ->
+voxel_signed_view_delivers_complete_large_resident_selection_test_() ->
     {timeout,90,fun() -> with_voxel_view(fun(#{physics := Pid,socket := Socket,projection := Projection}) ->
         View = maps:get(<<"view">>,Projection), Frame = maps:get(<<"frame">>,Projection),
         socket_command(Socket,#{type => terrain_interest,view => View,sequence => <<"1">>,
@@ -5811,16 +5811,15 @@ voxel_signed_view_batches_large_resident_selection_test_() ->
         Manifest = large_terrain_manifest(Socket,View),
         Rows = maps:get(<<"chunks">>,Manifest),Token = maps:get(<<"token">>,Manifest),
         ?assertEqual(27,length(Rows)),
-        ?assert(lists:sum([hd(maps:get(<<"costs">>,R)) || R <- Rows]) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+        ?assert(lists:sum([hd(maps:get(<<"costs">>,R)) || R <- Rows]) > (512*1024)),
         socket_command(Socket,#{type => terrain_ack,view => View,token => Token,
             want => [maps:get(<<"index">>,R) || R <- Rows]}),
-        Batches = consume_large_terrain(Socket,Pid,View,Token,Rows,0),
-        ?assert(Batches > 1),
+        consume_large_terrain(Socket,Pid,View,Token,Rows),
         ?assertMatch(#{pid := Pid},simulation_state(Socket))
     end,{view_distance,4000,1000,2000},{resources,2000000,4000000,100000,50000,64},[],
     fun(#{namespace := Ns}) ->
         %% This authored field exercises the ordinary resident-resource path
-        %% with more content than a single view frame can encode.
+        %% with more content than the retired presentation subquota.
         Before = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
         After = setelement(3,Before,{limits,64,64,256,1000000,{geometry,256,100000,100000}}),
         commit(Ns,{',',{retract,Before},{assertz,After}}),
@@ -5839,30 +5838,25 @@ large_terrain_manifest(Socket,View) ->
             large_terrain_manifest(Socket,View)
     end.
 
-consume_large_terrain(Socket,Pid,View,Token,Rows,Count) ->
+consume_large_terrain(Socket,Pid,View,Token,Rows) ->
     Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
-    ?assert(iolist_size(json:encode(Content)) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+    ?assert(iolist_size(json:encode(Content)) > 512*1024),
     ?assertEqual(Token,maps:get(<<"token">>,Content)),
-    Chunks = maps:get(<<"chunks">>,Content),?assertNotEqual([],Chunks),
-    {Selected,Rest} = lists:split(length(Chunks),Rows),
+    Chunks = maps:get(<<"chunks">>,Content),
+    ?assertEqual(length(Rows),length(Chunks)),
     lists:foreach(fun({Row,Chunk}) ->
         ?assertEqual(maps:get(<<"index">>,Row),maps:get(<<"index">>,Chunk)),
         Bytes = base64:decode(maps:get(<<"payload">>,Chunk),#{mode => urlsafe,padding => false}),
         ?assertEqual(hd(maps:get(<<"costs">>,Row)),byte_size(Bytes)),
         ?assertEqual(maps:get(<<"digest">>,Row),binary:encode_hex(crypto:hash(sha256,Bytes),lowercase))
-    end,lists:zip(Selected,Chunks)),
-    ?assertEqual(Rest =:= [],maps:get(<<"complete">>,Content)),
-    Ack = fun(Value) -> socket_command(Socket,Value#{type => terrain_ack,view => View,token => Token}) end,
-    case Rest of
-        [] -> Ack(#{complete => true}),Count+1;
-        _ ->
-            Last = maps:get(<<"index">>,lists:last(Chunks)),
-            Ack(#{complete => true}),Ack(#{through => Last+1}),
-            _ = simulation_state(Socket),_ = gen_server:call(Pid,status),
-            receive {simulation,Socket,_} -> error(inexact_ack_released_delivery) after 0 -> ok end,
-            Ack(#{through => Last}),
-            consume_large_terrain(Socket,Pid,View,Token,Rest,Count+1)
-    end.
+    end,lists:zip(Rows,Chunks)),
+    ?assertEqual(true,maps:get(<<"complete">>,Content)),
+    %% A completion for a different retained snapshot cannot release credit.
+    socket_command(Socket,#{type => terrain_ack,view => View,
+        token => base64:encode(<<0:256>>,#{mode => urlsafe,padding => false}),complete => true}),
+    _ = simulation_state(Socket),_ = gen_server:call(Pid,status),
+    receive {simulation,Socket,_} -> error(stale_ack_released_delivery) after 0 -> ok end,
+    socket_command(Socket,#{type => terrain_ack,view => View,token => Token,complete => true}).
 
 with_voxel_view(Fun,Distance,Resources,ExtraBodies) ->
     with_voxel_view(Fun,Distance,Resources,ExtraBodies,

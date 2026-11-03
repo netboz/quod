@@ -8,8 +8,6 @@
 
 import { atom, binary, compound, list, number, variable } from './prolog-term.js'
 
-import { PROLOG_TERM_LIMITS } from './protocol-limits.js'
-
 const ATOM = /^[a-z][A-Za-z0-9_]*/
 const VARIABLE = /^[A-Z_][A-Za-z0-9_]*/
 const NUMBER = /^-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/
@@ -20,7 +18,7 @@ const NUMBER = /^-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/
 export function readTerm(text) {
   if (typeof text !== 'string') throw new Error('a binding is not text')
   const state = { text, at: 0, variables: new Map() }
-  const term = readOne(state, 0)
+  const term = readOne(state)
   skipSpace(state)
   if (state.at !== text.length) throw new Error('trailing text after the term')
   return term
@@ -43,14 +41,13 @@ export function requireProjection(term) {
   } else if (term.type === 'compound') term.args.forEach(requireProjection)
 }
 
-function readOne(state, depth) {
-  if (depth > PROLOG_TERM_LIMITS.depth) throw new Error('term too deeply nested')
+function readOne(state) {
   skipSpace(state)
   const rest = state.text.slice(state.at)
   if (rest.length === 0) throw new Error('the term ends early')
   if (rest.startsWith('<<')) return readBinary(state)
-  if (rest.startsWith('[')) return readItems(state, depth)
-  if (rest.startsWith("'")) return readQuotedAtom(state, depth)
+  if (rest.startsWith('[')) return readItems(state)
+  if (rest.startsWith("'")) return readQuotedAtom(state)
   const numeric = NUMBER.exec(rest)
   if (numeric) {
     const literal = numeric[0]
@@ -75,15 +72,15 @@ function readOne(state, depth) {
   const name = ATOM.exec(rest)
   if (!name) throw new Error(`cannot read a term at ${state.at}`)
   state.at += name[0].length
-  return readCallOrAtom(state, name[0], depth)
+  return readCallOrAtom(state, name[0])
 }
 
-function readCallOrAtom(state, name, depth) {
+function readCallOrAtom(state, name) {
   if (state.text[state.at] !== '(') return atom(name)
   state.at += 1
   const args = []
   for (;;) {
-    args.push(readOne(state, depth + 1))
+    args.push(readOne(state))
     skipSpace(state)
     const next = state.text[state.at]
     if (next === ')') { state.at += 1; return compound(name, args) }
@@ -92,7 +89,7 @@ function readCallOrAtom(state, name, depth) {
   }
 }
 
-function readQuotedAtom(state, depth) {
+function readQuotedAtom(state) {
   state.at += 1
   let value = ''
   for (;;) {
@@ -106,22 +103,22 @@ function readQuotedAtom(state, depth) {
     }
     value += character
   }
-  return readCallOrAtom(state, value, depth) // 'quod:licence'(…) is a call too
+  return readCallOrAtom(state, value) // 'quod:licence'(…) is a call too
 }
 
-function readItems(state, depth) {
+function readItems(state) {
   state.at += 1
   skipSpace(state)
   if (state.text[state.at] === ']') { state.at += 1; return list([]) }
   const items = []
   for (;;) {
-    items.push(readOne(state, depth + 1))
+    items.push(readOne(state))
     skipSpace(state)
     const next = state.text[state.at]
     if (next === ']') { state.at += 1; return list(items) }
     if (next === '|') {
       state.at += 1
-      const tail = readOne(state, depth + 1)
+      const tail = readOne(state)
       skipSpace(state)
       if (state.text[state.at] !== ']') throw new Error('expected ] after a list tail')
       state.at += 1

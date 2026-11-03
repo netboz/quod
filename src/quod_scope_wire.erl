@@ -34,15 +34,12 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 13).
+-define(VERSION, 14).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
 -define(AUTH_DOMAIN, <<"quod.scope.auth.v5", 0>>).
 
--if(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
--error("scope envelope must stay below the transport frame bound").
--endif.
 
 -type key() :: <<_:?QUOD_SCOPE_WIRE_KEY_BITS>>.
 -type opaque_id() :: <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>.
@@ -147,7 +144,7 @@ authentication_digest(node) ->
 authentication_digest(
   {signed_goal, RequestBytes, <<_:512>> = Signature, Certificate})
   when is_binary(RequestBytes),
-       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
+       byte_size(RequestBytes) < (1 bsl 32) ->
     case quod_agent_identity:validate_certificate(Certificate) of
         true ->
             CertificateBytes = term_to_binary(Certificate, [deterministic]),
@@ -176,7 +173,7 @@ encode_identity_response(Response) ->
 encode_identity_frame(Frame, ok) ->
     Encoded = term_to_binary(
                 {?IDENTITY_DOMAIN, ?VERSION, Frame}, [deterministic]),
-    case byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES of
+    case byte_size(Encoded) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
         true -> {ok, Encoded};
         false -> too_large(scope_envelope)
     end;
@@ -270,16 +267,16 @@ validate_event(_) -> protocol_error(bad_shape).
 
 encode_envelope(Frame) ->
     Encoded = term_to_binary({?DOMAIN, ?VERSION, Frame}, [deterministic]),
-    case byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES of
+    case byte_size(Encoded) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
         true -> {ok, Encoded};
         false -> too_large(scope_envelope)
     end.
 
 decode_frame(Encoded, Direction)
   when is_binary(Encoded),
-       byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES ->
+       byte_size(Encoded) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
     case quod_safe_term:decode(
-           Encoded, ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES) of
+           Encoded, ?QUOD_LINK_PAYLOAD_CAPACITY) of
         {ok, {Domain, Version, Frame}} ->
             decode_frame_term(Domain, Version, Frame, Direction);
         {ok, _} -> protocol_error(bad_shape);
@@ -406,7 +403,7 @@ decode_payload(failure_reasons, Encoded) ->
       quod_wire_term:decode_failure_reasons(Encoded));
 decode_payload(Kind, Encoded) when is_binary(Encoded) ->
     case payload_limit(Kind) of
-        {ok, MaxBytes} when byte_size(Encoded) =< MaxBytes ->
+        {ok, MaxBytes} when MaxBytes =:= unlimited; byte_size(Encoded) =< MaxBytes ->
             case quod_safe_term:decode(Encoded, MaxBytes) of
                 {ok, WireTerm} -> decode_wire_payload(Kind, WireTerm);
                 {error, _} -> protocol_error(bad_payload)
@@ -421,7 +418,7 @@ decode_payload(Kind, _) ->
     end.
 
 bounded_encoded_payload(_Kind, MaxBytes, Encoded)
-  when byte_size(Encoded) =< MaxBytes -> {ok, Encoded};
+  when MaxBytes =:= unlimited; byte_size(Encoded) =< MaxBytes -> {ok, Encoded};
 bounded_encoded_payload(Kind, _MaxBytes, _Encoded) -> too_large(Kind).
 
 decode_wire_payload(_Kind, WireTerm) ->
@@ -436,18 +433,13 @@ normalize_failure_reason_payload({error, too_large}) ->
 normalize_failure_reason_payload({error, bad_term}) ->
     protocol_error(bad_payload).
 
-payload_limit(goal) -> {ok, ?QUOD_MAX_NESTED_GOAL_BYTES};
-payload_limit(answer) -> {ok, ?QUOD_MAX_PROOF_ANSWER_BYTES};
-payload_limit(failure_reasons) -> {ok, ?ERLOG_MAX_FAILURE_REASONS_BYTES};
-payload_limit(erlog_error) -> {ok, ?ERLOG_MAX_FAILURE_REASON_BYTES};
-payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
-payload_limit(manifest) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(attestation) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(read_certificate) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(foreign_reads) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(result) -> {ok, ?QUOD_MAX_DURABLE_RESULT_BYTES};
-payload_limit(operation_submission) ->
-    {ok, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES};
+%% Complete envelopes own actual framing capacity. Material allocation is
+%% checked by the proof's pinned Prolog policy, not a second payload quota.
+payload_limit(Kind) when Kind =:= failure_reasons; Kind =:= erlog_error;
+                         Kind =:= goal; Kind =:= answer; Kind =:= plan;
+                         Kind =:= manifest; Kind =:= attestation;
+                         Kind =:= read_certificate; Kind =:= foreign_reads;
+                         Kind =:= result; Kind =:= operation_submission -> {ok, unlimited};
 payload_limit(_) -> error.
 
 %% ------------------------------------------------------------------
@@ -865,8 +857,7 @@ valid_identity({Namespace, Anchor}) ->
 valid_identity(_) -> false.
 
 valid_namespace(Namespace) ->
-    is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
-        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES.
+    is_binary(Namespace) andalso byte_size(Namespace) > 0.
 
 valid_key(Binary) ->
     is_binary(Binary) andalso
@@ -914,7 +905,8 @@ validate_public_error(read_certificate_unavailable) -> ok;
 validate_public_error(conflict_retry) -> ok;
 validate_public_error({material_limit, Kind, Resource, Actual, Limit})
   when Kind =:= founding; Kind =:= plan; Kind =:= proof ->
-    case lists:member(Resource, [canonical_bytes, symbols, operations, reads, heap_bytes])
+    case lists:member(Resource, [canonical_bytes, symbols, operations, reads,
+                                heap_bytes, answer_bytes])
          andalso valid_uint64(Actual) andalso valid_uint64(Limit)
          andalso Actual > Limit of
         true -> ok;

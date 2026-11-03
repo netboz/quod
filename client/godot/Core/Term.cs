@@ -44,7 +44,7 @@ public sealed record Term(string Kind, string Name, Term[] Args, byte[] Bytes)
     };
     public static Term Parse(string source)
     {
-        var reader = new Reader(source); var value = reader.One(0); reader.Space();
+        var reader = new Reader(source); var value = reader.One(); reader.Space();
         if (reader.At != source.Length) throw new FormatException("Trailing projection text.");
         return value;
     }
@@ -73,10 +73,8 @@ public sealed record Term(string Kind, string Name, Term[] Args, byte[] Bytes)
             for (;;) { char c = Next(); if (c == end) return result.ToString();
                 result.Append(c == '\\' ? char.ConvertFromUtf32(Escape()) : c.ToString()); }
         }
-        public Term One(int depth)
+        public Term One()
         {
-            // include/quod_term_limits.hrl: lists count elements, not their spine.
-            if (depth > 64) throw new FormatException("Term exceeds protocol depth.");
             Space();
             if (Take("<<\"")) {
                 var bytes = new List<byte>();
@@ -90,8 +88,8 @@ public sealed record Term(string Kind, string Name, Term[] Args, byte[] Bytes)
             if (Take("[")) {
                 var items = new List<Term>(); Space(); if (Take("]")) return List();
                 for (;;) {
-                    items.Add(One(depth + 1)); Space(); if (Take("]")) return List(items.ToArray());
-                    if (Take("|")) { items.Add(One(depth + 1)); Space(); if (!Take("]")) throw new FormatException("List tail.");
+                    items.Add(One()); Space(); if (Take("]")) return List(items.ToArray());
+                    if (Take("|")) { items.Add(One()); Space(); if (!Take("]")) throw new FormatException("List tail.");
                         return new("partial", "", items.ToArray(), []); }
                     if (!Take(",")) throw new FormatException("Expected list separator.");
                 }
@@ -108,7 +106,7 @@ public sealed record Term(string Kind, string Name, Term[] Args, byte[] Bytes)
             }
             if (!Take("(")) return Atom(name);
             var args = new List<Term>();
-            for (;;) { args.Add(One(depth + 1)); Space(); if (Take(")")) return Call(name, args.ToArray());
+            for (;;) { args.Add(One()); Space(); if (Take(")")) return Call(name, args.ToArray());
                 if (!Take(",")) throw new FormatException("Expected argument separator."); }
         }
     }

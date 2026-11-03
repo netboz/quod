@@ -1,0 +1,12 @@
+CONFIGURED_ERLOG_OPTIONS [debug_info,
+                          {d,'ERLANG_VERSION',"28.5.0.2"},
+                          {d,'HAS_MAPS',true},
+                          {d,'HAS_FULL_KEYS',true},
+                          {d,'NEW_REC_CORE',true},
+                          {d,'NEW_RAND',true},
+                          {d,'NEW_BOOL_GUARD',true},
+                          {d,'HAS_FLOOR',true},
+                          {d,'HAS_CEIL',true},
+                          {d,'NEW_STACKTRACE',true},
+                          {d,'EEP48',true}]
+NORMAL_PRODUCTION_OPTIONS_VERIFIED

@@ -32,10 +32,11 @@ digest_hex_digit(N,Code) :- (N < 10 -> Code is N + 48; Code is N + 87).
 %% opened under ordinary scope ACLs; the client endpoint checks their exact
 %% heights against the proof's retained dependency envelope before installation.
 client_world_view(Space, Mode, Dependencies,
-        world_view(entity_ref(Ns, Anchor, Space), Marks, Selection)) :-
+        world_view(entity_ref(Ns, Anchor, Space), Name, Marks, Selection)) :-
     term_variables([Space, Mode, Dependencies], []), atom(Mode),
     client_view_dependencies(Dependencies),
     current_ontology_identity(Ns, Anchor),
+    client_subject_name(Space,Name),
     (space_instance(Space, space),
      findall(Scene, world_view(Space, Mode, Scene), [Marks]),
      term_variables(Marks, []),
@@ -45,6 +46,18 @@ client_world_view(Space, Mode, Dependencies,
                  well_formed_scene(Marks)) ->
         client_space_selection(Space, Marks, Selection)
     ; Marks = [], Selection = unavailable).
+
+%% Display names are ordinary governed source data, not identity or admission.
+%% Absence is explicit; conflicting or ill-typed names invalidate presentation.
+client_subject_name(Subject,Name) :-
+    findall(Value,attribute(Subject,name,Value),Names),
+    (Names = [] -> Name = unnamed
+    ; Names = [Name], binary(Name) -> true
+    ; fail_with_reason(invalid_subject_name(Subject))).
+client_subject_label(Subject,Label) :-
+    client_subject_name(Subject,Name),
+    (Name == unnamed -> Label = unlabelled
+    ; Label = label(Name,<<"above">>)).
 
 client_view_dependencies([]).
 client_view_dependencies([dependency(Ns, Anchor, _) | Rest]) :-
@@ -76,15 +89,57 @@ client_simulation_frame(Space,Frames,BodyFrames,
 client_simulation_frame(_,_,_,Selection,Selection) :-
     member(Selection,[disabled,denied,recovering,unavailable]).
 
-%% Code is an eidolon of every class. The root catalogue supplies the exact
+%% The thing class supplies the inherited source Eidolon. The root catalogue supplies the exact
 %% recipe identity; an absent editing ontology simply offers no such recipe.
 %% This is a recipe association, never permission to change the target.
-isa(ontology, thing).
+isa(space, thing).
+isa(ontology, space).
 instance_of(ontology, ontology_ref(Namespace, Anchor)) :-
     current_ontology_identity(Namespace, Anchor).
 
-class_eidolon(Class, prolog, source, recipe(Namespace, Anchor, prolog_editor)) :-
-    nonvar(Class),
+%% Reflected instances are ordinary local terms. Their source catalogue remains
+%% authoritative, including interpreted empty definitions; reads create no state.
+isa(predicate, thing).
+instance_of(predicate, predicate(Indicator)) :-
+    ontology_inspect(predicates(Indicator), Indicators), member(Indicator, Indicators).
+ontology_predicate(Indicator, Index) :-
+    ontology_inspect(predicate(Indicator), Entries), member(predicate(Indicator,Index), Entries).
+ontology_inspect(Query, Result) :-
+    current_ontology_identity(Namespace, Anchor),
+    quod:root::system_ontology(<<"quod:gui">>, ToolsAnchor),
+    in_ontology(<<"quod:gui">>, ToolsAnchor,
+        prolog_inspect(ontology_ref(Namespace, Anchor), Query, Result)).
+
+class_eidolon(predicate, prolog, source, recipe(Ns,A,predicate_source)) :-
+    current_ontology_identity(Ns,A).
+eidolon(predicate_source, subject(Target,predicate(Indicator)), View) :-
+    instance_of(predicate,predicate(Indicator)),
+    quod:root::system_ontology(<<"quod:gui">>,A),
+    in_ontology(<<"quod:gui">>,A,
+        eidolon(prolog_editor(Indicator),subject(Target,predicate(Indicator)),View)).
+class_eidolon(predicate,Mode,solid,recipe(Ns,A,predicate_model)) :-
+    member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
+entity_scene(predicate(Indicator),Mode,
+        appearance(predicate(Indicator),solid,predicate(Indicator),Pose,Eidolons)) :-
+    ontology_predicate(Indicator, Index),
+    X is (Index mod 16) * 1200, Y is -(Index // 16) * 800,
+    Pose = transform(X,Y,0,0,0,0),
+    entity_eidolons(predicate(Indicator),Mode,solid,Eidolons).
+eidolon(predicate_model,predicate(Indicator),
+        [part(<<"predicate">>,box(800,500,200),transform(0,0,0,0,0,0),
+              surface(<<"#6A90D9">>,0,700,0,[]),label(Label,<<"above">>),depicts_nothing)]) :-
+    instance_of(predicate,predicate(Indicator)),
+    '$quod_program_source'([Indicator],Source), binary_codes(Source,Codes),
+    append(LabelCodes,[46,10],Codes), binary_codes(Label,LabelCodes).
+
+%% These are display members, never containing-space assignments or grants.
+space_member(ontology_ref(Ns,A),entity_ref(Ns,A,predicate(Indicator))) :-
+    current_ontology_identity(Ns,A), instance_of(predicate,predicate(Indicator)).
+attribute(ontology_ref(Ns,A),transform,transform(0,0,0,0,0,0)) :- current_ontology_identity(Ns,A).
+attribute(ontology_ref(Ns,A),exterior,contents) :- current_ontology_identity(Ns,A).
+attribute(ontology_ref(Ns,A),dimensions,infinite) :- current_ontology_identity(Ns,A).
+
+class_eidolon(thing, prolog, source, recipe(Namespace, Anchor, prolog_editor)) :-
     Namespace = <<"quod:gui">>,
     quod:root::system_ontology(Namespace, Anchor).
 
@@ -92,6 +147,14 @@ class_eidolon(ontology, inspection, Style, recipe(Namespace, Anchor, Style)) :-
     member(Style, [policy, interfaces, routes]),
     Namespace = <<"quod:gui">>,
     quod:root::system_ontology(Namespace, Anchor).
+
+class_eidolon(ontology, workspace, workbench, recipe(Namespace, Anchor, workbench)) :-
+    Namespace = <<"quod:gui">>, quod:root::system_ontology(Namespace, Anchor).
+
+class_eidolon(ontology,Mode,contents,recipe(Ns,A,ontology_contents)) :-
+    member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
+eidolon(ontology_contents,Space,contents(Exposure)) :-
+    ontology_inspect(predicates(_),_), space_contents_projection(Space,Exposure).
 
 entity_eidolons(Entity,Eidolons) :- entity_eidolons(Entity,_,_,Eidolons).
 entity_eidolons(Entity,Purpose,Style,Eidolons) :-
@@ -103,6 +166,32 @@ entity_eidolons(Entity,Purpose,Style,Eidolons) :-
 entity_eidolon_mode(Entity,operation(class)) :- !, once(isa(Entity,Entity)).
 entity_eidolon_mode(Entity,operation(instance)) :- !, once(instance_of(_,Entity)).
 entity_eidolon_mode(_,_).
+
+%% A choice is data from this exact subject's authored associations, not an
+%% executable client continuation. The recipe and its reads retain their own
+%% anchored authorization and dependency tracking.
+client_eidolon(Entity,Choice,View) :-
+    term_variables([Entity,Choice],[]),
+    Choice = eidolon(Purpose,Style,recipe(Ns,A,Recipe)),
+    entity_eidolons(Entity,Purpose,Style,Choices), member_eq(Choice,Choices),
+    current_ontology_identity(Here,History), Target = ontology_ref(Here,History),
+    (member(Purpose,[playing,edition]) ->
+        entity_scene(Entity,Purpose,appearance(_,_,Context,Layout,_)),
+        in_ontology(Ns,A,eidolon(Recipe,Context,Model)),
+        client_eidolon_scene(Entity,Purpose,Style,Layout,Model,View)
+    ; in_ontology(Ns,A,eidolon(Recipe,subject(Target,Entity),View))).
+
+client_eidolon_scene(Entity,Mode,_,_,contents(Exposure),
+        eidolon_scene(Subject,Marks,Selection,Exposures)) :- !,
+    current_ontology_identity(Ns,A), Subject = entity_ref(Ns,A,Entity),
+    Exposure = exposure(Subject,_,_),
+    space_exposure_projection(Exposure,Mode,Marks,Exposures),
+    client_space_selection(Entity,Marks,Selection).
+client_eidolon_scene(Entity,_,_,Layout,Model,
+        eidolon_scene(entity_ref(Ns,A,Entity),Marks,nonphysical,[])) :-
+    current_ontology_identity(Ns,A), scene_vocabulary(MNs,MA),
+    in_ontology(MNs,MA,place_model(<<"selected">>,Layout,depicts(Ns,A,Entity),Model,Parts)),
+    in_ontology(MNs,MA,model(Parts,Marks)).
 
 class_eidolons(Classes,Eidolons) :- class_eidolons(Classes,_,_,Eidolons).
 class_eidolons(Classes,Purpose,Style,Eidolons) :-
@@ -224,6 +313,8 @@ public_source_query(entity_eidolons(_, _)).
 public_source_query(class_eidolons(_, _)).
 public_source_query(class_eidolons(_, _, _, _)).
 public_source_query(entity_eidolons(_, _, _, _)).
+public_source_query(client_eidolon(_, _, _)).
+public_source_query(entity_scene(_, _, _)).
 
 %% Targets admit only these exact source/read and administrator-edit shapes.
 %% The root policy describes whole-ontology read access, never API visibility.
@@ -239,14 +330,34 @@ system_prolog_introspection(Query, Result) :-
     (Query == presentation -> Result = Access ; prolog_introspection(Query, Result)).
 
 prolog_introspection(predicates, Indicators) :-
+    prolog_introspection(predicates(_), Indicators).
+prolog_introspection(predicates(Indicator), Indicators) :-
     findall(Indicator, current_predicate(Indicator), Unsorted),
     sort(Unsorted, Indicators).
+%% Exact membership and layout use the same source-authorized sorted catalogue;
+%% keep the catalogue inside its owner instead of transferring it per subject.
+prolog_introspection(predicate(Indicator), Entries) :-
+    prolog_introspection(predicates, Indicators),
+    (term_variables(Indicator,[]) ->
+        (once(append(Before,[Indicator|_],Indicators)) ->
+            length(Before,Index), Entries = [predicate(Indicator,Index)]
+        ; Entries = [])
+    ; findall(predicate(Indicator,Index),
+        (append(Before,[Indicator|_],Indicators), length(Before,Index)), Entries)).
 prolog_introspection(source(Indicator), Source) :-
     '$quod_predicate_source'(Indicator, Source).
 prolog_introspection(chunks(Bytes), Chunk) :-
     '$quod_source_chunk'(all, Bytes, Chunk).
 prolog_introspection(identity, ontology_ref(Namespace, Anchor)) :-
     current_ontology_identity(Namespace, Anchor).
+%% The first workbench depicts authored ground facts, not the inferred closure
+%% or executable rule bodies. It shares the ordinary full-source read boundary.
+prolog_introspection(workbench, content(Parents, Members, Attributes)) :-
+    findall(isa(C, P), (clause(isa(C, P), true), atom(C), atom(P)), P0), sort(P0, Parents),
+    findall(instance_of(C, I), (clause(instance_of(C, I), true),
+             atom(C), term_variables(I, [])), M0), sort(M0, Members),
+    findall(attribute(I, K, V), (clause(attribute(I, K, V), true),
+             term_variables([I, K, V], [])), A0), sort(A0, Attributes).
 prolog_introspection(policy_chunks(Bytes), Chunk) :-
     findall(Indicator, ontology_acl_indicator(Indicator), Indicators),
     '$quod_source_chunk'(predicates(Indicators), Bytes, Chunk).
@@ -503,3 +614,157 @@ member_eq(X, [_ | Rest]) :-
 %% the proof it is asked; a retried request is a new proof and draws afresh.
 %% Fails plainly outside a proof. Deterministic selection, not randomness.
 proof_draw(Salt, N, I) :- '$quod_draw'(Salt, N, I).
+
+space_instance(Space, Class) :-
+    %% Bind the more selective side of this join first. Open catalogues start
+    %% at the requested ancestry; exact subjects need only their own classes.
+    findall(instance(Space,Class),
+        (nonvar(Space) -> instance_of(Direct,Space),isa(Direct,Class)
+        ; isa(Direct,Class),instance_of(Direct,Space)),Raw),
+    sort(Raw,Distinct),member(instance(Space,Class),Distinct).
+
+
+space_contains(Space, Subject) :- space_member(Space, Subject).
+space_contains(Space, Subject) :- space_placement(Space, Subject, _).
+
+space_simulation_domain(_,_,_,_) :- fail.
+
+%% Contents is a recipe result, not a substitute mesh. The source owns the
+%% complete permitted subject set and physical bindings in its own frame.
+eidolon(space_contents, Space, contents(Exposure)) :-
+    space_contents_projection(Space,Exposure).
+
+space_contents_projection(Space,exposure(Frame,Revision,Subjects)) :-
+    space_instance(Space,space), current_ontology_identity(Ns,A),
+    Frame = entity_ref(Ns,A,Space),
+    findall(Subject,space_contains(Space,Subject),Raw), sort(Raw,Unique),
+    space_exposed_subjects(Unique,Space,Subjects),
+    variant_digest(contents(Frame,Subjects),Revision).
+space_exposed_subjects([],_,[]).
+space_exposed_subjects([Subject|Rest],Space,[exposed(Subject,Relation,Binding)|Subjects]) :-
+    Subject = entity_ref(_,_,_), term_variables(Subject,[]),
+    findall(R,space_placement(Space,Subject,R),Assignments),
+    (Assignments = [] -> Relation = display
+    ; Assignments = [Assignment], Relation = placement(Assignment)),
+    space_subject_binding(Space,Subject,Selected),
+    (Selected = body_pose(_,_), space_simulation_domain(Space,World,_,_) ->
+        Binding = in_frame(World,Selected)
+    ; Binding = Selected),
+    space_exposed_subjects(Rest,Space,Subjects).
+
+world_view(Space, Mode, Marks) :-
+    space_projection(Space,Mode,Marks,_).
+
+%% The ordinary view and portable exposure receipt use one projection.
+%% Exact ancestry detects cycles; the proof owner admits resource use.
+space_projection(Space,Mode,scene(Marks,Exposures)) :-
+    space_projection(Space,Mode,Marks,Exposures).
+space_projection(Space,Mode,Marks,Exposures) :-
+    space_instance(Space,space), current_ontology_identity(Ns,A),
+    entity_eidolons(Space,Mode,contents,Eidolons),
+    findall(Recipe,member(eidolon(Mode,contents,Recipe),Eidolons),Recipes),
+    space_entity_model(Recipes,Space,contents(Exposure)),
+    Exposure = exposure(entity_ref(Ns,A,Space),_,_),
+    space_exposure_projection(Exposure,Mode,Marks,Exposures).
+
+%% Selected contents and the ordinary interior share exactly one recursive
+%% projection. A selected recipe's permitted subjects are never replaced by
+%% a client inventory or by another read of the default exterior.
+space_exposure_projection(exposure(Frame,_,Subjects),Mode,Marks,Exposures) :-
+    member(Mode,[playing,edition]),
+    Frame = entity_ref(Here,History,Space), current_ontology_identity(Here,History),
+    unique_solution(scene_vocabulary(Ns,A)),
+    (space_simulation_domain(Space,World,_,_) -> true; World = none),
+    space_scene_parts(Subjects,Mode,[interior(Frame)],
+        [representation(Frame,contents(Mode))],none,role(physical,World),Parts,Exposures),
+    in_ontology(Ns,A,model(Parts,Marks)).
+
+space_scene_parts([],_,_,_,_,_,[],[]).
+space_scene_parts([exposed(Subject,Relation,Binding)|Rest],Mode,Path,Seen,Parent,Role,
+                  Parts,Exposures) :-
+    Subject = entity_ref(Ns,A,Entity),
+    in_ontology(Ns,A,entity_scene(Entity,Mode,Scene)),
+    (Scene = hidden -> Placed = [], Current = []
+    ; Scene = appearance(Id,Style,Context,Layout,Eidolons),
+      append(Path,[edge(Subject,Id)],OccurrencePath),
+      term_hex_digest(OccurrencePath,Occurrence),
+      findall(Recipe,member(eidolon(Mode,Style,Recipe),Eidolons),Recipes),
+      (Style == contents ->
+          (Recipes = [Selected],
+           space_entity_model([Selected],Context,contents(exposure(Subject,ContentRevision,Subjects))) ->
+              Model = contents(exposure(Subject,ContentRevision,Subjects))
+          ; fail_with_reason(space_contents_unavailable(Subject)))
+      ; space_entity_model(Recipes,Context,Model)),
+      variant_digest(selected(Recipes,Context,Model),Revision),
+      Role = role(ParentUse,World),
+      (ParentUse == physical, Relation = placement(_) -> Use = physical; Use = display),
+      space_scene_pose(Use,World,Subject,Binding,Layout,Pose), NextRole = role(Use,World),
+      space_parent_pose(Parent,Pose,At),
+      space_occurrence_model(Model,Mode,OccurrencePath,Seen,Occurrence,NextRole,
+                             Local,Children,Descendants,Frame,Allowed,Status),
+      scene_vocabulary(MNs,MA),
+      in_ontology(MNs,MA,
+            place_model(Occurrence,At,depicts(Ns,A,Entity),Local,Here)),
+      append(Here,Children,Placed),
+      Current = [exposure(Occurrence,OccurrencePath,Subject,selected(Recipes,Revision,Use),
+                          Frame,Allowed,Pose,Status)|Descendants]),
+    space_scene_parts(Rest,Mode,Path,Seen,Parent,Role,Tail,Others),
+    append(Placed,Tail,Parts), append(Current,Others,Exposures).
+
+space_scene_pose(Use,World,_,in_frame(Selected,body_pose(B,R)),_,Pose) :-
+    (Selected == World -> true; fail_with_reason(incompatible_physics_view(Selected,World))),
+    (Use == physical -> Pose = body_pose(B,R)
+    ; Use == display, Pose = body_frame_pose(B,R)).
+space_scene_pose(physical,_,_,body_pose(B,R),_,body_pose(B,R)).
+space_scene_pose(physical,_,_,source_layout,Layout,Layout).
+space_scene_pose(display,World,Subject,source_layout,Layout,Pose) :-
+    (World = world_ref(Ns,A,W) ->
+        in_ontology(Ns,A,physics_appearance_binding(W,Subject,Binding)),
+        (Binding = none -> Pose = Layout; Binding = body_pose(B,R),Pose = body_frame_pose(B,R))
+    ; Pose = Layout).
+
+space_occurrence_model(contents(exposure(Frame,_,Subjects)),Mode,Path,Seen,Occurrence,Role,
+                       Local,Children,Exposures,Frame,Subjects,Status) :-
+    Key = representation(Frame,contents(Mode)),
+    (member_eq(Key,Seen) ->
+        Status = cycle, Children = [], Exposures = [],
+        space_eidolon_status(<<"Contents cycle">>,Local)
+    ; Status = contents, Local = [],
+      space_scene_parts(Subjects,Mode,Path,[Key|Seen],Occurrence,Role,Children,Exposures)).
+space_occurrence_model(Model,_,_,_,_,_,Model,[],[],none,[],model) :-
+    Model \= contents(_).
+
+space_parent_pose(none,Pose,Pose).
+space_parent_pose(Parent,Pose,relative(Parent,Pose)) :- Parent \== none.
+
+space_subject_binding(Space,Subject,Binding) :-
+    (space_placement(Space,Subject,Assignment), space_simulation_domain(Space,World,_,Path) ->
+        World = world_ref(Ns,A,W),
+        in_ontology(Ns,A,physics_scene_binding(W,Path,Subject,Assignment,Binding))
+    ; space_placement(Space,Subject,Assignment), space_instance(Space,physical_space) ->
+        findall(binding(B,R),physics_body_definition(Space,B,R,_,_,live(Subject,Assignment,_,_)),
+                [binding(Body,Revision)]), Binding = body_pose(Body,Revision)
+    ; Binding = source_layout).
+
+space_entity_model([recipe(Ns,A,Recipe)],Context,Model) :-
+    in_ontology(Ns,A,eidolon(Recipe,Context,Model)).
+space_entity_model([],_,Parts) :- space_eidolon_status(<<"No matching eidolon">>,Parts).
+space_entity_model([_,_|_],_,Parts) :- space_eidolon_status(<<"Choose an eidolon">>,Parts).
+space_eidolon_status(Text,
+    [part(<<"eidolon-status">>,group,transform(0,0,0,0,0,0),
+          no_surface,label(Text,<<"above">>),depicts_nothing)]).
+
+entity_scene(Space, Mode, appearance(Space, Style, Space, Transform, Eidolons)) :-
+    space_instance(Space, space), attribute(Space, transform, Transform),
+    attribute(Space, exterior, Style),
+    member(Mode, [playing, edition]), entity_eidolons(Space, Mode, Style, Eidolons).
+
+class_eidolon(space,Mode,contents,recipe(Ns,A,space_contents)) :-
+    member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
+
+%% A composed vocabulary is an explicit owner pin. Otherwise the installed
+%% system GUI vocabulary supplies the common presentation policy and geometry.
+scene_vocabulary(Ns,A) :-
+    findall(ontology_ref(N,H),modelling_vocabulary(N,H),Pins),
+    (Pins = [] -> quod:root::system_ontology(<<"quod:gui">>,A), Ns = <<"quod:gui">>
+    ; Pins = [ontology_ref(Ns,A)]).

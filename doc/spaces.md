@@ -4,8 +4,11 @@ A **space** contains placed instances and can display references to other
 instances or information. A **physical_space** adds explicitly governed physical
 participation. Location and display membership are independent of ontology
 membership: an ontology owns code, committed facts, authorization and history.
-An ontology can be depicted or edited in 3D without acquiring space semantics.
-An instance can carry both roles only through explicit authored membership and policy.
+An ontology is reflected as a space whose ordinary display contents are its
+predicate instances. Its class-selected contents Eidolon uses the same exposure
+and scene projection as other spaces. This reflection grants no entry, placement,
+founding, ownership or physical permission; those operations retain their
+explicit authored policy.
 
 [quod_space.pl](../priv/ontologies/quod_space.pl) defines the shared space
 foundation and is composed into the ontologies owning individual spaces through
@@ -24,7 +27,7 @@ is class-first, remains authored, and does not itself expand ancestry.
 `space_instance(Entity, Class)` explicitly combines membership with ancestry.
 Neither declaration imports behavior or grants invocation rights. The existing
 lobby likewise explicitly expands its device classes before recipe selection.
-This vocabulary does not change lobby classes or ontology-instance reflection.
+Ontology reflection specializes space for display; it does not change lobby classes.
 
 An `entity_ref(Namespace, GenesisAnchor, Entity)` refers to an existing entity
 in its owning ontology. It is a reference term, not a new object registry or
@@ -298,6 +301,16 @@ opens only the current exact placed space; an unplaced client keeps navigation
 subscribed and may open an explicitly selected existing subject's ordinary Enter
 offer. `account_navigation/2` remains the placed-location query for world reads.
 
+The signed `client_world_view/4` result is
+`world_view(ExactSpace,Name,Marks,Selection)`. `Name` is the selected owner's
+single binary `attribute(Space,name,Name)`, or `unnamed` when absent; conflicting
+or non-binary names refuse the view. The existing endpoint checks the exact
+space before exposing this optional name (`name` string or null) alongside
+the projection. It has the same retained read dependencies and authorization;
+it is neither a naming service nor a second current-location record. Ordinary
+solid/wireframe space recipes use the same authored name in their scene label.
+An empty permitted scene remains black; its context belongs to the GUI chrome.
+
 `space_represent(Space, BeforeStyle, BeforePose, Style, Pose)` checks the exact
 source values and committed `space_represent` instance policy. A changed
 representation invokes the admitting destination's physical consequence in the
@@ -397,7 +410,7 @@ enabled runs cannot join through contents selection. Empty ordinary spaces
 allocate no physics solely because they are spaces; admission, custody and
 transfer guarantees still apply.
 
-The existing `quod_space.pl` projects the union of placement and display
+The shared projection in `common_predicates.pl` projects the union of placement and display
 references, deduplicating each exact subject within that view. It asks the source
 owner for `entity_scene/3` and uses the existing Eidolon, `place_model/5`, local
 `transform/6` and anchored `depicts/3` contracts. Ordinary placement uses the
@@ -405,14 +418,18 @@ scene's local transform. Display references use that same presentation path;
 no domain facts, ownership or storage move to the viewing space.
 
 `space_projection(Space,Mode,scene(Marks,Exposures))` supplies the same marks as
-`world_view/3`, with portable exposure receipts. Each occurrence hashes the full
+`world_view/3`, with portable exposure receipts. Interior projection and selected contents use the same
+class-owned contents recipe, bound to the requested namespace, genesis and space.
+The ontology class requires its authorized predicate catalogue before collecting
+reflected members; a refused catalogue cannot be collected as zero members. Each occurrence hashes the full
 anchored edge path from the viewed interior. Direct placement/display duplicates
 share one occurrence; independent paths keep distinct identities and exact
 depicted source subjects. Receipts retain the selected recipe/revision, source
 frame, permitted subjects and local-to-parent pose. Parents precede children.
 An ancestry cycle with the same exact subject and representation purpose emits
 the cycle occurrence without expansion. Independent branches remain valid.
-The pinned scene allowance governs traversal; exhaustion refuses explicitly.
+Traversal imposes no separate mark-count allowance. Exact ancestry ends cycles;
+resource admission remains with the existing proof and physical owners.
 
 Changes in C must reach A's retained view when A exposes B and B exposes C.
 The proof retains every source, recipe, containment and authorization dependency
@@ -428,6 +445,30 @@ decorative transform. Retained client views keep their existing dependencies,
 renewal and installed-change notification lifecycle. Unchanged projections
 allocate no physics resources and require no history replay or projection rebuild.
 A committed source update refreshes each subscribed display through those owners.
+
+## Reflected ontology contents
+
+The ordinary ontology instance derives display members from the authorized
+predicate catalogue. Each local `predicate(Name/Arity)` is an ordinary predicate
+instance, referenced with `entity_ref/3`. Its class owns its model and source
+recipes. A transient grid positions appearances without storing transforms,
+changing clause order or assigning predicates or agents to a containing space.
+Empty-but-defined predicates retain the existing catalogue semantics.
+
+Pure exposure and model composition share the common presentation owner.
+The space bundle retains construction, assignment, admission and physical
+transitions. A configured modelling vocabulary remains the exact owner pin;
+when none is composed, the root catalogue supplies the installed GUI vocabulary
+for presentation. Source policy still governs every reflected catalogue read.
+There is no client predicate identity type or domain-type selection branch.
+
+The presentation vocabulary imposes no population or display-text quota over
+complete contents. Occurrence groups and geometry retain their exact identities;
+labels are not shortened. Descriptor coordinates keep their declared numeric
+types, and adapters reject values outside their actual finite rendering range.
+Explicit authored resource allowances remain enforceable. Editing a predicate
+does not require rendering its whole containing ontology. Source workspaces
+carry their exact lens binding in authored representation data.
 
 ## Optional physical integration and recovery
 

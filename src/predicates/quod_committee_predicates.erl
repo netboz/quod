@@ -76,10 +76,9 @@ load(Est0) ->
 admit_3(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {admit, Pub, Host, Port} when is_binary(Pub) ->
-            case {self_ns(St), committee_size(St) < ?MAX_VALIDATORS} of
-                {undefined, _} -> erlog_int:fail(St);
-                {_Ns, false} -> quod_predicates:fail_reason(committee_full,St);
-                {Ns, true} ->
+            case self_ns(St) of
+                undefined -> erlog_int:fail(St);
+                Ns ->
                     Fact = {peer_admitted, Pub, Host, Port, Pub},
                     erlog_int:prove_body(
                       [{can_join, Ns, [Host, Port], Pub}, {assertz, Fact} | Next], St)

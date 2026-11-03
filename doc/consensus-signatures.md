@@ -29,8 +29,9 @@ Validators verify it before voting; replay and catch-up verify it again.
 ## Ownership and recovery
 
 `quod_simplex` is the sole local ledger writer. It installs a verified history
-delta before publishing the corresponding state. `quod_catchup` serves bounded
-pages from an immutable captured view; the receiver verifies ancestry,
+delta before publishing the corresponding state. `quod_catchup` serves pages
+which fit their complete encoded frames from one immutable captured view,
+retaining its cursor and continuation credits; the receiver verifies ancestry,
 historical committee and transaction signatures before its owner installs
 new material. `quod_feed` disseminates live entries and wakes the same
 catch-up path for gaps. Replay restores state and does not create a live event.

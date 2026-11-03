@@ -10,7 +10,7 @@ process holding the connection pid may send). A link:
 
 - **frames** an opener's first write as a **header** (`<<NLen:16, NodeId,
   CLen:16, Channel, LearnHint:8>>`), then length-prefixed payloads
-  (`<<PLen:32, Payload>>`),
+  (`<<PLen:?QUOD_LINK_PAYLOAD_BITS, Payload>>`),
 - **publishes** ordinary payloads as `{quod_message, {Peer, self()}, Channel, Payload}`
   on `{channel, Channel}`; catch-up instead gates page credit and delivers
   raw controls directly to the exact serving/producing owner,
@@ -140,7 +140,6 @@ bootstrap_frames(ConnProc, Stage, Deadline, S = #s{buf = Buf}) ->
         false ->
             case parse_one(Buf) of
                 more -> await_ack(ConnProc, Stage, Deadline, S);
-                {error, oversized} -> protocol_failed(frame_too_large, S);
                 {ok, Payload, Rest} ->
                     bootstrap_frame(ConnProc, Stage, Deadline, Payload,
                                     S#s{buf = Rest})
@@ -171,10 +170,9 @@ start_inbound(Conn, Sid, ConnProc) ->
     spawn(fun() -> read_header(Conn, Sid, ConnProc, <<>>) end).
 
 -doc "Queue `Payload` to be sent on this link (non-blocking).".
--spec send(pid(), iodata()) -> ok.
+-spec send(pid(), iodata()) -> ok | {error, frame_unrepresentable}.
 send(LinkPid, Payload) ->
-    LinkPid ! {send, iolist_to_binary(Payload)},
-    ok.
+    queue_payload(send, LinkPid, Payload).
 
 -doc """
 Queue a payload whose successors must never pass it if local QUIC backpressure
@@ -184,10 +182,21 @@ connection-idle bound, the link exits so every queued successor is discarded
 and its owner can reconnect and reconstruct the ordered prefix from retained
 state. The timer detects terminal silence; it never discovers normal progress.
 """.
--spec send_ordered(pid(), iodata()) -> ok.
+-spec send_ordered(pid(), iodata()) -> ok | {error, frame_unrepresentable}.
 send_ordered(LinkPid, Payload) ->
-    LinkPid ! {send_ordered, iolist_to_binary(Payload)},
-    ok.
+    queue_payload(send_ordered, LinkPid, Payload).
+
+queue_payload(Kind, LinkPid, Payload) ->
+    case prepare_payload(Payload) of
+        {ok, Binary} -> LinkPid ! {Kind, Binary}, ok;
+        {error, _} = Error -> Error
+    end.
+
+prepare_payload(Payload) ->
+    case iolist_size(Payload) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
+        true -> {ok, iolist_to_binary(Payload)};
+        false -> {error, frame_unrepresentable}
+    end.
 
 -doc "Bind this outbound catch-up link to its existing producer incarnation.".
 -spec bind_catchup(pid(), reference()) -> ok.
@@ -203,7 +212,7 @@ request_page(Link, BindingRef, Grant, ReqId, Query) ->
 
 -doc "Finish one admitted server page; acceptance and continuation are asynchronous.".
 -spec complete_page(pid(), reference(), {ok, [term()], non_neg_integer(), done | {binary(), non_neg_integer()}} |
-                    {error, not_ready | server_error}) -> ok.
+                    {error, not_ready | server_error | frame_unrepresentable}) -> ok.
 complete_page(Link, OperationRef, Result) ->
     Link ! {complete_page, self(), OperationRef, Result},
     ok.
@@ -248,9 +257,15 @@ involved. Intended for bounded request/response protocols, not gossip.
 -spec send_reliable(pid(), iodata(), pos_integer()) -> ok | {error, term()}.
 send_reliable(LinkPid, Payload, Timeout)
   when is_pid(LinkPid), is_integer(Timeout), Timeout > 0 ->
+    case prepare_payload(Payload) of
+        {ok, Binary} -> await_send(LinkPid, Binary, Timeout);
+        {error, _} = Error -> Error
+    end.
+
+await_send(LinkPid, Payload, Timeout) ->
     Ref = make_ref(),
     MRef = monitor(process, LinkPid),
-    LinkPid ! {send_reliable, self(), Ref, iolist_to_binary(Payload),
+    LinkPid ! {send_reliable, self(), Ref, Payload,
                erlang:monotonic_time(millisecond) + Timeout},
     receive
         {Ref, Result} ->
@@ -308,7 +323,7 @@ await_header_auth(Conn, Sid, ConnProc, Ref, Peer, Channel, Rest) ->
                          S;
                      #credit{ns = Ns} ->
                          Grant = fresh_grant(none),
-                         Payload = quod_catchup:encode_frame(Ns, {history_credit3, Grant}),
+                         {ok, Payload} = quod_catchup:encode_frame(Ns, {history_credit3, Grant}),
                          Frames = <<(ack_frame())/binary, (frame(Payload))/binary>>,
                          enqueue_send({ordered, Frames, {initial_credit, Grant}}, S)
                  end,
@@ -547,7 +562,6 @@ loop_msgs(Data, S = #s{buf = Buf, catchup = #credit{}}) ->
     catchup_frames(S#s{buf = <<Buf/binary, Data/binary>>});
 loop_msgs(Data, S = #s{buf = Buf, peer = Peer, channel = Ch}) ->
     case parse(<<Buf/binary, Data/binary>>) of
-        {error, oversized} -> exit({frame_too_large, Ch});
         {Frames, Buf1} ->
             lists:foreach(
               fun(Payload) -> publish(Peer, Ch, Payload) end,
@@ -560,7 +574,6 @@ loop_msgs(Data, S = #s{buf = Buf, peer = Peer, channel = Ch}) ->
 catchup_frames(S = #s{buf = Buf, catchup = #credit{ns = Ns}}) ->
     case parse_one(Buf) of
         more -> S;
-        {error, oversized} -> protocol_failed(frame_too_large, S);
         {ok, Payload, Rest} ->
             case quod_catchup:decode_frame(Ns, Payload) of
                 {ok, Control, _Bytes} ->
@@ -611,9 +624,12 @@ submit_page(Producer, BindingRef, Grant, ReqId, Query,
                                          binding = BindingRef, grant = Grant,
                                          pending = none}})
   when is_binary(Grant), byte_size(Grant) =:= 16 ->
-    Payload = quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, Query}),
-    S1 = S#s{catchup = C#credit{grant = none, pending = {Grant, ReqId}}},
-    enqueue_send({ordered, frame(Payload), request_accepted}, S1);
+    case quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, Query}) of
+        {ok, Payload} ->
+            S1 = S#s{catchup = C#credit{grant = none, pending = {Grant, ReqId}}},
+            enqueue_send({ordered, frame(Payload), request_accepted}, S1);
+        {error, Reason} -> protocol_failed(Reason, S)
+    end;
 submit_page(_Producer, _BindingRef, _Grant, _ReqId, _Query, S) ->
     %% Late controls belong to their original binding, never a replacement.
     S.
@@ -664,10 +680,16 @@ queue_page_response(Result,
     Control = case Result of
                   {ok, Parts, Height, Continuation} ->
                       {history_page3, Grant, ReqId, Parts, Height, Continuation, Next};
-                  {error, Reason} when Reason =:= not_ready; Reason =:= server_error ->
+                  {error, Reason} when Reason =:= not_ready; Reason =:= server_error; Reason =:= frame_unrepresentable ->
                       {history_error3, Grant, ReqId, Reason, Next}
               end,
-    Payload = quod_catchup:encode_frame(Ns, Control),
+    Encoded = case quod_catchup:encode_frame(Ns, Control) of
+        {ok, _} = Ok -> Ok;
+        {error, too_large} -> quod_catchup:encode_frame(
+                              Ns, {history_error3, Grant, ReqId, frame_unrepresentable, Next});
+        {error, EncodingReason} -> protocol_failed(EncodingReason, S)
+    end,
+    {ok, Payload} = Encoded,
     S1 = S#s{catchup = C#credit{pending = {OperationRef, Grant, ReqId, sending}}},
     enqueue_send({ordered, frame(Payload), {page_sent, OperationRef, Next}}, S1).
 
@@ -739,24 +761,21 @@ valid_identity({Pubkey, Addr}) ->
         quod_quic:valid_endpoint(Addr);
 valid_identity(_) -> false.
 
-%% payload frame: <<PLen:32, Payload>>
-frame(Payload) -> <<(byte_size(Payload)):32, Payload/binary>>.
+%% payload frame: <<PLen:?QUOD_LINK_PAYLOAD_BITS, Payload>>
+frame(Payload) when is_binary(Payload), byte_size(Payload) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
+    <<(byte_size(Payload)):?QUOD_LINK_PAYLOAD_BITS, Payload/binary>>.
 
 %% The liveness/authentication ACK: an empty frame sent only after the receiver
 %% binds the header identity to TLS. The opener consumes the first frame as the
 %% ACK; real payloads are never empty, so there is no ambiguity.
 ack_frame() -> frame(<<>>).
 
-parse_one(<<PLen:32, _/binary>>) when PLen > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
-    {error, oversized};
-parse_one(<<PLen:32, Payload:PLen/binary, Rest/binary>>) ->
+parse_one(<<PLen:?QUOD_LINK_PAYLOAD_BITS, Payload:PLen/binary, Rest/binary>>) ->
     {ok, Payload, Rest};
 parse_one(_Bin) -> more.
 
 parse(Bin) -> parse(Bin, []).
-parse(<<PLen:32, _/binary>>, _Acc)
-  when PLen > ?QUOD_TRANSPORT_MAX_FRAME_BYTES -> {error, oversized};
-parse(<<PLen:32, Rest/binary>> = Bin, Acc) ->
+parse(<<PLen:?QUOD_LINK_PAYLOAD_BITS, Rest/binary>> = Bin, Acc) ->
     case Rest of
         <<Payload:PLen/binary, Tail/binary>> -> parse(Tail, [Payload | Acc]);
         _ -> {lists:reverse(Acc), Bin}

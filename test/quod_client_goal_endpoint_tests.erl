@@ -81,19 +81,23 @@ malformed_shapes_fail_closed_test() ->
          term_to_binary({quod_client_goal_endpoint, 1,
                          term_to_binary({unknown, Id}, [deterministic])},
                         [deterministic]))),
-    Oversized = <<0:(?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES + 1)/unit:8>>,
+    Oversized = <<0:((1024 * 1024) + 1)/unit:8>>,
     ?assertEqual(
-       {error, {too_large, client_goal_endpoint}},
+       {error, {protocol_error, bad_etf}},
        quod_client_goal_endpoint:decode_response(Oversized)).
 
-limits_stay_below_transport_frame_test() ->
-    ?assert(?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES <
-                ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES),
-    ?assert(?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES <
-                ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-    ?assertEqual(
-       term_to_binary(quod_client_goal_v1, [deterministic]),
-       quod_client_goal_endpoint:channel()).
+complete_large_envelope_roundtrips_without_old_quota_test() ->
+    Id = <<7:128>>,
+    {ok,Payload}=quod_wire_term:encode_bindings(#{<<"X">>=>binary:copy(<<$x>>,600000)},unlimited),
+    {ok,Result}=quod_client_result:encode({answers,1,[Payload]}),
+    {ok,Envelope}=quod_client_goal_endpoint:encode_response({result,Id,Result}),
+    ?assertEqual({ok,{result,Id,Result}},quod_client_goal_endpoint:decode_response(Envelope)),
+    ?assertEqual({ok,{result,Id,Result}},quod_client_goal_endpoint:route_response(Envelope)),
+    {ok,HugePayload}=quod_wire_term:encode_bindings(#{<<"X">>=>binary:copy(<<$x>>,(1024 * 1024))},unlimited),
+    {ok,Huge}=quod_client_result:encode({answers,1,[HugePayload]}),
+    {ok,HugeEnvelope}=quod_client_goal_endpoint:encode_response({result,Id,Huge}),
+    ?assertEqual({ok,{result,Id,Huge}},quod_client_goal_endpoint:decode_response(HugeEnvelope)),
+    ?assertEqual(term_to_binary(quod_client_goal_v1,[deterministic]),quod_client_goal_endpoint:channel()).
 
 routing_decode_keeps_signed_and_result_payloads_opaque_test() ->
     Id = <<8:128>>,

@@ -592,7 +592,7 @@ start_local_owner(F, Dir) ->
             %% Reuse the signed history's existing owner-view constructor;
             %% it replays once during fixture setup, before tracing starts.
             View = quod_foreign_log_tests:local_fixture_view(Store, F, Index),
-            Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+            Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
                             [named_table, protected, set]),
             true = ets:insert(Table, {anchor, maps:get(anchor, F)}),
             Parent ! {local_owner_ready, self()},

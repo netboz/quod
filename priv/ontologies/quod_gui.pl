@@ -101,13 +101,14 @@ gui_attribute(gui_component, enabled, boolean, default(true)).
 gui_attribute(input, required, boolean, default(false)).
 gui_attribute(input, readonly, boolean, default(false)).
 gui_attribute(Kind, readonly, boolean, default(false)) :- member(Kind, [editor, catalogue_selection]).
-gui_attribute(text_box, max_bytes, nonnegative_integer, default(4096)).
+gui_attribute(text_box, max_bytes, nonnegative_integer, optional).
 gui_attribute(selection, options, labelled_values, required).
 gui_attribute(selectable_list, multiple, boolean, default(false)).
 gui_attribute(table, headings, text_list, required).
 gui_attribute(image, image, image_asset, required).
 gui_attribute(button, image, optional_image_asset, default(none)).
 gui_attribute(container, layout, layout, default(column)).
+gui_attribute(container, appearance, gui_appearance, default(inherit)).
 gui_attribute(row, layout, layout, default(row)).
 gui_attribute(grid, layout, layout, default(grid)).
 gui_attribute(grid, columns, positive_integer, default(2)).
@@ -210,6 +211,9 @@ gui_property(Kind, Key, Default) :-
     most_specific_classes([Kind], Owners, [Class]).
 
 gui_properties([], _, []).
+gui_properties([property(Key, optional) | Contract], Attributes, Properties) :-
+    \+ member(attribute(Key, _), Attributes), !,
+    gui_properties(Contract, Attributes, Properties).
 gui_properties([property(Key, Default) | Contract], Attributes, [property(Key, Value) | Properties]) :-
     findall(V, member(attribute(Key, V), Attributes), Values),
     (Values = [Value] -> true
@@ -229,6 +233,24 @@ no_follow(labelled_values/1).
 no_follow(text_list/1).
 no_follow(optional_image_asset/1).
 no_follow(image_asset/1).
+no_follow(gui_appearance/1).
+no_follow(gui_appearance_tokens/2).
+no_follow(gui_appearance_token/2).
+no_follow(gui_rgb/1).
+gui_appearance(inherit).
+gui_appearance(appearance(1, Tokens)) :- gui_appearance_tokens(Tokens, []).
+gui_appearance_tokens([], _).
+gui_appearance_tokens([token(Name, Value) | Rest], Seen) :-
+    atom(Name), \+ member_eq(Name, Seen), gui_appearance_token(Name, Value),
+    gui_appearance_tokens(Rest, [Name | Seen]).
+gui_appearance_token(Name, Value) :-
+    member(Name, [panel, field, text, accent, edge, error, success]), gui_rgb(Value).
+gui_appearance_token(panel_opacity, Value) :- integer(Value), Value >= 0, Value =< 1000.
+gui_appearance_token(Name, Value) :-
+    member(Name, [spacing, padding, corner_radius]), integer(Value), Value >= 0.
+gui_rgb(rgb(R, G, B)) :-
+    integer(R), integer(G), integer(B),
+    R >= 0, R =< 255, G >= 0, G =< 255, B >= 0, B =< 255.
 text_or_atom(Text) :- (atom(Text) -> true; gui_text(Text)).
 layout(Value) :- member(Value, [column, row, grid]).
 percentage(Value) :- integer(Value), Value >= 0, Value =< 100.
@@ -262,7 +284,7 @@ gui_options([option(Id, Label) | Rest], Seen) :-
 gui_value(Kind, Properties, Value) :-
     once(isa(Kind, text_box)),
     binary(Value), binary_codes(Value, Bytes), length(Bytes, Length),
-    member(property(max_bytes, Max), Properties), Length =< Max,
+    (member(property(max_bytes, Max), Properties) -> Length =< Max; true),
     (member(property(required, true), Properties) -> Length > 0; true).
 gui_value(Kind, Properties, Value) :-
     once(isa(Kind, selection)), member(property(options, Options), Properties),
@@ -332,7 +354,8 @@ gui_view(prolog_source, View) :-
 %% catalogues from the corresponding source lens, not a second GUI engine.
 gui_workspace(Title, Fields, Tree) :-
     gui_workspace_fields(Fields, Children),
-    gui_tree_schema(component(workspace, [form], [attribute(label, Title)], Children), Tree, _).
+    findall(attribute(appearance, Value), attribute(workspace, appearance, Value), Appearance),
+    gui_tree_schema(component(workspace, [form], [attribute(label, Title) | Appearance], Children), Tree, _).
 gui_workspace_fields([], []).
 gui_workspace_fields([Field | Rest], [component(Id, [Kind], [attribute(label, Label)], []) | Children]) :-
     Field =.. [Kind, Id, Label], gui_workspace_fields(Rest, Children).

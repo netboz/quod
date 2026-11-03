@@ -413,8 +413,8 @@ fresh_proof_state(
   #est{db = #db{mod = ?MODULE} = Db} = St) ->
     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0,
            db = Db#db{loc = []},
-           fail_reasons = [], fail_reason_count = 0,
-           fail_reasons_truncated = false, fail_boundaries = 0,
+           fail_reasons = [],
+           fail_reasons_truncated = false,
            checkpoint_depth = 0};
 fresh_proof_state(_St) ->
     erlang:error(badarg).
@@ -443,6 +443,10 @@ replace_revision(_St, _Revision) ->
 
 -doc "Return transaction tokens retained by the invocation's live choice points.".
 -spec live_transaction_tokens(tuple()) -> [distributed_token()].
+%% Checkpoints exist only inside the inherited or local savepoint mode.
+%% Exiting a savepoint discards its choicepoints before restoring depth zero.
+live_transaction_tokens(#est{checkpoint_depth = 0}) ->
+    [];
 live_transaction_tokens(#est{cps = Choicepoints}) ->
     lists:usort(live_transaction_tokens(Choicepoints, []));
 live_transaction_tokens(_St) ->
@@ -469,8 +473,8 @@ committed_state(
   #est{db = #db{mod = ?MODULE, ref = #lp{out_db = OutDb}}} = St) ->
     ensure_access(St),
     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0, db = OutDb,
-           fail_reasons = [], fail_reason_count = 0,
-           fail_reasons_truncated = false, fail_boundaries = 0,
+           fail_reasons = [],
+           fail_reasons_truncated = false,
            checkpoint_depth = 0}.
 
 -doc "Use the same staged view and read dependencies without generated following clauses.".

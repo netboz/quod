@@ -898,7 +898,12 @@ stream_next(Stream, St) ->
           St2 = refresh_session(St1),
           case Result of
               {solution, Solution, NextStream, Independent} ->
-                  {solution, Solution, NextStream, St2, Independent};
+                  case quod_proof_session:admit_answer(St2, Solution) of
+                      ok -> {solution, Solution, NextStream, St2, Independent};
+                      {error, Reason} ->
+                          close_stream(NextStream),
+                          {error, Reason, St2}
+                  end;
               {complete, Reasons} ->
                   {complete, Reasons, St2};
               {error, Reason} ->
@@ -1483,10 +1488,8 @@ refresh_session(St) ->
         _ -> quod_proof_session:refresh(St)
     end.
 
-%% A completion's failure stack was bounded by the target under the wire
-%% contract; check it here under that same contract. Erlog's native default
-%% would measure the decoded terms' external size, which wrapped foreign
-%% symbols inflate past the cap for a stack the target legitimately filled.
+%% Validate the incoming completion stack under the target's wire contract
+%% before exposing its reasons to the caller.
 checked_completion(Reasons) ->
     Wire = erlog_int:set_failure_reason_policy(
              {quod_wire_term, valid_failure_reason_stack}, #est{}),
@@ -1564,7 +1567,7 @@ open_authorized_scope(Principal, RequestedGoal, Chain,
     %% network invocations enter here before policy and execution, so relays
     %% never materialize another ontology's goal and the two transports cannot
     %% drift into different admission paths.
-    case quod_wire_term:materialize_goal_symbols(RequestedGoal) of
+    case quod_wire_term:materialize_goal_symbols(RequestedGoal, Ns) of
         {ok, Goal} ->
             Verdict =
                 case authorize_scope(
@@ -1749,7 +1752,7 @@ validate_authorization_entry(
         Tag =:= error orelse Tag =:= cancelled) ->
     case {authorization_chain(FullChain, Target, Origin),
           quod_wire_term:decode_canonical(
-            GoalBlob, ?QUOD_MAX_NESTED_GOAL_BYTES)} of
+            GoalBlob, unlimited)} of
         {{ok, CallerChain}, {ok, Goal}} ->
             case fully_materialized(Goal) of
                 true ->

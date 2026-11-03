@@ -62,6 +62,8 @@ invalid_policy_updates_are_refused_before_sealing_test() ->
           {material_limit_override, plan, unknown_resource, 12},
           {material_limit_override, proof, heap_bytes, -1},
           {material_limit_override, proof, heap_bytes, {'Any'}},
+          {material_limit_override, proof, answer_bytes, -1},
+          {material_limit_override, proof, answer_bytes, {'Any'}},
           {material_limit_override, proof, unknown_resource, 12}]),
     with_session([{material_limit_override, plan, symbols, 100}], fun(Session) ->
         first(Session, {assertz, {material_limit_override, plan, symbols, 200}}),

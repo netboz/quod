@@ -39,7 +39,7 @@ computed_answers_do_not_echo_ground_inputs_test() ->
                                     context(), empty_selection()),
         lists:foreach(fun(Expected) ->
             {solution, Answer} = quod_proof_session:next(Session, Invocation),
-            ?assert(erlang:external_size(Answer) < ?QUOD_MAX_PROOF_ANSWER_BYTES),
+            ?assert(erlang:external_size(Answer) < byte_size(Input)),
             {ok, Bindings} = quod_ask:test_bind_answer(Goal, Answer),
             ?assertEqual(Expected, erlog_int:dderef({'X'}, Bindings)),
             ?assertEqual({ok, #{'X' => Expected}},
@@ -50,9 +50,11 @@ computed_answers_do_not_echo_ground_inputs_test() ->
     end.
 
 computed_answer_preserves_unbound_aliases_and_real_output_limit_test() ->
-    Large = binary:copy(<<"x">>, ?QUOD_MAX_PROOF_ANSWER_BYTES),
+    Large = binary:copy(<<"x">>, 80000),
     Session = quod_proof_session:start(committed([
-        {alias, {'A'}, {'A'}}, {output, Large}]), #{read_set => true}),
+        {material_limit_override, proof, answer_bytes, 1000},
+        {alias, {'A'}, {'A'}}, {output, Large}]),
+        #{read_set => true, proof_context => {origin, test}}),
     try
         AliasGoal = {alias, {'X'}, {'Y'}},
         Alias = invocation_id(1),
@@ -66,10 +68,10 @@ computed_answer_preserves_unbound_aliases_and_real_output_limit_test() ->
         Output = invocation_id(2),
         ok = quod_proof_session:open(Session, Output, {output, {'Value'}},
                                     allowed, context(), empty_selection()),
-        {solution, LargeAnswer} = quod_proof_session:next(Session, Output),
-        ?assertEqual({error, {too_large, answer}},
-                     quod_scope_session:test_answer_disposition(LargeAnswer)),
-        ?assertEqual({ok, #{'Value' => Large}},
+        {ok, Bytes} = quod_wire_term:encode_canonical({output, Large}),
+        ?assertEqual({error, {material_limit, proof, answer_bytes, byte_size(Bytes), 1000}},
+                     quod_proof_session:next(Session, Output)),
+        ?assertEqual({error, unknown_invocation},
                      quod_proof_session:bindings(Session, Output))
     after quod_proof_session:stop(Session)
     end.
@@ -602,7 +604,7 @@ committed_authorization_preserves_infrastructure_fences_test() ->
 close_proof_gate_2(Goal, Next, #est{bs = Bs} = St) ->
     {close_proof_gate, <<_:256>> = GroupId} = erlog_int:dderef(Goal, Bs),
     true = ets:insert(
-             'quod_simplex_genesis_quod:session-guard-test',
+             binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
              quod_ct:proof_gate_row(
                true, 7, [{GroupId, 1, 7}])),
     erlog_int:prove_body(Next, St).
@@ -610,7 +612,7 @@ close_proof_gate_2(Goal, Next, #est{bs = Bs} = St) ->
 close_policy_gate_4(_Goal, Next, St) ->
     GroupId = <<103:256>>,
     true = ets:insert(
-             'quod_simplex_genesis_quod:session-guard-test',
+             binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
              quod_ct:proof_gate_row(
                true, 7, [{GroupId, 1, 7}])),
     erlog_int:prove_body(Next, St).
@@ -670,7 +672,7 @@ with_policy_predicate(#est{db = Db} = Est) ->
 
 with_proof_gate(Fun) ->
     Namespace = <<"quod:session-guard-test">>,
-    Table = 'quod_simplex_genesis_quod:session-guard-test',
+    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
     Tab = ets:new(Table, [named_table, protected, set]),
     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},

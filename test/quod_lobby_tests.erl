@@ -62,12 +62,12 @@ authored_space_composition_preserves_world_test_() ->
                     case Ns of LobbyNs -> [quod_ct:source_assertion({instance_of, lobby, Space})]; _ -> [] end),
                 commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
                 View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
-                ?assertMatch({ok, [#{<<"V0">> := {world_view, _, [], unavailable}}], _},
+                ?assertMatch({ok, [#{<<"V0">> := {world_view, _, _, [], unavailable}}], _},
                              read(Ctx, View)),
                 Before = quod_prolog:applied(Ns),
                 Edit = editor_scope(Ns, authored_space_composition_goal(Ctx, Ns)),
                 commit_editor_goal(Ctx, Edit),
-                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
+                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, unnamed, Scene, nonphysical},
                 ?assertMatch({ok, [#{<<"V0">> := Expected}], _}, read(Ctx, View)),
                 ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
                 ?assertEqual(Before + 1, quod_prolog:applied(Ns)),
@@ -145,7 +145,7 @@ inactive_physics_source_authoring_preserves_world_test_() ->
                 commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
                 commit_editor_goal(Ctx, editor_scope(Ns, authored_space_composition_goal(Ctx, Ns))),
                 View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
-                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
+                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, unnamed, Scene, nonphysical},
                 Before = quod_prolog:applied(Ns),
                 CheckInactive = fun() ->
                     ?assertMatch({ok, [#{<<"V0">> := Expected}], _}, read(Ctx, View)),
@@ -660,7 +660,7 @@ signed_prolog_eidolon_edits_use_target_policy_test_() ->
             ToolsAnchor = quod_simplex:genesis_hash(Tools),
             {ok, [#{<<"V0">> := Workspace}], _} = read(Ctx, Scope(RecipeNs,
                 {eidolon, prolog_editor, {subject, Target, console}, {0}})),
-            ?assertMatch({workspace, prolog_editor, Target, console, {ontology_ref, Tools, ToolsAnchor},
+            ?assertMatch({workspace, {prolog_editor,all}, Target, console, {ontology_ref, Tools, ToolsAnchor},
                           {component, workspace, form, _,
                            [{component, predicate, catalogue_selection, _, []},
                             {component, new_predicate, text_box, _, []},
@@ -786,7 +786,7 @@ ontology_instances_share_selection_and_authorized_inspection_test_() ->
             System = system_target(<<"quod:gui">>),
             {ok, [#{<<"V0">> := OwnedChoices}], _} = read(Ctx,
                 editor_scope(<<"quod:gui">>, {entity_eidolons, System, {0}})),
-            ?assertEqual(4, length(OwnedChoices)),
+            assert_ontology_choices(OwnedChoices),
             ?assertMatch({fail, _}, read(Reader,
                 editor_scope(Ns, {entity_eidolons, Target, {0}}))),
             ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
@@ -861,7 +861,7 @@ presentation_modes_and_ground_lens_targets_use_authorized_owner_reads_test_() ->
             Source = editor_source(Ctx, Target, {'/', ontology_source_mode, 1}),
             Duplicate = <<Source/binary, "ontology_source_mode(editable).\n">>,
             commit_editor_goal(Ctx, compile_source_edit(Ctx, Target, {'/', ontology_source_mode, 1}, Source, Duplicate)),
-            ?assertMatch({ok, [#{<<"V0">> := {workspace, prolog_editor, Target, Target, _,
+            ?assertMatch({ok, [#{<<"V0">> := {workspace, {prolog_editor,all}, Target, Target, _,
                 {component, workspace, form, _, [_, {component, new_predicate, _, _, _} | _]}}}], _},
                 read(Ctx, Workspace)),
             lists:foreach(fun(BadSource) ->
@@ -972,7 +972,7 @@ public_system_ontology_source_is_readable_but_not_mutable_test_() ->
                 {ok, [#{<<"V0">> := Workspace}], _} = read(Ctx,
                     editor_scope(Recipe,
                         {eidolon, prolog_editor, {subject, Target, Target}, {0}})),
-                ?assertMatch({workspace, prolog_editor, Target, Target, _,
+                ?assertMatch({workspace, {prolog_editor,all}, Target, Target, _,
                               {component, workspace, form, _,
                                [{component, predicate, catalogue_selection, _, []},
                                 {component, source, editor, _, []}]}},
@@ -1144,7 +1144,7 @@ verify_system_editor(Ctx, Ns) ->
     Query = fun(Goal) -> {'::', Tools, {',', ToolsGuard, Goal}} end,
     Recipe = <<"quod:gui">>,
     ?assertMatch({ok, [#{<<"V0">> :=
-        {workspace, prolog_editor, Target, Target, _,
+        {workspace, {prolog_editor,all}, Target, Target, _,
          {component, workspace, form, _,
           [{component, predicate, catalogue_selection, _, []},
            {component, new_predicate, text_box, _, []},
@@ -1189,6 +1189,14 @@ verify_system_editor(Ctx, Ns) ->
 
 system_target(Ns) -> {ontology_ref, Ns, quod_simplex:genesis_hash(Ns)}.
 
+assert_ontology_choices(Choices) ->
+    Ns = <<"quod:gui">>, Anchor = quod_simplex:genesis_hash(Ns),
+    Expected = [{eidolon, prolog, source, {recipe, Ns, Anchor, prolog_editor}},
+                {eidolon, workspace, workbench, {recipe, Ns, Anchor, workbench}} |
+                [{eidolon, inspection, Style, {recipe, Ns, Anchor, Style}} ||
+                 Style <- [policy, interfaces, routes]]],
+    ?assertEqual(lists:sort(Expected), lists:sort(Choices)).
+
 non_system_read_only_source_uses_the_same_recipe_test_() ->
     {timeout, 90, fun() ->
         Dir = filename:join("/tmp", "quod-ontology-readonly-" ++
@@ -1212,8 +1220,8 @@ non_system_read_only_source_uses_the_same_recipe_test_() ->
             Target = system_target(Ns),
             {ok, [#{<<"V0">> := Choices}], _} = read(Ctx, editor_scope(Ns,
                 {entity_eidolons, Target, {0}})),
-            ?assertEqual(4, length(Choices)),
-            ?assertMatch({ok, [#{<<"V0">> := {workspace, prolog_editor, Target, Target, _,
+            assert_ontology_choices(Choices),
+            ?assertMatch({ok, [#{<<"V0">> := {workspace, {prolog_editor,all}, Target, Target, _,
                 {component, workspace, form, _,
                  [{component, predicate, catalogue_selection, _, []},
                   {component, source, editor, _, []}]}}}], _}, read(Ctx,

@@ -103,9 +103,23 @@ whole_then_partial_test() ->
     ?assertEqual([<<"p">>], Frames),
     ?assertEqual(Tail, Rest).
 
-oversized_frame_rejected_test() ->
-    Huge = <<(1 bsl 21):32, 0:16>>,     %% declares ~2 MiB payload
-    ?assertEqual({error, oversized}, parse(Huge)).
+large_frame_waits_for_complete_declared_payload_test() ->
+    Partial = <<(1 bsl 21):32, 0:16>>,
+    ?assertEqual({[], Partial}, parse(Partial)),
+    Payload = binary:copy(<<7>>, (1 bsl 21)),
+    ?assertEqual({[Payload], <<>>}, parse(frame(Payload))).
+
+unrepresentable_iodata_refuses_before_allocation_or_enqueue_test() ->
+    %% Reuse one binary: the declared 4 GiB length is measured without making
+    %% a 4 GiB allocation, starting a link, or changing transport authority.
+    Payload = lists:duplicate(4096, binary:copy(<<0>>, 1024 * 1024)),
+    ?assertEqual({error, frame_unrepresentable}, quod_link:send(self(), Payload)),
+    ?assertEqual({error, frame_unrepresentable}, quod_link:send_ordered(self(), Payload)),
+    ?assertEqual({error, frame_unrepresentable}, quod_link:send_reliable(self(), Payload, 1000)),
+    receive {send, _} -> error(unrepresentable_frame_enqueued);
+            {send_ordered, _} -> error(unrepresentable_frame_enqueued);
+            {send_reliable, _, _, _, _} -> error(unrepresentable_frame_enqueued)
+    after 0 -> ok end.
 
 %% Exercise real link processes and the real catch-up codec. Only the QUIC
 %% connection acceptance boundary is substituted, with its actual call shape.
@@ -116,7 +130,7 @@ catchup_bootstrap_and_opaque_page_test() ->
           Link ! {data, frame(<<>>), false},
           receive {link_up, Channel, _, Link, out} -> ?assert(false)
           after 20 -> ok end,
-          Credit = frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})),
+          Credit = frame(catchup_frame(Ns, {history_credit3, Grant})),
           <<Prefix:5/binary, Rest/binary>> = Credit,
           Link ! {data, Prefix, false},
           Link ! {data, Rest, false},
@@ -134,7 +148,7 @@ catchup_bootstrap_and_opaque_page_test() ->
           %% Transport must not decode entry bytes or mint atoms from them.
           Opaque = <<"entry decoding belongs to the reader">>,
           Response = {history_page3, Grant, ReqId, [{entry, Opaque}], 1, done, Next},
-          Link ! {data, frame(quod_catchup:encode_frame(Ns, Response)), false},
+          Link ! {data, frame(catchup_frame(Ns, Response)), false},
           receive
               {catchup_page, Link, Binding, Grant, ReqId, {ok, [{entry, Opaque}], 1, done}, Next} -> ok
           after 1000 -> error(no_page_result) end,
@@ -142,7 +156,7 @@ catchup_bootstrap_and_opaque_page_test() ->
           after 20 -> ok end,
           %% A duplicate terminal has no live operation and resets the stream.
           MRef = monitor(process, Link),
-          Link ! {data, frame(quod_catchup:encode_frame(Ns, Response)), false},
+          Link ! {data, frame(catchup_frame(Ns, Response)), false},
           receive {'DOWN', MRef, process, Link, catchup_response_violation} -> ok
           after 1000 -> error(duplicate_response_not_reset) end,
           ?assert(is_process_alive(Conn))
@@ -281,7 +295,7 @@ catchup_changed_binding_retires_link_test() ->
       fun(Link, _Conn, _Tag, Ns, Channel) ->
           Grant = <<50:128>>,
           Link ! {data, <<(frame(<<>>))/binary,
-                          (frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})))/binary>>,
+                          (frame(catchup_frame(Ns, {history_credit3, Grant})))/binary>>,
                   false},
           receive {link_up, Channel, _, Link, out} -> ok
           after 1000 -> error(no_link_up) end,
@@ -300,7 +314,7 @@ catchup_producer_death_retires_link_test() ->
       fun(Link, Conn, _Tag, Ns, Channel) ->
           Grant = <<51:128>>,
           Link ! {data, <<(frame(<<>>))/binary,
-                          (frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})))/binary>>,
+                          (frame(catchup_frame(Ns, {history_credit3, Grant})))/binary>>,
                   false},
           receive {link_up, Channel, _, Link, out} -> ok
           after 1000 -> error(no_link_up) end,
@@ -409,7 +423,7 @@ initial_server_grant(Tag, Ns) ->
     Grant.
 
 credit_request(Ns, Grant, ReqId) ->
-    frame(quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, {range, 1, 1}})).
+    frame(catchup_frame(Ns, {history_request3, Grant, ReqId, {range, 1, 1}})).
 
 stop_credit_link(Link) ->
     MRef = monitor(process, Link),
@@ -420,3 +434,7 @@ stop_credit_link(Link) ->
 flush_credit_wire(Tag) ->
     receive {credit_wire, Tag, _} -> flush_credit_wire(Tag)
     after 0 -> ok end.
+
+catchup_frame(Ns, Term) ->
+    {ok, Bytes} = quod_catchup:encode_frame(Ns, Term),
+    Bytes.

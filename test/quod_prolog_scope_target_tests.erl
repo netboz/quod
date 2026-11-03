@@ -30,6 +30,7 @@ out_of_order_terminal_reply_is_rejected_test() ->
 pending_remote_open_reserves_shared_capacity_test() ->
     %% A return-link handshake has not spawned its worker yet, but it already
     %% owns the last capacity slot.  A co-hosted open must not pass this gate.
+    ?assert(quod_prolog:test_scope_capacity_available(unlimited, 65, 65)),
     ?assert(quod_prolog:test_scope_capacity_available(2, 1, 0)),
     ?assertNot(quod_prolog:test_scope_capacity_available(2, 1, 1)),
     ?assertNot(quod_prolog:test_scope_capacity_available(2, 0, 2)).

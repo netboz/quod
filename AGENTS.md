@@ -11,10 +11,20 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
 
 ### Architecture and Erlang processes
 
+- NO HARDCODED LIMITATION MUST BE INTRODUCED WITHOUT INFORMING ME !
 - Prolog ontologies are the core of the system. Domain state, policy, actions,
   authorization and protocol/conversation rules belong there. External Erlang
   predicates are the governed interface to the real world and runtime services;
   they must not become a second domain engine or private knowledge base.
+- Represent new domain types through the existing Prolog classes, instances,
+  class-selected Eidolons and space contents composition. Define ontology
+  predicates as ordinary predicate instances from the ontology's Prolog model;
+  their class owns its Eidolons, and the ontology is displayed through ordinary
+  space contents. Do not introduce a parallel execution or presentation path,
+  domain-specific client reference types or type-name dispatch to deliver this.
+  Trace and reuse the established path first; any demonstrated missing generic
+  capability belongs in its existing shared owner. Remove superseded special
+  cases rather than keeping both paths.
 - Do not hardcode resource budgets or population ceilings in Erlang. Resource
   allocation is Prolog policy, including future pricing of scarce resources.
   When an existing numeric cap blocks ordinary work, fix its policy ownership

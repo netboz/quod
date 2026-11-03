@@ -1,0 +1,1 @@
+{"passed": false, "children": {"server": 0, "client": -15}, "eof": {"server-stdout": true, "server-stderr": true, "client-stdout": true, "client-stderr": true}, "failure": "Empty: ", "checks": 0}

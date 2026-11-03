@@ -1,0 +1,961 @@
+{
+  "passed": true,
+  "full_M4_or_M5": false,
+  "all_selected_cases_passed": true,
+  "product": {
+    "manifest_sha256": "0a885304c191651e5746c63d55826a080001a937de608d6b855ccec6c97264cb",
+    "passed": true,
+    "supplied": 98,
+    "live": 98,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "diagnostic": {
+    "manifest_sha256": "976723b8afab990da535ecac591643c258c3ca9c3e4b32729609724fe85f9c6d",
+    "passed": true,
+    "supplied": 99,
+    "live": 98,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "selected_run": "contextual-final06",
+  "selected_entry": "contextual-entry-final06",
+  "selected_checks": 117,
+  "selected_current_doc_only_delta": [],
+  "builds": {
+    "contextual-baseline01": {
+      "manifest_sha256": "0db1761f52a1de52a50680d7e849e8459beaf78e853efa65d5c8bfc0fa64aa39",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "contextual-candidate02": {
+      "manifest_sha256": "4277d1dfc7ee94d36972e1d3a6753bb2efb33b803a06ce9a5b7759ae24f06467",
+      "passed": false,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "contextual-candidate03": {
+      "manifest_sha256": "91fbe9d6fe5739ced0ff085b6628217d4897ec3317e1ac53d7bc838315321e15",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "contextual-candidate04": {
+      "manifest_sha256": "087ae19e8b0b5cb3e34f4219f5dd983ac3daae92544471e78b074fee39299de1",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "contextual-candidate06": {
+      "manifest_sha256": "976723b8afab990da535ecac591643c258c3ca9c3e4b32729609724fe85f9c6d",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "contextual-entry-baseline05": {
+      "manifest_sha256": "8c24d82f3250dc23af5a26bb4a33ac248c3e4053e49d6f86642eb71f0569c2cb",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "contextual-product01": {
+      "manifest_sha256": "0a885304c191651e5746c63d55826a080001a937de608d6b855ccec6c97264cb",
+      "passed": true,
+      "supplied": 98,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "cases": {
+    "contextual-baseline01": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "actual current-subject raster retained"
+      ],
+      "exits": {
+        "server": 0,
+        "client-contextual": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-contextual-stdout": true,
+        "client-contextual-stderr": true
+      },
+      "receipt_sha256": "7f41e284b1d4bab6065bdc0ae2a8fc4c927408e46dd9eadab16929c31e3138c6",
+      "manifest_sha256": "0db1761f52a1de52a50680d7e849e8459beaf78e853efa65d5c8bfc0fa64aa39",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "contextual-candidate03": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "actual current-subject raster retained",
+        "each authored view or action has a directly visible labelled native choice without opening a technical dropdown",
+        "subject context is derived from the accepted current navigation identity",
+        "one native choice dispatcher replaces the duplicate operation dropdown",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@331",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "view choices preserve the same unsent native action form draft and control identity",
+        "viewing or opening an action form performs no movement instruction or pending write",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "current contextual raster retained",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "current contextual raster retained",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "current contextual raster retained",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "named history rebuild write sync observation installed",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "unchanged visible choices retain native controls signed consumer scene and zero watched work",
+        "current native target is enabled and enclosed: create-operations",
+        "one native press release activates exactly one callback",
+        "native catalogue gesture releases capture"
+      ],
+      "exits": {
+        "server": 0,
+        "client-contextual": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-contextual-stdout": true,
+        "client-contextual-stderr": true
+      },
+      "receipt_sha256": "cf483d26b5e5431955bea9bfcb325a1c9e404d1044701356254fb5614757c28e",
+      "manifest_sha256": "91fbe9d6fe5739ced0ff085b6628217d4897ec3317e1ac53d7bc838315321e15",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "contextual-candidate04": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "actual current-subject raster retained",
+        "each authored view or action has a directly visible labelled native choice without opening a technical dropdown",
+        "subject context is derived from the accepted current navigation identity",
+        "one native choice dispatcher replaces the duplicate operation dropdown",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@331",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "view choices preserve the same unsent native action form draft and control identity",
+        "viewing or opening an action form performs no movement instruction or pending write",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "current contextual raster retained",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "current contextual raster retained",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "current contextual raster retained",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "named history rebuild write sync observation installed",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "unchanged visible choices retain native controls signed consumer scene and zero watched work",
+        "current native target is enabled and enclosed: create-operations",
+        "one native press release activates exactly one callback",
+        "native catalogue gesture releases capture",
+        "ordinary storage or class picker opens within the native surface",
+        "native catalogue gesture releases capture",
+        "one actual catalogue item selects its exact target once",
+        "native catalogue gesture releases capture",
+        "ordinary storage or class picker opens within the native surface",
+        "native catalogue gesture releases capture",
+        "one actual catalogue item selects its exact target once",
+        "current native target is enabled and enclosed: @Button@365",
+        "one native press release activates exactly one callback",
+        "authored Create remains bound to explicitly chosen storage and exact class",
+        "current native target is enabled and enclosed: control7",
+        "one native press release activates exactly one callback",
+        "one native Create receives an actual committed outcome",
+        "current native target is enabled and enclosed: open-returned-subject",
+        "one native press release activates exactly one callback",
+        "viewing the exact returned subject retains original outcome without entering it",
+        "current native target is enabled and enclosed: @Button@455",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@459",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: control0",
+        "one native press release activates exactly one callback",
+        "explicit native Move submits the existing signed Enter exactly once",
+        "Create and Enter preserve original U A S0 and add exactly two instructions",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@453",
+        "one native press release activates exactly one callback",
+        "committed movement updates the current subject context through its real owner",
+        "current native target is enabled and enclosed: @Button@456",
+        "one native press release activates exactly one callback",
+        "native catalogue gesture releases capture",
+        "current native target is enabled and enclosed: @Button@453",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@456",
+        "one native press release activates exactly one callback",
+        "local source text and control survive representation choice without Save or subject conversion",
+        "current native target is enabled and enclosed: @Button@544",
+        "one native press release activates exactly one callback",
+        "authored system source remains read only",
+        "selected source denial withdraws content while the independent world has a fresh accepted projection",
+        "wrong-anchor subject cannot retain readable content or active stale choices",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@587",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: control0",
+        "one native press release activates exactly one callback",
+        "explicit native Leave commits through the unchanged governed form",
+        "Create Enter Leave each submit once with the same U A and no uncertain replay",
+        "enabled action disconnect",
+        "contextual consumer retires all signed sockets and captures without native XR"
+      ],
+      "exits": {
+        "server": 0,
+        "client-contextual": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-contextual-stdout": true,
+        "client-contextual-stderr": true
+      },
+      "receipt_sha256": "6156347d0da63b504da589f16c107d62accbcfeaa1f92347075b42545c025dc4",
+      "manifest_sha256": "087ae19e8b0b5cb3e34f4219f5dd983ac3daae92544471e78b074fee39299de1",
+      "unretired_failure": false,
+      "failure": null
+    },
+    "contextual-entry-baseline05": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback"
+      ],
+      "exits": {
+        "server": 0,
+        "client-contextual-entry": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-contextual-entry-stdout": true,
+        "client-contextual-entry-stderr": true
+      },
+      "receipt_sha256": "34dfa3246e88e0882d181a64745c2bb1e67a4ff03ea00f70fe76b25c5a3a534d",
+      "manifest_sha256": "8c24d82f3250dc23af5a26bb4a33ac248c3e4053e49d6f86642eb71f0569c2cb",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "contextual-entry-final06": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "ordinary subject and action opening reveal their actual context and confirmation without a test reveal of the destination",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "ordinary current subject context is visible after opening at (True, 1200, 26)",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "opening the same action exposes its retained title and confirmation at (True, 1200, 26)",
+        "actual action destination raster retained",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "ordinary current subject context is visible after opening at (True, 1200, 48)",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "opening the same action exposes its retained title and confirmation at (True, 1200, 48)",
+        "actual action destination raster retained",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "ordinary current subject context is visible after opening at (False, 560, 26)",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "opening the same action exposes its retained title and confirmation at (False, 560, 26)",
+        "actual action destination raster retained",
+        "enabled action disconnect",
+        "entry consumers retire normally"
+      ],
+      "exits": {
+        "server": 0,
+        "client-contextual-entry": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-contextual-entry-stdout": true,
+        "client-contextual-entry-stderr": true
+      },
+      "receipt_sha256": "6660f90867945f9a9923d894dfe76784b9f3bceb96f6012ef93edc1f6e1d24df",
+      "manifest_sha256": "976723b8afab990da535ecac591643c258c3ca9c3e4b32729609724fe85f9c6d",
+      "unretired_failure": false,
+      "failure": null
+    },
+    "contextual-final06": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "actual current-subject raster retained",
+        "each authored view or action has a directly visible labelled native choice without opening a technical dropdown",
+        "subject context is derived from the accepted current navigation identity",
+        "one native choice dispatcher replaces the duplicate operation dropdown",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@331",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@338",
+        "one native press release activates exactly one callback",
+        "view choices preserve the same unsent native action form draft and control identity",
+        "viewing or opening an action form performs no movement instruction or pending write",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 26)",
+        "current contextual raster retained",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "context choice or confirmation reachable through all clipping ancestors at (True, 1200, 48)",
+        "current contextual raster retained",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "context choice or confirmation reachable through all clipping ancestors at (False, 560, 26)",
+        "current contextual raster retained",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "named history rebuild write sync observation installed",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@332",
+        "one native press release activates exactly one callback",
+        "unchanged visible choices retain native controls signed consumer scene and zero watched work",
+        "current native target is enabled and enclosed: create-operations",
+        "one native press release activates exactly one callback",
+        "native catalogue gesture releases capture",
+        "ordinary storage or class picker opens within the native surface",
+        "native catalogue gesture releases capture",
+        "one actual catalogue item selects its exact target once",
+        "native catalogue gesture releases capture",
+        "ordinary storage or class picker opens within the native surface",
+        "native catalogue gesture releases capture",
+        "one actual catalogue item selects its exact target once",
+        "current native target is enabled and enclosed: @Button@365",
+        "one native press release activates exactly one callback",
+        "authored Create remains bound to explicitly chosen storage and exact class",
+        "current native target is enabled and enclosed: control7",
+        "one native press release activates exactly one callback",
+        "one native Create receives an actual committed outcome",
+        "current native target is enabled and enclosed: open-returned-subject",
+        "one native press release activates exactly one callback",
+        "viewing the exact returned subject retains original outcome without entering it",
+        "current native target is enabled and enclosed: @Button@455",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@459",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: control0",
+        "one native press release activates exactly one callback",
+        "explicit native Move submits the existing signed Enter exactly once",
+        "Create and Enter preserve original U A S0 and add exactly two instructions",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@453",
+        "one native press release activates exactly one callback",
+        "committed movement updates the current subject context through its real owner",
+        "current native target is enabled and enclosed: @Button@456",
+        "one native press release activates exactly one callback",
+        "native catalogue gesture releases capture",
+        "current native target is enabled and enclosed: @Button@453",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@456",
+        "one native press release activates exactly one callback",
+        "local source text and control survive representation choice without Save or subject conversion",
+        "current native target is enabled and enclosed: @Button@544",
+        "one native press release activates exactly one callback",
+        "authored system source remains read only",
+        "selected source denial withdraws content while the independent world has a fresh accepted projection",
+        "wrong-anchor subject cannot retain readable content or active stale choices",
+        "current native target is enabled and enclosed: location-operations",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: @Button@587",
+        "one native press release activates exactly one callback",
+        "current native target is enabled and enclosed: control0",
+        "one native press release activates exactly one callback",
+        "explicit native Leave commits through the unchanged governed form",
+        "Create Enter Leave each submit once with the same U A and no uncertain replay",
+        "enabled action disconnect",
+        "contextual consumer retires all signed sockets and captures without native XR"
+      ],
+      "exits": {
+        "server": 0,
+        "client-contextual": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-contextual-stdout": true,
+        "client-contextual-stderr": true
+      },
+      "receipt_sha256": "e91da8c7aaa1deaf7cf8e3491057f5343ba39714a0e80f5f4277fc79305e358e",
+      "manifest_sha256": "976723b8afab990da535ecac591643c258c3ca9c3e4b32729609724fe85f9c6d",
+      "unretired_failure": false,
+      "failure": null
+    }
+  },
+  "wrappers": {
+    "contextual-baseline01-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "37827cb7d6b196be57a331e907c8ddc3b2bb8f031346d2353d91a840975d93f6",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contextual-baseline01-build": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "66ecb91ea82ba402f1879c12743ccf2a358eb2cc0534390c2c58247adcd24918",
+      "log_sha256": "20f20959d3a853d013e7fac31f13958ea1262ec53a6143d2dfb149efa28fab2d"
+    },
+    "contextual-baseline01-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "a6ab25e965d253a5d0bac7b13bedb48d1ac6cad232d05b1994a0160ae1f80776",
+      "log_sha256": "68f28433fe0035643862c78c4362f9cb0b3c10a84247893415a40a6816e6f6c5"
+    },
+    "contextual-baseline01-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9f78e0a97854dc1cdcfbd9e60c4d94aad3f10f735c2d8cb2e4afc82e9f5a12e2",
+      "log_sha256": "52d55e6b05a02a40cfeeac7e40ec1edb8ddbab963079b17167fe5e65a585abb6"
+    },
+    "contextual-baseline01-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "81ba444de0349b5ec7cfd740d74afc0e645fbfb4dd5dddd3751fa5cdc41f65cf",
+      "log_sha256": "50063e25b5b49436ebe49f9b45fdad582fd57efe2b62b1b9c942216d381eaed2"
+    },
+    "contextual-baseline01-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt_sha256": "53ac9f61a6802308f3e06bc13bbdc2cba3a794eee550740d111c86d66d2f5e70",
+      "log_sha256": "5a9d9760c07bc8293d4c5d8148b1753c78be40976f16eadc92dd79f63797dd7e"
+    },
+    "contextual-baseline01-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "55dff91fbf14778bd717989f69478f85d9c6ad6ddbb48a47a0683c9893d9cc66",
+      "log_sha256": "14476ae47a70a694fb16f3bd0e8f655a76ba941dd5cce1d5bb9528d22a054208"
+    },
+    "contextual-candidate02-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "8d6def7d90f2738e97852ad8648254431d8338a813dd90ebb6cdd0d9f01729a5",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contextual-candidate02-build": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt_sha256": "3aa4e083d4348a0d7e944aa3ad09b5babde0e7be11dcd01fc550af1cfadf01e4",
+      "log_sha256": "a1226940037c50a9fa84103c2ec75bad1434263fae334668fed756f396e185e2"
+    },
+    "contextual-candidate02-export": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt_sha256": "a0b0f1ee0d8e349c49f7336eeb781e2ddeccea3e9f7dee791e3638cd61d0e7e8",
+      "log_sha256": "6011653ceddbac3a008ce7354b2059ef0cfe1a8964bc7e1053640764f35a3990"
+    },
+    "contextual-candidate02-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "acd161f4a5e9a8348c7d9f7e3220bf46415877436258c88acb57c185d9ca19bb",
+      "log_sha256": "0499f5cfa7033846e164da0960e40aa2c77a5e6561242ec7e8565faf350d25b9"
+    },
+    "contextual-candidate02-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "1144619682c5c58d8bdd0c64467992fd2b6b228c94c0ed6a64895547dd88f895",
+      "log_sha256": "569329ea4b6d90b3a7cf862b44aaf301da7eac705fbb2a79d430036679c9460f"
+    },
+    "contextual-candidate02-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "977883449465a6e1d2ac750f48e8d6f567ab3fac638e7a286a813413b09da518",
+      "log_sha256": "8867709580831cd55ff1464afb03dc02ed554633f2a58056c823831eb7437565"
+    },
+    "contextual-candidate03-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "d85661dea2684e322451c02d650f6868ae1d6fc96f909ba75fa5b901edff9b5a",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contextual-candidate03-build": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "b09be86261c7ded491ee5003ed2a27c19d594c70d61d8ecd75ac23f62f93f637",
+      "log_sha256": "0dd6bad67216322e8c6c506b634e304a71e5bfccf48e6bb38a5a617f9b633a3e"
+    },
+    "contextual-candidate03-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "231bd5a37425a038ce653532280e9481271e4b60104e7d18af5963998df26799",
+      "log_sha256": "b16c06066ec412cfa2d2cdd4c5f909fbd192ab26d6b80334ba9d94c800472852"
+    },
+    "contextual-candidate03-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "d63cc00f2b1b2197e909040b6ab8fcfcc91f882dc952249111054d38f8195781",
+      "log_sha256": "fe43e4ddc12c1a21efba8f8b61d7eec7426208b431f3b4a5585ede340395d1d9"
+    },
+    "contextual-candidate03-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "89f88807bf0615485594cffb3fa171dcc7bf1b4138f0099c675404f3687cde92",
+      "log_sha256": "78e748a9a81d9d0e7cf9e3a976e2fed717e67433a62ffe0877f06d0fba1eeb60"
+    },
+    "contextual-candidate03-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5a1394177c32c51160ba016f6543fe425ee3a63695428e9ff37b7f6b6bc93603",
+      "log_sha256": "df80978380cf56c5c16398fe3e0c541c08e46f003155b68a67e818fe2ebd043a"
+    },
+    "contextual-candidate03-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "faa2fe0c1b330cf3f43d77c7365742c407f4f161bcab3eaf456289e46e46d5f3",
+      "log_sha256": "9bfd6658b745d58dd67aa19f055e82e05e3c0181d99b803fdac68fa4af1a64da"
+    },
+    "contextual-candidate04-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "8dbf254e25dbbd64afe47cc1d1580efb6b70594f0a418f559a84fd3813a68679",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contextual-candidate04-build": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "08b6d630cc64e1928dff602f4d94106b877611ffc96c9b9b37342fe5029329ba",
+      "log_sha256": "8b0814c8d910848c0072fa429e710ac1114d696e1a3739421c1289eb58124a2e"
+    },
+    "contextual-candidate04-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9c12e208e4c38ad511c8a08d661823cfbbe7aa2ffb5509d2793cba90d3e39894",
+      "log_sha256": "addf576837321ada0f1c941afb93affe5d7ca32be2c6d3e85a8f6d53dbe45b3a"
+    },
+    "contextual-candidate04-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "ae09530e3683de3bf02ff61da967934df40fc00eebfd4eb8a65a35caaed4e9c3",
+      "log_sha256": "ef7822a83e8664948b44f22de945300b1612ccc506dddc99a6021ecaf57993cb"
+    },
+    "contextual-candidate04-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "771350699b94d47cf1344d35b4a4e1b924e50d455ee4b3b40827f1fc7fda2031",
+      "log_sha256": "9bb4277e84f8797053dd20552b998711730f2b125215e59629bbfaf201f8d34f"
+    },
+    "contextual-candidate04-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "604dd2ee04799fd6c1a3443e4a6e477967dc4f42c146951ce4c1079ea88e2cf4",
+      "log_sha256": "6a2fc176fb40098372bd02d059b1f48eb028ae96de7a768fa6c9edc5c2b9b431"
+    },
+    "contextual-candidate04-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "20f940c4b3547a2935a8bab4b3e63226375a636fc504ed03cdd4c78b24d10fae",
+      "log_sha256": "9a91d485b20ed69c2b288efdd9726745e25bc13a329d0a75537fa51852b047a0"
+    },
+    "contextual-candidate06-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "dd441d68c6a96582cab79f2250084f5ff01073996f467667b2ca581410672d3c",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contextual-candidate06-build": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "3aa32e04f02bb8ecb4a7857e56b0853a269ef5e1eb081db2f9b03b68361b2ca3",
+      "log_sha256": "2ac951d166b5c2631b21dad3398f11674dbcc7fc1f3380f2b750863735338f89"
+    },
+    "contextual-candidate06-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "89803e6009b5240dbdc3106f8cbeef3682ca6a1707f110442b3fe98a9775c68b",
+      "log_sha256": "c5683b8b4c02861b9185cd4e17dc6ba04572f520a3a3775acc49f562b804baad"
+    },
+    "contextual-candidate06-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5b33929fc7ce7d67c2ef70874173c421143a65a50baa29e948a160cf38513f84",
+      "log_sha256": "dcb7ba221ee99cb484c2f61f60cdd49309b33ede3d395cff23bc7b340baf23fc"
+    },
+    "contextual-candidate06-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5cfa77c0e40e7b811e6143a88e9d909e7c5dd155a01b8be241aa25b50103dce8",
+      "log_sha256": "646b2a98ab75e718c544f0056d76e460586b0719377b4a470f5f39b67ac90158"
+    },
+    "contextual-candidate06-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "a741e20a00a89cdeeca02f2369babf77c3e55c372d0d8a904eda91232b12aa26",
+      "log_sha256": "b4ccb1cf0bcbb45a5198db3592c2f82a8e84d521a37139034e0e524c11794abf"
+    },
+    "contextual-entry-baseline05-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "fa4ab75424000b01946dbf89579f0d03b02e30a666f2eff71e6d2e57968212b6",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contextual-entry-baseline05-build": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "4fd0c1663f2c86dcfec6a07b6164942755d33c224706a6050f9a9a3cf0171c52",
+      "log_sha256": "1d31768a288a828e8b5ea9d59ed12a795d746ef7ca3ac37f3f8e7665f2fadf34"
+    },
+    "contextual-entry-baseline05-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5bb6dd574df0686be7212fe24b53291856eac2fcedb9de967a1f0295f3392fb5",
+      "log_sha256": "02ccebc9ff76180c67cc906c554f982ba082823a9e9f15fefe7b6cf7426d427a"
+    },
+    "contextual-entry-baseline05-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "afb53f536fbaf4d45452b94eea0f6cddefba0bd4a6bda2b407bdc734ceb0f2d8",
+      "log_sha256": "50cd705ef7c32e84ff4aee7a91a6df2cf8cef89790788482352ff6234714ca01"
+    },
+    "contextual-entry-baseline05-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "a2512b2b0eefd956993a7a415c862aa8601f24ee2e5aea7cb65855d5c015e1c1",
+      "log_sha256": "5312aad561175c29efb679e95dfc65ff234f067a9457b0b4af25a24eb038610c"
+    },
+    "contextual-entry-baseline05-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt_sha256": "a5216d3a41161bf5fc7e6073e6a578831b705753a49fbbfaf6ace2079b3217c8",
+      "log_sha256": "a6ea0032cbe1b52e4d627d29ad108bc1f47b4a46a5491a790a3144558dcbe5f4"
+    },
+    "contextual-entry-baseline05-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5bb941a07057c13ed9432ecd2266f199331c206ca9a81c78cd0759b5a6def057",
+      "log_sha256": "e61f8452aff2e4fca8863d75b9c49746e2cf50b777fcda19dda01b8c13445413"
+    },
+    "contextual-entry-final06-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "3bbcb990354fb9ecd5b5e6686a9d377916fc70749705f75ef94deb89262f0f85",
+      "log_sha256": "f404ca1049388941501ec8e0bda2863bd4d33d2ae60acbfd0051cbcaf1e3fdb8"
+    },
+    "contextual-final06-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "6c031b93311370abdbd6718523825aa10d340e1a33f5d6d88604f4cf547da1ac",
+      "log_sha256": "6a2fc176fb40098372bd02d059b1f48eb028ae96de7a768fa6c9edc5c2b9b431"
+    },
+    "contextual-product01-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9a195af00b33134c7ac1c93e47a19ea074bd5b750060a066bb7f09e0020e0975",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contextual-product01-build": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "46eedb6b104a28b47efc87eeea24b0e648dc61bcbe8878cc15ae9f93cccec421",
+      "log_sha256": "e27871e31d79434529db0356e6e4316720a5d6caa8766e61f0f2470eb6e0fd85"
+    },
+    "contextual-product01-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "be6ca3aa153d48fe290ff4f07ffb23eb3ec87d1d7b290cc0c0c06601cd771f1e",
+      "log_sha256": "14b707a1129ad192864882eb46d992fa482a575f71a1fb94f97da0bf19b9a8ed"
+    },
+    "contextual-product01-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "93ed410ec000e38be55f6ad31c025edc0e1ae4f2e709d7807b06f72db16bb0ff",
+      "log_sha256": "1d56ce5dbd4eda0ebc6b6787329e0596bdc03715bb67292720720aee9bc60ed8"
+    },
+    "contextual-product01-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "768f0e6b8a362508f40d4837b6d51b1acc4cd7a1d6afc62e8519abe82326bdcb",
+      "log_sha256": "b84f63298543635dc40869a106d6a4da0635cac8cc7cb285259d4c807ffc66bb"
+    },
+    "contextual-product01-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5160b9dd3d3e658bb971a0052dfdcd999d642790a8460ab1e4b3d2c7b6877f1f",
+      "log_sha256": "dbf909b6a0167de028243b0b2eec1fab7d070794954d1326c4537cc81a36f642"
+    }
+  },
+  "source_delta": {
+    "client/godot/EidolonPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-contextual-20261101/inputs/before/client/godot/EidolonPanel.cs",
+      "before_sha256": "946cfc58fc4195dfdbdf280c5880426a95589a4ec7442b5499172ec6135a29cd",
+      "after_sha256": "5398f5159a60989965748a9a00d74ce6d783d4ece78e89a8b695661b8e310b02",
+      "mode": 420
+    },
+    "client/godot/OperationsPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-contextual-20261101/inputs/before/client/godot/OperationsPanel.cs",
+      "before_sha256": "595ec757d2c85cd32bb890948dcfbba0b29e5e0d038f111c749a9661c809340b",
+      "after_sha256": "6c862bea2162d6813b04287115a419d2a4b64328d90f0ab647ffe228ebac8545",
+      "mode": 420
+    },
+    "client/godot/Main.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-contextual-20261101/inputs/before/client/godot/Main.cs",
+      "before_sha256": "fb3c157d4299ff5821d5a61e216018d7ef45e0bfd2b340c9d080a0292af0eae9",
+      "after_sha256": "c59ffad12b7a7606de4dea1c99288e93ad1d3c0977e755a68b5a3ede0441fd0b",
+      "mode": 420
+    },
+    "client/godot/README.md": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-contextual-20261101/inputs/before/client/godot/README.md",
+      "before_sha256": "e462549832caa32fbc6206cf4336150584845ec14f373a2263150ca0d4dff0a1",
+      "after_sha256": "a6b4dad79002d61740f48597c448dffdf0b35e3e9727ccbfb0bbe2b1e660e81a",
+      "mode": 420
+    },
+    "client/godot/tests/SpaceChecks.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-contextual-20261101/inputs/before/client/godot/tests/SpaceChecks.cs",
+      "before_sha256": "c01a54af82c55b75d48d56e38bba961634082ecd35ce87d560320d45887036be",
+      "after_sha256": "a27a9a0c2c130225063a9c5d4e48878688efa5ca112f3136208caf7d1b654811",
+      "mode": 420
+    },
+    "client/godot/tests/NavigationChecks.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-contextual-20261101/inputs/before/client/godot/tests/NavigationChecks.cs",
+      "before_sha256": "c39413de076c848b840a1b0e0b333d8c30ded6ac43367c678f00449393902033",
+      "after_sha256": "fb84f3758c386373d46c016fbbed5174785d0aa6188d887390edbda4ea56b3e1",
+      "mode": 420
+    }
+  },
+  "line_delta": {
+    "client/godot/EidolonPanel.cs": {
+      "added": 63,
+      "removed": 15
+    },
+    "client/godot/OperationsPanel.cs": {
+      "added": 11,
+      "removed": 15
+    },
+    "client/godot/Main.cs": {
+      "added": 3,
+      "removed": 3
+    },
+    "client/godot/README.md": {
+      "added": 12,
+      "removed": 3
+    },
+    "client/godot/tests/SpaceChecks.cs": {
+      "added": 16,
+      "removed": 10
+    },
+    "client/godot/tests/NavigationChecks.cs": {
+      "added": 1,
+      "removed": 4
+    }
+  },
+  "native_XR_or_host_input": false,
+  "human_acceptance": false,
+  "historical_shutdown_fixed": false,
+  "limits": [
+    "Actual native Control input in a disposable signed software fixture; no host input or human test.",
+    "Baseline native-choice existence is distinct from later actual clipping and raster checks.",
+    "Ontology identity remains separate from spatial membership; broader founding/D5/D6/terrain remain outside this slice.",
+    "Current normal retirement does not explain or fix prior whole failed no-EOF labels.",
+    "Appearance tokens and human headset ergonomics remain unqualified."
+  ],
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/contextual-qualification01/computed-hashes.json",
+    "sha256": "458c5aa21042d7e428400e95679d31142fd5007acf06da68ae98ab43be8573ef"
+  }
+}

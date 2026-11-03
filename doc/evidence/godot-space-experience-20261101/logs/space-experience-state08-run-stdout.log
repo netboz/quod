@@ -1,0 +1,26 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS explicit authorized fixture source change committed
+PASS actual committed name refresh preserves exact location and empty interior
+PASS explicit authorized fixture source change committed
+PASS missing authored name is explicit absence, never an invented identifier or denied view
+PASS explicit authorized fixture source change committed
+PASS invalid authored name withdraws presentation instead of claiming an empty space
+PASS explicit authorized fixture source change committed
+PASS ambiguous authored names are explicitly refused by the shared Prolog owner
+PASS explicit authorized fixture source change committed
+PASS explicit accepted refresh restores the same world after the actual corrected metadata
+PASS enabled action location-operations
+PASS wrong-anchor selection stays unavailable, with no accepted empty choice or authority
+PASS fresh accepted current world survives wrong-anchor selected occurrence
+PASS deliberate authored Workbench and source preserve the exact flat ontology identity
+PASS actual permission-owner transition completed
+PASS source denial revokes selected inspector content and edit ability
+PASS fresh accepted independent world after selected source denial preserves current location
+PASS enabled action space-home
+PASS enabled action disconnect
+PASS ordinary disconnect retires world and all negative-case consumers
+{"passed": true, "failure": null, "children": {"server": 0, "client-space-experience-state": 0}, "native_inputs": 0}

@@ -1,0 +1,109 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05:/work:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02:/stage",
+    "-w",
+    "/stage",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/prod/lib/*/ebin -eval \"$1\"",
+    "sh",
+    "true=code:add_patha(\"/stage/lib/erlog/ebin\"),\"/stage/lib/erlog\"=code:lib_dir(erlog),\n{ok,quod_wire_term}=compile:file(\"/stage/quod_wire_term.erl\",[{outdir,\"/stage\"},{i,\"/work/include\"}]),\n{ok,quod_ontology_name}=compile:file(\"/stage/quod_ontology_name.erl\",[{outdir,\"/stage\"},{i,\"/work/include\"}]),\n{ok,quod_client_auth}=compile:file(\"/stage/quod_client_auth.erl\",[{outdir,\"/stage\"},{i,\"/work/include\"}]),\n{ok,quod_ask}=compile:file(\"/stage/quod_ask.erl\",[{outdir,\"/stage\"},{i,\"/work/include\"}]),\n{ok,quod_client_auth}=compile:file(\"/stage/quod_client_auth.erl\",[{d,'TEST'},{outdir,\"/stage/test\"},{i,\"/work/include\"}]),\n{ok,quod_wire_term_tests}=compile:file(\"/stage/quod_wire_term_tests.erl\",[{outdir,\"/stage/test\"}]),\n{ok,quod_client_auth_tests}=compile:file(\"/stage/quod_client_auth_tests.erl\",[{outdir,\"/stage/test\"}]),\ntrue=code:add_patha(\"/stage\"),true=code:add_patha(\"/stage/test\"),\ncase eunit:test([quod_wire_term_tests,quod_client_auth_tests],[verbose]) of ok->halt(0);error->halt(1) end."
+  ],
+  "inputs": {
+    "src/quod_wire_term.erl": {
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/quod_wire_term.erl",
+      "actual_source": "/home/yan/src/quod_worktrees/pearl-stone/src/quod_wire_term.erl"
+    },
+    "src/quod_ontology_name.erl": {
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/quod_ontology_name.erl",
+      "actual_source": "/home/yan/src/quod_worktrees/pearl-stone/src/quod_ontology_name.erl"
+    },
+    "src/quod_client_auth.erl": {
+      "sha256": "919c55738448d003810ecd59eb4f7f8ac9ce8d396ef9d57a1c3cceb1499d9ad5",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/quod_client_auth.erl",
+      "actual_source": "/home/yan/src/quod_worktrees/pearl-stone/src/quod_client_auth.erl"
+    },
+    "src/predicates/quod_ask.erl": {
+      "sha256": "e40c7ccf2b2f61ebaf0647d6961b19a9b381cbdbed10cfa34724acc76ff74fc5",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/quod_ask.erl",
+      "actual_source": "/home/yan/src/quod_worktrees/pearl-stone/src/predicates/quod_ask.erl"
+    },
+    "test/quod_wire_term_tests.erl": {
+      "sha256": "77bfe6b91f6dfa4b7831ee65f8d858b60d98e06d5632b696eed84f09e63902ac",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/quod_wire_term_tests.erl",
+      "actual_source": "/home/yan/src/quod_worktrees/pearl-stone/test/quod_wire_term_tests.erl"
+    },
+    "test/quod_client_auth_tests.erl": {
+      "sha256": "c8883f2c3621df1eb854ae7904981766aad0627f4d1cb2d92a1b51bcec766ed2",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/quod_client_auth_tests.erl",
+      "actual_source": "/home/yan/src/quod_worktrees/pearl-stone/test/quod_client_auth_tests.erl"
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlog/src/erlog_int.hrl": {
+      "sha256": "fc2290033440d71447bb0b19eac04e81de1998438cfc225082e9200ac9595f20",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/lib/erlog/src/erlog_int.hrl"
+    },
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05/_build/prod/lib/erlog/ebin/erlog.app": {
+      "sha256": "f9af2784db9ee5492c146c8347a3575f6389604b0f64cb2d6f0a29e340508707",
+      "mode": 33188,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/lib/erlog/ebin/erlog.app"
+    }
+  },
+  "network": "none",
+  "functional_fixture": false,
+  "module_suites": true,
+  "passed": true,
+  "true_exit": 0,
+  "new_objects": {
+    "quod_client_auth.beam": {
+      "sha256": "a4325fcc4249ad2d1871e665787f9d1cd27e004c53d12d262dbda89d80885c91",
+      "bytes": 12744
+    },
+    "quod_wire_term.beam": {
+      "sha256": "3f377b838eded1326091d1937e85614ef667892ccbe34e7028533df842ca4311",
+      "bytes": 14388
+    },
+    "quod_ask.beam": {
+      "sha256": "bc65c1f62890c0793150974af19cdcea82905a4143ab143b8f9636f1b49fd1b2",
+      "bytes": 42388
+    },
+    "quod_ontology_name.beam": {
+      "sha256": "51448778f3c2ce985d9152c00e06625a2e45f90cb2453fe1f9cde81d831813d8",
+      "bytes": 1532
+    }
+  },
+  "test_objects": {
+    "quod_client_auth.beam": {
+      "sha256": "90cf14587f632fbd241c64639721ab4c9671e27fd92c6859c6d9a8f5de787b2a",
+      "bytes": 12960
+    },
+    "quod_wire_term_tests.beam": {
+      "sha256": "f307a2f836c04514f4917ad6d396bd6ff0d00dc7511dce80b4bb33a202f7f79b",
+      "bytes": 29576
+    },
+    "quod_client_auth_tests.beam": {
+      "sha256": "d20d3ef5420daf283dd8e09c42bed5f4062d6bc0821d77a193bdc56d31b32a8d",
+      "bytes": 25188
+    }
+  }
+}

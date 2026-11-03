@@ -1,0 +1,45 @@
+--- client/godot/Core/LocalStore.cs before
+
++++ client/godot/Core/LocalStore.cs
+
+@@ -7,8 +7,9 @@
+
+ namespace Quod.Client;
+ 
+ public sealed record Account(Actor Human, string? Setup = null);
++public sealed record SourceDraft(string Baseline,string Text);
+ public sealed record SignedWork(string Id, string Network, Actor Actor, string Request, string Signature,
+-    string Flow, string? Instruction = null, string? OutcomeReference = null);
++    string Flow, string? Instruction = null, string? OutcomeReference = null, SourceDraft? SourceDraft = null);
+ public sealed class LocalState
+ {
+     public int Version { get; set; } = 1;
+@@ -16,6 +17,7 @@
+
+     public bool CreatedLocally { get; set; }
+     public Dictionary<string, Account> Accounts { get; set; } = [];
+     public List<SignedWork> Pending { get; set; } = [];
++    public Dictionary<string,SourceDraft> SourceDrafts { get; set; } = [];
+     public string Endpoint { get; set; } = "https://localhost:14570";
+     public string CaFile { get; set; } = "";
+ }
+@@ -60,6 +62,8 @@
+
+     static void Validate(LocalState value)
+     {
+         if (value.Version != 1) throw new IOException("Unsupported active identity version.");
++        if(value.SourceDrafts==null || value.SourceDrafts.Any(d=>d.Key.Length==0 || d.Value==null || d.Value.Baseline==null || d.Value.Text==null))
++            throw new IOException("Invalid saved source draft.");
+         using var identity = Identity.FromPayload(value.Payload);
+         foreach (var (network, account) in value.Accounts) {
+             if (Identity.Decode(network).Length != 32 || Identity.Decode(account.Human.Anchor).Length != 32)
+@@ -71,6 +75,8 @@
+
+             var bytes = Identity.Decode(work.Request);
+             if (!seen.Add(work.Id) || Identity.Digest(bytes) != work.Id || !Identity.Verify(identity.PublicKey, bytes, Identity.Decode(work.Signature)))
+                 throw new IOException("Invalid saved signed work.");
++            if(work.SourceDraft is { } draft && (draft.Baseline==null || draft.Text==null))
++                throw new IOException("Invalid submitted source draft.");
+         }
+     }
+     public void Create(string payload, bool createdLocally = false)

@@ -1,0 +1,22 @@
+--- client/godot/Core/Forms.cs before
+
++++ client/godot/Core/Forms.cs
+
+@@ -14,6 +14,7 @@
+
+         "text_box" or "text_area" => "text", "slider" or "rotary_knob" or "number_input" => "number",
+         "checkbox" or "toggle" => "boolean", "selection" or "radio_group" or "selectable_list" or "table" => "choice",
+         "label" or "status" or "help" or "error" or "separator" or "progress" => "display",
++        "editor"=>"editor", "catalogue_selection"=>"catalogue", "bindings"=>"bindings",
+         "button" => "button", _ => throw new FormatException("Unsupported GUI component: " + kind) };
+     public IEnumerable<Component> Leaves => Family == "container" ? Children.SelectMany(c => c.Leaves) : [this];
+     public bool Input => Family is "text" or "number" or "boolean" or "choice";
+@@ -36,6 +37,7 @@
+
+             var allowed = new HashSet<string>(["label", "help", "enabled"]);
+             if (family == "container") allowed.Add("layout");
+             if (family is "text" or "number" or "boolean" or "choice") allowed.UnionWith(["required", "readonly"]);
++            if (family is "editor" or "catalogue")allowed.Add("readonly");
+             if (family == "text") allowed.Add("max_bytes");
+             if (family == "number") allowed.UnionWith(["range", "unit"]);
+             if (family == "choice") allowed.Add("options");

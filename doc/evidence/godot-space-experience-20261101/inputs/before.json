@@ -1,0 +1,146 @@
+{
+  "client/godot/Main.cs": {
+    "sha256": "c59ffad12b7a7606de4dea1c99288e93ad1d3c0977e755a68b5a3ede0441fd0b",
+    "stat_key": [
+      66305,
+      23512511,
+      41797,
+      1793504812958104950,
+      1793504812958104950
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/client/godot/Main.cs"
+  },
+  "client/godot/EidolonPanel.cs": {
+    "sha256": "31ee2dd04a91a4dff30dadbea1422618b2263953fc202bf6a851bc8c91864bcb",
+    "stat_key": [
+      66305,
+      23514723,
+      14399,
+      1793535903364265770,
+      1793535903364265770
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/client/godot/EidolonPanel.cs"
+  },
+  "client/godot/ScenePanel.cs": {
+    "sha256": "778cb917d5880c06120f1c16e2210d65d80dd2dc7d51c5fe028040e92fd419b3",
+    "stat_key": [
+      66305,
+      23514195,
+      20677,
+      1793535903295264088,
+      1793535903295264088
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/client/godot/ScenePanel.cs"
+  },
+  "client/godot/README.md": {
+    "sha256": "79440555f3a772ac1416ce732ac5b0c90d73439009492da49394295470f415bf",
+    "stat_key": [
+      66305,
+      23513097,
+      20388,
+      1793537612045635301,
+      1793537612045635301
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/client/godot/README.md"
+  },
+  "priv/ontologies/common_predicates.pl": {
+    "sha256": "48dba94f659bfd0cd9662764cba224f719c8350c76d4874ca3f28de0a58b7f50",
+    "stat_key": [
+      66305,
+      32557919,
+      25772,
+      1793468235016613094,
+      1793468235016613094
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/priv/ontologies/common_predicates.pl"
+  },
+  "priv/ontologies/quod_space.pl": {
+    "sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38",
+    "stat_key": [
+      66305,
+      32557972,
+      33252,
+      1793456828111284092,
+      1793456828111284092
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/priv/ontologies/quod_space.pl"
+  },
+  "src/quod_client_view.erl": {
+    "sha256": "6a68ed523ab1575428a3f472ce43b104f6fd63e09e48d7a6728221a3c9580a2c",
+    "stat_key": [
+      66305,
+      32914281,
+      52713,
+      1793462957126268640,
+      1793462957126268640
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/src/quod_client_view.erl"
+  },
+  "client/godot/Core/World.cs": {
+    "sha256": "c789bdc56a3e547222ef672eed8b21640876d89331a7c9818aae765677e06d48",
+    "stat_key": [
+      66305,
+      23462268,
+      11718,
+      1793248114310238513,
+      1793248114310238513
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/client/godot/Core/World.cs"
+  },
+  "client/src/simulation.js": {
+    "sha256": "a50455963f06f6c4f4b62c8223de4bbfdbfb2d3a87193e3affe47788a40e5aaf",
+    "stat_key": [
+      66305,
+      23226191,
+      17234,
+      1793106895531359439,
+      1793106895531359439
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/client/src/simulation.js"
+  },
+  "client/test/simulation.test.js": {
+    "sha256": "442de30596643bb3e20f63df56b24cfc2e97740a0f02284f9cfab3c0f193987b",
+    "stat_key": [
+      66305,
+      23226802,
+      31375,
+      1793137801907702484,
+      1793137801907702484
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/client/test/simulation.test.js"
+  },
+  "test/quod_lobby_tests.erl": {
+    "sha256": "761a3d06ca64cf94e142f5501625456bd75d2a699ce5334a0debdffcf3550ce9",
+    "stat_key": [
+      66305,
+      32914543,
+      104015,
+      1793486178083911379,
+      1793486178083911379
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/test/quod_lobby_tests.erl"
+  },
+  "doc/spaces.md": {
+    "sha256": "9d5fb5f9d9ae65f68cf5be395d8c15fb73923caa0f16a7abcaf3ebfae64c5659",
+    "stat_key": [
+      66305,
+      23238122,
+      33739,
+      1793237263668806328,
+      1793237263668806328
+    ],
+    "mode": 33188,
+    "copy": "doc/evidence/godot-space-experience-20261101/inputs/before/doc/spaces.md"
+  }
+}

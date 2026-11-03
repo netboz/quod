@@ -1,0 +1,49 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "91fbe9d6fe5739ced0ff085b6628217d4897ec3317e1ac53d7bc838315321e15",
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-contextual-stdout": true,
+    "client-contextual-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/contextual-candidate03/server-stdout.raw",
+      "sha256": "cb0790d7059d079b26a382869c53d1ad344ab0630fa37f40a31a879c1017da7c",
+      "bytes": 129
+    },
+    "client-contextual-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/contextual-candidate03/client-contextual-stdout.raw",
+      "sha256": "fac81f93f1ff5a34619cf368bd5058e28e1d7f559e8f23c68f31ab6e9100b5fc",
+      "bytes": 120921
+    },
+    "client-contextual-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/contextual-candidate03/client-contextual-stderr.raw",
+      "sha256": "a180e8e1259bae35906cd559d72addd0e2a132c9e223a6f53301f29af7bec2e7",
+      "bytes": 5175
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/contextual-candidate03/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-contextual": {
+      "true_exit": 1
+    }
+  }
+}

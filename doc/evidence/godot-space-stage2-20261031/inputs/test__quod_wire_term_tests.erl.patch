@@ -1,0 +1,56 @@
+--- test/quod_wire_term_tests.erl before
+
++++ test/quod_wire_term_tests.erl
+
+@@ -1,5 +1,50 @@
+
+ -module(quod_wire_term_tests).
+ -include_lib("eunit/include/eunit.hrl").
++
++self_scoped_symbols_use_the_same_admission_walk_test() ->
++    S = fun(B) -> {'$quod_symbol', B} end,
++    Head = <<"wire_self_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
++    Data = S(<<"wire_self_data">>),
++    Selectors = [<<"wire:owner">>, 'wire:owner', "wire:owner",
++                 {':', wire, owner}, S(<<"wire:owner">>),
++                 {S(<<":">>), S(<<"wire">>), S(<<"owner">>)}],
++    lists:foreach(fun(Selector) ->
++        Goal = {'::', Selector, {S(Head), Data}},
++        {ok, Names} = quod_wire_term:goal_symbol_names(Goal, <<"wire:owner">>),
++        ?assert(lists:member(Head, Names)),
++        ?assertNot(lists:member(<<"wire_self_data">>, Names)),
++        {ok, {'::', _, {Callable, Data}}} =
++            quod_wire_term:materialize_goal_symbols(Goal, <<"wire:owner">>),
++        ?assert(is_atom(Callable))
++    end, Selectors).
++
++foreign_scope_defers_inner_symbols_even_when_nested_test() ->
++    S = fun(B) -> {'$quod_symbol', B} end,
++    Name = <<"wire_foreign_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
++    Inner = {'::', <<"wire:owner">>, {S(Name), S(<<"wire_foreign_data">>)}},
++    Goal = {S(<<"::">>), <<"wire:foreign">>, Inner},
++    {ok, Names} = quod_wire_term:goal_symbol_names(Goal, <<"wire:owner">>),
++    ?assertNot(lists:member(Name, Names)),
++    ?assertEqual({ok, {'::', <<"wire:foreign">>, Inner}},
++        quod_wire_term:materialize_goal_symbols(Goal, <<"wire:owner">>)),
++    ?assertError(badarg, binary_to_existing_atom(Name, utf8)),
++    {ok, {'::', _, {Callable, _}}} =
++        quod_wire_term:materialize_goal_symbols(Inner, <<"wire:owner">>),
++    ?assert(is_atom(Callable)).
++
++opaque_rule_clause_heads_remain_executable_test() ->
++    S=fun(B)->{'$quod_symbol',B} end,
++    Head= <<"wire_editor_rule_",(integer_to_binary(erlang:unique_integer([positive])))/binary>>,
++    Body= <<"wire_editor_body_",(integer_to_binary(erlang:unique_integer([positive])))/binary>>,
++    Data=S(<<"wire_editor_opaque_data">>),
++    Rule={S(<<":-">>),{S(Head),Data},{S(Body),Data}},
++    lists:foreach(fun(Operation)->
++        {ok,Materialized}=quod_wire_term:materialize_goal_symbols({S(Operation),Rule}),
++        {_,{':-',{HeadAtom,Data},{BodyAtom,Data}}}=Materialized,
++        ?assert(is_atom(HeadAtom)),?assert(is_atom(BodyAtom)),
++        ?assertEqual(Head,atom_to_binary(HeadAtom,utf8)),
++        ?assertEqual(Body,atom_to_binary(BodyAtom,utf8))
++    end,[<<"asserta">>,<<"assertz">>,<<"retract">>,<<"retractall">>]).
+ -include_lib("erlog/src/erlog_int.hrl").
+ 
+ roundtrip_existing_terms_test() ->

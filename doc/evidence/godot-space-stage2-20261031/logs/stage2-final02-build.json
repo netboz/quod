@@ -1,0 +1,49 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-space-stage2-20261031/build.py",
+    "stage2-final02",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "application.py": "dd4422e8ad3d4e28a6c9dedd036c20ba42e613e14fb987dea4f8ca630d534394",
+    "build.py": "11c37924666bafbcd427863c801aa6d7b1d625130ac6afcfb773ea461a8e4f1d",
+    "hashes.py": "ca762ebc7ef76c6e4f5b8e5d66fb57ae777d4d254a8da2531ac9e6f41a390ee0",
+    "owner_checks.py": "72c7b79a32ab6837e2f617ca4aa2a6ab7f7b7376320a5d47b805ba4f5f6fb700",
+    "qualify.py": "1750c4e5cbe5195b6a1ed4afa1599e21b60a8da80ea5ae22be72010197fb38cf",
+    "rehearse.py": "136fa664177ade704496c0cc4b302a5d20c6e3456b1be19386b2b04574a42496",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479",
+    "serve.py": "334a9602cfd32a7c3679264e1900e89cc8c08613f040b09a639adee6f265fb8f",
+    "term_checks.py": "6321cfee86a95e56bbf9a17885d317bbb7289298624492a78797abf1aaa98e40"
+  },
+  "start_utc": "2026-10-31T16:24:01Z",
+  "elapsed_seconds": 24.324294090270996,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/stage2-final02-build/stdout.raw",
+      "sha256": "6058164066e6914a20259e88686f1dec6847918cbebdfa0a5009883e82a685b7",
+      "bytes": 1129
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/stage2-final02-build/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/logs/stage2-final02-build-stdout.log",
+      "sha256": "6058164066e6914a20259e88686f1dec6847918cbebdfa0a5009883e82a685b7",
+      "bytes": 1129
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/logs/stage2-final02-build-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

@@ -1,0 +1,122 @@
+--- client/godot/FormPanel.cs before
+
++++ client/godot/FormPanel.cs
+
+@@ -15,10 +15,14 @@
+
+     readonly Dictionary<string, Label> errors = [];
+     bool locked;
+     public void Present(Form form, Dictionary<string, string>? draft = null)
++        => Present(form,draft,false);
++    void Present(Form form,Dictionary<string,string>? draft,bool workspace)
+     {
+         Clear(); Descriptor = form; Draft = draft ?? new(form.Defaults);
+-        AddChild(Render(form.Tree, true));
+-    }
++        AddChild(Render(form.Tree,true,workspace));
++    }
++    public void Present(Component workspace)
++    { Present(new Form(workspace,Term.Atom("none"),workspace.Leaves.Where(c=>c.Input).ToDictionary(c=>c.Role,_=>"")),null,true); }
+     public void Clear()
+     {
+         foreach (var node in GetChildren()) { RemoveChild(node); node.QueueFree(); }
+@@ -46,8 +50,8 @@
+
+     {
+         bool valid = true;
+         foreach (var field in Descriptor.Tree.Leaves.Where(c => c.Input)) {
+-            try { field.Draft(Draft[field.Role]); errors[field.Role].Text = ""; }
+-            catch (Exception error) { valid = false; errors[field.Role].Text = error.Message; }
++            try { field.Draft(Draft[field.Role]); Error(field.Role,""); }
++            catch (Exception error) { valid = false; Error(field.Role,error.Message); }
+         }
+         return valid;
+     }
+@@ -55,6 +59,12 @@
+
+     internal static OptionButton Choice(string name="")
+     {
+         var choice=new OptionButton { ActionMode=BaseButton.ActionModeEnum.Release,FitToLongestItem=false,ClipText=true };
++        choice.CustomMinimumSize=new(0,44);
++        choice.ThemeChanged+=()=>{
++            var popup=choice.GetPopup();int height=(int)Math.Ceiling(popup.GetThemeFont("font").GetHeight(popup.GetThemeFontSize("font_size")));
++            int gap=Math.Max(8,44-height);
++            if(popup.GetThemeConstant("v_separation")!=gap)popup.AddThemeConstantOverride("v_separation",gap);
++        };
+         if(name.Length>0)choice.Name=name;
+         return choice;
+     }
+@@ -64,16 +74,22 @@
+
+         var field = Descriptor.Tree.Leaves.Single(c => c.Role == role);
+         if (field.Flag("readonly") || !field.Flag("enabled", true) || !controls[role].GetMeta("offered_enabled").AsBool()) return;
+         Draft[role] = value;
+-        try { field.Draft(value); errors[role].Text = ""; }
+-        catch (Exception error) { errors[role].Text = error.Message; }
++        try { field.Draft(value); Error(role,""); }
++        catch (Exception error) { Error(role,error.Message); }
+         Edited?.Invoke();
+     }
+-    Control Render(Component field, bool enabled)
++    Control Render(Component field,bool enabled,bool workspace=false)
+     {
+         enabled &= field.Flag("enabled", true);
+         if (field.Family == "container") {
+             Control content;
+-            if (field.Kind == "tabs") {
++            if(workspace) {
++                var column=new VBoxContainer();var fields=new VBoxContainer { SizeFlagsHorizontal=SizeFlags.ExpandFill };
++                var actions=new HFlowContainer();
++                foreach(var child in field.Children)(child.Family=="button" ? (Godot.Container)actions : fields).AddChild(Render(child,enabled));
++                column.AddChild(Wrap(new ScrollContainer { CustomMinimumSize=new(0,260),SizeFlagsHorizontal=SizeFlags.ExpandFill },fields));
++                column.AddChild(actions);content=column;
++            } else if (field.Kind == "tabs") {
+                 var tabs = new TabContainer();
+                 foreach (var child in field.Children) {
+                     var page = Render(child, enabled); page.Name = "page" + tabs.GetTabCount(); tabs.AddChild(page); tabs.SetTabTitle(tabs.GetTabCount() - 1, child.Label);
+@@ -95,9 +111,14 @@
+
+             return content;
+         }
+         var row = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+-        if (field.Family is "text" or "number" or "choice") row.AddChild(Label(field.Label));
++        if (field.Family is "text" or "number" or "choice" or "editor" or "bindings" or "catalogue") row.AddChild(Label(field.Label));
+         Control control;
+         switch (field.Family) {
++            case "editor": case "bindings":
++                var editor=new TextEdit { Editable=enabled && field.Family=="editor" && !field.Flag("readonly"),CustomMinimumSize=new(0,field.Family=="editor" ? 260 : 100),WrapMode=TextEdit.LineWrappingMode.Boundary };
++                control=editor;break;
++            case "catalogue":
++                control=Choice();break;
+             case "display":
+                 control = field.Kind == "separator" ? new HSeparator() : field.Kind == "progress"
+                     ? new ProgressBar { Value = (double)field.Properties["percent"].Integer, ShowPercentage = true, TooltipText = field.Label }
+@@ -122,7 +143,7 @@
+
+                         if (locked) return;
+                         try { var value = field.Draft(Draft[field.Role]).Integer + direction * field.Range.Step;
+                             string next = value.ToString(); field.Draft(next); number.Text = next; Edit(field.Role, next); }
+-                        catch (Exception error) { errors[field.Role].Text = error.Message; }
++                        catch (Exception error) { Error(field.Role,error.Message); }
+                     }; numeric.AddChild(step);
+                 }
+                 if (field.Properties.TryGetValue("unit", out var unit)) numeric.AddChild(Label(unit.Kind == "binary" ? unit.TextValue : unit.Name));
+@@ -170,14 +191,16 @@
+
+         }
+         control.Name = "control" + controls.Count; control.SetMeta("role", field.Role); control.SetMeta("offered_enabled", enabled);
+         control.FocusMode = FocusModeEnum.All; controls[field.Role] = control;
++        if(control is BaseButton or LineEdit)control.CustomMinimumSize=new(control.CustomMinimumSize.X,Math.Max(44,control.CustomMinimumSize.Y));
+         control.TooltipText = field.Properties.GetValueOrDefault("help")?.TextValue ?? "";
+         control.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+         if (field.Family != "number") row.AddChild(control);
+-        var errorLabel = Label(""); errorLabel.Modulate = new Color(1, 0.65f, 0.6f); errors[field.Role] = errorLabel; row.AddChild(errorLabel);
++        var errorLabel = Label("");errorLabel.Visible=false;errorLabel.Modulate = new Color(1, 0.65f, 0.6f); errors[field.Role] = errorLabel; row.AddChild(errorLabel);
+         interactions[field.Role] = row.FindChildren("*", "", true, false).OfType<Control>()
+             .Where(c => c is LineEdit or TextEdit or BaseButton or Slider or ItemList).ToArray();
+         return row;
+     }
+     static Control Wrap(Godot.Container parent, Control child) { parent.AddChild(child); return parent; }
++    void Error(string role,string text) { var label=errors[role];label.Text=text;label.Visible=text.Length>0; }
+     static Label Label(string text) => new() { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+ }

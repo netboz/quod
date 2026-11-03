@@ -1,0 +1,23 @@
+node:internal/modules/run_main:111
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ undefined
+- 'owner'
+
+    at file:///data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/browser-check.mjs:22:8
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: 'owner',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.10.0

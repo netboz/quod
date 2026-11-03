@@ -1,0 +1,15 @@
+{
+  "source": "same open_subject function arguments from one actual signed eidolon_scene request/result",
+  "private_log": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-credit-baseline01-headless-server/server-raw.log",
+  "actual_pairs_observed": 1,
+  "observations": [
+    {
+      "raw_equal": false,
+      "canonical_equal": true,
+      "request_opaque": true,
+      "returned_atom": true
+    }
+  ],
+  "retained_successor_or_room_data": false,
+  "qualifies": "parser/runtime identity mismatch, not an authorization relaxation"
+}

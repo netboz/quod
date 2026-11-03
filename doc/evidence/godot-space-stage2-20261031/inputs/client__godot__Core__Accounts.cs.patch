@@ -1,0 +1,14 @@
+--- client/godot/Core/Accounts.cs before
+
++++ client/godot/Core/Accounts.cs
+
+@@ -80,7 +80,7 @@
+
+         }
+         if (work.Flow is "signup" or "setup" && reply["aggregate"]?.ToString() == "mixed")
+             throw new InvalidOperationException("Original account operation has mixed terminal effects. Its exact outcome is retained; do not replace or resubmit it: " + reply.ToJsonString());
+-        session.Forget(work.Id);
++        session.Finish(work,reply);
+     }
+     public void RememberSetup(Actor human, Term setup, string? originalId = null)
+     {

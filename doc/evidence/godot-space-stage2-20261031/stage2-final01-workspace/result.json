@@ -1,0 +1,54 @@
+{
+  "command": [
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-stage2-final03/source/client/godot/dist/quod.x86_64",
+    "--headless",
+    "--audio-driver",
+    "Dummy",
+    "--xr-mode",
+    "off",
+    "--rendering-method",
+    "mobile",
+    "--rendering-driver",
+    "vulkan",
+    "--",
+    "--qualification",
+    "--profile",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-final01-workspace/identity"
+  ],
+  "manifest": "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-final03-manifest.json",
+  "manifest_sha256": "2ebe6332e198129ddfc8c59b9b462fe4f5b1c224c8e3285eb76895dd2ed7c81c",
+  "actual_exports_admitted": 196,
+  "stat_bound_digest_hits": 196,
+  "driver_hashes": {
+    "application.py": "dd4422e8ad3d4e28a6c9dedd036c20ba42e613e14fb987dea4f8ca630d534394",
+    "hashes.py": "79bfa1b1c5d117d9ca5b29c2b8d84239d1237a116675db229ad85c8cf6e1d624",
+    "digests.py": "4c356fa8d6501037fa77bde705af6fd1e916a76e2efb744f2dae96e57b0edd19",
+    "desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"
+  },
+  "native_input": [],
+  "watchdog_seconds": 60,
+  "physical_acceptance": false,
+  "passed": true,
+  "reader_errors": [],
+  "client_exit": 0,
+  "eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "streams": {
+    "stdout": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-final01-workspace/stdout.raw",
+      "sha256": "aabe933ef86c809a279cccd85488c4140d63b18cceea39661d889519c7e66605",
+      "bytes": 16655,
+      "public_sha256": "aabe933ef86c809a279cccd85488c4140d63b18cceea39661d889519c7e66605"
+    },
+    "stderr": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-final01-workspace/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "completion_marker": true,
+  "observation_marker": false
+}

@@ -1,0 +1,343 @@
+--- src/quod_wire_term.erl before
+
++++ src/quod_wire_term.erl
+
+@@ -31,9 +31,9 @@
+
+ -export([encode/1, decode/1,
+          encode_canonical/1, decode_canonical/2,
+          encode_bindings/2, decode_bindings/2,
+-         materialize_symbols/1, materialize_goal_symbols/1,
++         materialize_symbols/1, materialize_goal_symbols/1, materialize_goal_symbols/2,
+          normalize_answer_symbols/2,
+-         goal_symbol_names/1, symbol_names/1,
++         goal_symbol_names/1, goal_symbol_names/2, symbol_names/1,
+          is_symbol/1, callable_functor/1,
+          is_ground/1,
+          encode_failure_reasons/1, decode_failure_reasons/1,
+@@ -214,13 +214,19 @@
+
+ -spec materialize_goal_symbols(term()) ->
+           {ok, term()} |
+           {error, malformed_material | too_many_new_atoms | atom_limit}.
+-materialize_goal_symbols(Goal) ->
+-    case collect_goal_symbols(Goal, #{}) of
++materialize_goal_symbols(Goal) -> materialize_goal_symbols(Goal, undefined).
++
++%% Only an authenticated owner may supply its canonical namespace. Self-scoped
++%% goals execute in that same owner; foreign inner callables remain deferred.
++-spec materialize_goal_symbols(term(), binary() | undefined) ->
++          {ok, term()} | {error, malformed_material | too_many_new_atoms | atom_limit}.
++materialize_goal_symbols(Goal, Owner) ->
++    case collect_goal_symbols(Goal, #{}, Owner) of
+         {ok, Symbols}
+           when map_size(Symbols) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS ->
+             Names = lists:sort(maps:keys(Symbols)),
+             case materialize_symbol_names(Names) of
+-                ok -> {ok, replace_goal_symbols(Goal)};
++                ok -> {ok, replace_goal_symbols(Goal, Owner)};
+                 {error, _} = Error -> Error
+             end;
+         {ok, _TooMany} ->
+@@ -237,8 +243,12 @@
+
+ """.
+ -spec goal_symbol_names(term()) ->
+           {ok, [binary()]} | {error, malformed_material}.
+-goal_symbol_names(Goal) ->
+-    case collect_goal_symbols(Goal, #{}) of
++goal_symbol_names(Goal) -> goal_symbol_names(Goal, undefined).
++
++-spec goal_symbol_names(term(), binary() | undefined) ->
++          {ok, [binary()]} | {error, malformed_material}.
++goal_symbol_names(Goal, Owner) ->
++    case collect_goal_symbols(Goal, #{}, Owner) of
+         {ok, Symbols} -> {ok, lists:sort(maps:keys(Symbols))};
+         error -> {error, malformed_material}
+     end.
+@@ -410,163 +420,178 @@
+
+ replace_symbols(Term) ->
+     Term.
+ 
+-collect_goal_symbols({'$quod_symbol', Name}, Acc) when is_binary(Name) ->
++collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+     {ok, Acc#{Name => true}};
+-collect_goal_symbols(Tuple, _Acc)
++collect_goal_symbols(Tuple, _Acc, Owner)
+   when is_tuple(Tuple), tuple_size(Tuple) >= 1,
+        element(1, Tuple) =:= '$quod_symbol' ->
+     error;
+-collect_goal_symbols(Tuple, Acc) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
++collect_goal_symbols(Tuple, Acc, Owner) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+     case element(1, Tuple) of
+         {'$quod_symbol', Name} when is_binary(Name) ->
+-            collect_opaque_goal_positions(Name, Tuple, Acc#{Name => true});
++            collect_opaque_goal_positions(Name, Tuple, Acc#{Name => true}, Owner);
+         Marker when is_tuple(Marker), tuple_size(Marker) >= 1,
+                     element(1, Marker) =:= '$quod_symbol' -> error;
+-        ',' -> collect_goal_positions(Tuple, [2, 3], Acc);
+-        ';' -> collect_goal_positions(Tuple, [2, 3], Acc);
+-        '->' -> collect_goal_positions(Tuple, [2, 3], Acc);
+-        '\\+' -> collect_goal_positions(Tuple, [2], Acc);
+-        'not' -> collect_goal_positions(Tuple, [2], Acc);
+-        once -> collect_goal_positions(Tuple, [2], Acc);
+-        call -> collect_goal_positions(Tuple, [2], Acc);
+-        independent when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc);
+-        transaction when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc);
+-        findall -> collect_goal_positions(Tuple, [3], Acc);
+-        bagof -> collect_goal_positions(Tuple, [3], Acc);
+-        setof -> collect_goal_positions(Tuple, [3], Acc);
+-        asserta -> collect_clause_symbol(Tuple, 2, Acc);
+-        assertz -> collect_clause_symbol(Tuple, 2, Acc);
+-        retract -> collect_clause_symbol(Tuple, 2, Acc);
+-        retractall -> collect_clause_symbol(Tuple, 2, Acc);
+-        '::' -> collect_selector_symbol(Tuple, 2, Acc);
++        ',' -> collect_goal_positions(Tuple, [2, 3], Acc, Owner);
++        ';' -> collect_goal_positions(Tuple, [2, 3], Acc, Owner);
++        '->' -> collect_goal_positions(Tuple, [2, 3], Acc, Owner);
++        '\\+' -> collect_goal_positions(Tuple, [2], Acc, Owner);
++        'not' -> collect_goal_positions(Tuple, [2], Acc, Owner);
++        once -> collect_goal_positions(Tuple, [2], Acc, Owner);
++        call -> collect_goal_positions(Tuple, [2], Acc, Owner);
++        independent when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc, Owner);
++        transaction when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc, Owner);
++        findall -> collect_goal_positions(Tuple, [3], Acc, Owner);
++        bagof -> collect_goal_positions(Tuple, [3], Acc, Owner);
++        setof -> collect_goal_positions(Tuple, [3], Acc, Owner);
++        asserta -> collect_clause_symbol(Tuple, 2, Acc, Owner);
++        assertz -> collect_clause_symbol(Tuple, 2, Acc, Owner);
++        retract -> collect_clause_symbol(Tuple, 2, Acc, Owner);
++        retractall -> collect_clause_symbol(Tuple, 2, Acc, Owner);
++        '::' -> collect_selector_symbol(Tuple, 2, Acc, Owner);
+         _ -> {ok, Acc}
+     end;
+-collect_goal_symbols(_Goal, Acc) ->
++collect_goal_symbols(_Goal, Acc, Owner) ->
+     {ok, Acc}.
+ 
+ %% Parser V2 deliberately keeps every source identifier opaque. Once an
+ %% opaque callable names one of Prolog's goal-bearing built-ins, its executable
+ %% positions still need the same walk as the already-materialized spelling.
+ %% Unknown callables keep ordinary arguments opaque.
+-collect_opaque_goal_positions(<<"once">>, Tuple, Acc) ->
+-    collect_goal_positions(Tuple, [2], Acc);
+-collect_opaque_goal_positions(<<"call">>, Tuple, Acc) ->
+-    collect_goal_positions(Tuple, [2], Acc);
+-collect_opaque_goal_positions(<<"independent">>, Tuple, Acc) when tuple_size(Tuple) =:= 2 ->
+-    collect_goal_positions(Tuple, [2], Acc);
+-collect_opaque_goal_positions(<<"transaction">>, Tuple, Acc) when tuple_size(Tuple) =:= 2 ->
+-    collect_goal_positions(Tuple, [2], Acc);
+-collect_opaque_goal_positions(<<"not">>, Tuple, Acc) ->
+-    collect_goal_positions(Tuple, [2], Acc);
+-collect_opaque_goal_positions(<<"findall">>, Tuple, Acc) ->
+-    collect_goal_positions(Tuple, [3], Acc);
+-collect_opaque_goal_positions(<<"bagof">>, Tuple, Acc) ->
+-    collect_goal_positions(Tuple, [3], Acc);
+-collect_opaque_goal_positions(<<"setof">>, Tuple, Acc) ->
+-    collect_goal_positions(Tuple, [3], Acc);
+-collect_opaque_goal_positions(<<"asserta">>, Tuple, Acc) ->
+-    collect_clause_symbol(Tuple, 2, Acc);
+-collect_opaque_goal_positions(<<"assertz">>, Tuple, Acc) ->
+-    collect_clause_symbol(Tuple, 2, Acc);
+-collect_opaque_goal_positions(<<"retract">>, Tuple, Acc) ->
+-    collect_clause_symbol(Tuple, 2, Acc);
+-collect_opaque_goal_positions(<<"retractall">>, Tuple, Acc) ->
+-    collect_clause_symbol(Tuple, 2, Acc);
+-collect_opaque_goal_positions(_Name, _Tuple, Acc) ->
++collect_opaque_goal_positions(<<"::">>, Tuple, Acc, Owner) ->
++    collect_selector_symbol(Tuple, 2, Acc, Owner);
++collect_opaque_goal_positions(<<"once">>, Tuple, Acc, Owner) ->
++    collect_goal_positions(Tuple, [2], Acc, Owner);
++collect_opaque_goal_positions(<<"call">>, Tuple, Acc, Owner) ->
++    collect_goal_positions(Tuple, [2], Acc, Owner);
++collect_opaque_goal_positions(<<"independent">>, Tuple, Acc, Owner) when tuple_size(Tuple) =:= 2 ->
++    collect_goal_positions(Tuple, [2], Acc, Owner);
++collect_opaque_goal_positions(<<"transaction">>, Tuple, Acc, Owner) when tuple_size(Tuple) =:= 2 ->
++    collect_goal_positions(Tuple, [2], Acc, Owner);
++collect_opaque_goal_positions(<<"not">>, Tuple, Acc, Owner) ->
++    collect_goal_positions(Tuple, [2], Acc, Owner);
++collect_opaque_goal_positions(<<"findall">>, Tuple, Acc, Owner) ->
++    collect_goal_positions(Tuple, [3], Acc, Owner);
++collect_opaque_goal_positions(<<"bagof">>, Tuple, Acc, Owner) ->
++    collect_goal_positions(Tuple, [3], Acc, Owner);
++collect_opaque_goal_positions(<<"setof">>, Tuple, Acc, Owner) ->
++    collect_goal_positions(Tuple, [3], Acc, Owner);
++collect_opaque_goal_positions(<<"asserta">>, Tuple, Acc, Owner) ->
++    collect_clause_symbol(Tuple, 2, Acc, Owner);
++collect_opaque_goal_positions(<<"assertz">>, Tuple, Acc, Owner) ->
++    collect_clause_symbol(Tuple, 2, Acc, Owner);
++collect_opaque_goal_positions(<<"retract">>, Tuple, Acc, Owner) ->
++    collect_clause_symbol(Tuple, 2, Acc, Owner);
++collect_opaque_goal_positions(<<"retractall">>, Tuple, Acc, Owner) ->
++    collect_clause_symbol(Tuple, 2, Acc, Owner);
++collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+     {ok, Acc}.
+ 
+ %% A clause passed to a database-update predicate contains executable syntax:
+ %% its head is a callable and a rule body is a goal.  Ordinary arguments of
+ %% that head remain opaque data, exactly like arguments of any other goal.
+-collect_clause_symbol(Tuple, Position, Acc)
++collect_clause_symbol(Tuple, Position, Acc, Owner)
+   when Position =< tuple_size(Tuple) ->
+-    collect_clause_symbols(element(Position, Tuple), Acc);
+-collect_clause_symbol(_Tuple, _Position, _Acc) ->
++    collect_clause_symbols(element(Position, Tuple), Acc, Owner);
++collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+     error.
+ 
+-collect_clause_symbols({':-', Head, Body}, Acc) ->
+-    case collect_goal_symbols(Head, Acc) of
+-        {ok, Acc1} -> collect_goal_symbols(Body, Acc1);
+-        error -> error
+-    end;
+-collect_clause_symbols(Clause, Acc) ->
+-    collect_goal_symbols(Clause, Acc).
+-
+-%% The current ontology owns the route selector but not the selected
+-%% ontology's inner goal. Materialize only the selector here; the target will
+-%% perform the same goal walk after it authenticates and opens that scope.
+-collect_selector_symbol(Tuple, Position, Acc)
++collect_clause_symbols({{'$quod_symbol', <<":-">>}, Head, Body}, Acc, Owner) ->
++    collect_clause_symbols({':-',Head,Body},Acc, Owner);
++collect_clause_symbols({':-', Head, Body}, Acc, Owner) ->
++    case collect_goal_symbols(Head, Acc, Owner) of
++        {ok, Acc1} -> collect_goal_symbols(Body, Acc1, Owner);
++        error -> error
++    end;
++collect_clause_symbols(Clause, Acc, Owner) ->
++    collect_goal_symbols(Clause, Acc, Owner).
++
++%% The selector belongs to this scope. Only a selector for the authenticated
++%% current owner also owns its inner goal; a foreign destination admits its own.
++collect_selector_symbol(Tuple, Position, Acc, Owner)
+   when Position =< tuple_size(Tuple) ->
+-    collect_new_symbols(element(Position, Tuple), Acc);
+-collect_selector_symbol(_Tuple, _Position, _Acc) ->
+-    error.
+-
+-collect_goal_positions(_Tuple, [], Acc) ->
++    case collect_new_symbols(element(Position, Tuple), Acc) of
++        {ok, Acc1} when tuple_size(Tuple) =:= 3, is_binary(Owner) ->
++            case quod_ontology_name:flatten(element(Position, Tuple)) of
++                Owner -> collect_goal_symbols(element(3, Tuple), Acc1, Owner);
++                _ -> {ok, Acc1}
++            end;
++        Result -> Result
++    end;
++collect_selector_symbol(_Tuple, _Position, _Acc, _Owner) -> error.
++
++collect_goal_positions(_Tuple, [], Acc, Owner) ->
+     {ok, Acc};
+-collect_goal_positions(Tuple, [Position | Rest], Acc) ->
++collect_goal_positions(Tuple, [Position | Rest], Acc, Owner) ->
+     case Position =< tuple_size(Tuple) of
+         true ->
+-            case collect_goal_symbols(element(Position, Tuple), Acc) of
+-                {ok, Acc1} -> collect_goal_positions(Tuple, Rest, Acc1);
++            case collect_goal_symbols(element(Position, Tuple), Acc, Owner) of
++                {ok, Acc1} -> collect_goal_positions(Tuple, Rest, Acc1, Owner);
+                 error -> error
+             end;
+         false ->
+             error
+     end.
+ 
+-replace_goal_symbols({'$quod_symbol', Name}) ->
++replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+     binary_to_existing_atom(Name, utf8);
+-replace_goal_symbols(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
++replace_goal_symbols(Tuple, Owner) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+     case element(1, Tuple) of
+         {'$quod_symbol', Name} ->
+             %% Re-enter after replacing the callable so a V2 spelling such as
+             %% opaque assertz(opaque_head(...)) receives the same executable-
+             %% position treatment as an already-materialized assertz/1.
+             replace_goal_symbols(
+-              setelement(1, Tuple, binary_to_existing_atom(Name, utf8)));
+-        ',' -> replace_goal_positions(Tuple, [2, 3]);
+-        ';' -> replace_goal_positions(Tuple, [2, 3]);
+-        '->' -> replace_goal_positions(Tuple, [2, 3]);
+-        '\\+' -> replace_goal_positions(Tuple, [2]);
+-        'not' -> replace_goal_positions(Tuple, [2]);
+-        once -> replace_goal_positions(Tuple, [2]);
+-        call -> replace_goal_positions(Tuple, [2]);
+-        independent when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2]);
+-        transaction when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2]);
+-        findall -> replace_goal_positions(Tuple, [3]);
+-        bagof -> replace_goal_positions(Tuple, [3]);
+-        setof -> replace_goal_positions(Tuple, [3]);
+-        asserta -> replace_clause_symbol(Tuple, 2);
+-        assertz -> replace_clause_symbol(Tuple, 2);
+-        retract -> replace_clause_symbol(Tuple, 2);
+-        retractall -> replace_clause_symbol(Tuple, 2);
+-        '::' -> replace_selector_symbol(Tuple, 2);
++              setelement(1, Tuple, binary_to_existing_atom(Name, utf8)), Owner);
++        ',' -> replace_goal_positions(Tuple, [2, 3], Owner);
++        ';' -> replace_goal_positions(Tuple, [2, 3], Owner);
++        '->' -> replace_goal_positions(Tuple, [2, 3], Owner);
++        '\\+' -> replace_goal_positions(Tuple, [2], Owner);
++        'not' -> replace_goal_positions(Tuple, [2], Owner);
++        once -> replace_goal_positions(Tuple, [2], Owner);
++        call -> replace_goal_positions(Tuple, [2], Owner);
++        independent when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2], Owner);
++        transaction when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2], Owner);
++        findall -> replace_goal_positions(Tuple, [3], Owner);
++        bagof -> replace_goal_positions(Tuple, [3], Owner);
++        setof -> replace_goal_positions(Tuple, [3], Owner);
++        asserta -> replace_clause_symbol(Tuple, 2, Owner);
++        assertz -> replace_clause_symbol(Tuple, 2, Owner);
++        retract -> replace_clause_symbol(Tuple, 2, Owner);
++        retractall -> replace_clause_symbol(Tuple, 2, Owner);
++        '::' -> replace_selector_symbol(Tuple, 2, Owner);
+         _ -> Tuple
+     end;
+-replace_goal_symbols(Goal) ->
++replace_goal_symbols(Goal, Owner) ->
+     Goal.
+ 
+-replace_clause_symbol(Tuple, Position) when Position =< tuple_size(Tuple) ->
++replace_clause_symbol(Tuple, Position, Owner) when Position =< tuple_size(Tuple) ->
+     setelement(Position, Tuple,
+-               replace_clause_symbols(element(Position, Tuple)));
+-replace_clause_symbol(Tuple, _Position) ->
++               replace_clause_symbols(element(Position, Tuple), Owner));
++replace_clause_symbol(Tuple, _Position, Owner) ->
+     Tuple.
+ 
+-replace_clause_symbols({':-', Head, Body}) ->
+-    {':-', replace_goal_symbols(Head), replace_goal_symbols(Body)};
+-replace_clause_symbols(Clause) ->
+-    replace_goal_symbols(Clause).
+-
+-replace_selector_symbol(Tuple, Position) when Position =< tuple_size(Tuple) ->
+-    setelement(Position, Tuple, replace_symbols(element(Position, Tuple)));
+-replace_selector_symbol(Tuple, _Position) ->
+-    Tuple.
+-
+-replace_goal_positions(Tuple, Positions) ->
++replace_clause_symbols({{'$quod_symbol', <<":-">>}, Head, Body}, Owner) ->
++    replace_clause_symbols({':-',Head,Body}, Owner);
++replace_clause_symbols({':-', Head, Body}, Owner) ->
++    {':-', replace_goal_symbols(Head, Owner), replace_goal_symbols(Body, Owner)};
++replace_clause_symbols(Clause, Owner) ->
++    replace_goal_symbols(Clause, Owner).
++
++replace_selector_symbol(Tuple, Position, Owner) when Position =< tuple_size(Tuple) ->
++    Selected = setelement(Position, Tuple, replace_symbols(element(Position, Tuple))),
++    case is_binary(Owner) andalso tuple_size(Tuple) =:= 3 andalso
++         quod_ontology_name:flatten(element(Position, Tuple)) =:= Owner of
++        true -> setelement(3, Selected, replace_goal_symbols(element(3, Tuple), Owner));
++        false -> Selected
++    end;
++replace_selector_symbol(Tuple, _Position, _Owner) -> Tuple.
++
++replace_goal_positions(Tuple, Positions, Owner) ->
+     lists:foldl(
+       fun(Position, Acc) ->
+               setelement(Position, Acc,
+-                         replace_goal_symbols(element(Position, Acc)))
++                         replace_goal_symbols(element(Position, Acc), Owner))
+       end, Tuple, Positions).
+ 
+ -doc "Encode one complete, possibly-empty Erlog failure-reason stack.".

@@ -956,3 +956,17 @@ and managed compilation. One obsolete deep-term refusal fixture was corrected in
 both generator and corpus after a separately retained failure. No production
 behavior, deadline or policy changed. Native reliability and broader Stage 2
 acceptance remain separate; no hardware or shutdown retry occurred.
+
+### Commit completion
+
+The authorized pending source/test/docs delivery is committed as `34616c41`;
+six historical-evidence commits end at `d0767687`. Exact-path batching resolved
+the commit tool's `spawn E2BIG` and directory-selection errors; neither failed
+attempt changed HEAD or left staged files. All 22,235 manifest inputs matched
+their frozen hashes and committed blobs. See
+[finalization receipt](../../doc/evidence/stage2-finalization-20261103/commit-verification.json).
+Erlog `79b38746` is published on Yan's `netboz/erlog` branch
+`codex/stage2-policy-diagnostics`. Quod commits are local. Generated editor
+skills, review archives and ignored build artifacts remain preserved outside Git.
+Stage 2's remaining policy-owner audit and the recorded runtime acceptance gaps
+are unchanged; this closes the bounded removal and source-delivery work only.

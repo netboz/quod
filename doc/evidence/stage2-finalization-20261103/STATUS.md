@@ -60,3 +60,15 @@ and subsequent historical-evidence commits within the OS argument-size boundary.
 Ignore rules exclude generated Python bytecode directories and diagnostic DLL/PDB outputs;
 these files remain on disk. Source, tests and evidence are preserved. This is a
 local commit-tool transport correction, not a runtime limit or test failure.
+
+## Committed delivery
+
+Source, tests, documentation and current evidence are committed in
+`34616c41f71da2604b5d65442154a6a5cd254c9b`. Six subsequent historical-evidence
+commits end at `d076768735dadb894e8cbe927ee62298c200fce1`. The
+[verification receipt](commit-verification.json) checks all 22,235 input-manifest
+entries against their recorded SHA-256 and committed Git blobs, with no mismatch.
+The manifest itself is also committed. Tracked files were clean after delivery;
+845 generated skill/review-archive files remain untracked and preserved.
+This delivery supplement follows that frozen input manifest. Quod commits remain
+local; the pinned Erlog source has been pushed and independently verified.

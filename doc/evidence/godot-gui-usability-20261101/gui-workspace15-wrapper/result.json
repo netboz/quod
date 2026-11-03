@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-gui-usability-20261101/run.py",
+    "gui-workspace15-render",
+    "--manifest",
+    "doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final15-manifest.json",
+    "--phase",
+    "workspace-render",
+    "--headed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 4.089607481990242
+}

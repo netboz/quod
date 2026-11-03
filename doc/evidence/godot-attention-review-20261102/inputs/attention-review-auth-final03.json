@@ -1,0 +1,63 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "fc500eb1b924d5479cefd50bd53881e3b954016c525b5e63c76d14ea19ee587f",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final03/drivers/signed.py",
+      "sha256": "8eea2f27093e0ee11d2e04d9aca89ab4362799a502bd7e2aba23d3fec74626b4"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final03/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final03/drivers/hashes.py",
+      "sha256": "c393ad09e788d7dfb36c24f3c6bfcd910115afa78246f6f6b1684b233cffd896"
+    }
+  },
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-attention-review-auth-stdout": true,
+    "client-attention-review-auth-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final03/server-stdout.raw",
+      "sha256": "a280cab0228d31ad093a7368b866f2c2d541feac1ce656570e397e76929eadf7",
+      "bytes": 129
+    },
+    "client-attention-review-auth-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final03/client-attention-review-auth-stdout.raw",
+      "sha256": "1564aa1e4566d50335f538febc50c584715be86c02ceef28cf78965a12bb6327",
+      "bytes": 127645
+    },
+    "client-attention-review-auth-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final03/client-attention-review-auth-stderr.raw",
+      "sha256": "390881e5948303412395da9b9e851c3de924afb6bbe1b177405100326c57aaf4",
+      "bytes": 4992
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final03/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-attention-review-auth": {
+      "true_exit": 1
+    }
+  }
+}

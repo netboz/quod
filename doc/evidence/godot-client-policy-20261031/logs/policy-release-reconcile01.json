@@ -1,0 +1,64 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-client-policy-20261031/reconcile_release.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "build_companion.py": "1fb4155958d4909e7c417d7cd48106199683b7b1c4959bf7a3985a405028d38a",
+    "build_shutdown.py": "256a7b33f79650aba93c482344ba68b961ddf8933b25ddacfb4a083cf45e37f2",
+    "continue_checks.py": "1cd229c208be71111407dfc8671547297b8952624a2161f5854d53cf0017f1ae",
+    "freeze_small.py": "191b035dc348e86962f61cef60d948c9ada92106019f6e4f559f4ac5ef641034",
+    "gates.py": "e65d6508e243f1b9f0c91e8cb8264a4ee65726e51c16e18aa2a6b4b7343cc016",
+    "hashes.py": "3507e3d71ffe3c8d5799d8edf47ab10242f09fc1de09353262c195b952dbb3ab",
+    "inspect_package.py": "8614fedee23c63f6b7c5521a1a230b2831267adea6119deed3c0dfbd6d91c86f",
+    "instrument_close.py": "7bb13ee7f6d780c25e03e523d31f9fcd7114c38d40a00dc0abb63021ecea2ac5",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "isolation_probe.py": "779fa1dc753b5865d48b186e5c596c6af196a8e821fc0d5fa685f3fd2b304b90",
+    "journey.py": "2bbbac72a828810343190bea65ea14cb78724c575cf887cda2e819fcf6a567e1",
+    "ordinary_launch.py": "1a598b43fbdbe0d9024d23cac5d1acedfcebc05867ab03186d71f3875f2b6d82",
+    "owner_checks.py": "cc25c22841e8c15495e1c450d7a91e67af6601e7857d99a340b3f570a93dee10",
+    "package_current.py": "c07f16977ccf6ae4aaf97c8d5970581b1a0bbe81342f9b5c57d7f5a23b11b909",
+    "prepare.py": "5b6eca4ec27bffca0a300eeb2f6439b0226b8a1dddaf7294d1117a47b0cf7faf",
+    "prepare_journey.py": "725427939c99fd4f5a48f1c817dee8156a3c1718462a054528e3d5411e105149",
+    "qualify.py": "074b6d511e2e3acd7df63c8d2e49a160b229e152bf70a25ea45595f103580967",
+    "reconcile_close.py": "a42fe06c13b0e01922a6a6bb494fd6b2718ddbb3cb16d8c5bfa227937a48bbdb",
+    "reconcile_release.py": "6947d2453d55ac55e18b6a0003393cdb2e0fcfb04ccaa99d21a4112395d17f15",
+    "remote_checks.py": "a4f614482fdd783d86e475673d8e17a61ef2bd597c2c1353d7a6fb1a5695494a",
+    "resource_error_checks.py": "a652dbbc676a46646f0d6f35bb1f990eb7bc18aa89e5da09ff7c607636c551bb",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "74f27e34f2afa1fe1cc69dfa2e5e970401685203abc8de8b17bfb8f79f089a19",
+    "shutdown_capture.py": "5603bdeac2f668f60e7f65aa0ae27b2c61760c16118c87f670edfda0f0ba7387",
+    "shutdown_run.py": "b1f615df5322d07a4e9272b38031aa1873cd8b113fb6bd02ace22985a5dbf62d",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-10-31T22:54:46Z",
+  "elapsed_seconds": 2.473384380340576,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/policy-release-reconcile01/stdout.raw",
+      "sha256": "71112d7ec89de26acd661354a557d677fb35a9d5905052360a55d4bca7223aa9",
+      "bytes": 142
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/policy-release-reconcile01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/policy-release-reconcile01-stdout.log",
+      "sha256": "71112d7ec89de26acd661354a557d677fb35a9d5905052360a55d4bca7223aa9",
+      "bytes": 142
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/policy-release-reconcile01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

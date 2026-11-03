@@ -1,0 +1,20 @@
+{
+  "command": [
+    "env",
+    "NUGET_PACKAGES=/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/nuget",
+    "dotnet",
+    "build",
+    "client/godot/Quod.csproj",
+    "--no-restore"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T03:31:22Z",
+  "elapsed_seconds": 5.033119201660156,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/engine-compile06.log",
+  "raw_sha256": "8e28cd95d8421d9feacdf623f0c7532a41afb0fd0b374b836e6b63668f35cf93",
+  "sanitized_sha256": "8e28cd95d8421d9feacdf623f0c7532a41afb0fd0b374b836e6b63668f35cf93",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

@@ -1,0 +1,42 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--init",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source:/work:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-remote03:/input",
+    "-w",
+    "/input",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "-e",
+    "ERL_CRASH_DUMP=/input/erl_crash.dump",
+    "-e",
+    "XDG_CACHE_HOME=/input/cache",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/test/checkouts/*/ebin /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test /input -eval \"$1\"",
+    "sh",
+    "{ok,quod_ask_SUITE}=compile:file(\"/input/quod_ask_SUITE.erl\",[debug_info,{d,'TEST'},{i,\"/work/include\"},{outdir,\"/input\"},report_errors,report_warnings]),\nR=ct:run_test([{dir,\"/input\"},{suite,quod_ask_SUITE},{testcase,answer_policy_producer_consumer_and_signed_change},{auto_compile,false},{logdir,\"/input/logs\"}]),\nio:format(\"POLICY_CT_RESULT ~p~n\",[R]),case R of {1,0,{0,0}}->halt(0);_->halt(1) end."
+  ],
+  "clean_manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/inputs/answer-policy-clean-focused06-source-manifest.json",
+  "clean_manifest_sha256": "a248a8c3df61c80d248af8762e0fe4cf3fd5c6e6f7ad50540c1e1f33f65cd869",
+  "suite_source": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-remote03/quod_ask_SUITE.erl",
+  "suite_sha256": "a10097ceb4763e5f4518924cc0d5c8e027b8dc2a145b94295d8ab4c8413f8100",
+  "product_inputs_unchanged_from_focused105": true,
+  "compiled_application_inputs_copied": false,
+  "true_child_exit": 1,
+  "passed": false,
+  "suite_object": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-remote03/quod_ask_SUITE.beam",
+    "sha256": "d85f3ab0ba3b52b246bee58d497210c925886be1165626898ca16f5b386f6f45",
+    "bytes": 307116
+  }
+}

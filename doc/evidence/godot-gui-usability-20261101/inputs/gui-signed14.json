@@ -1,0 +1,70 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "manifest_sha256": "c98160c08a5e4c421992c19c24a6d45eaf6296b9c14e532c64bf077b058a10fc",
+  "failure": "Empty: ",
+  "post_completion_trigger": {
+    "wrapper_returncode": null,
+    "received_EOF": []
+  },
+  "shutdown_capture": {
+    "original60s_no_EOF_trigger": true,
+    "attempted": true,
+    "inspected": true,
+    "alive_at_trigger": true,
+    "thread_count": 41,
+    "true_exit": 0,
+    "invocation_sha256": "018f10b2f3b4512e08bb636910b75365325959172c8a870aea876b5751926c9d",
+    "stack_sha256": "abd0f1c186b0eef4d9575a058f9eaea8e7133d6cc2a6372a24a73bada728b2e2"
+  },
+  "unretired_failure": true,
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-gui-signed-stdout": true,
+    "client-gui-signed-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-signed14/server-stdout.raw",
+      "sha256": "32c2dda5186baea7f9ad29772a0926f389c8396d67bd708fa3e6f19341e2e24a",
+      "bytes": 129
+    },
+    "client-gui-signed-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-signed14/client-gui-signed-stdout.raw",
+      "sha256": "cc9c283286ee316d3b4c481c932b3720ddf66f699c015df9ea35f3415f79a99c",
+      "bytes": 183396
+    },
+    "client-gui-signed-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-signed14/client-gui-signed-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "shutdown-stacks.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-signed14/shutdown-stacks.raw",
+      "sha256": "abd0f1c186b0eef4d9575a058f9eaea8e7133d6cc2a6372a24a73bada728b2e2",
+      "bytes": 32336
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-signed14/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-gui-signed": {
+      "explicit_completion": true,
+      "completion_monotonic": 143545.614662138,
+      "true_exit": -15
+    }
+  }
+}

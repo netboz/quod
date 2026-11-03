@@ -1,0 +1,89 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/serve.py",
+    "gui-final02-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--qualified"
+  ],
+  "client": "final02",
+  "passed": true,
+  "commands": [
+    {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "gui-final02-journey",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/gui-final02-drivers/journey.py",
+        "--journey",
+        "gui",
+        "--export",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+        "--backend-port",
+        "40493",
+        "--backend-ca",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/quod-m4-live-gui-final02-server/backend-ca.pem",
+        "--control-port",
+        "38177",
+        "--network",
+        "j6fK8EYhycZFpN6t4JhIqlT-I8s1B1EmgkiYTMMBocw",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/gui-final02",
+        "--private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final02",
+        "--desktop",
+        "--controllers"
+      ],
+      "child_exit": 0
+    },
+    {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "gui-final02-backup-import",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/gui-final02-drivers/local.py",
+        "--phase",
+        "backup-import",
+        "--export",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+        "--journey-private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final02",
+        "--node",
+        "https://127.0.0.1:40493",
+        "--ca",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/quod-m4-live-gui-final02-server/backend-ca.pem",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/gui-final02-backup-import",
+        "--private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final02-backup-import",
+        "--desktop"
+      ],
+      "child_exit": 0
+    }
+  ],
+  "driver_inputs": {
+    "doc/evidence/godot-m4-20261029/campaign.py": "ca825196c63ffb587f7c502074b6cbabdc6490fd2354d30b1f81ef6bedc3231d",
+    "client/godot-tests/journey.py": "a012afe3dff46c4dd4c3fae1b562907490483b213e858cbe07b558dc80629052",
+    "client/godot-tests/local.py": "ccc309776c51126ad4215735680f8ae843afc5c2575b6b014a82e634d6a27067",
+    "client/godot-tests/desktop_input.py": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26"
+  },
+  "retained_drivers": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/gui-final02-drivers",
+  "endpoint": {
+    "port": 40493,
+    "network": "j6fK8EYhycZFpN6t4JhIqlT-I8s1B1EmgkiYTMMBocw",
+    "control_port": 38177,
+    "ca": "/m1b/backend-ca.pem"
+  },
+  "server_child_exit": 0
+}

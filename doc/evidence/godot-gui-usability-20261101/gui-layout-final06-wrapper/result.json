@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-gui-usability-20261101/run.py",
+    "gui-layout-final06-render",
+    "--manifest",
+    "doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate06-manifest.json",
+    "--headed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 3.1850574900163338
+}

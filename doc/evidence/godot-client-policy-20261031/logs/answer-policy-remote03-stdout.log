@@ -1,0 +1,22 @@
+
+Common Test starting (cwd is /input)
+
+
+
+CWD set to: "/input/logs/ct_run.nonode@nohost.2026-10-31_21.57.58"
+
+TEST INFO: 1 test(s), 1 case(s) in 1 suite(s)
+
+Testing input.quod_ask_SUITE.answer_policy_producer_consumer_and_signed_change: Starting test, 1 test cases
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:answer_policy_producer_consumer_and_signed_change failed on line 1088
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing input.quod_ask_SUITE.answer_policy_producer_consumer_and_signed_change: *** FAILED test case 1 of 1 ***
+Testing input.quod_ask_SUITE.answer_policy_producer_consumer_and_signed_change: TEST COMPLETE, 0 ok, 1 failed of 1 test cases
+
+Updating /input/logs/index.html ... done
+Updating /input/logs/all_runs.html ... done
+POLICY_CT_RESULT {0,1,{0,0}}

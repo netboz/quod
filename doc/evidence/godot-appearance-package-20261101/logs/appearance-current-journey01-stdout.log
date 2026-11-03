@@ -1,0 +1,109 @@
+PASS enabled ordinary action create-key
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: create-key
+PASS one software Control signal reaches the existing button owner
+PASS enabled ordinary action connect
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: connect
+PASS one software Control signal reaches the existing button owner
+PASS real signed authentication uses the fresh fixture network
+PASS enabled ordinary action register
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: register
+PASS one software Control signal reaches the existing button owner
+PASS enabled ordinary action prepare
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: prepare
+PASS one software Control signal reaches the existing button owner
+PASS enabled ordinary action setup
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: setup
+PASS one software Control signal reaches the existing button owner
+PASS enabled ordinary action location-operations
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: location-operations
+PASS one software Control signal reaches the existing button owner
+PASS ordinary Current space presents the accepted navigation context
+PASS enabled ordinary action create-operations
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: create-operations
+PASS one software Control signal reaches the existing button owner
+PASS native action is visible inside the current ordinary desktop viewport
+PASS existing authored choice is present
+PASS software selection reaches the existing authored-choice owner
+PASS native action is visible inside the current ordinary desktop viewport
+PASS existing authored choice is present
+PASS software selection reaches the existing authored-choice owner
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: @Button@366
+PASS one software Control signal reaches the existing button owner
+PASS offered create keeps the explicitly chosen existing storage and anchored class
+PASS current signed offered Submit is enabled
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: control7
+PASS one software Control signal reaches the existing button owner
+PASS software Control Submit leaves no GUI pointer capture
+PASS one software Control Submit commits the governed creation through U to A
+PASS creation retains A in the original space until explicit Enter
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: open-returned-subject
+PASS one software Control signal reaches the existing button owner
+PASS View result keeps the original location; inspection is not Enter
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: @Button@461
+PASS one software Control signal reaches the existing button owner
+PASS returned-subject native action opens the exact created-space Enter offer
+PASS current signed offered Submit is enabled
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: control0
+PASS one software Control signal reaches the existing button owner
+PASS software Control Submit leaves no GUI pointer capture
+PASS explicit native Enter commits using the same signed form owner
+PASS creation and Enter each add one original instruction with no pending work
+PASS enabled ordinary action location-operations
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: location-operations
+PASS one software Control signal reaches the existing button owner
+PASS enabled ordinary action inspect-subject-storage
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: inspect-subject-storage
+PASS one software Control signal reaches the existing button owner
+PASS ordinary Source / inspection keeps the exact current owned ontology
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: @Button@497
+PASS one software Control signal reaches the existing button owner
+PASS named unchanged-work observation is installed before renewal
+PASS unchanged accepted renewal has zero watched history/rebuild/write/sync calls
+PASS unchanged renewal retains native graph/scene/source and private profile bytes
+PASS workbench starts with inspection rather than unrequested preparation fields
+PASS native action is visible inside the current ordinary desktop viewport
+PASS actual current desktop raster retained: workbench-inspection
+PASS software activation requires the visible enabled native button: control2
+PASS one software Control signal reaches the existing button owner
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software text signal preserves the exact offered draft value
+PASS existing Control text signal edits the single offered local form draft
+PASS native action is visible inside the current ordinary desktop viewport
+PASS existing authored choice is present
+PASS software selection reaches the existing authored-choice owner
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: control11
+PASS one software Control signal reaches the existing button owner
+PASS native Prepare creates only the guarded local source draft
+PASS actual current desktop raster retained: local-source-draft
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: control4
+PASS one software Control signal reaches the existing button owner
+PASS existing signed Preview enables explicit Save
+PASS native action is visible inside the current ordinary desktop viewport
+PASS software activation requires the visible enabled native button: control5
+PASS one software Control signal reaches the existing button owner
+PASS one explicit native Save has committed graphical/text readback and no pending work
+PASS ontology editing preserves the same current space and agent assignment
+PASS actual current desktop raster retained: committed-workbench
+PASS one ordinary authorized fixture transaction authors the non-space appearance example
+PASS native action is visible inside the current ordinary desktop viewport
+PASS actual current desktop raster retained: authored-appearance
+PASS the exact signed non-space subject renders its authored cyan primary action
+PASS ordinary desktop accessibility keeps the authored panel and foreground opaque
+{"passed": false, "failure": "Empty: ", "children": {"server": 0, "client-initial": -15}, "native_inputs": 0}

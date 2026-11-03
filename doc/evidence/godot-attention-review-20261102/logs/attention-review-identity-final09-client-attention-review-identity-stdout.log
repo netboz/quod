@@ -1,0 +1,169 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit signed question fixture transaction commits
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit signed question fixture transaction commits
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit signed question fixture transaction commits
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS retained actual attention-arrival raster
+PASS new signed questions update attention without opening any working form before human selection
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native References reveals full exact identity in the same texture at (False, 1200, 26)
+PASS native readonly reference text stays opaque
+PASS exact-reference reader and return control are enclosed at (False, 1200, 26)
+PASS retained actual references-False-1200-26 raster
+<private fixture/client diagnostic>
+PASS return from References retains the same native form draft caret and selection
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native References reveals full exact identity in the same texture at (False, 1200, 48)
+PASS native readonly reference text stays opaque
+PASS exact-reference reader and return control are enclosed at (False, 1200, 48)
+PASS retained actual references-False-1200-48 raster
+<private fixture/client diagnostic>
+PASS return from References retains the same native form draft caret and selection
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native References reveals full exact identity in the same texture at (False, 560, 26)
+PASS native readonly reference text stays opaque
+PASS exact-reference reader and return control are enclosed at (False, 560, 26)
+PASS retained actual references-False-560-26 raster
+<private fixture/client diagnostic>
+PASS return from References retains the same native form draft caret and selection
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native References reveals full exact identity in the same texture at (True, 1200, 26)
+PASS native readonly reference text stays opaque
+PASS exact-reference reader and return control are enclosed at (True, 1200, 26)
+PASS retained actual references-True-1200-26 raster
+<private fixture/client diagnostic>
+PASS return from References retains the same native form draft caret and selection
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native References reveals full exact identity in the same texture at (True, 1200, 48)
+PASS native readonly reference text stays opaque
+PASS exact-reference reader and return control are enclosed at (True, 1200, 48)
+PASS retained actual references-True-1200-48 raster
+<private fixture/client diagnostic>
+PASS return from References retains the same native form draft caret and selection
+PASS identity inspection never writes or reacquires signed resources
+<private fixture/client diagnostic>
+PASS enabled action disconnect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS review fixture retires signed owners and captures without native XR
+ATTENTION_PASS
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

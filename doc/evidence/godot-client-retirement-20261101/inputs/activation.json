@@ -1,0 +1,47 @@
+{
+  "radar": {
+    "actual_command": [
+      "env",
+      "-u",
+      "LD_LIBRARY_PATH",
+      "-u",
+      "LD_PRELOAD",
+      "node",
+      "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+      "/home/yan/src/quod",
+      "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+      "work_radar",
+      "{\"issueKey\":\"QUO-66\"}"
+    ],
+    "true_exit": 0,
+    "nested_isError": false,
+    "totalThreads": 0
+  },
+  "tracker_get": {
+    "QUO-66": {
+      "true_exit": 0,
+      "nested_isError": false,
+      "raw": "doc/evidence/godot-client-retirement-20261101/inputs/QUO-66.json",
+      "decoded": "doc/evidence/godot-client-retirement-20261101/inputs/QUO-66.md"
+    },
+    "QUO-60": {
+      "true_exit": 0,
+      "nested_isError": false,
+      "raw": "doc/evidence/godot-client-retirement-20261101/inputs/QUO-60.json",
+      "decoded": "doc/evidence/godot-client-retirement-20261101/inputs/QUO-60.md"
+    },
+    "QUO-61": {
+      "true_exit": 0,
+      "nested_isError": false,
+      "raw": "doc/evidence/godot-client-retirement-20261101/inputs/QUO-61.json",
+      "decoded": "doc/evidence/godot-client-retirement-20261101/inputs/QUO-61.md"
+    }
+  },
+  "actual_model": "openai-codex:gpt-6-astra",
+  "effective_backend_effort": "unexposed",
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "old_status_does_not_override_accepted_scopes": true,
+  "body_publication_attempted": false,
+  "whole_current_journey_diagnostic_unchanged_from246": true,
+  "scope": "Only close observations and exact owned process/pipe identity; no domain/action/UI change"
+}

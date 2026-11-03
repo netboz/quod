@@ -1,0 +1,26 @@
+{
+  "label": "postmortem280-offline01",
+  "command": [
+    "/usr/bin/python3",
+    "-B",
+    "doc/evidence/godot-attention-vr-preparation-20261102/postmortem280.py"
+  ],
+  "true_child_exit": 0,
+  "elapsed_seconds": 0.08102513599442318,
+  "new_app_fixture_or_runtime_invocations": 0,
+  "output_files_closed": true,
+  "analysis_driver_sha256": "862a4336f255c44de55af8fd860c3aac4def84af361fde08f0660f12e4494b8b",
+  "logs": {
+    "doc/evidence/godot-attention-vr-preparation-20261102/logs/postmortem280-offline01.stdout.log": {
+      "sha256": "21a0efb9cde9335788249fdf6dc2bde3d3ea291d2b98100fddfcf2bd8b83a5b0",
+      "bytes": 349,
+      "mode": 33152
+    },
+    "doc/evidence/godot-attention-vr-preparation-20261102/logs/postmortem280-offline01.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mode": 33152
+    }
+  },
+  "explicit_completion": true
+}

@@ -1,0 +1,81 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "3147de69033020cd8bdddc5f3e0f3200b0240bcd4f86b70d55dc628d31f792f0",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-appearance-question-stdout": true,
+    "client-appearance-question-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-question/server-stdout.raw",
+      "sha256": "c264d46ad6f616e15ec4667fb2b90b75cf68442d4377dd621d6f5fd7a91e3bf5",
+      "bytes": 129
+    },
+    "client-appearance-question-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-question/client-appearance-question-stdout.raw",
+      "sha256": "fbe17287d4897f87beec6772e3e2f10a0101aacee1c41ca7ebc0aa940e9a7d95",
+      "bytes": 177966
+    },
+    "client-appearance-question-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-question/client-appearance-question-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-question/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-appearance-question": {
+      "explicit_completion": true,
+      "completion_monotonic": 181398.506648035,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "question appearance refresh preserves native controls draft and style resource",
+        "question refresh retains dirty native text selection and caret",
+        "appearance does not stale or replace the original deferred question contract",
+        "question colour applies while existing withdrawal revokes focus",
+        "authored native popup is enclosed in the current surface at (True, 1200, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored native popup is enclosed in the current surface at (True, 1200, 48)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored native popup is enclosed in the current surface at (False, 560, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "appearance and local choices send no question answer or continuation",
+        "one native explicit answer action reaches the original question owner",
+        "the original question continuation commits exactly once with the preserved dirty values",
+        "enabled action disconnect",
+        "all authored question appearance consumers retire"
+      ]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-attention-review-20261102/build.py",
+    "attention-review-product01",
+    "--product"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "browser.py": "8e8f67f3f41065382946c7859fba8ba50c46e9560721e959e9814640ab437e7a",
+    "build.py": "9b7c8f4e92b4b974257ae11ea8e68bba6e740f6ff0022ea6ce10b7aef8f60657",
+    "freeze.py": "6f2dc49e3a1fdcaabc5c7a581e5beabd41de87314669ea0a2bf8d36c9995980c",
+    "hashes.py": "c393ad09e788d7dfb36c24f3c6bfcd910115afa78246f6f6b1684b233cffd896",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "qualify.py": "0c2d4b5bbe22aec0fc53380233bad96d87094188bb3e638ee9322eb0cac40eae",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "sequence.py": "429dfd49b105494ef7d2f13c8406edf35c0fead0ac732bbeb5dd5a941d4f3543",
+    "signed.py": "8eea2f27093e0ee11d2e04d9aca89ab4362799a502bd7e2aba23d3fec74626b4",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-01T23:44:37Z",
+  "elapsed_seconds": 28.958688020706177,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/attention-review-product01-build/stdout.raw",
+      "sha256": "56459170fb0d594b029fb8dac55b4a238522395ef9519c28529a322d5c07f525",
+      "bytes": 1073
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/attention-review-product01-build/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-attention-review-20261102/logs/attention-review-product01-build-stdout.log",
+      "sha256": "56459170fb0d594b029fb8dac55b4a238522395ef9519c28529a322d5c07f525",
+      "bytes": 1073
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-attention-review-20261102/logs/attention-review-product01-build-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

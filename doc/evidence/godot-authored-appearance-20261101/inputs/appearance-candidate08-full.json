@@ -1,0 +1,119 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "3147de69033020cd8bdddc5f3e0f3200b0240bcd4f86b70d55dc628d31f792f0",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-appearance-full-stdout": true,
+    "client-appearance-full-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-full/server-stdout.raw",
+      "sha256": "89f047fdcfd20831ac635de7a4e4acbbbf1fd0e92ea0a49fc654d8807eb3faff",
+      "bytes": 129
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-full/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-appearance-full-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-full/client-appearance-full-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "client-appearance-full-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-candidate08-full/client-appearance-full-stdout.raw",
+      "sha256": "729cb5393d1daf1fe135bb255534c97588c85b3246949a56ac7a3ec1328e66f5",
+      "bytes": 222702
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-appearance-full": {
+      "explicit_completion": true,
+      "completion_monotonic": 181463.326503221,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "native target enclosed in every clipping ancestor: control0",
+        "real native editing reaches the same dirty local draft",
+        "adjacent native keyboard remains opaque and holds no appearance text copy",
+        "explicit fixture source change commits once",
+        "appearance-only commit retains native controls draft and style resource identity",
+        "appearance-only colour renewal retains dirty text caret and selection",
+        "existing authorization withdrawal revokes input and keyboard; appearance never restores focus",
+        "appearance-only renewal preserves semantic revision submit target permission and original outcome",
+        "actual changed colour applies only to its authored independent occurrence",
+        "named history rebuild write sync measurement starts",
+        "unchanged signed renewals reuse themes controls and projections with zero named history rebuild write sync work",
+        "authored permille affects only the panel background",
+        "local Opaque preference overrides authored transparency without rebuilding",
+        "explicit fixture source change commits once",
+        "appearance geometry change cancels an existing native capture without submitting",
+        "authored appearance target remains reachable at (True, 1200, 26)",
+        "authored appearance target remains reachable at (True, 1200, 26)",
+        "local text size has precedence over authored appearance at (True, 1200, 26)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (True, 1200, 26)",
+        "active field stays visible with the existing adjacent keyboard at (True, 1200, 26)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-1200-26",
+        "authored appearance target remains reachable at (True, 1200, 48)",
+        "authored appearance target remains reachable at (True, 1200, 48)",
+        "local text size has precedence over authored appearance at (True, 1200, 48)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (True, 1200, 48)",
+        "active field stays visible with the existing adjacent keyboard at (True, 1200, 48)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-1200-48",
+        "authored appearance target remains reachable at (False, 560, 26)",
+        "authored appearance target remains reachable at (False, 560, 26)",
+        "local text size has precedence over authored appearance at (False, 560, 26)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (False, 560, 26)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-560-26",
+        "semantic component identity excludes only authored appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "wrong anchored appearance vocabulary cannot supply a native descriptor",
+        "explicit fixture source change commits once",
+        "ambiguous authored appearance withdraws the affected form instead of silently using defaults",
+        "independent authored occurrence is currently accepted after the shared ontology change",
+        "enabled action disconnect",
+        "appearance consumers retire through ordinary disconnect"
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+PASS actual authored row raster retained
+PASS explicit authored row retains interleaved action and field order
+PASS authored layout preserves exact local values
+PASS actual authored grid raster retained
+PASS explicit authored grid retains interleaved action and field order
+PASS authored layout preserves exact local values
+PASS actual authored column raster retained
+PASS explicit authored column retains interleaved action and field order
+PASS authored layout preserves exact local values
+GUI_USABILITY_PASS
+{"passed": true, "children": {"client": 0}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 9}

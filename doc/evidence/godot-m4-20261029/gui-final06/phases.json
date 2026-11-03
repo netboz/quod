@@ -1,0 +1,90 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/identity",
+      "--node",
+      "https://127.0.0.1:32915",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 32.05366016700282,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "reset",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/identity",
+      "--node",
+      "https://127.0.0.1:32915",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 22.02296780499455,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m4-live",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/identity",
+      "--node",
+      "https://127.0.0.1:32915",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 20.3522546910026,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "final",
+    "command": [
+      "/home/yan/.cache/quod-m4-artifacts/builds/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/identity",
+      "--node",
+      "https://127.0.0.1:32915",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-final06/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 48.65535251000256,
+    "godot_error_diagnostics": false,
+    "passed": true
+  }
+]

@@ -1,0 +1,48 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-authored-appearance-20261101/browser.py",
+    "appearance-browser-bound02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "browser.py": "b0f1fbf8861ea2d026526457a72b5fe287870d4a53b728914fbecb15f1ed39dc",
+    "build.py": "8d513b05bc2dec66b56745751ef2ee7f5856d822be050587724925bf164db2bb",
+    "hashes.py": "2f74ab80ea4367f1914c4f4f308222772c7b070c3015f286452014e3a70b49d9",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "qualify.py": "da092f4e2e800462e1503879470cb7f8f656e2175d8f8b499571c1b7b8161ab1",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "969fd1e9c968ddc3211a609cb183d5b952715e650b09889de97681974ad2f338",
+    "signed.py": "39c9176a3a8b1a1a617744589b86ca09611241d81734569aca32624758919546",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-01T12:37:08Z",
+  "elapsed_seconds": 0.5651259422302246,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/appearance-browser-bound02-run/stdout.raw",
+      "sha256": "e8af0ad44f94d29565f9b9f040dc7a9c43166e1405778f1148283504ebc7bcf7",
+      "bytes": 378
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/appearance-browser-bound02-run/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/logs/appearance-browser-bound02-run-stdout.log",
+      "sha256": "e8af0ad44f94d29565f9b9f040dc7a9c43166e1405778f1148283504ebc7bcf7",
+      "bytes": 378
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/logs/appearance-browser-bound02-run-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

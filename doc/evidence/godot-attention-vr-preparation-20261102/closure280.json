@@ -1,0 +1,302 @@
+{
+  "checkpoint": 280,
+  "opportunity": "attention280-human01",
+  "passed": false,
+  "ready": false,
+  "human_task_result": "unrun/no report",
+  "classification": "original native30 admission failure; separate operator fixture-stop input error",
+  "actual_children": {
+    "client": 1,
+    "fixture": 1
+  },
+  "actual_tool_wrapper_exits": {
+    "client": 1,
+    "fixture": 1
+  },
+  "EOF": {
+    "client_stdout": true,
+    "client_stderr": true,
+    "fixture_stdout": true,
+    "fixture_stderr": true
+  },
+  "reader_errors": {
+    "client": [],
+    "fixture": []
+  },
+  "owned": {
+    "pid": 578962,
+    "incarnation": [
+      2050,
+      3312335,
+      26343635
+    ],
+    "address": "0x55f62c2bd020"
+  },
+  "closed_forbidden_ptys": {
+    "client": 83326,
+    "fixture": 92932
+  },
+  "original_engine_absent_host_verified": true,
+  "exact_owned_container_absent_host_verified": true,
+  "started_monotonic": 260128.164683245,
+  "prepared_monotonic": 260138.646743124,
+  "begin_sent_monotonic": 260138.683183597,
+  "begin_delay_from_prepared_seconds": 0.03644047299167141,
+  "remaining_preparation_at_begin": 169.4814996480127,
+  "auth_expires_ms": 1793615999690,
+  "participant_started": false,
+  "native_blocker": {
+    "initialized": true,
+    "running": true,
+    "adapter_running": true,
+    "session_state": "Synchronized",
+    "can_render": false,
+    "xr_frames": 0,
+    "primary": true,
+    "action_set_active": true,
+    "use_xr": true,
+    "viewport_update": "Always",
+    "scene_visible": false,
+    "predicted_time": 260162122767215,
+    "presence_supported": false,
+    "presence": null,
+    "captures": 0,
+    "question_receiver_ready": true,
+    "stereo_views": 2,
+    "draws": 4,
+    "runtime_system": {
+      "XRRuntimeName": "SteamVR/OpenXR",
+      "XRRuntimeVersion": "2.18.4",
+      "OpenXRSystemName": "SteamVR/OpenXR : lighthouse",
+      "OpenXRVendorID": "10462"
+    },
+    "head": {
+      "tracked": true,
+      "confidence": "High"
+    },
+    "sources": [
+      {
+        "hand": "left",
+        "profile": "/interaction_profiles/none",
+        "tracked": false,
+        "neutral": false
+      },
+      {
+        "hand": "right",
+        "profile": "/interaction_profiles/none",
+        "tracked": false,
+        "neutral": false
+      }
+    ],
+    "router": {
+      "available": true,
+      "revision": "0",
+      "digest": "EWOaAaDhlG1m-sE4f_1thzMcbIf5ANlDI7k0M0eAYk4",
+      "choices": {},
+      "sources": [
+        {
+          "id": "1",
+          "hand": "left",
+          "profile": "unsupported",
+          "tracked": false,
+          "bindings": [],
+          "reason": "No unambiguous supported profile/components."
+        },
+        {
+          "id": "2",
+          "hand": "right",
+          "profile": "unsupported",
+          "tracked": false,
+          "bindings": [],
+          "reason": "No unambiguous supported profile/components."
+        }
+      ]
+    },
+    "models_settled": true,
+    "metrics": {
+      "Running": true,
+      "Subscriptions": 15,
+      "sources": 2,
+      "appearances": 2,
+      "MenuRedraws": 0,
+      "LateCallbacks": 0,
+      "captures": 0,
+      "DriveRequests": 0,
+      "StopRequests": 0,
+      "SnapRequests": 0,
+      "TeleportRequests": 0,
+      "resources": {
+        "Acquisitions": 0,
+        "Releases": 0,
+        "Decodes": 0,
+        "InstancesCreated": 0,
+        "InstancesReleased": 0,
+        "NodesBuilt": 0,
+        "TexturesDecoded": 0,
+        "LiveTemplates": 0,
+        "LiveLeases": 0
+      }
+    },
+    "signed_world": true,
+    "operation_available": true,
+    "expired": false,
+    "expires_ms": 1793615999690,
+    "remaining_auth_ms": 865025,
+    "workspace_visible": true,
+    "window_focus": false,
+    "blocked": false
+  },
+  "finish_reason": "native_admission_failure",
+  "finish_sent_monotonic": 260169.059215391,
+  "client_completed_monotonic": 260169.929244902,
+  "retirement_failure": null,
+  "fixture_stop": {
+    "operator_sent_bytes": "\\n",
+    "accepted_stop_command": "stop\\n",
+    "writes": 1,
+    "actual_error": "unexpected_end from json:decode/1 in godot_m3b_fixture:commands/0",
+    "operator_error": true,
+    "product_or_XR_cause": false,
+    "replayed": false
+  },
+  "qt": {
+    "process_override": "xcb",
+    "monitor_observations": [],
+    "qt_platform_error_present": false,
+    "separate_helper_startup_claim": false
+  },
+  "original_bounds_seconds": {
+    "preparation": 180,
+    "native_admission": 30,
+    "participant": 1800,
+    "normal_close": 60,
+    "outer": 2100
+  },
+  "deadline_extension": false,
+  "automatic_renewal_or_replay": false,
+  "host_input_or_focus": false,
+  "global_configuration_change": false,
+  "next_launch_authorized": false,
+  "sources": {
+    "prepared_receipt_sha256": "f6f488a06f9c08fdd7c41e3695373fff865c79e3cce6548d93facc1a19d207a4",
+    "companion_manifest_sha256": "1adf1cee85091f94dfd15f6c92e35874902fffca797504eb2400f644ab077359",
+    "production": 98,
+    "supplied": 99,
+    "server_resources": 14
+  },
+  "receipts": {
+    "invocation": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention280-human01/invocation.json",
+      "sha256": "043c9361d86213cd86f190f4d37c581b0e4972f168b57f29890d52aee0e820b5",
+      "bytes": 5980,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        33554604,
+        5980,
+        1793615135562107774,
+        1793615135562107774
+      ]
+    },
+    "preparation": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention280-human01/preparation.json",
+      "sha256": "0417cb10e8fcd59dbbf5db4bafc8c93f9b4149b1ea6e8ae816d33508d67a0e78",
+      "bytes": 1560,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        33554717,
+        1560,
+        1793615104256010613,
+        1793615104256010613
+      ]
+    },
+    "fixture": {
+      "path": "doc/evidence/godot-attention-vr-preparation-20261102/inputs/server-attention280-human01-server.json",
+      "sha256": "d41ad2e34b1df4d4e122a81ec45a6990240d0439ee40d16e5596b10a0d5c43c8",
+      "bytes": 13499,
+      "mode": 33152,
+      "stat_key": [
+        66305,
+        28452567,
+        13499,
+        1793615160326752157,
+        1793615160326752157
+      ]
+    },
+    "fixture_wrapper": {
+      "path": "doc/evidence/godot-attention-vr-preparation-20261102/logs/attention280-fixture-wrapper01.json",
+      "sha256": "6bd799749e30f8258331b014f2703e634c795806ac4477ea25f05f7a360591d7",
+      "bytes": 2913,
+      "mode": 33152,
+      "stat_key": [
+        66305,
+        28452570,
+        2913,
+        1793615160431723382,
+        1793615160431723382
+      ]
+    },
+    "preflight": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-vr-preparation280/launch-preflight280.json",
+      "sha256": "ffaa5c5ec39db1133cd1ccf17408ecb3b1c1d30f20a196b55c667f15a3a0ba24",
+      "bytes": 905,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        33425075,
+        905,
+        1793615059258029988,
+        1793615059258029988
+      ]
+    }
+  },
+  "raw": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention280-human01/stdout.raw",
+      "sha256": "a3f277225de9c5a7ace37db33b49e5babf5ba745b70f24b422425e3c86425d2d",
+      "bytes": 136632,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        33554605,
+        136632,
+        1793615135444693136,
+        1793615135444693136
+      ]
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention280-human01/stderr.raw",
+      "sha256": "68e8f53a129b4b8ff51598afb1f939421bbcd45b969105391bae4cd414d7921c",
+      "bytes": 4800,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        33554606,
+        4800,
+        1793615134726677398,
+        1793615134726677398
+      ]
+    }
+  },
+  "server_raw": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-attention280-human01-server/server-raw.log",
+    "sha256": "a28b420ac697fc693d0514823167b1d7fef6cd18d7eed2dfbb17b14eb9989992",
+    "bytes": 2033,
+    "mode": 33152,
+    "stat_key": [
+      2050,
+      33554532,
+      2033,
+      1793615160323239130,
+      1793615160323239130
+    ]
+  },
+  "limits": [
+    "HeadHigh is not wear/pixel evidence; native presence unsupported/null.",
+    "No supported tracked controller admission or human form/attention task result.",
+    "Synchronized/CanRenderfalse does not identify a runtime or application cause.",
+    "Current normal EOF is no historical shutdown fix.",
+    "All historical profiles/pending work/failures and accepted package unchanged."
+  ]
+}

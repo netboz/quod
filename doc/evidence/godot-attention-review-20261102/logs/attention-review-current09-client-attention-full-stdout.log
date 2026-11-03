@@ -1,0 +1,362 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit signed question fixture transaction commits
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit signed question fixture transaction commits
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit signed question fixture transaction commits
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS retained actual attention-arrival raster
+PASS new signed questions update attention without opening any working form before human selection
+PASS existing spatial menu offers the same authorized attention owner
+PASS native target is visibly enclosed without diagnostic reveal: attention
+PASS native action enabled: attention
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: attention
+PASS compact attention exposes the two exact independent occurrences without opening either
+PASS native target is visibly enclosed without diagnostic reveal: @Button@62
+PASS native action enabled: @Button@62
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: @Button@62
+PASS one selected exact question is the primary working form
+PASS native target is visibly enclosed without diagnostic reveal: control0
+PASS native field receives actual surface focus
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit signed question fixture transaction commits
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS arrival leaves the chosen task in place and never transfers focus to another request
+PASS same-form occurrences retain independent native drafts selection and caret
+PASS real named work watcher installed
+PASS native target is visibly enclosed without diagnostic reveal: hide-question
+PASS native action enabled: hide-question
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: hide-question
+PASS native target is visibly enclosed without diagnostic reveal: @Button@62
+PASS native action enabled: @Button@62
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: @Button@62
+<private fixture/client diagnostic>
+PASS native target is visibly enclosed without diagnostic reveal: hide-question
+PASS native action enabled: hide-question
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: hide-question
+PASS native target is visibly enclosed without diagnostic reveal: @Button@62
+PASS native action enabled: @Button@62
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: @Button@62
+<private fixture/client diagnostic>
+PASS native target is visibly enclosed without diagnostic reveal: hide-question
+PASS native action enabled: hide-question
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: hide-question
+PASS native target is visibly enclosed without diagnostic reveal: @Button@62
+PASS native action enabled: @Button@62
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: @Button@62
+<private fixture/client diagnostic>
+PASS three hide recalls and accepted renewals retain controls subscriptions and zero named history rebuild write sync work
+<private fixture/client diagnostic>
+PASS retained actual working-False-1200-26 raster
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 26) control0
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 26) control1
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 26) hide-question
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 26) cancel-question
+PASS native target is visibly enclosed without diagnostic reveal: control0
+PASS selected native field supports existing adjacent keyboard at (False, 1200, 26)
+PASS layout and spatial composition retain local text without native XR
+<private fixture/client diagnostic>
+PASS retained actual working-False-1200-48 raster
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 48) control0
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 48) control1
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 48) hide-question
+PASS primary question field action dismissal and cancellation enclosed at (False, 1200, 48) cancel-question
+PASS native target is visibly enclosed without diagnostic reveal: control0
+PASS selected native field supports existing adjacent keyboard at (False, 1200, 48)
+PASS layout and spatial composition retain local text without native XR
+<private fixture/client diagnostic>
+PASS retained actual working-False-560-26 raster
+PASS primary question field action dismissal and cancellation enclosed at (False, 560, 26) control0
+PASS primary question field action dismissal and cancellation enclosed at (False, 560, 26) control1
+PASS primary question field action dismissal and cancellation enclosed at (False, 560, 26) hide-question
+PASS primary question field action dismissal and cancellation enclosed at (False, 560, 26) cancel-question
+PASS native target is visibly enclosed without diagnostic reveal: control0
+PASS selected native field supports existing adjacent keyboard at (False, 560, 26)
+PASS layout and spatial composition retain local text without native XR
+<private fixture/client diagnostic>
+PASS retained actual working-True-1200-26 raster
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 26) control0
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 26) control1
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 26) hide-question
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 26) cancel-question
+PASS native target is visibly enclosed without diagnostic reveal: control0
+PASS selected native field supports existing adjacent keyboard at (True, 1200, 26)
+PASS layout and spatial composition retain local text without native XR
+<private fixture/client diagnostic>
+PASS retained actual working-True-1200-48 raster
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 48) control0
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 48) control1
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 48) hide-question
+PASS primary question field action dismissal and cancellation enclosed at (True, 1200, 48) cancel-question
+PASS native target is visibly enclosed without diagnostic reveal: control0
+PASS selected native field supports existing adjacent keyboard at (True, 1200, 48)
+PASS layout and spatial composition retain local text without native XR
+<private fixture/client diagnostic>
+PASS attention selection hide resize and refresh never answer a question or submit domain work
+PASS native target is visibly enclosed without diagnostic reveal: control1
+PASS native action enabled: control1
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: control1
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit native Submit executes the original continuation exactly once with retained text
+PASS native target is visibly enclosed without diagnostic reveal: attention
+PASS native action enabled: attention
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: attention
+PASS native target is visibly enclosed without diagnostic reveal: @Button@103
+PASS native action enabled: @Button@103
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: @Button@103
+PASS explicit selection installs only the second question's retained form
+PASS native target is visibly enclosed without diagnostic reveal: cancel-question
+PASS native action enabled: cancel-question
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: cancel-question
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit Cancel retires only its exact question; Later did not cancel
+PASS received input commit is retained without inventing application success from HUD removal
+PASS native target is visibly enclosed without diagnostic reveal: hide-question
+PASS native action enabled: hide-question
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: hide-question
+PASS Later acknowledges only the selected received cancellation result
+PASS native target is visibly enclosed without diagnostic reveal: @Button@144
+PASS native action enabled: @Button@144
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: @Button@144
+PASS native target is visibly enclosed without diagnostic reveal: hide-question
+PASS native action enabled: hide-question
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: hide-question
+PASS Later retains exact pending question and draft without cancellation
+PASS native target is visibly enclosed without diagnostic reveal: hide-attention
+PASS native action enabled: hide-attention
+<private fixture/client diagnostic>
+PASS one complete native gesture delivers one action: hide-attention
+PASS enabled action disconnect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS all question views and native capture retire through existing disconnect
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS same-profile Connect recovers the original still-pending question identity and location
+PASS reconnect never resubmits the original answer or invents a new domain result
+PASS enabled action disconnect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+ATTENTION_PASS
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

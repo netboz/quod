@@ -1,0 +1,21 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary authorized source transaction authors an independent non-space instrument form and appearance
+PASS exact anchored subject reaches its authored operation through existing signed discovery and form owners
+PASS actual native signed instrument raster retained
+PASS authored appearance reaches the native primary action instead of the adapter default
+PASS explicit fixture source change commits once
+PASS native target enclosed in every clipping ancestor: control0
+PASS real native editing reaches the same dirty local draft
+PASS adjacent native keyboard remains opaque and holds no appearance text copy
+PASS explicit fixture source change commits once
+PASS appearance-only commit retains native controls draft and style resource identity
+PASS appearance-only colour renewal retains dirty text caret and selection
+PASS existing authorization withdrawal revokes input and keyboard; appearance never restores focus
+PASS appearance-only renewal preserves semantic revision submit target permission and original outcome
+PASS actual changed colour applies only to its authored independent occurrence
+PASS named history rebuild write sync measurement starts
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-appearance-full": 1}, "native_inputs": 0}

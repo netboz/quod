@@ -1,0 +1,9 @@
+{
+  "full_actual_batches_read_once": true,
+  "list_only_not_consumption": true,
+  "consume_tool_available": false,
+  "worker_rows": 1,
+  "coordinator_rows": 1,
+  "private_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/client-reliability-inbox-final01/batches.json",
+  "sha256": "49c6440b7e11cd51105b63b92c184bdb03bc3ff849e47d3e30cf7288e8477a58"
+}

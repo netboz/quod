@@ -1,0 +1,62 @@
+{
+  "own_uuid": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "project": "/home/yan/src/quod",
+  "calls": [
+    {
+      "label": "radar66",
+      "command": [
+        "node",
+        "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+        "/home/yan/src/quod",
+        "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+        "work_radar",
+        "{\"issueKey\": \"QUO-66\"}"
+      ],
+      "true_exit": 0,
+      "stdout": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/radar66.stdout",
+      "stderr": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/radar66.stderr"
+    },
+    {
+      "label": "get66",
+      "command": [
+        "node",
+        "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+        "/home/yan/src/quod",
+        "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+        "tracker_get",
+        "{\"id\": \"QUO-66\"}"
+      ],
+      "true_exit": 0,
+      "stdout": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/get66.stdout",
+      "stderr": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/get66.stderr"
+    },
+    {
+      "label": "get60",
+      "command": [
+        "node",
+        "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+        "/home/yan/src/quod",
+        "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+        "tracker_get",
+        "{\"id\": \"QUO-60\"}"
+      ],
+      "true_exit": 0,
+      "stdout": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/get60.stdout",
+      "stderr": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/get60.stderr"
+    },
+    {
+      "label": "get61",
+      "command": [
+        "node",
+        "/home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs",
+        "/home/yan/src/quod",
+        "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+        "tracker_get",
+        "{\"id\": \"QUO-61\"}"
+      ],
+      "true_exit": 0,
+      "stdout": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/get61.stdout",
+      "stderr": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-package279-tracker01/get61.stderr"
+    }
+  ]
+}

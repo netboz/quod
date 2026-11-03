@@ -1,0 +1,15 @@
+{
+  "accepted_owner_inputs": {
+    "PackageJourneyChecks.cs": "44085c2f2414118a0965dd44c19b0d16c5f4bb9794981ace788d7cde030460c2",
+    "build_companion.py": "1be5e3367019c1fa16431c806902c5202f74102b470e724947a6c4c1fe354298",
+    "journey.py": "027b0c9bfc274fd5e80046a1e76020dbfe5f97d85dd65b32553f1561b71dd744"
+  },
+  "composition": {
+    "PackageJourneyChecks.cs": "23e5be0d8da244c2252492ebb869d50f712489a131f0c8013640b49671e140f3",
+    "build_companion.py": "1be5e3367019c1fa16431c806902c5202f74102b470e724947a6c4c1fe354298",
+    "journey.py": "2bbbac72a828810343190bea65ea14cb78724c575cf887cda2e819fcf6a567e1"
+  },
+  "product_source_changes": false,
+  "host_input_or_focus": false,
+  "software_Control_signal_scope": true
+}

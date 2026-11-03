@@ -1,0 +1,67 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "00920eba732f8e0bc5140413d3d7e146e4e0303b5d72c359c964f36707f04340",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-appearance-independent-stdout": true,
+    "client-appearance-independent-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-retirement-final17/server-stdout.raw",
+      "sha256": "bd9cf1128b42c4b6cad31fffb231c3d708f7155d80ebf1425a91b5158ed56167",
+      "bytes": 129
+    },
+    "client-appearance-independent-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-retirement-final17/client-appearance-independent-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "client-appearance-independent-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-retirement-final17/client-appearance-independent-stdout.raw",
+      "sha256": "3b9f98fcf714081007b2240c854f46e67a2a51c2bb243c15ec878f734456a71e",
+      "bytes": 141304
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-retirement-final17/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-appearance-independent": {
+      "explicit_completion": true,
+      "completion_monotonic": 182816.678466646,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "explicit fixture source change commits once",
+        "ambiguous authored appearance removes the action from a current accepted empty offered-operation projection",
+        "one explicitly renewed accepted independent occurrence retains its exact native controls after the selected refusal",
+        "enabled action disconnect",
+        "appearance consumers retire through ordinary disconnect"
+      ]
+    }
+  }
+}

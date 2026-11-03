@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-attention-client-package-20261102/qualify.py", line 90, in <module>
+    assert not cases['attention-package-journey01'].get('post_completion_trigger')
+               ^^^^^
+NameError: name 'cases' is not defined

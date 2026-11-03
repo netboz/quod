@@ -1,0 +1,22 @@
+{
+  "command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/input-campaign.py",
+    "scene-final03",
+    "--engine",
+    "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+    "--desktop",
+    "--phase",
+    "scene"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T04:18:46Z",
+  "elapsed_seconds": 1.468142032623291,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/scene-final03.log",
+  "raw_sha256": "9fb2e807823b62d51d47a8637613b1ce3d9c1d95199ae44c81051d6f8463e61d",
+  "sanitized_sha256": "9fb2e807823b62d51d47a8637613b1ce3d9c1d95199ae44c81051d6f8463e61d",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

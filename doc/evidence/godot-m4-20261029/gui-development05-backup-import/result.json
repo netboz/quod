@@ -1,0 +1,22 @@
+[
+  {
+    "phase": "backup-import",
+    "case": "backup-import",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-development05-backup-import/identity",
+      "--node",
+      "https://127.0.0.1:39455",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/quod-m4-live-gui-development05-server/backend-ca.pem"
+    ],
+    "child_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "passed": true
+  }
+]

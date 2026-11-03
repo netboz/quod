@@ -1,0 +1,27 @@
+{
+  "command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+    "gui-final03",
+    "--client",
+    "final03",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--journey",
+    "gui",
+    "--desktop",
+    "--controllers"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T04:29:56Z",
+  "elapsed_seconds": 212.47057366371155,
+  "child_exit": 1,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/gui-final03.log",
+  "raw_sha256": "f8809a94fd863d6d7ba4d030d8a893b64792c2ed2ed152bd78253637cc0cb537",
+  "sanitized_sha256": "f8809a94fd863d6d7ba4d030d8a893b64792c2ed2ed152bd78253637cc0cb537",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

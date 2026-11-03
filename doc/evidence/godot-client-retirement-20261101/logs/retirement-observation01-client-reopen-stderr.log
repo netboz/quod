@@ -1,0 +1,28 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+CLOSE_OWNER {"stage":"close.enter","monotonic":186577149203365,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"session.close.begin","monotonic":186577150276747,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"session.close.returned","monotonic":186577152699054,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"views.observed","monotonic":186577153148756,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"views.completed","monotonic":186577153541426,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"action.observed","monotonic":186577153574805,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"action.completed","monotonic":186577153580312,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"backup.observed","monotonic":186577153584462,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"backup.completed","monotonic":186577153586150,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"xr.completion.observed","monotonic":186577153588991,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"xr.completion.completed","monotonic":186577153590590,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"owners.await","monotonic":186577153592090,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"owners.await.returned","monotonic":186577153722772,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"models.dispose.begin","monotonic":186577153730690,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"models.dispose.returned","monotonic":186577153917511,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"models.observed","monotonic":186577154133264,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"models.completed","monotonic":186577154142286,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"models.await.returned","monotonic":186577154156997,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"xr.shutdown.begin","monotonic":186577154159756,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"xr.shutdown.returned","monotonic":186577157322509,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"identity.release.begin","monotonic":186577157348862,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"identity.release.returned","monotonic":186577157468389,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"tree.quit.begin","monotonic":186577157478906,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"tree.quit.returned","monotonic":186577157519957,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"tree.exit.entered","monotonic":186577171711181,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}
+CLOSE_OWNER {"stage":"tree.exit.returned","monotonic":186577171761924,"frequency":1000000000,"thread":1,"context":"Godot.GodotSynchronizationContext","status":null}

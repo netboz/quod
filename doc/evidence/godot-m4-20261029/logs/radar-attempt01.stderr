@@ -1,0 +1,13 @@
+node:internal/process/per_thread:277
+      throw new ErrnoException(err, 'kill');
+            ^
+
+Error: kill ESRCH
+    at process.kill (node:internal/process/per_thread:277:13)
+    at file:///home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs:17:9 {
+  errno: -3,
+  code: 'ESRCH',
+  syscall: 'kill'
+}
+
+Node.js v26.10.0

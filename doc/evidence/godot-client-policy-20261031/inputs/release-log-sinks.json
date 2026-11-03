@@ -1,0 +1,49 @@
+{
+  "created_utc": "2026-10-31T22:30:26Z",
+  "links": [
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-eunit-stdout.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-eunit-stdout.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-eunit-stderr.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-eunit-stderr.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-ct-stdout.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-ct-stdout.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-ct-stderr.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-ct-stderr.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-xref-stdout.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-xref-stdout.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-xref-stderr.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-xref-stderr.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-dialyzer-stdout.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-dialyzer-stdout.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-dialyzer-stderr.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-dialyzer-stderr.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-release-stdout.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-release-stdout.log"
+    },
+    {
+      "worktree_link": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-release01-release-stderr.log",
+      "private_target": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-logs01/answer-policy-release01-release-stderr.log"
+    }
+  ],
+  "driver_source_sha256": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+  "driver_or_command_changed": false,
+  "existing_file_overwritten": false,
+  "purpose": "Keep full new sequential-gate sanitized streams on private Data; original raw streams remain in their run directories. Only new exclusive output links were created before each wrapper publishes its result."
+}

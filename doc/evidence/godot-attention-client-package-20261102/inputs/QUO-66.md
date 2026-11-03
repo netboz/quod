@@ -1,0 +1,65 @@
+# M5 — Package Godot, retire superseded paths and replace the network
+
+**Type**: task
+**Issue Key**: QUO-66
+**Status**: to-do
+**Priority**: high
+**Tags**: godot, ontology, architecture, milestone
+**Sync Status**: synced
+**Source**: inline
+**share**: {"status":"team","body":"team"}
+**dependsOn**: [{"itemId":"tsk_01M5YNM08XX0HQEGRA6WN5J9S4"},{"itemId":"tsk_01M5YNM08XQG5GVZGTJNYFKHKQ"},{"itemId":"tsk_01M5YNM08XYDABJXFR89HJV6YK"},{"itemId":"tsk_01M5YNM08XZDSB9AERHSBMCPYZ"}]
+**ID**: tsk_01M5YNM08XVHPEWS88F3VKT2FC
+**Updated**: 2026-10-27T21:28:35.051Z
+
+---
+
+Plan: [QUO-60](nimbalyst://QUO-60). Milestone: M5. Dependencies: [QUO-62](nimbalyst://QUO-62), [QUO-63](nimbalyst://QUO-63), [QUO-64](nimbalyst://QUO-64), [QUO-65](nimbalyst://QUO-65); [QUO-61](nimbalyst://QUO-61) defines the deletion boundary.
+
+
+**Outcome and scope**
+
+Deliver a clean-install Linux package, remove replaced native bridge/build paths, move superseded Erlang and Prolog ontology code to excluded `outdated` subdirectories, and complete the authorized fresh-network cutover. End users must not compile Chromium or the client. Check callers and runtime reachability before deletion, preserve still-valid test obligations and report actual reduction. Yan explicitly chose deletion of the previous network rather than migration of its histories.
+
+**Acceptance**
+
+- [ ] The packaged Linux client completes sign-in, GUI, creation, entry and reopening on the fresh network with no old Quod Rust extension dependency.
+- [ ] Remove superseded native loaders/build instructions and move superseded Erlang and Prolog ontology sources to `outdated` subdirectories in the same replacement scope. Verify archived sources are excluded from compilation, application module lists, packaged resources, bootstrap and runtime loading; no permanent compatibility engine or active parallel domain path remains.
+- [ ] Report before/after shared catalogue identities, dynamic instances, production Prolog files and production lines. Report ontology source archive moves and retained archive totals separately; relocation, formatting compression and deleted coverage are not reductions.
+- [ ] Pass applicable clean sequential release gates against an identified tree; retain full logs, real child exits, failures and any unrun hardware cases.
+- [ ] Verify the replacement catalogue, endpoint and trust configuration, then delete only the old-network services/state identified in M0. Record cutover/deletion evidence; preserve unrelated networks, repository edits, local backups and retained failure evidence.
+
+**Boundaries:** no history migration or browser compatibility is required. Existing runtime authority, atomicity, custody, recovery and deadlines remain unchanged. Cutover executes during implementation/release, not while creating these tickets. Terrain/helper retirement outside the first journey remains in the existing Stage 3 scope unless a demonstrated core dependency requires removal.
+
+**Review refinements — additional acceptance**
+
+- [ ] Reuse M1a's verified founding recipe and M0's concrete inventory; refresh exact resource identity checks and validate replacement endpoint/trust/routing before irreversible old-state deletion.
+- [ ] Run the applicable clean sequential gates and packaging checks on the frozen integrated tree; later runtime/base changes invalidate affected earlier acceptance evidence.
+
+**Execution**
+
+[Coordinator](nimbalyst://session/ed9cd520-b2a4-4607-a8f5-ff99d08f3e46) supplies the next applicable checkpoint with current prerequisite evidence. The initial branch base below is provenance, not an instruction to reset later work.
+
+### M5 launch prompt
+
+```text
+/planning-implement QUO-66
+
+Checkpoint: M5. Select GPT-6.1 Sol (openai-codex:gpt-6.1-sol), reasoning xhigh, in the session launcher; this text cannot switch models.
+Work only in /home/yan/src/quod_worktrees/pearl-stone, branch worktree/pearl-stone. Initial branch base: f6c29fe925e666dd68ee7fa68c0e03f5d03391a2. Verify current HEAD/status and the coordinator's latest prerequisite handoff before edits; never reset to the initial base or edit the dirty main checkout.
+
+Read AGENTS.md, relevant specs and doc/multiwrite-architecture.md in this worktree. Call work_radar for QUO-66 and affected linked items. Read full QUO-60 and QUO-66 through tracker_get and link this session to the existing ticket. These shared items are authoritative: adapt planning-implement bookkeeping to tracker updates; do not create frontmatter plans, synthetic fm:plan items or duplicate tickets. Follow QUO-60's checked review refinements and execution workflow.
+
+Dependencies: QUO-62, QUO-63, QUO-64, QUO-65 with verified evidence on this tree.
+Scope: Package and clean-install the replacement, retire covered old native/core paths (archive superseded Erlang and Prolog ontology code under `outdated`, excluded from builds/packaging/loading), run release gates and execute the already authorized fresh-network cutover within M0's verified resource boundary.
+This checkpoint: Complete packaging, covered retirement and the authorized scoped fresh-network cutover after verifying prerequisites. Do not treat the review/setup turn as cutover authorization for unidentified resources.
+Required outcome evidence: Packaged full journey without old Quod Rust bridge or end-user compilation, valid retained test obligations, audited actual ontology/file/production-line deltas, true sequential gate exits/logs, endpoint/trust and exact scoped old-network deletion evidence.
+Read and satisfy the full existing ticket checklist and review refinements, not just this brief.
+
+Use existing Prolog authority, actions, atomic writes, recovery and runtime owners; preserve U/A separation, exact signing/values, caller deadlines and original-result recovery. No old Quod Rust core reuse, implicit storage change, second domain engine or uncertain-write resubmission. Carry out only this checkpoint; no parallel implementation writer, automatic next milestone, unrequested Claude review or unauthorized commit.
+
+Update existing acceptance/status as work lands. Preserve full logs and true exits for focused behavioral checks and applicable README/.forgejo/workflows/gates.yml release gates. Retain failures and unrun hardware cases. Freeze reproducible scoped source evidence, including untracked sources, before handoff; hashes alone are insufficient. Leave partial work unchecked and implemented/uncommitted work in-review.
+
+Return the source/evidence manifest, actual model/effort, branch/HEAD, changed scope, tests, failures and remaining acceptance to coordinator session ed9cd520-b2a4-4607-a8f5-ff99d08f3e46. Use send_prompt messageKind=report once if reporting to that session. Do not close broader contributing tickets. Invoke AGENTS.md's stop notifier before ending.
+```
+

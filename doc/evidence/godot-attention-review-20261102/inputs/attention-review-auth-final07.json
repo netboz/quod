@@ -1,0 +1,91 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "c356e2fc9c6f2d8ed2d72660056bd1a5fedab5816a440d8b3fb3fb9aac00032b",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final07/drivers/signed.py",
+      "sha256": "8eea2f27093e0ee11d2e04d9aca89ab4362799a502bd7e2aba23d3fec74626b4"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final07/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final07/drivers/hashes.py",
+      "sha256": "c393ad09e788d7dfb36c24f3c6bfcd910115afa78246f6f6b1684b233cffd896"
+    }
+  },
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-attention-review-auth-stdout": true,
+    "client-attention-review-auth-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final07/server-stdout.raw",
+      "sha256": "0965b962b846198ba7eabd11b411737b7e175f4b8bb648cf0f93c789eb7ba48f",
+      "bytes": 129
+    },
+    "client-attention-review-auth-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final07/client-attention-review-auth-stdout.raw",
+      "sha256": "e7bbbcd7ed0619b841557caca17c9decf241a6e27c9f92dc9553c435ac2820b2",
+      "bytes": 153008
+    },
+    "client-attention-review-auth-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final07/client-attention-review-auth-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-review-auth-final07/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-attention-review-auth": {
+      "explicit_completion": true,
+      "completion_monotonic": 221200.782452968,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "explicit signed question fixture transaction commits",
+        "explicit signed question fixture transaction commits",
+        "explicit signed question fixture transaction commits",
+        "retained actual attention-arrival raster",
+        "new signed questions update attention without opening any working form before human selection",
+        "HUD-only withdrawal and accepted reprojection preserve independently authorized question state",
+        "question authorization withdrawal hides and locks its own native form",
+        "HUD acceptance cannot restore a withdrawn question or overwrite its last-known status",
+        "only accepted question renewal restores the same native draft and selection",
+        "named unchanged-owner work watcher installed",
+        "independent accepted renewals retain native resources and perform no history rebuild write sync work",
+        "complete native field gesture opens the adjacent keyboard after release",
+        "native question field holds existing capture and adjacent keyboard",
+        "question withdrawal cancels native capture and keyboard without changing outcome",
+        "one unknown original operation applies the existing global uncertain barrier",
+        "HUD and question withdrawals retain exact unknown-outcome text without claiming refusal",
+        "unrelated Cancel preserves the existing global uncertain barrier without a second write",
+        "accepted question refresh cannot clear unknown original work",
+        "enabled action disconnect",
+        "review fixture retires signed owners and captures without native XR"
+      ]
+    }
+  }
+}

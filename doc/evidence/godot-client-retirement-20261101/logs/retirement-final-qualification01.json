@@ -1,0 +1,48 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-client-retirement-20261101/qualify.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "a285dc04de136f0a4d05f0b775e43ecdbe3677b649f8354069512063755cf57e",
+    "hashes.py": "47af18b005d33774840482ce7561039677a68826ff82d93d0492c1715cfd8c7a",
+    "instrument_close.py": "08d6dad282699a93fd3f7647b93aa0ea3560702db8fa62a2e119f6be55a30f48",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "journey.py": "e7cfaa3424add24eea37dc724f26ecdf5ee7aef787e8cf8b9f9dbd58692380d8",
+    "qualify.py": "75f8781cc6c0188eb4e56061c9fe10fffe9ea74024e3d5d5cb312ba109137cf9",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "f2b31c5b0f349213ce21af850ee5d79c4d26a18a6ebd1fbf7016f835767586d2",
+    "shutdown_capture.py": "e97f4516a312fdb8f8c6c1f44eab17e98ff3765285441828c27bfa7b3205977f",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-01T14:02:10Z",
+  "elapsed_seconds": 0.6660678386688232,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/retirement-final-qualification01/stdout.raw",
+      "sha256": "a7cbde94ce1e05779a06a326d59223cb4d4401e9a38fb0663f1d82b056d2a078",
+      "bytes": 252
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/retirement-final-qualification01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-retirement-20261101/logs/retirement-final-qualification01-stdout.log",
+      "sha256": "a7cbde94ce1e05779a06a326d59223cb4d4401e9a38fb0663f1d82b056d2a078",
+      "bytes": 252
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-retirement-20261101/logs/retirement-final-qualification01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

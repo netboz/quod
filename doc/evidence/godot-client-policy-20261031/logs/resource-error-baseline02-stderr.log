@@ -1,0 +1,4 @@
+System.Exception: actual Transport reports exact resource quantity and allowance without numeric loss
+   at ResourceErrorChecks.Check(Boolean value, String message) in /data/quod-m4-vr-ca84d4f8-20261029/builds/resource-error-baseline02/client/godot-tests/ResourceErrorChecks.cs:line 16
+   at ResourceErrorChecks.Run() in /data/quod-m4-vr-ca84d4f8-20261029/builds/resource-error-baseline02/client/godot-tests/ResourceErrorChecks.cs:line 22
+   at Tests.Main(String[] args) in /data/quod-m4-vr-ca84d4f8-20261029/builds/resource-error-baseline02/client/godot-tests/Program.cs:line 16

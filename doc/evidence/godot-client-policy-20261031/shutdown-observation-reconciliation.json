@@ -1,0 +1,157 @@
+{
+  "original_wrapper_exit": 1,
+  "original_failure_retained": true,
+  "reconciliation": "Duplicate observation names, distinguished by task-status versus awaited milestone",
+  "actual_children": {
+    "server": 0,
+    "client-shutdown-owner": 0
+  },
+  "actual_checks": [
+    "enabled ordinary action create-key",
+    "native action is visible inside the current ordinary desktop viewport",
+    "one diagnostic native-Control signal reaches the ordinary action owner",
+    "enabled ordinary action connect",
+    "native action is visible inside the current ordinary desktop viewport",
+    "one diagnostic native-Control signal reaches the ordinary action owner",
+    "real signed authentication uses the fresh fixture network",
+    "enabled ordinary action register",
+    "native action is visible inside the current ordinary desktop viewport",
+    "one diagnostic native-Control signal reaches the ordinary action owner",
+    "enabled ordinary action prepare",
+    "native action is visible inside the current ordinary desktop viewport",
+    "one diagnostic native-Control signal reaches the ordinary action owner",
+    "enabled ordinary action setup",
+    "native action is visible inside the current ordinary desktop viewport",
+    "one diagnostic native-Control signal reaches the ordinary action owner",
+    "enabled ordinary action inspect",
+    "native action is visible inside the current ordinary desktop viewport",
+    "one diagnostic native-Control signal reaches the ordinary action owner",
+    "native action is visible inside the current ordinary desktop viewport",
+    "installed workbench and editor use the exact signed account ontology",
+    "no outstanding signed action before the ordinary close owner"
+  ],
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-shutdown-owner-stdout": true,
+    "client-shutdown-owner-stderr": true
+  },
+  "final_resources_zero": true,
+  "xr_running": false,
+  "milestones": [
+    {
+      "stage": "session.close.begin",
+      "monotonic": 129086492796063,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "session.close.returned",
+      "monotonic": 129086509862481,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "owners.await",
+      "monotonic": 129086510634948,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "owners.settled",
+      "monotonic": 129086512321590,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "models.settled",
+      "monotonic": 129086512788067,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "xr.shutdown.begin",
+      "monotonic": 129086512790095,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "xr.shutdown.returned",
+      "monotonic": 129086517285502,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "identity.release.begin",
+      "monotonic": 129086517311307,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "identity.release.returned",
+      "monotonic": 129086517440375,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "tree.quit.requested",
+      "monotonic": 129086517446156,
+      "frequency": 1000000000,
+      "status": null
+    },
+    {
+      "stage": "tree.exit.entered",
+      "monotonic": 129086543924758,
+      "frequency": 1000000000,
+      "status": null
+    }
+  ],
+  "task_statuses": [
+    {
+      "stage": "views.begin",
+      "status": "WaitingForActivation"
+    },
+    {
+      "stage": "action.begin",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "action.settled",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "backup.begin",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "backup.settled",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "xr.completion.begin",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "xr.completion.settled",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "views.settled",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "models.begin",
+      "status": "RanToCompletion"
+    },
+    {
+      "stage": "models.settled",
+      "status": "RanToCompletion"
+    }
+  ],
+  "source_receipt_sha256": "18363ca1203f794dfd4ab95086a76a4fc57cfc4fc5240d932b24e54d8c3fc7ef",
+  "source_wrapper_sha256": "0b3f68b8aa0565e2fb9391c96c483493aac246e531496b831b191c55ae994105",
+  "shutdown_wait_recurred": false,
+  "shutdown_cause": "unresolved",
+  "client_rerun": false,
+  "close_elapsed_seconds": 0.051128695
+}

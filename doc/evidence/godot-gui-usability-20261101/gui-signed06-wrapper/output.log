@@ -1,0 +1,15 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS actual signed initial raster retained
+PASS actual product reveals the native target without diagnostic scrolling: create-operations
+PASS one native pointer gesture reaches exactly one existing button
+PASS native pointer releases its existing capture
+PASS actual signed choose-storage raster retained
+PASS actual product reveals the native target without diagnostic scrolling: operation-storage
+PASS one native pointer gesture reaches exactly one existing button
+PASS native pointer releases its existing capture
+PASS the actual offered-choice popup opens
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-gui-signed": 1}, "native_inputs": 0}

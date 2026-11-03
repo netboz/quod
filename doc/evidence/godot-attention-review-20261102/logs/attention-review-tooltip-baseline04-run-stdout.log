@@ -1,0 +1,12 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS explicit signed question fixture transaction commits
+PASS explicit signed question fixture transaction commits
+PASS explicit signed question fixture transaction commits
+PASS retained actual attention-arrival raster
+PASS new signed questions update attention without opening any working form before human selection
+PASS retained actual spatial-exact-reference-tooltip raster
+{"passed": false, "failure": "Empty: ", "children": {"server": 0, "client-attention-review-tooltip": -15}, "native_inputs": 0}

@@ -1,0 +1,5 @@
+[
+  {"label":"attention-review-current09","build":"attention-review-candidate09","phase":"attention-full"},
+  {"label":"attention-review-identity-final09","build":"attention-review-candidate09","phase":"attention-review-identity"},
+  {"label":"attention-review-home-final09","build":"attention-review-candidate09","phase":"attention-review-home"}
+]

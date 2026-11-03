@@ -1,0 +1,2513 @@
+{
+  "passed": true,
+  "full_M4_or_M5": false,
+  "all_selected_cases_passed": true,
+  "product": {
+    "manifest_sha256": "2fc8ea3a1326ccc9c211c2b9bdb285bc872cc82e890d71eae3880de84de35f2f",
+    "passed": true,
+    "supplied": 98,
+    "live": 98,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "diagnostic": {
+    "manifest_sha256": "3147de69033020cd8bdddc5f3e0f3200b0240bcd4f86b70d55dc628d31f792f0",
+    "passed": true,
+    "supplied": 99,
+    "live": 98,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "selected_run": "appearance-candidate08-full",
+  "selected_cases": {
+    "appearance-candidate08-full": "appearance-candidate08",
+    "appearance-candidate07-workspaces": "appearance-candidate07",
+    "appearance-question-layout-baseline10": "appearance-consumers-baseline10",
+    "appearance-lens-dependency-final15": "appearance-lens-dependency-final15",
+    "appearance-inspection-final16": "appearance-inspection-final16",
+    "appearance-retirement-final17": "appearance-retirement-final17"
+  },
+  "selected_case_checks": {
+    "appearance-candidate08-full": 67,
+    "appearance-candidate07-workspaces": 18,
+    "appearance-question-layout-baseline10": 38,
+    "appearance-lens-dependency-final15": 10,
+    "appearance-inspection-final16": 23,
+    "appearance-retirement-final17": 15
+  },
+  "selected_checks": 67,
+  "selected_current_input_delta": [
+    "client/godot/FormPanel.cs",
+    "client/godot/README.md",
+    "client/godot/SourcePanel.cs"
+  ],
+  "changed_product_inputs": [
+    "client/godot/Core/Forms.cs",
+    "client/godot/Core/SignedView.cs",
+    "client/godot/EidolonPanel.cs",
+    "client/godot/FormPanel.cs",
+    "client/godot/OperationsPanel.cs",
+    "client/godot/QuestionHub.cs",
+    "client/godot/README.md",
+    "client/godot/ScenePanel.cs",
+    "client/godot/SourcePanel.cs",
+    "client/godot/SpatialGui.cs",
+    "client/godot/WorkbenchPanel.cs"
+  ],
+  "builds": {
+    "appearance-baseline01": {
+      "manifest_sha256": "fee0e5482432bb3401e8173b69c102270e6bf2d10e601bc989c46d23e89bbf1d",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-baseline02": {
+      "manifest_sha256": "db46b6f1b6284868ba60c145303b35d2bfe5d890bfa74f53bf904c8cf9b778c0",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-baseline03": {
+      "manifest_sha256": "3e223ce4fb559f38ee692cf8fcfca2e81edb79eb4921e01fbbaaefbb894487a9",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-candidate01": {
+      "manifest_sha256": "216c3c90f03b0c72e03bf4d8f9da224d73660ba3dc130a52327a215028c10a36",
+      "passed": false,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "appearance-candidate02": {
+      "manifest_sha256": "554f300f41535a444b60b6c066bf4144c43f0160b07150e61463dde45b7151f6",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-candidate03": {
+      "manifest_sha256": "630d7369a239b2580b86e7cfda49d0372ece268c0a3c0f86b2ffba4139f8b734",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-candidate04": {
+      "manifest_sha256": "8d9f4e7d100c921178605b5e3f9e4d78edd691d8fc5a78c7fc7415a6071937e8",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-candidate06": {
+      "manifest_sha256": "29d918363c4df66cbb881bec1c646da0a73cbd79c79606cb37e547753ec63962",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-candidate07": {
+      "manifest_sha256": "0e40585dff789ea7e95f0ed293063c59edf04afb44d4ce05abfd0a1d05773e8d",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-candidate08": {
+      "manifest_sha256": "3147de69033020cd8bdddc5f3e0f3200b0240bcd4f86b70d55dc628d31f792f0",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-consumers-baseline10": {
+      "manifest_sha256": "fa6fe02972c31e7587809211bf67244753ce633277cd7611ab8e628546b9634d",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-consumers-final11": {
+      "manifest_sha256": "a457db7b2b8b572a1122eb1fd9851455bddfae24689b30751c5c4e0c11c582a5",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-independence-final13": {
+      "manifest_sha256": "0018ec1d4d5749fc87f7fc5eca76ed520aa9fb57c51e3bbd92312be417517251",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-inspection-baseline09": {
+      "manifest_sha256": "96cd5442611bc397b13ba018477c3911a5a8553429b9f8677f0fbd3068715236",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-inspection-final12": {
+      "manifest_sha256": "eb655fb26c6b918989cbf1678669f61f4afb867174ae2380632b956063bee940",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-inspection-final16": {
+      "manifest_sha256": "fb7023a4308a927a3255508aa2399432743077bf80860aef3d9b672cf4ef76b6",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-lens-dependency-baseline14": {
+      "manifest_sha256": "ee1a18af943baa709e0dc8a58c52195bb2b5a34d0342569a0c655ced5dc72f88",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-lens-dependency-final15": {
+      "manifest_sha256": "4617c108e7d265afda1b4d2e226ab4662e953725221956328ccabe59a8e58c11",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-product01": {
+      "manifest_sha256": "0fe18e60b0a6ec38fa6a45e2bab788267c8d9a562535e1be5fdccfaa8eab27f3",
+      "passed": true,
+      "supplied": 98,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-product02": {
+      "manifest_sha256": "5728378daf3583e16edd11268ef694fc35808dabab3561443a0f2ab7d558817b",
+      "passed": true,
+      "supplied": 98,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-product03": {
+      "manifest_sha256": "2fc8ea3a1326ccc9c211c2b9bdb285bc872cc82e890d71eae3880de84de35f2f",
+      "passed": true,
+      "supplied": 98,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-retirement-final17": {
+      "manifest_sha256": "00920eba732f8e0bc5140413d3d7e146e4e0303b5d72c359c964f36707f04340",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "appearance-workspace-baseline05": {
+      "manifest_sha256": "00e5bf89c5e5f0ed1da544f23660d905a43514d21ec755dc57223bacf28b2e74",
+      "passed": true,
+      "supplied": 99,
+      "live": 98,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "cases": {
+    "appearance-baseline01": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-stdout": true,
+        "client-appearance-stderr": true
+      },
+      "receipt_sha256": "6233cba90dc947382fe6ba5be538e7862236cff920483f64633d3474b7ea7f7d",
+      "manifest_sha256": "fee0e5482432bb3401e8173b69c102270e6bf2d10e601bc989c46d23e89bbf1d",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-baseline03": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-stdout": true,
+        "client-appearance-stderr": true
+      },
+      "receipt_sha256": "10937ca467cf09392b85c7b73afbab59cee9c18a16768bfce97a0c33c47dbc30",
+      "manifest_sha256": "3e223ce4fb559f38ee692cf8fcfca2e81edb79eb4921e01fbbaaefbb894487a9",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-candidate02": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "enabled action disconnect",
+        "appearance consumers retire through ordinary disconnect"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-stdout": true,
+        "client-appearance-stderr": true
+      },
+      "receipt_sha256": "7e12aa4f2c93c63d2ba5242de99b35179f63459bd5ced1c2a846300f8aa5d9a0",
+      "manifest_sha256": "554f300f41535a444b60b6c066bf4144c43f0160b07150e61463dde45b7151f6",
+      "unretired_failure": false,
+      "failure": null
+    },
+    "appearance-candidate03": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "native target enclosed in every clipping ancestor: control0",
+        "real native editing reaches the same dirty local draft",
+        "adjacent native keyboard remains opaque and holds no appearance text copy",
+        "explicit fixture source change commits once",
+        "appearance-only commit retains native controls draft and style resource identity"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-full-stdout": true,
+        "client-appearance-full-stderr": true
+      },
+      "receipt_sha256": "f582daeabd7e0902db190710f42955de418b511b141925fcb6017e6829485491",
+      "manifest_sha256": "630d7369a239b2580b86e7cfda49d0372ece268c0a3c0f86b2ffba4139f8b734",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-candidate04": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "native target enclosed in every clipping ancestor: control0",
+        "real native editing reaches the same dirty local draft",
+        "adjacent native keyboard remains opaque and holds no appearance text copy",
+        "explicit fixture source change commits once",
+        "appearance-only commit retains native controls draft and style resource identity",
+        "appearance-only colour renewal retains dirty text caret and selection",
+        "existing authorization withdrawal revokes input and keyboard; appearance never restores focus",
+        "appearance-only renewal preserves semantic revision submit target permission and original outcome",
+        "actual changed colour applies only to its authored independent occurrence",
+        "named history rebuild write sync measurement starts"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-full-stdout": true,
+        "client-appearance-full-stderr": true
+      },
+      "receipt_sha256": "6e3735a954ceae9d27bd0c83cd99530b24bb8dd64aa21ff1d683d57cec44245a",
+      "manifest_sha256": "8d9f4e7d100c921178605b5e3f9e4d78edd691d8fc5a78c7fc7415a6071937e8",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-candidate07-full": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "native target enclosed in every clipping ancestor: control0",
+        "real native editing reaches the same dirty local draft",
+        "adjacent native keyboard remains opaque and holds no appearance text copy",
+        "explicit fixture source change commits once",
+        "appearance-only commit retains native controls draft and style resource identity",
+        "appearance-only colour renewal retains dirty text caret and selection",
+        "existing authorization withdrawal revokes input and keyboard; appearance never restores focus",
+        "appearance-only renewal preserves semantic revision submit target permission and original outcome",
+        "actual changed colour applies only to its authored independent occurrence",
+        "named history rebuild write sync measurement starts",
+        "unchanged signed renewals reuse themes controls and projections with zero named history rebuild write sync work",
+        "authored permille affects only the panel background",
+        "local Opaque preference overrides authored transparency without rebuilding",
+        "explicit fixture source change commits once",
+        "appearance geometry change cancels an existing native capture without submitting",
+        "authored appearance target remains reachable at (True, 1200, 26)",
+        "authored appearance target remains reachable at (True, 1200, 26)",
+        "local text size has precedence over authored appearance at (True, 1200, 26)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (True, 1200, 26)",
+        "active field stays visible with the existing adjacent keyboard at (True, 1200, 26)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-1200-26",
+        "authored appearance target remains reachable at (True, 1200, 48)",
+        "authored appearance target remains reachable at (True, 1200, 48)",
+        "local text size has precedence over authored appearance at (True, 1200, 48)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (True, 1200, 48)",
+        "active field stays visible with the existing adjacent keyboard at (True, 1200, 48)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-1200-48",
+        "authored appearance target remains reachable at (False, 560, 26)",
+        "authored appearance target remains reachable at (False, 560, 26)",
+        "local text size has precedence over authored appearance at (False, 560, 26)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (False, 560, 26)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-560-26",
+        "semantic component identity excludes only authored appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "wrong anchored appearance vocabulary cannot supply a native descriptor",
+        "explicit fixture source change commits once",
+        "ambiguous authored appearance withdraws the affected form instead of silently using defaults"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-full-stdout": true,
+        "client-appearance-full-stderr": true
+      },
+      "receipt_sha256": "c666d7b30d73b1224db9965dcaf75cfc349497d259ae397a2d4440bb8660ece6",
+      "manifest_sha256": "0e40585dff789ea7e95f0ed293063c59edf04afb44d4ce05abfd0a1d05773e8d",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-candidate07-workspaces": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary native source editing creates its existing durable local draft",
+        "ordinary signed administrator source edit changes the fresh fixture workspace appearance",
+        "appearance-only workspace update reacquires no unchanged source snapshot graph or scene",
+        "every observed updating interval withdraws interaction visibility source access and scene picking",
+        "signed workbench appearance retains same dirty native editor selection caret and catalogues",
+        "appearance update preserves exact durable source drafts without a signed edit",
+        "an actual target source change commits through the original signed owner",
+        "changed committed dependency refreshes the baseline comparison without discarding the original dirty draft",
+        "actual authored workbench source appearance raster retained",
+        "denied appearance owner withdraws source data from the visible native surface",
+        "selected source denial preserves the independent current world",
+        "enabled action disconnect",
+        "all workspace appearance consumers retire"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-workspaces": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-workspaces-stdout": true,
+        "client-appearance-workspaces-stderr": true
+      },
+      "receipt_sha256": "0c6de7365b245628a9eb3f7fa6a3fcbc57988db67dc679a389895782a4c9f6a7",
+      "manifest_sha256": "0e40585dff789ea7e95f0ed293063c59edf04afb44d4ce05abfd0a1d05773e8d",
+      "unretired_failure": false,
+      "failure": null,
+      "reuse_limit": "SourcePanel changes only the separately qualified readonly ReadLens branch and lens-only hidden retention; this case does not select an inspection lens.",
+      "cleared_form_reuse_limit": "Only clearing Descriptor when removing controls differs; the selected current independence/retirement gate covers that demonstrated callback defect.",
+      "current_input_delta": [
+        "client/godot/FormPanel.cs",
+        "client/godot/README.md",
+        "client/godot/SourcePanel.cs"
+      ]
+    },
+    "appearance-candidate08-full": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "native target enclosed in every clipping ancestor: control0",
+        "real native editing reaches the same dirty local draft",
+        "adjacent native keyboard remains opaque and holds no appearance text copy",
+        "explicit fixture source change commits once",
+        "appearance-only commit retains native controls draft and style resource identity",
+        "appearance-only colour renewal retains dirty text caret and selection",
+        "existing authorization withdrawal revokes input and keyboard; appearance never restores focus",
+        "appearance-only renewal preserves semantic revision submit target permission and original outcome",
+        "actual changed colour applies only to its authored independent occurrence",
+        "named history rebuild write sync measurement starts",
+        "unchanged signed renewals reuse themes controls and projections with zero named history rebuild write sync work",
+        "authored permille affects only the panel background",
+        "local Opaque preference overrides authored transparency without rebuilding",
+        "explicit fixture source change commits once",
+        "appearance geometry change cancels an existing native capture without submitting",
+        "authored appearance target remains reachable at (True, 1200, 26)",
+        "authored appearance target remains reachable at (True, 1200, 26)",
+        "local text size has precedence over authored appearance at (True, 1200, 26)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (True, 1200, 26)",
+        "active field stays visible with the existing adjacent keyboard at (True, 1200, 26)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-1200-26",
+        "authored appearance target remains reachable at (True, 1200, 48)",
+        "authored appearance target remains reachable at (True, 1200, 48)",
+        "local text size has precedence over authored appearance at (True, 1200, 48)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (True, 1200, 48)",
+        "active field stays visible with the existing adjacent keyboard at (True, 1200, 48)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-1200-48",
+        "authored appearance target remains reachable at (False, 560, 26)",
+        "authored appearance target remains reachable at (False, 560, 26)",
+        "local text size has precedence over authored appearance at (False, 560, 26)",
+        "native target enclosed in every clipping ancestor: control0",
+        "native field focus retains exact local draft at (False, 560, 26)",
+        "ordinary desktop panels remain opaque",
+        "actual appearance raster retained: instrument-560-26",
+        "semantic component identity excludes only authored appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "native parser refuses malformed unsupported or ambiguous appearance",
+        "the signed anchored vocabulary refuses the same invalid appearance",
+        "wrong anchored appearance vocabulary cannot supply a native descriptor",
+        "explicit fixture source change commits once",
+        "ambiguous authored appearance withdraws the affected form instead of silently using defaults",
+        "independent authored occurrence is currently accepted after the shared ontology change",
+        "enabled action disconnect",
+        "appearance consumers retire through ordinary disconnect"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-full": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-full-stdout": true,
+        "client-appearance-full-stderr": true
+      },
+      "receipt_sha256": "030d71fdd62b87467168e83639e307ae7cabb7dcc43d56ebf686377e70c7410e",
+      "manifest_sha256": "3147de69033020cd8bdddc5f3e0f3200b0240bcd4f86b70d55dc628d31f792f0",
+      "unretired_failure": false,
+      "failure": null,
+      "reuse_limit": "SourcePanel changes only the separately qualified readonly ReadLens branch and lens-only hidden retention; this case does not select an inspection lens.",
+      "cleared_form_reuse_limit": "Only clearing Descriptor when removing controls differs; the selected current independence/retirement gate covers that demonstrated callback defect.",
+      "current_input_delta": [
+        "client/godot/FormPanel.cs",
+        "client/godot/README.md",
+        "client/godot/SourcePanel.cs"
+      ]
+    },
+    "appearance-candidate08-question": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "question appearance refresh preserves native controls draft and style resource",
+        "question refresh retains dirty native text selection and caret",
+        "appearance does not stale or replace the original deferred question contract",
+        "question colour applies while existing withdrawal revokes focus",
+        "authored native popup is enclosed in the current surface at (True, 1200, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored native popup is enclosed in the current surface at (True, 1200, 48)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored native popup is enclosed in the current surface at (False, 560, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "appearance and local choices send no question answer or continuation",
+        "one native explicit answer action reaches the original question owner",
+        "the original question continuation commits exactly once with the preserved dirty values",
+        "enabled action disconnect",
+        "all authored question appearance consumers retire"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-question": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-question-stdout": true,
+        "client-appearance-question-stderr": true
+      },
+      "receipt_sha256": "19504e285874fef0c663f9b8476cb8933b326b9e655f91bdbdb5c30b42d5f12c",
+      "manifest_sha256": "3147de69033020cd8bdddc5f3e0f3200b0240bcd4f86b70d55dc628d31f792f0",
+      "unretired_failure": false,
+      "failure": null
+    },
+    "appearance-independence-final13": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "explicit fixture source change commits once"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-independent": -15
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-independent-stdout": true,
+        "client-appearance-independent-stderr": true
+      },
+      "receipt_sha256": "76cb131bca77e25b0815a72c378e4e747f50e749ad9eb7ab2300e7f35bf9ffc7",
+      "manifest_sha256": "0018ec1d4d5749fc87f7fc5eca76ed520aa9fb57c51e3bbd92312be417517251",
+      "unretired_failure": true,
+      "failure": "Empty: "
+    },
+    "appearance-independence-final15": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "explicit fixture source change commits once",
+        "ambiguous authored appearance removes the action from a current accepted empty offered-operation projection",
+        "one explicitly renewed accepted independent occurrence retains its exact native controls after the selected refusal",
+        "enabled action disconnect"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-independent": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-independent-stdout": true,
+        "client-appearance-independent-stderr": true
+      },
+      "receipt_sha256": "560b4ef1912cd47c96a8a565baadfc13a16f384430ee6aabf5f41496562c248c",
+      "manifest_sha256": "4617c108e7d265afda1b4d2e226ab4662e953725221956328ccabe59a8e58c11",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-inspection-baseline09": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authored workspace token update reaches the inspection owner"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-inspection": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-inspection-stdout": true,
+        "client-appearance-inspection-stderr": true
+      },
+      "receipt_sha256": "40c983c0b3ddb432cba7728bc2f11a184c14500c9aedba32128cc397861e6e97",
+      "manifest_sha256": "96cd5442611bc397b13ba018477c3911a5a8553429b9f8677f0fbd3068715236",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-inspection-baseline10": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authored workspace token update reaches the inspection owner"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-inspection": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-inspection-stdout": true,
+        "client-appearance-inspection-stderr": true
+      },
+      "receipt_sha256": "e1500e88328b9c88e19b4c86c64a3658e164279e96d6221bc7c1d1fb3ef0c48b",
+      "manifest_sha256": "fa6fe02972c31e7587809211bf67244753ce633277cd7611ab8e628546b9634d",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-inspection-final11": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authored workspace token update reaches the inspection owner",
+        "appearance-only inspection refresh retains its exact native editor text and selection",
+        "appearance-only inspection performs no unchanged source read and remains readonly",
+        "readonly appearance creates no local source draft or domain instruction",
+        "actual native inspection appearance raster retained",
+        "enabled action disconnect",
+        "all authored inspection appearance consumers retire"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-inspection": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-inspection-stdout": true,
+        "client-appearance-inspection-stderr": true
+      },
+      "receipt_sha256": "7e923924b7600153dd40bffd96d168720d7377a08755b3ba37e7c7a514c976da",
+      "manifest_sha256": "a457db7b2b8b572a1122eb1fd9851455bddfae24689b30751c5c4e0c11c582a5",
+      "unretired_failure": false,
+      "failure": null
+    },
+    "appearance-inspection-final12": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authored workspace token update reaches the inspection owner",
+        "appearance-only inspection refresh retains its exact native editor text and selection",
+        "appearance-only inspection performs no unchanged source read and remains readonly",
+        "readonly appearance creates no local source draft or domain instruction",
+        "readonly appearance editor remains natively reachable with exact text at (True, 1200, 26)",
+        "actual native inspection appearance raster retained",
+        "readonly appearance editor remains natively reachable with exact text at (True, 1200, 48)",
+        "actual native inspection appearance raster retained",
+        "readonly appearance editor remains natively reachable with exact text at (False, 560, 26)",
+        "actual native inspection appearance raster retained",
+        "an actual inspection target source change commits normally",
+        "changed source dependency rereads the readonly lens without replacing its native editor",
+        "inspection denial clears retained source while the independent world remains accepted",
+        "enabled action disconnect",
+        "all authored inspection appearance consumers retire"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-inspection": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-inspection-stdout": true,
+        "client-appearance-inspection-stderr": true
+      },
+      "receipt_sha256": "73b649946cd4c3323a02e6a47e100cdc4fa9e800746847f824bba4a55e824d08",
+      "manifest_sha256": "eb655fb26c6b918989cbf1678669f61f4afb867174ae2380632b956063bee940",
+      "unretired_failure": false,
+      "failure": null
+    },
+    "appearance-inspection-final16": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authored workspace token update reaches the inspection owner",
+        "appearance-only inspection refresh retains its exact native editor text and selection",
+        "computed inspection re-evaluates once under current authority and remains readonly",
+        "readonly appearance creates no local source draft or domain instruction",
+        "readonly appearance editor remains natively reachable with exact text at (True, 1200, 26)",
+        "actual native inspection appearance raster retained",
+        "readonly appearance editor remains natively reachable with exact text at (True, 1200, 48)",
+        "actual native inspection appearance raster retained",
+        "readonly appearance editor remains natively reachable with exact text at (False, 560, 26)",
+        "actual native inspection appearance raster retained",
+        "computed inspection named history rebuild write sync observer is installed",
+        "accepted computed inspection renewal performs no history rebuild disk write sync native text replacement or style acquisition",
+        "one necessary authored computation refresh preserves the exact readonly native text",
+        "an actual inspection target source change commits normally",
+        "changed source dependency rereads the readonly lens without replacing its native editor",
+        "inspection denial clears retained source while the independent world remains accepted",
+        "enabled action disconnect",
+        "all authored inspection appearance consumers retire"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-inspection": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-inspection-stdout": true,
+        "client-appearance-inspection-stderr": true
+      },
+      "receipt_sha256": "cf0feae6f4179060ea30c66e19957e6df16e0a841b36be26f359f22a5fcad61d",
+      "manifest_sha256": "fb7023a4308a927a3255508aa2399432743077bf80860aef3d9b672cf4ef76b6",
+      "unretired_failure": false,
+      "failure": null,
+      "cleared_form_reuse_limit": "Only clearing Descriptor when removing controls differs; the selected current independence/retirement gate covers that demonstrated callback defect.",
+      "current_input_delta": [
+        "client/godot/FormPanel.cs"
+      ]
+    },
+    "appearance-lens-dependency-baseline14": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized recipe computation change commits without changing the inspected target"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-lens-dependency": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-lens-dependency-stdout": true,
+        "client-appearance-lens-dependency-stderr": true
+      },
+      "receipt_sha256": "28e30a773abd10768f8b87195fce086a7b2675b69cf76f95fdd99ecd81a28966",
+      "manifest_sha256": "ee1a18af943baa709e0dc8a58c52195bb2b5a34d0342569a0c655ced5dc72f88",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    },
+    "appearance-lens-dependency-final15": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized recipe computation change commits without changing the inspected target",
+        "accepted authored recipe computation change updates readonly inspection despite unchanged target source version",
+        "computed inspection refresh retains its native readonly editor without drafts or domain instructions",
+        "enabled action disconnect",
+        "all computed inspection consumers retire"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-lens-dependency": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-lens-dependency-stdout": true,
+        "client-appearance-lens-dependency-stderr": true
+      },
+      "receipt_sha256": "eee8d3f798bcd51a2a56b5e9a4e741ed82e413ea99fb8d95b4770f9072693145",
+      "manifest_sha256": "4617c108e7d265afda1b4d2e226ab4662e953725221956328ccabe59a8e58c11",
+      "unretired_failure": false,
+      "failure": null,
+      "cleared_form_reuse_limit": "Only clearing Descriptor when removing controls differs; the selected current independence/retirement gate covers that demonstrated callback defect.",
+      "current_input_delta": [
+        "client/godot/FormPanel.cs",
+        "client/godot/README.md"
+      ]
+    },
+    "appearance-question-layout-baseline10": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "question appearance refresh preserves native controls draft and style resource",
+        "question refresh retains dirty native text selection and caret",
+        "appearance does not stale or replace the original deferred question contract",
+        "question colour applies while existing withdrawal revokes focus",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 26)",
+        "authored native popup is enclosed in the current surface at (True, 1200, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 48)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 48)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 48)",
+        "authored native popup is enclosed in the current surface at (True, 1200, 48)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored question target enclosed in every actual clipping ancestor at (False, 560, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (False, 560, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (False, 560, 26)",
+        "authored native popup is enclosed in the current surface at (False, 560, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "appearance and local choices send no question answer or continuation",
+        "one native explicit answer action reaches the original question owner",
+        "the original question continuation commits exactly once with the preserved dirty values",
+        "enabled action disconnect",
+        "all authored question appearance consumers retire"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-question": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-question-stdout": true,
+        "client-appearance-question-stderr": true
+      },
+      "receipt_sha256": "ae42bffc90902943c0b4ccbce7748c92a5bc7abc7ad9147a809e9b5ccfb266cf",
+      "manifest_sha256": "fa6fe02972c31e7587809211bf67244753ce633277cd7611ab8e628546b9634d",
+      "unretired_failure": false,
+      "failure": null,
+      "reuse_limit": "SourcePanel changes only the separately qualified readonly ReadLens branch and lens-only hidden retention; this case does not select an inspection lens.",
+      "cleared_form_reuse_limit": "Only clearing Descriptor when removing controls differs; the selected current independence/retirement gate covers that demonstrated callback defect.",
+      "current_input_delta": [
+        "client/godot/FormPanel.cs",
+        "client/godot/README.md",
+        "client/godot/SourcePanel.cs"
+      ]
+    },
+    "appearance-retirement-final17": {
+      "passed": true,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary authorized source transaction authors an independent non-space instrument form and appearance",
+        "exact anchored subject reaches its authored operation through existing signed discovery and form owners",
+        "actual native signed instrument raster retained",
+        "authored appearance reaches the native primary action instead of the adapter default",
+        "explicit fixture source change commits once",
+        "explicit fixture source change commits once",
+        "ambiguous authored appearance removes the action from a current accepted empty offered-operation projection",
+        "one explicitly renewed accepted independent occurrence retains its exact native controls after the selected refusal",
+        "enabled action disconnect",
+        "appearance consumers retire through ordinary disconnect"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-independent": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-independent-stdout": true,
+        "client-appearance-independent-stderr": true
+      },
+      "receipt_sha256": "e513c7ff02d925ad9867b0e9635bc4d050bb18dd5eaa5ef81b72cdf7f1c0ce0a",
+      "manifest_sha256": "00920eba732f8e0bc5140413d3d7e146e4e0303b5d72c359c964f36707f04340",
+      "unretired_failure": false,
+      "failure": null,
+      "current_input_delta": []
+    },
+    "appearance-workspace-baseline05": {
+      "passed": false,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary native source editing creates its existing durable local draft",
+        "ordinary signed administrator source edit changes the fresh fixture workspace appearance"
+      ],
+      "exits": {
+        "server": 0,
+        "client-appearance-workspaces": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-appearance-workspaces-stdout": true,
+        "client-appearance-workspaces-stderr": true
+      },
+      "receipt_sha256": "378f2d2a103fb44fcfe57af6b3d53f1223ad2f034cf6a13e5cbab065eb33c41c",
+      "manifest_sha256": "00e5bf89c5e5f0ed1da544f23660d905a43514d21ec755dc57223bacf28b2e74",
+      "unretired_failure": false,
+      "failure": "AssertionError: "
+    }
+  },
+  "wrappers": {
+    "appearance-baseline01-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "71c4a25c483c8a6362c7530475c607b750e4166598f7ed4dc89f3fd4b57e65e4",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-baseline01-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "0b5491df013a660563663a1c6c2a69978996dc573aec464bcbcb8c96471f1cd0",
+      "log_sha256": "2e8793a5ca53bc8ae552f19abd17a85d666676da5b44d147d09683faba1cd2ed"
+    },
+    "appearance-baseline01-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "d7c086310f9b0e8b8ae7d2502f98999323926666c83249f269804318711f1019",
+      "log_sha256": "96de438784a98aee52acf8514791818a1de75e9e23d2142bcf9581214f02077a"
+    },
+    "appearance-baseline01-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "15e2fd0da7aa9237de182d0812bd15e76ffe6bd88d540f3d42b0e5ada31032e2",
+      "log_sha256": "09e6cdfcb4d176180514e332431ea9fa05bd0441e1b490f3b0142c67129ec348"
+    },
+    "appearance-baseline01-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "0f651b127a2a886d3b28039b84ce89491444c8097074f532a75d83a712ea6ea5",
+      "log_sha256": "0aee01fdde229d68d0725fd64d8dd76c3f45d885cb6e3a8ebfed6857b0b744d1"
+    },
+    "appearance-baseline02-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "89f29d49d0b59e374ee76a2671c0a892fff22e79a50fc3e8a0fdd2d2b5d49054",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-baseline02-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "c7d6f4ce65fef2d5fb5cb5d7fa15e1b8fc538127999a57c80e8fd97c55110e02",
+      "log_sha256": "7216a38b975fbad15b0d1842abf8cc3f0f7dc6db6c3081493e625e4bd84a8bde"
+    },
+    "appearance-baseline02-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5aac6016affaeb5ec59c85d859aa26e571358468a652c517ffec64a3f9e8d8e1",
+      "log_sha256": "da94d84f6d8e6242c9695ada396447c93ef80ba7097e8d5c8ed4fe6ac0600528"
+    },
+    "appearance-baseline02-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "56e4e156223775560e3426df25cc090d3ac7a826af0f3baf4914cd9df92e2086",
+      "log_sha256": "30254aa7c9300c668858f59ec9f0c36344f928d4e1b970e1038661add6cc6343"
+    },
+    "appearance-baseline02-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5433516bcd40951db737d8903b0af823406f213edb9b91bfdde3f051506f89ba",
+      "log_sha256": "e735b2bd51512caf8d061cf727042afbab58417c2273919db5ae306c4d6d6e8d"
+    },
+    "appearance-baseline03-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "23533498370b98f41da7c42a9426256a5f0e57970671af059aea8e5c04918ddc",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-baseline03-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5d366382b0fd32722987647773afadd93be385891beeafc4f096e6dc57f2e9cf",
+      "log_sha256": "77cb01edb2c6c7014372cf0cad867f1ff96666ceef9feaa225a5d3bc0b9054ef"
+    },
+    "appearance-baseline03-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "e0fd40932bcaa4f1991570cd43c512830c063f5487a64bb4670197d601edc0ca",
+      "log_sha256": "6cce58d4ff3fdd9552b15bc334f0213762038a36a5bf6d1eed1feaf911b9b71c"
+    },
+    "appearance-baseline03-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "b49f59c37c1ff21e2a231eacd8612f0ee632b4c7a9a90d6b1d5a1c8c0fe793be",
+      "log_sha256": "7f6e702e3506802a3d42ce8906fe4c9e13a026b04e3b7c817c8d0458a6fc7599"
+    },
+    "appearance-baseline03-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "3d31fab942938e7573cbb89cb81c0873b714c1ad81e6974d539c86a7f162113a",
+      "log_sha256": "9727ad8367ba22a539eac5e1db2a833bc785bd6bf53f9686dba6bb16dffec35c"
+    },
+    "appearance-candidate01-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "ca68d75e1990da3c0e67337047f14e2423155a2ab1eeb588b1098c14ae24d7c1",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-candidate01-export": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt_sha256": "790aa6d4b8d16bce50b2bf388140d4249b17c4d30c9679bea9b35290d08979ba",
+      "log_sha256": "59943013056645f9dfbf6bed7b37afd9e2813dba929220068eea226c7d055429"
+    },
+    "appearance-candidate01-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "c8a20aeb659314d4d47ff45f412aefe24361fb6e5bc17fbb67de0828af4cddd1",
+      "log_sha256": "fe43728bbed27bbe16541ee2f8b19e49f840027df9e5b9c7838b981173efaa68"
+    },
+    "appearance-candidate01-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5a36f7140486a316cc422acf950f6db64d6f7d65645a0b52e95d4182202b4a51",
+      "log_sha256": "7bb8c1d6b9739202dd09b5ee31bf02efe697f85c10e11bf4133a9bac9caf7037"
+    },
+    "appearance-candidate01-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "87a9926ce18af36612062392eea7b7634e11f4eafe3c95f5873e303d071c94cb",
+      "log_sha256": "23dc350f403c8b5752d5a2301e4ee853d546dbbdf07b9bb169d22fa454657bea"
+    },
+    "appearance-candidate02-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "b76fbe5d6c30c5392c3b1cc718c796b18430edc843be1661d126ff29ab34cde9",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-candidate02-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "6a69c44843bf1fa17b74afdf8753dcf9ecbd9cacc7dc958c592d7a316c7f52f3",
+      "log_sha256": "7c6de83502c9a19f03be02b2c31c22116f7ae90fcfbeb3763482b2041f7419c2"
+    },
+    "appearance-candidate02-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "abbe5ac77b9b9bb52eb075f68535923476a24f21cc1d4f36036bf8a8203e095f",
+      "log_sha256": "92a0c257ef1c0611f36be3ecea3fc064de7993a5f7ad352349e5b39cf7dd221f"
+    },
+    "appearance-candidate02-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "7a9860adc892da4ecf3d82a1b59ab6979ad75a32160d3cbcbc239284fbd3651d",
+      "log_sha256": "d6fa5630887dda0f7ca35a911999de0321a0f7806d98a5a71918d250abfd815f"
+    },
+    "appearance-candidate02-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9d8e6046c76f6deb2ce07e783d80ee4fcaeb89df6465b7f9787c50939ecd73ae",
+      "log_sha256": "8eb5171dee48e037807459562e222a7dbac595ac208d2fa9e5ad4e1bbf1c7885"
+    },
+    "appearance-candidate03-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "51396082c13f1609f98e548cdc818ae388989e1822bf5464d186f580bb5fbc47",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-candidate03-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "bedfef4e412cf49dfc622fb1df3064b3f8ec4356a3cfc11085e92875d5f2217e",
+      "log_sha256": "2a1f41c0ec7f9568257cd2de200535836ace864902e4a495567ac2cfec12e017"
+    },
+    "appearance-candidate03-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "b7333e8083827c9c4c2075c201425c2bf0d0adf7471dee61db17d515fbddb6e7",
+      "log_sha256": "2afbfbbbc1ce3bed514f799d99ce3b0aa371c55a1b23711e9d555605cc74e314"
+    },
+    "appearance-candidate03-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "95c4bbb8ad762315cf3bab92763cb0b1f8d1d7548acd27e0d6cca96715d6a67a",
+      "log_sha256": "7d325a0242b22f191aa7d4c893b135c864b25d59c95d637b07d9687f400c7d7f"
+    },
+    "appearance-candidate03-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "3a8f9c380209f163ac6f00319e5d186a69f541ec90c3417691bd0fdc3aa6def0",
+      "log_sha256": "842800acb4b0769752c739bdfe6208501aaab2355532635e50b363a8bf6546ea"
+    },
+    "appearance-candidate04-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "b607a90c0598aac46c179cec1012f7eef9258fca180e0d541f9f56f4b38276ef",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-candidate04-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "1e07d49c8a7b695747f93da9cd3c612b786c6ab37117be6d562b9d59c500abdd",
+      "log_sha256": "ce793b5165044fb17388168d7e83f271c7003b60262323cd1250830412dd2eb2"
+    },
+    "appearance-candidate04-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "a12102e3cd8556e6efca9e180bbdb76ad5ca7d17876cdae718cfcb4b6b5c318f",
+      "log_sha256": "fd09d4f46fbd6b6f5fa3136aa563bb22f65526927902a1f7b24d4eea9db3e8a6"
+    },
+    "appearance-candidate04-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "78ffccd8984a203c044cf5afacf81a6a59cbd18836eceadf9a7028b3bb7ae069",
+      "log_sha256": "81a8378dc30a86b6dd18fff87e6e25322258e3359cd22c979b2ef08f3990a298"
+    },
+    "appearance-candidate04-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "783e242d6dc8581b4314b0a83b1687bc0f7b1ba586071c72af9f86820688ba88",
+      "log_sha256": "4480661b57a7843cace7a297cb9dabdf48d2f885d77e9d507047bc4ebc7ef262"
+    },
+    "appearance-candidate06-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "e2748ab7c7cbc96e7a315da646523783a68e3e951a91b1b780c80adfb8d0922d",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-candidate06-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "c5f65ddc180f03dbd411fd215b832f58f4bcada84344e63c2dd461ab41795f0e",
+      "log_sha256": "8b5a7438c16d65d738b94ed9b9e8d43220c4a83efefa3829bb980ffca7744fb1"
+    },
+    "appearance-candidate06-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "e71a88563a40048ce7652872fe994622ff6ac99259c11f643b0214515a97bfc0",
+      "log_sha256": "06d24f675fb0a58129ec12163f0a71441efd4ada9f9e9c4ecdc18beaea08d948"
+    },
+    "appearance-candidate06-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "4d4be935cad610aac887557f9486bc7a5305453703ea5cada951684b0057e719",
+      "log_sha256": "e9ed8c8d53facab08d8b921829c329dc3c2347b6f891c5f4cce6fb823378072f"
+    },
+    "appearance-candidate06-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "41160a522fe4c9b7d479de7f64c3e97f8630b01a348e8c9f75439da50c3fd7fb",
+      "log_sha256": "797bdb2fe53e12b1fbc63a49fc00da274bce249ae5c9774436b9633f10ffeb87"
+    },
+    "appearance-candidate07-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "0868bed13ce1f69386ca0f4ac708aa25b1aeb54ff6c6a0cfa2c495d2c5e1afa6",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-candidate07-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "ac53926d3a7b116ef8626c5a1104203a82296e578f86541fb96a79377a8ddd34",
+      "log_sha256": "7022f5601734a842d54daee238547314ba3a8ae21b761580fe93adae5078b9ae"
+    },
+    "appearance-candidate07-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "c7196af786a49c9c1c59255460ed418b7f79ad633e60f0df384ff4a8b8786ccf",
+      "log_sha256": "b77583096e54606e648c8a2c8f18fd53c3a88d44e8484b58f17cb263ba415b4f"
+    },
+    "appearance-candidate07-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "fd9d6a8ef877bb0fc97509a2478ce6f86e247aee03f2263e10f81e637fa7603d",
+      "log_sha256": "9260115583b17dd3d9e9b916acf7e222afae0dd8606e6480f1dcb2ea87948a3b"
+    },
+    "appearance-candidate07-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "81554fd04ce28112739f86ff91c9ee391c0f0abcd796c3ab2c4d8816a5984f30",
+      "log_sha256": "0bf9a41e6f24fd9c534045b4cda289abd0b11f448209d116df6a5f6e662fcbc8"
+    },
+    "appearance-candidate08-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "16cdb11c9b81abcde056b20374b9cc6a8582168ea365f1e5df7d34c6ee5f83fa",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-candidate08-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "f5c91650112b80d274ec17bd6d7caff7dd6d97b041327ac4fb64164b4817b1be",
+      "log_sha256": "07347c1fb6d080ec1dec7067141f7678292be1c7340e0eca0fb90b0ffc5bc5a4"
+    },
+    "appearance-candidate08-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "579dccc11835c0f3a982f1d20e0806c4f65a81f2c969c178682e7a6a5cdbf7d3",
+      "log_sha256": "bb711994e82a4f168ff33b2bbeeed3fcacc00cb39b83452f8c88b5462c9bb476"
+    },
+    "appearance-candidate08-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "2cfce9a11d33f8ec8928c928cc0fe977e6ec052e4759487cc286787d9602f47e",
+      "log_sha256": "9151ac271c8ed37e373e8db7d9f2445d6b2954cf4e7b62ac7a23f902aafd70d0"
+    },
+    "appearance-candidate08-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "0b8d1bfa28611d0a0a12911ea5ce5ca48639224c7430cd8fa961a138738647f6",
+      "log_sha256": "ed509fc3290448dc4efbf6c3e59c73db94a3a6bfa79f510478762c697a50d878"
+    },
+    "appearance-consumers-baseline10-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "4e1447d89b80d384d6902b249f87cce783fa598e6a55ec318c6db40bc760f9ff",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-consumers-baseline10-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "3d30d3b317be052070ba9c052f6ce61bed18e14fae488ba59dbfdf9e2f204ebb",
+      "log_sha256": "9fbbceeffa23508a09c8c58b44872389306b872adfc6f6aaf0ae418b9932f4dc"
+    },
+    "appearance-consumers-baseline10-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "7a3512803a9f1afae494fa17a5b6949d592d0421a31c9b51538131bde2d30078",
+      "log_sha256": "71d96a315bd27751fcfe3c169dc831c531e567bb1110ba35a3c47d1124f30653"
+    },
+    "appearance-consumers-baseline10-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "7d8154fbb513929d69641f0395ef783234e8ddeea5f3417cfb389971214f8003",
+      "log_sha256": "55d277fd2924c94a9467dba1adaa01624bcaf8fd0454745e246fc4deb990c3ee"
+    },
+    "appearance-consumers-baseline10-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "7d4812f0c60538ba0e93a043055d45e73948959642ed1c797ec1d45c10f686dc",
+      "log_sha256": "cd0d54676e62df0678102664c66594bc344705a3e745d0f10bc7c4fb62b5b74c"
+    },
+    "appearance-consumers-final11-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "fdd8c92edda9762fe8f9ed49bd3ecf0ea5094d1b95de37b9a96f906d9c987c8a",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-consumers-final11-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9d25c2547964f1c8240252d58765d72eef0345f65c83fc2f31ca56afe2d56409",
+      "log_sha256": "51049c059d3fa50c971a28dbb89b36b2a2c7dbe849cc99c7ac3be5bdffacb72f"
+    },
+    "appearance-consumers-final11-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "37e1cf912c01ec77e6f63ecf51f6702928a163407d77e60421bbadfee46cafd5",
+      "log_sha256": "70f6f28e1137866da1dad31d44e91f53dfec69eb006d0736b90530f747c45009"
+    },
+    "appearance-consumers-final11-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "b7f22e6b2fdf42cc91dc17c49f9d2e22321354bb8415f90f9809f80c49900027",
+      "log_sha256": "142d5de57b6b6b733fef584c2e85b6b8bd670e3d1e251adf5702753c6ab27380"
+    },
+    "appearance-consumers-final11-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "571a65b46d9b0bf80b6625ade1022d4b827a2d64aafb59316fde251aceb1f610",
+      "log_sha256": "b4aef9412461c8675ab4d17cc0df6e7fa0d7fa3aaf78abd99396f7329dd724d7"
+    },
+    "appearance-independence-final13-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "7e9b499f149a6c1d9fec89451c3bf682f88caa8ae2fa75478a70cebba3f13606",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-independence-final13-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "60c739969710711175f94fe6a09ab10c85fb9e4d2161630752c0d1bfb84e3257",
+      "log_sha256": "086f47adb8c603bebccb752d40380c998cb7c8c8c62d88c02139d1923d320567"
+    },
+    "appearance-independence-final13-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "74bacbed5b3358a5b7544d101e752d42e11b1f22e84d2e2793482320e0538920",
+      "log_sha256": "beb0a3284c160dbcb40317c12fbbf394520ce4bc607560b719289833842beddf"
+    },
+    "appearance-independence-final13-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9528c9b89986354e9b619aed7b5141f1c582493cf34b7fda87a8de454b95a6ac",
+      "log_sha256": "47d87d89e5812466f39ee93982afdbc3e6c8cfce09cc31145529a88c2d1b7ed3"
+    },
+    "appearance-independence-final13-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "94408333165f957e08cbffb49dde568f39b35338986add3759045dd6f867b8b8",
+      "log_sha256": "8563d34fa947ca53382b98442eb37bae01d2d5bb4109780ef97d4c2d73489a8a"
+    },
+    "appearance-inspection-baseline09-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "f7acf9c16c211ecf4bf6f4cebcdf919f30eb683d8a7af75b023cab23dd755d54",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-inspection-baseline09-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "35d6c994a8ab406edfae7a2531b308847af1a29c846c45d746b2b36094adbbca",
+      "log_sha256": "d6304224a537df2552c8ddb7b0cce3b624c03ba4ff9e3171516f5824f491f55d"
+    },
+    "appearance-inspection-baseline09-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "c0f5f9f21d9f6b714aaa837836a7e665f76424b56c55940ec536b88e8f97027f",
+      "log_sha256": "41cf46e9d9584849a15a6269627602f79323f767f7c92fabfd3dc4c66518414d"
+    },
+    "appearance-inspection-baseline09-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "745a9e1af70d338508a4e4fa7c789fa1de6cb3ba26298e95e8f6d75e88ab6666",
+      "log_sha256": "ef42b0b9d60384e776b38fb383532a04c1134015456903a069081bfa7c74359d"
+    },
+    "appearance-inspection-baseline09-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "aafb6f56866cce37ab40a2729caa84b4e75633cd3f4f1a5e143f0700eaa5c8eb",
+      "log_sha256": "d6a30c97be1066460c63dddf0ea5ce58b36f2bd6e31780c4b8ea38b7ad7a766f"
+    },
+    "appearance-inspection-final12-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "7f753f9513804a38d8fcaf9b2f4f3e0231e8a3bf7213cc5e0fd0bca6c437d0c8",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-inspection-final12-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "ddf4c2740fb7c5057f6d6a838147c1a1ad1d5d3e646d1665372d94660c1a776a",
+      "log_sha256": "44e8e6700b05493c66e9e47a33c51d56cc64d144870b6aa390c53fc43d6737c3"
+    },
+    "appearance-inspection-final12-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9ca1a3f59d31e2cbf3f5b7d3a287d72bec08bc74d732e1624d2991197f59823e",
+      "log_sha256": "d199a0b92e623c33927257e7ea0b98c593bc2d3f22ef0be2da3885561f4ebf23"
+    },
+    "appearance-inspection-final12-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "8a24d5cf7c7f2d331ac80b236ceea381f8634e13191327d645771544aea98837",
+      "log_sha256": "f74f3911de1daa82e9f2c973cf101dd41d03ff50118d738434fc31240e266997"
+    },
+    "appearance-inspection-final12-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "da90c5ef9233e4f3f8de4f174974025f6c72d555db879ecf88523c8b78919210",
+      "log_sha256": "5b56e84471f2be84f9693ac50a1692f806e404ff143c953d363f246a7e1ba3c4"
+    },
+    "appearance-inspection-final16-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "154c68232e9fe09e9666bdd96065e859ee1eea9cab3b578c632eac542d7eb4e4",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-inspection-final16-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "6a7f45240acc74e21cb00fa1223782f0ef59c4b04c4b79d2d7effe8f4477d3d3",
+      "log_sha256": "44ae48e87a2bda7665533ec813773205fad9ec358a311fd4955eb06aa234b160"
+    },
+    "appearance-inspection-final16-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "0f36f7c627ab3147729cde0a21c58c1cb50ac4851798b2e738f5a2b48473303e",
+      "log_sha256": "306bc9a3381b76001158293d830359d4f0e2ee198adda85cd1d750f4add23ee4"
+    },
+    "appearance-inspection-final16-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "f2ab900d31c92292f2f0fd6d4100dd98fcce08e7176a04e83b14487d075efbe9",
+      "log_sha256": "643c649fd749c52f467c0f18ca67f38fc060fd7486c29184f21c6358bfea9b9f"
+    },
+    "appearance-inspection-final16-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "40c53af8b141ef8a024bcdc116d7533b61bb7a6abcb596896473db6cad4f06c7",
+      "log_sha256": "18dbae73b2033c436412611fdae3e78922ad2a65ad1f537e98ce02e8ad3813ab"
+    },
+    "appearance-lens-dependency-baseline14-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "5911713590157319101ec6742e4707822b383c795f815ec4c3ef1a92be0a1dbf",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-lens-dependency-baseline14-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "4634dda4aa1e6c27ad9d8b2838615f41254db5b6b83cb1c155274619885f5061",
+      "log_sha256": "ebbbac43d7714d3778661ab5681352a392a488a13115e74603fa1f2dbc0153c1"
+    },
+    "appearance-lens-dependency-baseline14-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "1dad179bd229edc07581649503398178433aca43de3baf07476b6e710f8b789a",
+      "log_sha256": "f4d69f2674b3b9343971870e7bfff9347a6a25b69478fa119c5dccd763d3b0fb"
+    },
+    "appearance-lens-dependency-baseline14-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "cf76a03c6b210fae86e2afcff61c41d472f18353446e53576d52ae6b4d2bce0f",
+      "log_sha256": "58dc4531858f4c595a086078173ec0d58720653cb5b440254cfd7fe4430c1400"
+    },
+    "appearance-lens-dependency-baseline14-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "8d45a0fcd23698aab5585f9da8c11d0f2b6e6786256e001057573c1300d5d37c",
+      "log_sha256": "fc5b0a285b4116e803b1f317df506b6cbe2427e0185242a808a8d6a9575c04c8"
+    },
+    "appearance-lens-dependency-final15-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "c54390ef2f0a6451c9bbc2396a435363397d57b5d92a352b2c1f2c0815ecb8b7",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-lens-dependency-final15-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "75abba9fd6b2d1ab50ce45b67897983d7c66dfaefd36b3708dd90a5f07999e45",
+      "log_sha256": "742ba281ff2b96989427e2507d1249126091d40cb4972960d3e17ca4e321a4b2"
+    },
+    "appearance-lens-dependency-final15-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "cdb2331c2cdffc41cce33f7be6d6bef586049bff103f4448973f673cd04646c0",
+      "log_sha256": "daa0fd91c0afe0aadb604b6fdb608204241be62aef0c79ac2935d96e4f7f3815"
+    },
+    "appearance-lens-dependency-final15-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "42fba6783f65681919d481e46cef09ab5d66b58c5e35517aa16871c38a02ab52",
+      "log_sha256": "62abcae2b10ba760cd8bffb1a8a597e9758788a217dfb6ff75a1064245cbc9a5"
+    },
+    "appearance-lens-dependency-final15-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "bbd57de917d8023c1cf399c4e8bccc8a9c5546c71e76cc1a306cd25e087f65c0",
+      "log_sha256": "fcb6b9c24b86cc7a65a16b403529760a7e244cc829b0ce51b54b11657813fcff"
+    },
+    "appearance-product01-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "974081146d3f92b9199472a3f2571ba601ecef9aefd9845eb6675291be55b2ac",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-product01-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "8f17d5b2a17f30bbad90180ce4aa62a1756abe0f0d9be6ebfdd27c0719d3383d",
+      "log_sha256": "601ba3a0b00d943f5ab2f87535f8cfbb66b454ecc158779efc31f68bdcf15e6b"
+    },
+    "appearance-product01-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "0da4b20c96655a75e0e18cba95e3a2c65850fad94547e063ba5b38c8e99d64f4",
+      "log_sha256": "70bbf49cf71de3df6bd5a742b28250bbbdaabc3a044b1ed3721962e30cdd8ea0"
+    },
+    "appearance-product01-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "e412b1d97cb5232edc55d9b031da1a63fd4facd540db6b81684c76276e2a0dda",
+      "log_sha256": "fe2dc02800894204ae08f17733eed71c4e32cd1cfe8d8841aa5a7753d5f6b1ec"
+    },
+    "appearance-product01-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "890068c9ba2593cd3cea77a48a3ccafbeefaba8bd2acc2cf464c881a274a1147",
+      "log_sha256": "1d0a195a6b1344e366c5acdf3ed4fc165484fc5bc263a49a6f48b9957a2ee95d"
+    },
+    "appearance-product02-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "9aab7acecfc47fc63eeb508f78f227e08cac1354c20669e0ea34ad094fe29b3c",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-product02-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "90cfc3aae7183d72afc6b55f14524963de1a41050b43185a8295da934a2d1132",
+      "log_sha256": "fe2c94374bbfb1c4b32c7ae433ee6dfde39d539f9ccd5cba7a9940af4f38f956"
+    },
+    "appearance-product02-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "3bbd86cf56cd1132d0422c4f7296f3cb8bfbfc9ebd2625fb0d74b32439561aaf",
+      "log_sha256": "2ec7c588b50ad532989c97f640052b507a95a4993dde351bc7f2f819fc8833c7"
+    },
+    "appearance-product02-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "6d8968846c45b4d19ede661793027f6dc7bc9b8a5cf7fc9511efee4fc2bd58ca",
+      "log_sha256": "b7748009896a10ca60e149dbcb99bdeaf891dc53a2d0bc219fe78d01b2edffb5"
+    },
+    "appearance-product02-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "fa83382b8a84d63e69e0fe05a2b5dbad44682d5d5360f0d180337fe6453996f0",
+      "log_sha256": "60f2ea3d4cf0459500a7118b9de540c6136da762280379dc52063fe8ef455baa"
+    },
+    "appearance-product03-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "15e2124d5c7b2b91052491416efefdecc1ab0ef7ee2824b33a51f5e1d45d3b03",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-product03-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "55d4830fc14e6dd87aecd5cbbb4cfc934ddc000e2267af0456bfb0affc38c730",
+      "log_sha256": "075f592d8a6cff8b5001b28d90c0c6323381afcd82fe1b9ec3effc61458e526a"
+    },
+    "appearance-product03-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "037814739f3526a5400be9f1807b2bf691d43c41bc4b1292543c2b98428598fd",
+      "log_sha256": "b22543faff46022323114cf354907656d60a3f071d1c1452629da9b5241bcaea"
+    },
+    "appearance-product03-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "8d268eabe779971525272fad4be8b259ff6b9c016de7eb6311e43183a0b44cd3",
+      "log_sha256": "67c4822077bfe4f7af5e7150cfbddda96aff4881097951b7650d8baba11713ea"
+    },
+    "appearance-product03-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "331b82d083de439befb9d460f502ab7c7bbf82f0f16448139070d28bc4123e1e",
+      "log_sha256": "a1ffdd474bafd73577983fe993b99e8088a26374f769513545c4beb8a580c6e1"
+    },
+    "appearance-retirement-final17-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "c8211175ac86a3b6038570b85e6e9e8389a2d9d0057266b3afe8d02b0b00954f",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-retirement-final17-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "08be7c67cf9facbf2d24d90a37b5e915803173e31161f148587eb5e6a470eb66",
+      "log_sha256": "3ff503043362e9c073de18587c5ed235f46cf89d746d4b3e11eaf2e4a85166a2"
+    },
+    "appearance-retirement-final17-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "35db133345ac771596a445acf64f32e3e833799df3daf599338560df589c0a5e",
+      "log_sha256": "e536f1d1957f19dd564be05af6c8dd0613f044811c619095b87f0d6b8d50aab5"
+    },
+    "appearance-retirement-final17-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "475800ce04979d7255e617a57fbf3996bb92e0bc37c6edcc4a3597ae14966adc",
+      "log_sha256": "cb85022e0415cda6a0306d7bab584f413d59c1d8b0d6b019fdc37634f67ef992"
+    },
+    "appearance-retirement-final17-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "22e999091a8c09cceded48b584f6496592f303ce9cd1e67a2a643a9676227a73",
+      "log_sha256": "78548c519c94d67510590a3e27f35056080b61bd6d3e0d0e8491c24993abbf62"
+    },
+    "appearance-workspace-baseline05-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "e4d11d42de475df3f63f8c269b76121c59a7c84a2d1f75bd18c291c41c8f0c47",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "appearance-workspace-baseline05-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "fb19dca4c67702df9b3117fc78cca8b1f97447662f448ac4115429ccae4fe5d2",
+      "log_sha256": "297de47d41a6f9f40c32e4cde8d83d8ad44d0a3a92635caab31d7c18ee71d3df"
+    },
+    "appearance-workspace-baseline05-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "85cee9517cc23b9963a87070fb5a07401a59eab95b78370d9c8be433492ca0fd",
+      "log_sha256": "7af1d60284287e892514598fe9eb0a6373410e8b51eb0469ea2956752ed21b46"
+    },
+    "appearance-workspace-baseline05-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "ef289073878f00e12cb59befd90a5d5c0ddead255028e1aff6609472184a7977",
+      "log_sha256": "949560ba150fea4a0259000bcf7e87d331fbd4db5e88eee75021f887ba221642"
+    },
+    "appearance-workspace-baseline05-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt_sha256": "d4f4cdfe245be7567e8b53a78e1f2babcd3718fdaba65a9c9de5799ae5013b9f",
+      "log_sha256": "6918ba939ad0e464108e1ddfb5dcbb0c05e6ee06f9e53c360dfe3c8e7a4de9a1"
+    },
+    "appearance-baseline01-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "227c476aeb07e3f0536352cefcfcb68e33291b67006243bf9a1c24ff617c5cce"
+    },
+    "appearance-baseline01-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "a05ee041a2cf12a1d90bfb8925b02d79975e49e0073b90eabad692149fed2bef"
+    },
+    "appearance-baseline02-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "984319de6eebaa8c8479f9d647c08618751ae6f04915fc5c838d0ffa1244eec9"
+    },
+    "appearance-baseline03-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "a35a3e57480b13f86f467475964d1664f3b6956f653cdbf36a93795dd2471baf"
+    },
+    "appearance-baseline03-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "eb497f8afa797c59b3c3d3abba0f80cea7898a4e2a291c5e942a0648bfa5bedb"
+    },
+    "appearance-browser-baseline01": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "f5a5c0d7d7c0864e4279229dfb59aa4045ea3cabbd0c95b83b96493b84fefadd"
+    },
+    "appearance-browser-bound02-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "ca0622eea10d4c384978b360f5fe9607848c2906b7af3738afaf67d23a7d17e9"
+    },
+    "appearance-browser-final01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "6a2668728d735bacfc6a486337836002645c4a2c48b92d0e69553ed9c5c558c3"
+    },
+    "appearance-candidate01-build": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "99dd999111afa46329b0ed232cbef700638ea0900ab436c3fd11981de329f78d"
+    },
+    "appearance-candidate02-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "1fff5828c40f31e1dcfe13fb6cce301e8169000d79fd160e10b70b077a3f338b"
+    },
+    "appearance-candidate02-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "0fdc79abc6c27f7fa1050a25bb67dee876f06968591078c4d6443c832dd23808"
+    },
+    "appearance-candidate03-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "3a8fa8a6ae7cb4caed1e4501ea151dfbd7f52d25f70bc3d4f3476a6a2272c228"
+    },
+    "appearance-candidate03-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "d40a65b41ebb9558a9098cdf0d4c88798971ee5636a902e145c940f3a9f2b721"
+    },
+    "appearance-candidate04-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "3581002333028753b85eb07f457db998aaba4a2f8df013c776cb9faf24518f8c"
+    },
+    "appearance-candidate04-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "54aad74211474640576e3fa7a8b4c03c3b998ab87341d93010d029aac12fa042"
+    },
+    "appearance-candidate06-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "60f05d33357caa14fdbb6ad44c9410d0c0b931defb32981a760a054c7df3d7d7"
+    },
+    "appearance-candidate07-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "0e3b397dd1bad0a08838f3a2514440f4683bbecc704ddac3977d842b959531d8"
+    },
+    "appearance-candidate07-full-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "a5cd71c351b2c0c35a30963acfe87d2a26e577e5d33fea30bde94862dfe1ac0a"
+    },
+    "appearance-candidate07-workspaces-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "1d2c0dbd314ed2e75a11ec5a9570c91c31934bf33ae8dace0897ae839074a693"
+    },
+    "appearance-candidate08-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "611d075ed6410a390a37393aee4c5791eda59a327e441c39262edfc6f4712c9d"
+    },
+    "appearance-candidate08-full-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "7e27666d93fdb3830d76a6fdf91e746f3c82f901be7faf8db9d4ecc1d9a17aa1"
+    },
+    "appearance-candidate08-question-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "81853487a498a0f7911816552bc2bf3eb4e168358f290649274b2d353fa5020c"
+    },
+    "appearance-consumers-baseline10-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "d4f06074da4d125bd9cadac8c0f0b87ecf04475edf41657460541d708d79aede"
+    },
+    "appearance-consumers-final11-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "a8e09901894dc39f83470171741c1e652c0ce2f70a4c2fff79150d9a92d40d3e"
+    },
+    "appearance-independence-final13-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "e429984174d1f9545f606c0f5a94a8b4877ea7ffb481c63a90e6040517e63eb4"
+    },
+    "appearance-independence-final13-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "09b813a788436388d6c49a67bc24ac0f0b69de8199efab7456f3e947ec57121f"
+    },
+    "appearance-independence-final15-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "56a16b81418451931940ac2459b850c9a21371aac08e379dc225f788eaf8d8ff"
+    },
+    "appearance-inspection-baseline09-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "f0438e289948d9b3a1abe7dcb5533933c7840b1cc55a76298f2b3956d9d5fe81"
+    },
+    "appearance-inspection-baseline09-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "8bd0ff347f4675de585735672837aa6eb797cdfad734fec290c7c49b712ef06b"
+    },
+    "appearance-inspection-baseline10-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "77863b7fbf9a4d8890ca3415d510814ee6499855e7771739920bb8a6792457a1"
+    },
+    "appearance-inspection-final11-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "5ee3e66f69f2493641c4b768aec70ef4625e843bbf637f4ebb36b90d2ef87c64"
+    },
+    "appearance-inspection-final12-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "98b34abb681411363267ad1fa3f8adce9b03b87bae7512a8d2a7f24918a44d14"
+    },
+    "appearance-inspection-final12-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "373f31efc8caef0cb682edfaccb08884703f032b4e60a03310d0f7031b9afd38"
+    },
+    "appearance-inspection-final16-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "63da10d67455a9dabe840d726c88621af8ff9a0012232491352e678f1b91c79e"
+    },
+    "appearance-inspection-final16-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "b0ad3192d54f8cc5ce9c1a6b8ce7490a67c1771a9e5fe63be51b722cde13397a"
+    },
+    "appearance-lens-dependency-baseline14-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "16ce8353dc6b00fcb8eee6b15280487bfaa9b90217102194b0b198fafe9d3acc"
+    },
+    "appearance-lens-dependency-baseline14-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "f40a90e858a89d859bc78803673e7426dc70ee873e77dbd08a213036410d5f71"
+    },
+    "appearance-lens-dependency-final15-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "8eb3c5d64cfa2220d5e3fb89294dffd745e95946f9c6a6cff361c6a280934d62"
+    },
+    "appearance-lens-dependency-final15-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "5a19cf727f6e9d3a2a3d35612f7453a735e29fc5b763718d8812dc3a82098576"
+    },
+    "appearance-product01-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "d80f9526e510685e4cdec31028bd8cd2dd3d42c57e3308eb0006bd7b5a4fbfb9"
+    },
+    "appearance-product02-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "90156fa951983c1d385fcfc89a83c0c59b330eabcffa80fa38fabf43f8241c98"
+    },
+    "appearance-product03-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "85f427a7b21c8db8338b69f9f1b40e0082e81df458e7781f9d7ae721ae327b18"
+    },
+    "appearance-qualify01-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "122cb16630094cc8f023d22a754b3de888ee4b0fdeb53d4b09acf3894e7c1ef0"
+    },
+    "appearance-qualify02-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "ae1393117d1962826c8087cf372f0b1c76868b332d9687f2e376e545dddc1cbd"
+    },
+    "appearance-question-layout-baseline10-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "f3791f291a7222d87479ae69b495135896e93ba3e04a4e5688e4fadf12e6d5f6"
+    },
+    "appearance-retirement-final17-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "5cfb618ac7ade9a206bdfbfd47c17ec0240e293db8c9a27c6c688b7c2431bdb8"
+    },
+    "appearance-retirement-final17-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "ff9e3ff1a01c0a43722c2dfa751fb2a9bcb5b4faa6a46fa630f4cb1b3f7698e7"
+    },
+    "appearance-workspace-baseline05-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt_sha256": "1e9d5e1c237a652f485a949f0e6a268824aa63dc33df29faf2fc4c6806b86850"
+    },
+    "appearance-workspace-baseline05-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt_sha256": "7aa1fcf6d9cbbe9b995eea58ebb8eacbb8338ede89810f1a957d5a3c5ed8a9b9"
+    }
+  },
+  "source_delta": {
+    "client/godot/Core/Forms.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/Core/Forms.cs",
+      "before_sha256": "11ce41608f52499b40370c8132c87fb0d741a63ff0330255a3356090e08fecb5",
+      "after_sha256": "cf16ee762460a272ddea53df9c9d35b8efe683e48d4529aaedc998ceff1b28c6",
+      "mode": 33188
+    },
+    "client/godot/FormPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/FormPanel.cs",
+      "before_sha256": "d8efae9e1a1ddf87db2a68304d64160225a4a82317fb1c2ccebe3be0ea392703",
+      "after_sha256": "8d19a51d76b9d01a8aa719702431368d5cf91e8b4b6b69e7341067498ea596f5",
+      "mode": 33188
+    },
+    "client/godot/SpatialGui.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/SpatialGui.cs",
+      "before_sha256": "fb3bf81d252665c0afe238a336bb1c009cd0e6571ee8030940364a5bf42d8c2f",
+      "after_sha256": "b0db9b88562f94d42b833f736121a96729e0ccbbbddbbe10e356878575e61152",
+      "mode": 33188
+    },
+    "client/godot/OperationsPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/OperationsPanel.cs",
+      "before_sha256": "6c862bea2162d6813b04287115a419d2a4b64328d90f0ab647ffe228ebac8545",
+      "after_sha256": "1c30abe37158b2c3cf347de47f98f8d63e742d1e698b8bc84ade7c643f06ad74",
+      "mode": 33188
+    },
+    "client/godot/SourcePanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/SourcePanel.cs",
+      "before_sha256": "1cd40219e8f52cf2d00384c7c24c4dceb72a96f6a152766a167fd0aefbbbd7f5",
+      "after_sha256": "a9c9018d62b9fdf60eb5389f2837bfd72b4c1d41df0c9c2e4458d8805c359168",
+      "mode": 33188
+    },
+    "client/godot/WorkbenchPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/WorkbenchPanel.cs",
+      "before_sha256": "47df121fc06fe4a875b40b54c9c12589eb53113b10f8f1b8b3f3f8161480551b",
+      "after_sha256": "8f818abdd2e7f042783ad821817eb13914dfe12efce1163f92863b787200177e",
+      "mode": 33188
+    },
+    "priv/ontologies/gui_forms.pl": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/priv/ontologies/gui_forms.pl",
+      "before_sha256": "6f4623cd25ced128b0813cfdb5356154726483f0992dbf83ee87e19bb1d3b9e2",
+      "after_sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b",
+      "mode": 33188
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/priv/ontologies/quod_gui.pl",
+      "before_sha256": "969b6ab3eafd67cf5fd6f36c50b1657c90b34fa134d61657d1da50ec16863339",
+      "after_sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766",
+      "mode": 33188
+    },
+    "client/godot/README.md": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/README.md",
+      "before_sha256": "25d01a2b79279a65852405f37510a1419499e902dde1d746d440e04c3f757068",
+      "after_sha256": "79440555f3a772ac1416ce732ac5b0c90d73439009492da49394295470f415bf",
+      "mode": 33188
+    },
+    "doc/gui-implementation-plan.md": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/doc/gui-implementation-plan.md",
+      "before_sha256": "cca6c3309e03856cb98205e59d5edbecdb0e7366a6e0bad0bdd5d39268c4b930",
+      "after_sha256": "9b6a757d66637e7e0d05b0f4a42a071909819c0e2dd18833ccb07edeb64d5c52",
+      "mode": 33188
+    },
+    "client/godot/QuestionHub.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/QuestionHub.cs",
+      "before_sha256": "a1a73694ab0d162d2401de949646379565b253fdf19720e1fb4c96136d95af24",
+      "after_sha256": "029f0aaf6d5ac26b1d4c26f0a98399b2fef8ee6ac172d7f626d56910ead4c2bb",
+      "mode": 33188
+    },
+    "client/src/world.js": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/src/world.js",
+      "before_sha256": "e84605a30d32f2b7de504715189b39be6ecf97d145f2b37a18eb28ee07858c41",
+      "after_sha256": "e7ed5edaa93cac0f9ebee65e82361b6c565e7eed6e3d38bc84785d3a555ddcf5",
+      "mode": 33188
+    },
+    "client/godot/EidolonPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/EidolonPanel.cs",
+      "before_sha256": "38371d58c38899f1ad1a62d2c59992f48703e76a7fe6576df31bed703b6c34ff",
+      "after_sha256": "31ee2dd04a91a4dff30dadbea1422618b2263953fc202bf6a851bc8c91864bcb",
+      "mode": 33188
+    },
+    "client/godot/Core/SignedView.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/Core/SignedView.cs",
+      "before_sha256": "1317281c87bdcb725ab0bec34951ee676529793e6c68f96480dddbf5f08a0629",
+      "after_sha256": "46fd9579ef524ea41815dead6ec0a7c0ff30f0e171f7bfd77edadc8dfcb67751",
+      "mode": 33188
+    },
+    "client/godot/ScenePanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/inputs/before/client/godot/ScenePanel.cs",
+      "before_sha256": "4b1c07a8b8905c761cbdc182da09e3f3e519319866a7d6c902a8e77a7be902d8",
+      "after_sha256": "778cb917d5880c06120f1c16e2210d65d80dd2dc7d51c5fe028040e92fd419b3",
+      "mode": 33188
+    }
+  },
+  "line_delta": {
+    "client/godot/Core/Forms.cs": {
+      "added": 26,
+      "removed": 1
+    },
+    "client/godot/FormPanel.cs": {
+      "added": 45,
+      "removed": 3
+    },
+    "client/godot/SpatialGui.cs": {
+      "added": 46,
+      "removed": 26
+    },
+    "client/godot/OperationsPanel.cs": {
+      "added": 2,
+      "removed": 0
+    },
+    "client/godot/SourcePanel.cs": {
+      "added": 33,
+      "removed": 10
+    },
+    "client/godot/WorkbenchPanel.cs": {
+      "added": 4,
+      "removed": 2
+    },
+    "priv/ontologies/gui_forms.pl": {
+      "added": 15,
+      "removed": 1
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "added": 21,
+      "removed": 1
+    },
+    "client/godot/README.md": {
+      "added": 18,
+      "removed": 0
+    },
+    "doc/gui-implementation-plan.md": {
+      "added": 27,
+      "removed": 0
+    },
+    "client/godot/QuestionHub.cs": {
+      "added": 2,
+      "removed": 1
+    },
+    "client/src/world.js": {
+      "added": 6,
+      "removed": 1
+    },
+    "client/godot/EidolonPanel.cs": {
+      "added": 8,
+      "removed": 3
+    },
+    "client/godot/Core/SignedView.cs": {
+      "added": 7,
+      "removed": 4
+    },
+    "client/godot/ScenePanel.cs": {
+      "added": 8,
+      "removed": 3
+    }
+  },
+  "native_XR_or_host_input": false,
+  "human_acceptance": false,
+  "historical_shutdown_fixed": false,
+  "new_context_source_paths": [
+    "nimbalyst-local/handoffs/godot-gui-authored-appearance-236.md",
+    "nimbalyst-local/handoffs/godot-gui-authored-appearance-result-236.md"
+  ],
+  "browser_bound_case": {
+    "passed": true,
+    "true_exit": 0,
+    "command": [
+      "/usr/bin/node",
+      "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/browser-check.mjs",
+      "client/src/world.js"
+    ],
+    "cwd": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02",
+    "source_inputs": {
+      "client/src/gui-operation.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/gui-operation.js",
+        "sha256": "1b26b43d0c181c46e350bd26708a774bcc019d43c578c5ebafbdc19197b3ee7d",
+        "original_stat_key": [
+          66305,
+          23225951,
+          3050,
+          1793106895527359340,
+          1793106895527359340
+        ],
+        "mode": 33188
+      },
+      "client/src/key-provider.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/key-provider.js",
+        "sha256": "8bc429aebdce6691db49dac33fc7a1d7cdfa96558f9ff23c27f4d12b384e346b",
+        "original_stat_key": [
+          66305,
+          23226051,
+          11310,
+          1793106895528359365,
+          1793106895528359365
+        ],
+        "mode": 33188
+      },
+      "client/src/agent-references.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/agent-references.js",
+        "sha256": "c2df0674a475fa8575a1f9453257fbcfd7ca3657aa21c38c2b09567fadabe7f7",
+        "original_stat_key": [
+          66305,
+          23225687,
+          3385,
+          1793106895524724382,
+          1793106895524724382
+        ],
+        "mode": 33188
+      },
+      "client/src/protocol-limits.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/protocol-limits.js",
+        "sha256": "f4c4c18ab84df48f27c7e4a2f95716e0dae8cef3d7fc39909e546240f0ae55c5",
+        "original_stat_key": [
+          66305,
+          23226180,
+          1315,
+          1793106895529359390,
+          1793106895529359390
+        ],
+        "mode": 33188
+      },
+      "client/src/signed-view.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/signed-view.js",
+        "sha256": "d7e3a045478f866c9a12e372404bcc929b34057cd3d9de912d06df0072bc280b",
+        "original_stat_key": [
+          66305,
+          23226188,
+          5391,
+          1793106895530359415,
+          1793106895530359415
+        ],
+        "mode": 33188
+      },
+      "client/src/signed-client.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/signed-client.js",
+        "sha256": "99ae6a09009e00afa2440171814c3cb5d3cee92a98cbcb4f08350581286ea3dd",
+        "original_stat_key": [
+          66305,
+          23226187,
+          17809,
+          1793106895530359415,
+          1793106895530359415
+        ],
+        "mode": 33188
+      },
+      "client/src/prolog-term.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/prolog-term.js",
+        "sha256": "44ddca00277c27de2401f71ac2b31744b12623eaf4185d4bc9eafc126ce39a56",
+        "original_stat_key": [
+          66305,
+          23226178,
+          9592,
+          1793106895529359390,
+          1793106895529359390
+        ],
+        "mode": 33188
+      },
+      "client/src/operation-journal.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/operation-journal.js",
+        "sha256": "01b3e7635c3ec7a1e2ece811cda17696112587df001c382bb7d101f9f7dd468a",
+        "original_stat_key": [
+          66305,
+          23226169,
+          4807,
+          1793106895529359390,
+          1793106895529359390
+        ],
+        "mode": 33188
+      },
+      "client/src/world.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/world.js",
+        "sha256": "e7ed5edaa93cac0f9ebee65e82361b6c565e7eed6e3d38bc84785d3a555ddcf5",
+        "original_stat_key": [
+          66305,
+          23226203,
+          24760,
+          1793535658020286211,
+          1793535658020286211
+        ],
+        "mode": 33188
+      },
+      "client/src/marks.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/marks.js",
+        "sha256": "5875005f8ae052f00dd0a1989c20473a329c91c240d231f0d55777fcaa7c9283",
+        "original_stat_key": [
+          66305,
+          23226156,
+          11344,
+          1793141013242076975,
+          1793141013242076975
+        ],
+        "mode": 33188
+      },
+      "client/src/prolog-read.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/prolog-read.js",
+        "sha256": "060aa24ad49f93029d47b8ef68b31cb962650bf0ace0ec9070ef6eb0f313fae8",
+        "original_stat_key": [
+          66305,
+          23226176,
+          6761,
+          1793106895529359390,
+          1793106895529359390
+        ],
+        "mode": 33188
+      },
+      "client/src/gui-values.js": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/src/gui-values.js",
+        "sha256": "79b0e180384fba74d3a586f3301368613ca7acf41a1fde80cd0e4f0d0fab5559",
+        "original_stat_key": [
+          66305,
+          23225999,
+          2688,
+          1793106895527359340,
+          1793106895527359340
+        ],
+        "mode": 33188
+      },
+      "browser-check.mjs": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/browser-check.mjs",
+        "sha256": "de13fde3cf0eda146b88e4a0437a9d5b1ded8091dcdf58826ae80ce058ccd6fe",
+        "original_stat_key": [
+          66305,
+          28210147,
+          2938,
+          1793535757484710281,
+          1793535757484710281
+        ],
+        "mode": 33188
+      },
+      "client/package.json": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/client/package.json",
+        "sha256": "c79de91842950c2e5032d7983a39abd10cb31ff4639c253606caa9ea583c4c31",
+        "original_stat_key": [
+          66305,
+          23225671,
+          544,
+          1793106895523359241,
+          1793106895523359241
+        ],
+        "mode": 33188
+      },
+      "browser.py": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/browser.py",
+        "sha256": "b0f1fbf8861ea2d026526457a72b5fe287870d4a53b728914fbecb15f1ed39dc",
+        "original_stat_key": [
+          66305,
+          28211100,
+          2114,
+          1793536626402116192,
+          1793536626402116192
+        ],
+        "mode": 33188
+      }
+    },
+    "only_retained_sources_executed": true,
+    "network_or_browser_runtime": false,
+    "older_unbound_case_retained": true,
+    "digest_cache": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-browser-bound02/computed-hashes.json",
+      "sha256": "45caf393970d57143cdb89c056f18f0708c3d31de699a25dae3373393498d531"
+    }
+  },
+  "limits": [
+    "Actual native Control input in a disposable signed software fixture; no host input or human test.",
+    "Real signed ontology and native-Control evidence; physical headset comfort is unqualified.",
+    "Ontology identity remains separate from spatial membership; broader founding/D5/D6/terrain remain outside this slice.",
+    "Current normal retirement does not explain or fix prior whole failed no-EOF labels.",
+    "Authored tokens are native Godot scope; the existing browser explicitly refuses non-inherit declarations."
+  ],
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-qualify03/computed-hashes.json",
+    "sha256": "1a39fe08a3dd3b28c381e58d1d3299b2d6098e358a73b6c1f8e4270bfd88e08c"
+  }
+}

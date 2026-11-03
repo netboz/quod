@@ -1,0 +1,52 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-authored-appearance-20261101/signed.py",
+    "appearance-retirement-final17",
+    "doc/evidence/godot-authored-appearance-20261101/inputs/client-appearance-retirement-final17-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+    "appearance-independent"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "browser.py": "b0f1fbf8861ea2d026526457a72b5fe287870d4a53b728914fbecb15f1ed39dc",
+    "build.py": "8d513b05bc2dec66b56745751ef2ee7f5856d822be050587724925bf164db2bb",
+    "freeze.py": "01a9efece379aad6372cbbeebdc6247f6f88d1a0638608a2d84a78785c7492d9",
+    "hashes.py": "eaed7d8a2cfd34f6d986cfaa21e5a1b2615544eeed983e2de1209a25b7d55cce",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "qualify.py": "c2d84d0978f4a11ce9693b039a298f9ff1ced620624b3166482e427dc8be1c01",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "969fd1e9c968ddc3211a609cb183d5b952715e650b09889de97681974ad2f338",
+    "signed.py": "39c9176a3a8b1a1a617744589b86ca09611241d81734569aca32624758919546",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-01T12:56:03Z",
+  "elapsed_seconds": 19.307624101638794,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/appearance-retirement-final17-run/stdout.raw",
+      "sha256": "0576b04b670345958e40578275361fd39a86ceb730e5627db144737c50fc8236",
+      "bytes": 1043
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/appearance-retirement-final17-run/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/logs/appearance-retirement-final17-run-stdout.log",
+      "sha256": "0576b04b670345958e40578275361fd39a86ceb730e5627db144737c50fc8236",
+      "bytes": 1043
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-authored-appearance-20261101/logs/appearance-retirement-final17-run-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

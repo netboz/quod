@@ -44,7 +44,7 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
 - Stage 2 — Same-agent entry and space Eidolons #task[id:tsk_01M5PY8TEXKG858WBZJ1RHC6EW status:done priority:medium created:2026-10-24 tags:architecture,space]
   Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#smallest-staged-normalization). Implements stage 2 under the confirmed model and existing code retention/retirement map.
   
-  Status: implemented and verified for agreed local software scope; source-reconciled closeout 2026-11-04. Depends on stage 1; blocks stage 3. The supplied tracker ID is unresolved by the live tracker, so no duplicate item was created. [Closeout and exact evidence](../../doc/evidence/stage2-closeout-20261104/STATUS.md).
+  Status: implemented and verified for agreed local software scope; **4/4 local completion checks (100%)**, source-reconciled closeout 2026-11-04. Depends on stage 1; blocks stage 3. The inline item is visible through `tracker_get` with status `done`, but its synced custom progress still reads 50% and `tracker_update` cannot resolve its ID; no duplicate item was created. [Closeout and exact evidence](../../doc/evidence/stage2-closeout-20261104/STATUS.md).
   
   **Agreed scope**
   

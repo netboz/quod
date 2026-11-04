@@ -81,8 +81,12 @@ offline client checks are not hardware acceptance. The two adjacent diagnostic
 truncations in the limit audit are still inventory observations, not claimed
 as corrected. These limits do not block the agreed Stage 2 software checks.
 
-The supplied Stage 2 task ID still cannot be resolved by `work_radar`; no
-duplicate item was created. The local Stage 2 task/checklist records completion.
+`work_radar` still reports no match for the supplied Stage 2 task ID, while
+`tracker_get` now reads the existing inline task with status `done` and sync
+status `pending`. Its custom progress remains 50%; a direct `tracker_update`
+attempt to set progress 100% and attach the commit returned literal
+`Tracker item not found: tsk_01M5PY8TEXKG858WBZJ1RHC6EW`. The local task
+records all four completion checks and 100% progress. No duplicate was created.
 An initial attempt to link this editor session to the plan was rejected by
 automatic approval review because it would add a persistent tracker association
 without explicit link authorization; no indirect link was attempted. Yan then

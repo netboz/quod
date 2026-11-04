@@ -1031,7 +1031,9 @@ to the plan, stating that a persistent tracker association lacked explicit link
 authorization. No indirect link was attempted. Yan then explicitly selected
 “Link session” in the editor (response `1793799291001`); the direct
 `tracker_link_session` call linked this session to the existing file-backed plan.
-That plan has no published issue key, and the Stage2 task ID remains unresolved
-by `work_radar`; no duplicate item was created. The local plan and task file
-record the completed Stage2 scope. The link changed no source or acceptance
-evidence.
+That plan has no published issue key. `work_radar` still reports no Stage2 task
+match; `tracker_get` reads its existing inline item as `done` with pending sync,
+but stale custom progress50. A direct progress/commit update returned literal
+`Tracker item not found: tsk_01M5PY8TEXKG858WBZJ1RHC6EW`. The local task
+records4/4 checks and100%; no duplicate item was created. The plan link changed
+no source or acceptance evidence.

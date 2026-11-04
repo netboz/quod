@@ -1,6 +1,7 @@
 [application]
 config/name="Quod"
 run/main_scene="res://main.tscn"
+config/icon="res://assets/quod-logo.png"
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 [display]
 window/size/viewport_width=1200
@@ -12,5 +13,6 @@ project/assembly_name="Quod"
 renderer/rendering_method="gl_compatibility"
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)
 [xr]
-openxr/enabled=false
+openxr/enabled=true
+openxr/startup_alert=false
 openxr/default_action_map="res://xr_actions.tres"

@@ -1,0 +1,54 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -signed_mixed_view_uses_rendering_policy_test_/0-fun-7-...*failed*
+in function quod_physics_tests:'-signed_mixed_view_uses_rendering_policy_test_/0-fun-6-'/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 2714)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3266)
+in call from quod_agent_hosting_tests:with_host/4 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_agent_hosting_tests.erl, line 1654)
+in call from quod_physics_tests:with_world/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3269)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:{assertMatch,
+    [{module,quod_physics_tests},
+     {line,2714},
+     {expression,"Read ( [ Body , Decoration ] )"},
+     {pattern,
+         "{ ok , _ , { normalized , { read , _ , { answers , _ , [ _ ] } } } }"},
+     {value,
+         {ok,#{request =>
+                   #{mode => read,
+                     agent_genesis_anchor => <<137,170,176,47,26,217,...>>,
+                     agent_instance_text =>
+                         <<"'\\x70\\\\x68\\\\x79\\\\x73\\\\x6"...>>,
+                     agent_namespace => <<"host-test-node">>,
+                     goal_text => <<"<<\"host-test-agent\">> ::"...>>,
+                     network_identity => <<0,0,0,0,0,0,...>>,
+                     not_after_ms => 1793806500988,...},
+               signature => <<201,139,201,218,133,112,124,...>>,
+               goal =>
+                   {'::',<<"host-test-agent">>,
+                       {{'$quod_symbol',<<"clie"...>>},
+                        {'$quod_symbol',<<...>>},
+                        {'$quod_symbol',...},
+                        [],...}},
+               operation_ref =>
+                   {operation,<<"host-test-node">>,
+                       <<137,170,176,47,...>>,
+                       <<131,104,2,...>>,
+                       <<68,200,...>>},
+               goal_blob => <<131,104,2,97,4,108,0,...>>,
+               request_digest => <<"Qì©iZ­U"...>>,
+               agent_ref_blob => <<131,104,2,97,4,108,0,...>>,
+               variables => [{<<"V0">>,0}],...},
+             {normalized,{failed,<<131,104,3,...>>}}}}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_AAA1CCF1EA2CDCB4
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

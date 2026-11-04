@@ -348,10 +348,10 @@ exact_claim_reuses_live_consensus_custody_test() ->
             quod_simplex:test_append(EquivalentFrom,
               Redelivery#transaction{evidence = {AlternateRef, Claim}}, Joined),
         ?assertEqual([Original], quod_simplex:test_custody(Equivalent)),
-        %% Missing claim evidence is refused by ordinary ingress encoding
+        %% Missing claim evidence is refused by ordinary ingress validation
         %% before it can join the existing valid custody.
         BadFrom = {self(), make_ref()},
-        {Unchanged, [{reply, BadFrom, {error, too_large}}]} =
+        {Unchanged, [{reply, BadFrom, {error, bad_change}}]} =
             quod_simplex:test_append(BadFrom, Redelivery#transaction{evidence = none}, Equivalent),
         ?assertEqual([Original], quod_simplex:test_custody(Unchanged)),
         Expired = quod_simplex:test_expire_custody(Unchanged),

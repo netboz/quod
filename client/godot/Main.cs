@@ -76,14 +76,23 @@ public partial class Main : Control
     public Task ViewsDisposed { get; private set; } = Task.CompletedTask;
     QuestionHub? questions;
     readonly Dictionary<string, Button> buttons = [];
+    readonly Button modeButton=new() {Name="presentation-mode",Text="Enter VR · F9",AnchorLeft=1,AnchorRight=1,
+        OffsetLeft=-220,OffsetRight=-24,OffsetTop=22,OffsetBottom=66,Visible=false};
     public override void _Ready()
     {
         GetTree().AutoAcceptQuit = false;
         gui=new() { Name="shared-gui" };AddChild(gui);
+        modeButton.Theme=gui.Appearance;
+        AddChild(modeButton);
+        modeButton.Pressed+=()=>{if(xr.Running)xr.StopSession();else xr.Start();};
         var margin = new MarginContainer { OffsetLeft = 28, OffsetTop = 22, AnchorRight = 1, AnchorBottom = 1, OffsetRight = -28, OffsetBottom = -22 };
         gui.SetContent(margin);workspaceContent=margin;
         var shell=new VBoxContainer();margin.AddChild(shell);
-        var header=new HFlowContainer();shellHeader=header;shell.AddChild(header);header.AddChild(new Label { Text="Quod",ThemeTypeVariation="Heading" });
+        var header=new HFlowContainer();shellHeader=header;shell.AddChild(header);
+        header.AddChild(new TextureRect {Name="quod-logo",Texture=GD.Load<Texture2D>("res://assets/quod-logo.png"),
+            CustomMinimumSize=new(56,56),ExpandMode=TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode=TextureRect.StretchModeEnum.KeepAspectCentered,MouseFilter=MouseFilterEnum.Ignore});
+        header.AddChild(new Label { Text="Quod",ThemeTypeVariation="Heading" });
         Add(header,"workspace-connection","Account",()=>{showConnection=!showConnection;UpdateWorkspace();return Task.CompletedTask;});
         Add(header,"client-tools","Tools",()=>{toolsPanel.Visible=!toolsPanel.Visible;return Task.CompletedTask;});
         shell.AddChild(place);place.AddChild(placeTitle);place.AddChild(accountActions);shell.AddChild(attentionHost);
@@ -108,8 +117,6 @@ public partial class Main : Control
         root.AddChild(toolsPanel);
         Add(toolsPanel, "inspect", "Source / inspection", OpenTools);
         Add(toolsPanel,"local-controllers","Connected controllers",()=>{OpenControllers();return Task.CompletedTask;});
-        Add(toolsPanel,"start-xr","Start OpenXR",()=>{xr.Start();return Task.CompletedTask;});
-        Add(toolsPanel,"stop-xr","Stop OpenXR",()=>{xr.StopSession();return Task.CompletedTask;});
         scene = new() { Name = "space-scene" };
         models=new(async (asset,cancellation)=> {
             var consumer=session??throw new InvalidOperationException("Connect before requesting controller resources.");
@@ -120,7 +127,7 @@ public partial class Main : Control
         });
         xr=new() { Name="openxr-input" };scene.Viewport.AddChild(xr);
         xr.Configure(scene,gui,models,()=>controls,()=>GuiOpen || gui.NativePressed,WorkspaceMenuEntries);
-        xr.Changed+=()=>{UpdateWorkspace();UpdateControllerStatus();};
+        xr.Changed+=UpdateControllerStatus;
         gui.NativeCaptureChanged+=()=>{if(gui.NativePressed){xr.Router.Cancel();scene.ReleaseInput();}xr.ContextChanged();};
         GetWindow().VisibilityChanged+=()=>xr.Visibility(GetWindow().Visible);
         scene.Drive += (direction,_) => controls?.Drive(direction.X,direction.Y,direction.Z);
@@ -158,12 +165,13 @@ public partial class Main : Control
             store = new LocalStore(profile);
             if (store.Snapshot is LocalState saved) {
                 key = Identity.FromPayload(saved.Payload); endpoint.Text = saved.Endpoint; ca.Text = saved.CaFile;
-                status.Text = "Your saved key is ready. Connect explicitly.";
+                status.Text = "Signing in with your saved key…";
             } else status.Text = "Not signed in.";
             if (Argument("--node") is string node) endpoint.Text = node;
             if (Argument("--ca") is string caPath) ca.Text = caPath;
         } catch (Exception error) { state = "storage-error"; status.Text = error.Message; }
         UpdateButtons(); Notify();
+        if(key!=null)activeAction=Run(Connect);
         if (OS.GetCmdlineUserArgs().Contains("--qualification")) {
             var checks = new ExportChecks(); AddChild(checks); checks.Begin(this);
         }
@@ -174,9 +182,10 @@ public partial class Main : Control
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
     }
     static HFlowContainer Row(Godot.Container parent) { var row = new HFlowContainer(); parent.AddChild(row); return row; }
-    internal (string,Func<bool>,Action)[] WorkspaceMenuEntries()=>new[]{"workspace-show","workspace-move","workspace-hide","workspace-text-larger","workspace-nearer","open-gui","create-operations","location-operations","inspect","local-controllers","stop-xr"}.Select(name=> {
+    internal (string,Func<bool>,Action)[] WorkspaceMenuEntries()=>new[]{"workspace-show","workspace-move","workspace-hide","workspace-text-larger","workspace-nearer","open-gui","create-operations","location-operations","inspect","local-controllers"}.Select(name=> {
         var button=buttons[name];return(button.Text,(Func<bool>)(()=>!button.Disabled),(Action)(()=>button.EmitSignal(BaseButton.SignalName.Pressed)));
-    }).Concat(questions is { } hub ? new[]{(hub.Caption,(Func<bool>)(()=>ReferenceEquals(questions,hub)&&session is {IsExpired:false}),
+    }).Concat(new[]{("Return to 3D",(Func<bool>)(()=>xr.Running),(Action)(()=>xr.StopSession()))})
+    .Concat(questions is { } hub ? new[]{(hub.Caption,(Func<bool>)(()=>ReferenceEquals(questions,hub)&&session is {IsExpired:false}),
         (Action)(()=>{if(ReferenceEquals(questions,hub)&&session is {IsExpired:false}){OverlayChanging();hub.Show();}}))} : []).ToArray();
     void Add(Godot.Container row, string name, string text, Func<Task> operation)
     {
@@ -200,7 +209,7 @@ public partial class Main : Control
     {
         if (key != null || store == null) throw new InvalidOperationException("Local identity storage is unavailable or already occupied.");
         using var created = Identity.Create(); store.Create(created.Payload(), true); key = Identity.FromPayload(store.Snapshot!.Payload);
-        status.Text = "Key saved on this device. Connect when you are ready."; return Task.CompletedTask;
+        status.Text = "Key saved on this device."; return Connect();
     }
     async Task Connect()
     {
@@ -488,6 +497,9 @@ public partial class Main : Control
     }
     public override void _UnhandledKeyInput(InputEvent @event)
     {
+        if (@event is InputEventKey { Pressed:true, Echo:false, Keycode:Key.F9 } && modeButton.Visible && !xr.Running) {
+            modeButton.EmitSignal(BaseButton.SignalName.Pressed);GetViewport().SetInputAsHandled();return;
+        }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
             if (representations?.Visible == true) { representations.Cancel();ShowHome(); } else action?.Cancel();
             GetViewport().SetInputAsHandled(); Notify();
@@ -518,8 +530,8 @@ public partial class Main : Control
         buttons["location-operations"].Disabled |= accounts?.Setup == null || !navigationAvailable || navigation?.Space == null || !worldAccepted;
         buttons["inspect"].Disabled |= accounts?.Human == null;
         buttons["local-controllers"].Disabled|=accounts?.Human==null;
-        buttons["start-xr"].Disabled|=accounts?.Human==null || xr.Running;
-        buttons["stop-xr"].Disabled|=!xr.Running;
+        modeButton.Visible=xr.Running || accounts?.Human!=null && xr.Available;
+        modeButton.Text=xr.Running ? "Return to 3D" : "Enter VR · F9";
         UpdateOnboarding();
         UpdateWorkspace();
         xr.RefreshMenu();
@@ -601,7 +613,10 @@ public partial class Main : Control
         }
         apply.Pressed += () => { if (!apply.Disabled) backupWork = Apply(); };
         dialog.TreeExiting += () => cancelled.Cancel();
-        dialog.TreeExited += () => { if (ReferenceEquals(backupDialog, dialog)) backupDialog = null; };
+        dialog.TreeExited += () => {
+            if (ReferenceEquals(backupDialog, dialog)) backupDialog = null;
+            if (!export && key!=null && session==null && !closing && !disposed) activeAction=Run(Connect);
+        };
         dialog.CloseRequested += () => { cancelled.Cancel(); dialog.QueueFree(); }; dialog.PopupCentered(); phrase.GrabFocus();
     }
     void ReleaseIdentity()

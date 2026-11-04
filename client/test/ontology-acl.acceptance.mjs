@@ -158,8 +158,19 @@ try {
   tools = { namespace: row.namespace, anchor: fromB64url(row.anchor) }
   workspace = { target, tools }
   assert.equal(await presentation(owner), true)
-  assert.deepEqual(await readEntityEidolons(owner.identity, owner.agent, subject),
-    await readEntityEidolons(owner.identity, owner.agent, ontologySubject(tools)))
+  const ownedChoices = await readEntityEidolons(owner.identity, owner.agent, subject)
+  const toolChoices = await readEntityEidolons(owner.identity, owner.agent, ontologySubject(tools))
+  assert.deepEqual(ownedChoices.filter(choice => choice.style !== 'contents'),
+    toolChoices.filter(choice => choice.style !== 'contents'))
+  for (const [choices, reference] of [[ownedChoices, target], [toolChoices, tools]]) {
+    const contents = choices.filter(choice => choice.style === 'contents')
+    assert.deepEqual(contents.map(choice => choice.purpose).sort(), ['edition', 'playing'])
+    for (const choice of contents) {
+      assert.equal(choice.recipe.namespace, reference.namespace)
+      assert.deepEqual(choice.recipe.anchor, reference.anchor)
+      assert.equal(choice.recipe.name, 'ontology_contents')
+    }
+  }
   await assert.rejects(full(guest), error => error instanceof GoalFailure)
   const wrong = { ...workspace, target: { ...target, anchor: new Uint8Array(32) } }
   await assert.rejects(readCodeState(owner.identity, owner.agent, wrong), error => error instanceof GoalFailure)

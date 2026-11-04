@@ -1,0 +1,176 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 4-Nov-2026::21:29:09.017526 ===
+quod_scope_session[quod:broken-scope]: start failed: error:function_clause [{quod_proof_session,
+                                                                             start,
+                                                                             [{not_an_erlog_state},
+                                                                              #{scope_id =>
+                                                                                 <<128,4,
+                                                                                   171,47,
+                                                                                   199,20,
+                                                                                   162,163,
+                                                                                   97,74,
+                                                                                   184,194,
+                                                                                   19,61,
+                                                                                   66,26>>,
+                                                                                principal =>
+                                                                                 {node,
+                                                                                  <<0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,1>>},
+                                                                                request_binding =>
+                                                                                 none,
+                                                                                deadline_ms =>
+                                                                                 -576460745578,
+                                                                                read_set =>
+                                                                                 true,
+                                                                                proof_context =>
+                                                                                 {scope,
+                                                                                  <<172,3,
+                                                                                    245,76,
+                                                                                    67,192,
+                                                                                    188,76,
+                                                                                    108,199,
+                                                                                    71,186,
+                                                                                    85,254,
+                                                                                    62,32,
+                                                                                    99,199,
+                                                                                    15,10,
+                                                                                    145,59,
+                                                                                    90,209,
+                                                                                    14,164,
+                                                                                    254,194,
+                                                                                    67,169,
+                                                                                    67,9>>,
+                                                                                  <0.612.0>,
+                                                                                  #Ref<0.1649888639.4278714371.216188>,
+                                                                                  <<128,4,
+                                                                                    171,47,
+                                                                                    199,20,
+                                                                                    162,163,
+                                                                                    97,74,
+                                                                                    184,194,
+                                                                                    19,61,
+                                                                                    66,26>>}}],
+                                                                             [{file,
+                                                                               "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_proof_session.erl"},
+                                                                              {line,
+                                                                               100}]},
+                                                                            {quod_scope_session,
+                                                                             start_session,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1301}]},
+                                                                            {quod_scope_session,
+                                                                             init,
+                                                                             10,
+                                                                             [{file,
+                                                                               "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1265}]},
+                                                                            {quod_trace,
+                                                                             with_context,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_trace.erl"},
+                                                                              {line,
+                                                                               59}]}]
+[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:29:09.066485 ===
+     Process:            <0.685.0> 
+     Context:            maximum heap size reached
+     Max Heap Size:      1048576
+     Total Heap Size:    1200544
+     Kill:               true
+     Error Logger:       true
+     Message Queue Len:  0
+     GC Info:            [{old_heap_block_size,987},
+                          {heap_block_size,2199188},
+                          {mbuf_size,0},
+                          {recent_size,0},
+                          {stack_size,999630},
+                          {old_heap_size,585},
+                          {heap_size,0},
+                          {bin_vheap_size,0},
+                          {bin_vheap_block_size,46422},
+                          {bin_old_vheap_size,8},
+                          {bin_old_vheap_block_size,46422}]
+     Stacktrace:         [{erlog_int,make_var_list,2,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,1096}]},
+                          {erlog_int,make_var_list,2,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,1098}]},
+                          {erlog_lib_lists,make_list,4,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/default/lib/erlog/src/erlog_lib_lists.erl"},
+                               {line,127}]},
+                          {quod_proof_scope,guarded,1,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_proof_scope.erl"},
+                               {line,102}]},
+                          {quod_trace,'-with_span/6-fun-0-',3,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_trace.erl"},
+                               {line,81}]},
+                          {quod_trace,with_context,2,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_trace.erl"},
+                               {line,59}]},
+                          {quod_proof_scope,next,1,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_proof_scope.erl"},
+                               {line,55}]},
+                          {quod_transaction_scope,with_invocation,4,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_transaction_scope.erl"},
+                               {line,88}]}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 4-Nov-2026::21:29:10.625756 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.1061.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,role => member,
+                                       data_dir =>
+                                           "/tmp/quod_ask_E6012188AAE3CC11",
+                                       seed_peers => [],
+                                       node_id =>
+                                           <<137,6,158,113,192,70,109,156,50,6,
+                                             172,90,64,153,190,224,135,226,60,
+                                             154,72,146,73,54,151,55,41,68,29,
+                                             245,5,177>>,
+                                       external_predicate_modules => [],
+                                       batch_window_ms => 25,
+                                       detailed_consensus_metrics => false,
+                                       transaction_ttl_ms => 30000,
+                                       genesis_file =>
+                                           "/tmp/quod_ask_E6012188AAE3CC11/slow.pl",
+                                       max_proof_workers => unlimited,
+                                       max_scope_workers => 64,
+                                       proof_timeout_ms => 300000,
+                                       scope_timeout_ms => 300000,
+                                       scope_step_timeout_ms => 30000}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 3.779 seconds
+[0;32m103 tests, 0 failures
+[0m

@@ -437,19 +437,11 @@ no_follow(workbench_remove/3).
 no_follow(workbench_same/2).
 no_follow(workbench_member/2).
 no_follow(prolog_edit_goal/5).
-no_follow(prolog_edit_body/6).
-no_follow(prolog_ordered_clauses/2).
-no_follow(prolog_keyed_entries/2).
-no_follow(prolog_numbered_entries/3).
-no_follow(prolog_grouped_entries/2).
-no_follow(prolog_groups/2).
-no_follow(prolog_group_tail/4).
+no_follow(prolog_edit_body/4).
 no_follow(prolog_predicate_edits/3).
 no_follow(prolog_predicate_edit/5).
 no_follow(prolog_edit_destination/3).
-no_follow(prolog_code/3).
 no_follow(prolog_clause/2).
-no_follow(prolog_unique_clauses/2).
 no_follow(prolog_changed_suffix/4).
 no_follow(prolog_edit_tail/5).
 no_follow(prolog_retract_goals/3).
@@ -489,6 +481,8 @@ workbench_change(replace(Before, After), Program, Next) :-
       ; append(Rest, [After], Next))).
 %% Ground wire symbols and their already-materialized atoms name the same fact.
 %% Reuse the source compiler's canonical identity; never allocate input atoms.
+prolog_clause((Head :- Body), (Head :- Body)) :- !.
+prolog_clause(Head, (Head :- true)).
 workbench_same(A, B) :-
     term_variables([A, B], []), prolog_clause(A, CA), prolog_clause(B, CB),
     term_digest(CA, D), term_digest(CB, D).
@@ -535,11 +529,11 @@ prolog_edit_goal(Target, Selection, ExpectedSource, DraftSource, Edit) :-
     term_variables([Namespace, Anchor, Selection], []),
     '$quod_program_source'(ExpectedProgram, ExpectedSource),
     '$quod_program_source'(DraftProgram, DraftSource),
-    prolog_code(ExpectedProgram, ExpectedClauses, ExpectedEntries),
-    prolog_code(DraftProgram, DraftClauses, DraftEntries),
-    prolog_unique_clauses(DraftEntries, Selection),
-    prolog_edit_body(Selection, ExpectedClauses, DraftClauses,
-                     ExpectedEntries, DraftEntries, Body),
+    '$quod_program_layout'(ExpectedProgram, ExpectedLayout),
+    '$quod_program_layout'(DraftProgram, DraftLayout),
+    DraftLayout = layout(_,_,_,_,Unique),
+    (Unique == true -> true ; fail_with_reason(duplicate_clause(Selection))),
+    prolog_edit_body(Selection, ExpectedLayout, DraftLayout, Body),
     TargetEdit = Namespace::(current_ontology_identity(Namespace, Anchor),
                              transaction(Body)),
     prolog_edit_destination(Target, TargetEdit, Edit).
@@ -549,10 +543,9 @@ prolog_edit_goal(Target, Selection, ExpectedSource, DraftSource, Edit) :-
 %% (including runtime-owned and shared definitions) generate no mutations.
 %% The guard reads one coherent snapshot. Ordinary predicate version tokens
 %% protect every inspected and newly edited definition through Accept.
-prolog_edit_body(all, _, _, ExpectedEntries, DraftEntries,
-                 (Guard, Changes)) :-
+prolog_edit_body(all, layout(_,_,ExpectedClauses,ExpectedGroups,_),
+                 layout(_,_,_,DraftGroups,_), (Guard, Changes)) :-
     !,
-    prolog_ordered_clauses(ExpectedEntries, ExpectedClauses),
     '$quod_program_source'(ExpectedClauses, CanonicalExpected),
     term_digest(CanonicalExpected, ExpectedDigest),
     binary_codes(CanonicalExpected, Bytes), length(Bytes, Length),
@@ -561,46 +554,17 @@ prolog_edit_body(all, _, _, ExpectedEntries, DraftEntries,
                     ('$quod_source_chunk'(all, ChunkBytes, source_chunk(Kind, Current)),
                      term_digest(Current, Digest)), [done-ExpectedDigest])
              -> true ; fail_with_reason(edit_conflict(all))),
-    prolog_grouped_entries(ExpectedEntries, ExpectedGroups),
-    prolog_grouped_entries(DraftEntries, DraftGroups),
     prolog_predicate_edits(ExpectedGroups, DraftGroups, Goals),
     (Goals = [] -> Changes = true
     ; length(Goals, Count), prolog_goal_tree(Count, Goals, [], Changes)).
-prolog_edit_body(Indicator, ExpectedClauses, DraftClauses, ExpectedEntries, DraftEntries,
-                 (Guard, Tail)) :-
+prolog_edit_body(Indicator, layout(ExpectedClauses,ExpectedEntries,_,_,_),
+                 layout(DraftClauses,DraftEntries,_,_,_), (Guard, Tail)) :-
     '$quod_program_source'(ExpectedClauses, CanonicalExpected),
     '$quod_program_source'(DraftClauses, CanonicalDraft),
     Guard = ('$quod_predicate_source'(Indicator, CanonicalExpected)
              -> true ; fail_with_reason(edit_conflict(Indicator))),
     prolog_changed_suffix(ExpectedEntries, DraftEntries, Remove, Add),
     prolog_edit_tail(Remove, Add, Indicator, CanonicalDraft, Tail).
-
-%% Across-predicate order is presentation; within-predicate clause order is
-%% semantic. Normalize both opened baselines and subsequent saved drafts alike.
-prolog_ordered_clauses(Entries, Clauses) :-
-    prolog_keyed_entries(Entries, Sorted),
-    findall(Clause, member(_-code(_, _, Clause), Sorted), Clauses).
-
-prolog_keyed_entries(Entries, Sorted) :-
-    prolog_numbered_entries(Entries, 0, Keyed),
-    sort(Keyed, Sorted).
-prolog_numbered_entries([], _, []).
-prolog_numbered_entries([code(Source, Clause) | Entries], Index,
-                       [Indicator-code(Index, Source, Clause) | Keyed]) :-
-    '$quod_source_indicator'(Clause, Indicator),
-    Next is Index + 1,
-    prolog_numbered_entries(Entries, Next, Keyed).
-
-prolog_grouped_entries(Entries, Groups) :-
-    prolog_keyed_entries(Entries, Sorted),
-    prolog_groups(Sorted, Groups).
-prolog_groups([], []).
-prolog_groups([Indicator-code(_, Source, Clause) | Rest], [predicate(Indicator, [code(Source, Clause) | Entries]) | Groups]) :-
-    prolog_group_tail(Rest, Indicator, Entries, Tail),
-    prolog_groups(Tail, Groups).
-prolog_group_tail([Indicator-code(_, Source, Clause) | Rest], Indicator, [code(Source, Clause) | Entries], Tail) :-
-    !, prolog_group_tail(Rest, Indicator, Entries, Tail).
-prolog_group_tail(Tail, _, [], Tail).
 
 prolog_predicate_edits([], [], []).
 prolog_predicate_edits([predicate(I, Before) | Expected], [predicate(I, After) | Draft], Goals) :-
@@ -644,22 +608,6 @@ prolog_edit_destination(
                     ontology_ref(Namespace, Anchor), editable)),
     !.
 prolog_edit_destination(_, TargetEdit, TargetEdit).
-
-%% Compare ground source keys, never unify two clauses to test equality.
-%% The bridge numbers variables independently for each printed clause.
-prolog_code([], [], []).
-prolog_code([Term | Terms], [Clause | Clauses], [code(Source, Clause) | Entries]) :-
-    prolog_clause(Term, Clause),
-    '$quod_program_source'([Clause], Source),
-    prolog_code(Terms, Clauses, Entries).
-
-prolog_clause((Head :- Body), (Head :- Body)) :- !.
-prolog_clause(Head, (Head :- true)).
-
-prolog_unique_clauses(Entries, Indicator) :-
-    findall(Source, member(code(Source, _), Entries), Sources),
-    sort(Sources, Unique), length(Sources, Count),
-    (length(Unique, Count) -> true ; fail_with_reason(duplicate_clause(Indicator))).
 
 prolog_changed_suffix([code(Source, _) | Expected], [code(Source, _) | Draft], Remove, Add) :-
     !, prolog_changed_suffix(Expected, Draft, Remove, Add).

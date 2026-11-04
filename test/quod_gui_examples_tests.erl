@@ -96,7 +96,7 @@ world_library() ->
                     %% Body IDs deliberately overlap; the exact world and pilot
                     %% remain distinct in control and presentation selection.
                     ?assertMatch({ok,[_],_},read(Ctx,Ns,{physics_control,W,Human,1,{controlled,{world_pilot,W},eye}})),
-                    {ok,[#{<<"V0">> := {world_view,_,Visible,_}}],_} =
+                    {ok,[#{<<"V0">> := {world_view,_,_,Visible,_}}],_} =
                         read(Ctx,Ns,{client_world_view,W,playing,[],{0}}),
                     ?assert(lists:any(fun({mark,_,<<"terrain">>,_,_,_,_,_}) -> true;
                                         (_) -> false end,Visible)),

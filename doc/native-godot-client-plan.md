@@ -23,16 +23,16 @@ working-tree changes remain owned by their current workstreams.
 
 ## First deliverable
 
-One native executable supports two explicit launch modes: a desktop viewer and
-an OpenXR viewer. Both use the same identity, protocol and scene components.
-XR failure displays the real error; it does not silently claim desktop rendering
-as XR success.
+One native executable starts in desktop 3D and offers an in-app switch to OpenXR
+when the runtime initializes. Both use the same identity, protocol and scene
+components. Failed XR initialization leaves desktop available without presenting
+an unusable VR action.
 
-The user enters a node address and port in separate editable fields (also
-available as `--node` and `--port` launch options). A separate first-launch
-welcome step creates or imports a key offline and persists it before presenting
-the connection screen. Later launches restore the active key and skip welcome;
-connection always requires an explicit Connect action. On a network with no
+The user enters an HTTPS node origin in one editable field (also available as
+the `--node` launch option). A separate first-launch
+welcome step creates or imports a key offline and persists it before connecting.
+Later launches restore the active key and authenticate automatically; a failed or
+expired session offers explicit reconnection. On a network with no
 account, a focused account step uses the existing signup and lobby actions.
 The lobby opens with its menu closed. Browser-compatible encrypted backup
 import/export remains optional under Key & backups. The client authenticates and renders the
@@ -182,10 +182,10 @@ compiled library is outside this scope; shared fixtures constrain drift now.
 
 ### XR
 
-Use Godot 4 native OpenXR and the Mobile renderer as the initial configuration,
+Use Godot 4 native OpenXR with the existing GL Compatibility renderer,
 following [Godot's XR setup](https://docs.godotengine.org/en/stable/tutorials/xr/setting_up_xr.html).
-Pin the exact stable engine, export templates, Rust dependencies and compatible
-GDExtension API before implementation. Do not depend on an unpinned latest build.
+Pin the exact stable engine, export templates and .NET toolchain before
+implementation. Do not depend on an unpinned latest build.
 
 Use one reusable `XROrigin3D` rig with camera and two controllers. Keep the rig
 independent of Quod authentication and scene projection. Use a deliberate

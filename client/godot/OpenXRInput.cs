@@ -92,6 +92,8 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     IControllerSource? pointerSource;
     public ControllerInput Router { get; private set; }=null!;
     public bool Running=>active;
+    public bool Available=>XRServer.FindInterface("OpenXR") is OpenXRInterface candidate && candidate.IsInitialized() &&
+        candidate.GetSessionState() is not (OpenXRInterface.SessionState.Stopping or OpenXRInterface.SessionState.LossPending or OpenXRInterface.SessionState.Exiting);
     public bool WorkspaceVisible=>workspaceShown;
     public bool MovingWorkspace=>movingWorkspace;
     public int MenuRedraws { get; private set; }
@@ -120,7 +122,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     {
         if(disposed || shuttingDown || active)return active;
         xr=XRServer.FindInterface("OpenXR") as OpenXRInterface;
-        if(xr==null || (!xr.IsInitialized() && !xr.Initialize())) { Status="OpenXR unavailable. Launch with --xr-mode on and a supported installed runtime.";Changed?.Invoke();return false; }
+        if(!Available || xr==null) { Status="OpenXR unavailable. Connect a supported headset and restart Quod.";Changed?.Invoke();return false; }
         xr.SessionFocussed+=Focused;xr.SessionVisible+=Unfocused;xr.SessionSynchronized+=Unfocused;xr.SessionStopping+=Stopping;
         xr.SessionLossPending+=Stopping;xr.InstanceExiting+=Stopping;xr.PoseRecentered+=Recentered;Subscriptions+=7;
         lifecycleSubscribed=true;xr.SetActionSetActive("quod_inputs",true);

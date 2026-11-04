@@ -1,0 +1,14 @@
+profile parse_expected prove_us=5721 deref_us=286
+profile parse_draft prove_us=5352 deref_us=346
+profile code_expected prove_us=147502 deref_us=727
+profile code_draft prove_us=181858 deref_us=749
+profile unique prove_us=305151 deref_us=0
+profile body prove_us=1705450 deref_us=4
+profile ordered prove_us=402491 deref_us=300
+profile canonical prove_us=8617 deref_us=1
+profile digest prove_us=128 deref_us=1
+profile grouped_expected prove_us=274404 deref_us=497
+profile grouped_draft prove_us=275142 deref_us=558
+profile predicate_edits prove_us=117531 deref_us=2
+profile goals 2
+profile_result {3504317,ok}

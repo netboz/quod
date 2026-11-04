@@ -157,7 +157,8 @@ post_json(Req0, State, Handler) ->
 
 read_json(Req0, Handler) ->
     %% Preserve Cowboy's existing 15000 ms body-read period as one absolute
-    %% deadline across streamed chunks; auto mode has no aggregate byte quota.
+    %% deadline across streamed chunks. Its default chunk length is not an
+    %% aggregate request quota.
     Deadline = erlang:monotonic_time(millisecond) + 15000,
     case read_body(Req0, Deadline, []) of
         {ok, Body, Req} ->
@@ -181,8 +182,7 @@ read_body(Req0, Deadline, Chunks) ->
     case Remaining > 0 of
         false -> {timeout, Req0};
         true ->
-            try cowboy_req:read_body(Req0, #{length => auto, period => infinity,
-                                           timeout => Remaining}) of
+            try cowboy_req:read_body(Req0, #{timeout => Remaining}) of
                 {ok, Body, Req} ->
                     {ok, iolist_to_binary(lists:reverse([Body | Chunks])), Req};
                 {more, Body, Req} -> read_body(Req, Deadline, [Body | Chunks])

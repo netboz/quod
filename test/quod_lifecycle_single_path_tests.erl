@@ -148,7 +148,7 @@ default_lobby_physics_startup_test_() ->
                     {agent_hosted, physics_authority, Node, 1, Key})),
                 View = Scoped({client_world_view,personal_lobby,playing,[],{0}}),
                 {ok,_,{normalized,{read,_,{answers,_,[Scene]}}}} = submit_lobby(User,read,View),
-                {ok,[{<<"V0">>,{world_view,_,Marks,_}}]} = quod_client_result:decode_binding(Scene),
+                {ok,[{<<"V0">>,{world_view,_,_,Marks,_}}]} = quod_client_result:decode_binding(Scene),
                 ?assert(lists:any(fun({mark,_,_,_,{body_pose,_,_},_,_,_}) -> true; (_) -> false end,Marks)),
                 [?assert(lists:keymember(quod_ct:scene_mark_id(Marks,
                     {entity_ref,Ns,Anchor,Entity},Part),2,Marks)) || {Entity,Part} <-
@@ -773,10 +773,10 @@ m3a_recursive(User,C,S0,S1,S2) ->
     m2_edit(User,{assertz,{space_member,I2,S1}}),
     {scene,_,Cycles}=Read(), ?assertEqual(2,length([E||E={exposure,_,_,_,_,_,_,_,cycle}<-Cycles])),
     m2_edit(User,{retract,{space_member,I2,S1}}),
-    [ContentsRecipe]=[R||R={space_exterior_recipe,contents,space_contents}<-
+    [ContentsRecipe]=[R||R={':-',{class_eidolon,space,_,contents,_},_}<-
         quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
     m2_edit(User,{retract,ContentsRecipe}),
-    ?assertEqual({world_view,S0,[],unavailable},
+    ?assertMatch({world_view,S0,_,[],unavailable},
         m1a_read(User,{client_world_view,I0,playing,[],{0}})),
     m2_edit(User,{assertz,ContentsRecipe}),
     {scene,_,Independent}=Read(),
@@ -816,7 +816,7 @@ m2_create_goal(C,Ns,{operation_view,Name,Subject,Revision,_,_,_,Control,_,_},Fie
 m2_failed_creation(C,_User,Ns,Offer,Fields,Owners) ->
     Before=m2_state(Owners),{{failed,_},_}=m2_create(C,Ns,Offer,Fields),?assertEqual(Before,m2_state(Owners)).
 m2_assert_scene(User,Space,Subject,Kind) ->
-    {world_view,Space,Marks,nonphysical}=m1a_read(User,{client_world_view,element(4,Space),playing,[],{0}}),
+    {world_view,Space,_,Marks,nonphysical}=m1a_read(User,{client_world_view,element(4,Space),playing,[],{0}}),
     {entity_ref,Ns,Anchor,Entity}=Subject,
     [Root]=[Id||{mark,Id,<<"group">>,[],_,_,_,{depicts,Ns0,A0,E0}}<-Marks,
         {Ns0,A0,E0}=:={Ns,Anchor,Entity}],
@@ -917,14 +917,14 @@ m1a_setup(User = #{reference := Owner = {agent_instance_ref, Ns, Anchor, me}}) -
     ?assertEqual(unplaced, m1a_read(User, {space_location, Space, {0}})),
     ?assertMatch({placed, Room, {transform, 0,0,0,0,0,0}}, m1a_read(User, {space_location, personal, {0}})),
     ?assertEqual(Owner, m1a_read(User, {attribute, Space, owner, {0}})),
-    ?assertEqual({world_view,Room,[],nonphysical}, m1a_read(User,{client_world_view,Space,playing,[],{0}})),
+    ?assertMatch({world_view,Room,_,[],nonphysical}, m1a_read(User,{client_world_view,Space,playing,[],{0}})),
     ?assertEqual(Room,m1a_read(User,{account_navigation,{0},[playing,edition]})),
     {ok,[#{'G':=GuiPin}],_}=quod_prolog:prove_ro(Ns,{rendering_vocabulary,<<"quod:gui">>,{'G'}}),
     {ok,ChangedPin,{normalized,{committed,_,_}}}=submit_lobby(User,execute,
         {transaction,{',',{retract,{rendering_vocabulary,<<"quod:gui">>,GuiPin}},
                          {assertz,{rendering_vocabulary,<<"quod:gui">>,<<0:256>>}}}}),
     m1a_complete(ChangedPin),
-    ?assertEqual({world_view,Room,[],unavailable},m1a_read(User,{client_world_view,Space,playing,[],{0}})),
+    ?assertMatch({world_view,Room,_,[],unavailable},m1a_read(User,{client_world_view,Space,playing,[],{0}})),
     {ok,RestoredPin,{normalized,{committed,_,_}}}=submit_lobby(User,execute,
         {transaction,{',',{retract,{rendering_vocabulary,<<"quod:gui">>,<<0:256>>}},
                          {assertz,{rendering_vocabulary,<<"quod:gui">>,GuiPin}}}}),
@@ -1985,7 +1985,7 @@ personal_lobbies_use_shared_creation_and_recovery(
             quod_client_goal_ingress:submit(SceneBytes, SceneSig),
         {ok, ScenePairs} = quod_client_result:decode_binding(SceneBinding),
         ?assertMatch({world_view, {entity_ref, FirstLobby, FirstAnchor, personal_lobby},
-                      [_ | _], recovering}, proplists:get_value(<<"V0">>, ScenePairs)),
+                      _, [_ | _], recovering}, proplists:get_value(<<"V0">>, ScenePairs)),
         {DeniedBytes, DeniedSig} = lobby_user_request(Second, read, SceneGoal),
         ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
                      quod_client_goal_ingress:submit(DeniedBytes, DeniedSig)),

@@ -1,0 +1,9 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_prolog_ontology_tests: complete_edit_groups_predicates_and_preserves_unchanged_contents_test...[4.577 s] ok
+=======================================================
+  Test passed.

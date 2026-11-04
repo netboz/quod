@@ -547,7 +547,7 @@ era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_() 
 fixture_transfer_page(Store, Send) ->
     %% Deliberately small test envelope forces the existing cursor to retain
     %% a partially streamed group without constructing multi-gigabyte fixtures.
-    quod_catchup:transfer_page(Store, Send, {65536, 65536}, [], 0).
+    quod_catchup:test_transfer_page(Store, Send, {65536, 65536}).
 
 transfer_all_pages(Store, Send, Receive, Count) ->
     {ok, Parts, Next} = fixture_transfer_page(Store, Send),
@@ -1893,7 +1893,10 @@ reader_for_operation(Endpoint, Op) ->
 
 terminal_frame_lookahead_preserves_every_part_test() ->
     Part = {entry, <<1,2,3>>}, End = end_group,
-    Size = fun quod_catchup:part_body_size/1,
+    Size = fun(P) ->
+        {ok, <<131, Body/binary>>} = quod_safe_term:encode_canonical(P, unlimited),
+        byte_size(Body)
+    end,
     More = Size(Part) - 1, Done = Size(Part) + Size(End),
     ?assertEqual({ok, [Part, End], done},
         quod_catchup:test_transfer_parts([Part, End], {More, Done})),
@@ -1901,6 +1904,6 @@ terminal_frame_lookahead_preserves_every_part_test() ->
     Allowances = {Size(Prefix) + More, Size(Prefix) + Done - 1},
     {ok, [Prefix], Retained} = quod_catchup:test_transfer_parts(Parts, Allowances),
     ?assertEqual({ok, [Part, End], done},
-        quod_catchup:transfer_page(undefined, Retained, {More, Done}, [], 0)),
+        quod_catchup:test_transfer_page(undefined, Retained, {More, Done})),
     ?assertEqual({error, frame_unrepresentable},
         quod_catchup:test_transfer_parts([Part, End], {More, Done - 1})).

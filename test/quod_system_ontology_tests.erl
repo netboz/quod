@@ -23,9 +23,9 @@ catalogue_requires_exact_existing_identity_test() ->
                               [{system_ontology, {':', quod, root}, Anchor}]),
     assert_one_malformed(InvalidRoot),
     Overlong = <<"quod:", (binary:copy(<<"x">>, 129))/binary>>,
-    {ok, [], InvalidName} = quod_system_ontology:validate_rows(
-                              [{system_ontology, Overlong, Anchor}]),
-    assert_one_malformed(InvalidName).
+    ?assertMatch({ok, [#{namespace := Overlong, anchor := Anchor}], #{}},
+                 quod_system_ontology:validate_rows(
+                   [{system_ontology, Overlong, Anchor}])).
 
 catalogue_rejects_extra_fields_and_duplicates_test() ->
     Anchor = <<2:256>>,

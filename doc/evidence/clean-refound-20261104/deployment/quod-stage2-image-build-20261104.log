@@ -1,0 +1,621 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.39kB done
+#1 DONE 0.1s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.7s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/debian:trixie-slim
+#4 ...
+
+#5 [internal] load metadata for docker.io/library/erlang:28
+#5 DONE 0.0s
+
+#6 [internal] load metadata for docker.io/library/rust:1.90.0-bookworm
+#6 DONE 0.6s
+
+#4 [internal] load metadata for docker.io/library/debian:trixie-slim
+#4 DONE 3.1s
+
+#7 [internal] load .dockerignore
+#7 transferring context: 211B done
+#7 DONE 0.1s
+
+#8 [builder  1/14] FROM docker.io/library/erlang:28
+#8 DONE 0.0s
+
+#9 [rust-toolchain 1/1] FROM docker.io/library/rust:1.90.0-bookworm@sha256:3914072ca0c3b8aad871db9169a651ccfce30cf58303e5d6f2db16d1d8a7e58f
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context: 25.78MB 0.4s done
+#10 DONE 0.6s
+
+#11 [runtime 1/6] FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+#11 resolve docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 0.0s done
+#11 sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 8.97kB / 8.97kB done
+#11 sha256:1e1a22175fbf1b32157ddaf0219e1db4e5401fab2b94ed285add64d18587cd2d 1.02kB / 1.02kB done
+#11 sha256:394ffa2d2ac8f5c9f45148f22bad3587429bceb19c93b88e8595f1e3f7892853 451B / 451B done
+#11 sha256:6fc242d221a673263eabd14a9ad9584d3177c96e5cb504c891497338e2f912f5 29.86MB / 29.86MB 0.5s
+#11 ...
+
+#12 [builder  3/14] COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+#12 CACHED
+
+#13 [builder  4/14] RUN apt-get update && apt-get install -y --no-install-recommends git     && rm -rf /var/lib/apt/lists/*
+#13 CACHED
+
+#14 [builder  2/14] COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+#14 CACHED
+
+#15 [builder  5/14] WORKDIR /build
+#15 CACHED
+
+#11 [runtime 1/6] FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+#11 sha256:6fc242d221a673263eabd14a9ad9584d3177c96e5cb504c891497338e2f912f5 29.86MB / 29.86MB 0.5s done
+#11 extracting sha256:6fc242d221a673263eabd14a9ad9584d3177c96e5cb504c891497338e2f912f5
+#11 ...
+
+#16 [builder  6/14] COPY rebar.config rebar.lock ./
+#16 DONE 0.3s
+
+#11 [runtime 1/6] FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+#11 ...
+
+#17 [builder  7/14] COPY native/quod_physics/ native/quod_physics/
+#17 DONE 0.2s
+
+#11 [runtime 1/6] FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+#11 ...
+
+#18 [builder  8/14] COPY scripts/build-physics.sh scripts/build-physics.sh
+#18 DONE 0.2s
+
+#11 [runtime 1/6] FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+#11 extracting sha256:6fc242d221a673263eabd14a9ad9584d3177c96e5cb504c891497338e2f912f5 1.5s done
+#11 DONE 2.3s
+
+#19 [builder  9/14] RUN mkdir -p src     && printf '{application, quod, [{vsn,"0.0.0"},{registered,[]},{applications,[kernel,stdlib]}]}.\n'          > src/quod.app.src     && rebar3 as prod compile     && rm -rf src _build/prod/lib/quod
+#19 0.983 ===> Verifying dependencies...
+#19 1.969 ===> Fetching cowboy v2.19.0
+#19 2.062 ===> Fetching erlog (from {git,"https://github.com/netboz/erlog.git",
+#19 2.062                  {ref,"79b3874617a4eb9f76d5089a3fc908667e605e8a"}})
+#19 3.206 ===> Fetching gproc v0.9.1
+#19 3.249 ===> Fetching hocon (from {git,"https://github.com/emqx/hocon.git",
+#19 3.249                  {ref,"e41c46fb8ddc34ca50500322eee81d2758606a22"}})
+#19 4.513 ===> Fetching opentelemetry v1.7.0
+#19 4.555 ===> Fetching opentelemetry_api v1.5.0
+#19 4.592 ===> Fetching opentelemetry_exporter v1.10.0
+#19 4.640 ===> Fetching prometheus v4.11.0
+#19 4.681 ===> Fetching prometheus_httpd v2.1.15
+#19 4.707 ===> Fetching quic (from {git,"https://github.com/netboz/erlang_quic.git",
+#19 4.707                 {ref,"9832288e2fca0c848bc6453cfb4ee7cbfd59ddd5"}})
+#19 ...
+
+#20 [runtime 2/6] RUN apt-get update && apt-get install -y --no-install-recommends         libncurses6 libstdc++6 libssl3 ca-certificates curl openssl     && rm -rf /var/lib/apt/lists/*
+#20 0.562 Get:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+#20 0.578 Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+#20 0.584 Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+#20 0.596 Get:4 http://deb.debian.org/debian trixie/main amd64 Packages [9678 kB]
+#20 0.709 Get:5 http://deb.debian.org/debian trixie-updates/main amd64 Packages [1108 B]
+#20 0.709 Get:6 http://deb.debian.org/debian-security trixie-security/main amd64 Packages [297 kB]
+#20 1.383 Fetched 10.2 MB in 1s (12.1 MB/s)
+#20 1.383 Reading package lists...
+#20 1.927 Reading package lists...
+#20 2.529 Building dependency tree...
+#20 2.700 Reading state information...
+#20 3.000 libstdc++6 is already the newest version (14.2.0-19).
+#20 3.000 libstdc++6 set to manually installed.
+#20 3.000 libssl3t64 is already the newest version (3.5.7-1~deb13u3).
+#20 3.000 libssl3t64 set to manually installed.
+#20 3.000 The following additional packages will be installed:
+#20 3.000   libbrotli1 libcom-err2 libcurl4t64 libffi8 libgnutls30t64 libgssapi-krb5-2
+#20 3.000   libidn2-0 libk5crypto3 libkeyutils1 libkrb5-3 libkrb5support0 libldap2
+#20 3.001   libnghttp2-14 libnghttp3-9 libp11-kit0 libpsl5t64 librtmp1 libsasl2-2
+#20 3.002   libsasl2-modules-db libssh2-1t64 libtasn1-6 libunistring5
+#20 3.005 Suggested packages:
+#20 3.005   gnutls-bin krb5-doc krb5-user
+#20 3.005 Recommended packages:
+#20 3.005   bash-completion krb5-locales libldap-common libgpm2 publicsuffix
+#20 3.005   libsasl2-modules
+#20 3.166 The following NEW packages will be installed:
+#20 3.166   ca-certificates curl libbrotli1 libcom-err2 libcurl4t64 libffi8
+#20 3.166   libgnutls30t64 libgssapi-krb5-2 libidn2-0 libk5crypto3 libkeyutils1
+#20 3.166   libkrb5-3 libkrb5support0 libldap2 libncurses6 libnghttp2-14 libnghttp3-9
+#20 3.167   libp11-kit0 libpsl5t64 librtmp1 libsasl2-2 libsasl2-modules-db libssh2-1t64
+#20 3.168   libtasn1-6 libunistring5 openssl
+#20 3.211 0 upgraded, 26 newly installed, 0 to remove and 3 not upgraded.
+#20 3.211 Need to get 6683 kB of archives.
+#20 3.211 After this operation, 18.1 MB of additional disk space will be used.
+#20 3.211 Get:1 http://deb.debian.org/debian-security trixie-security/main amd64 openssl amd64 3.5.7-1~deb13u3 [1508 kB]
+#20 3.248 Get:2 http://deb.debian.org/debian-security trixie-security/main amd64 ca-certificates all 20250419+deb13u1 [161 kB]
+#20 3.249 Get:3 http://deb.debian.org/debian-security trixie-security/main amd64 libbrotli1 amd64 1.1.0-2+deb13u1 [304 kB]
+#20 3.252 Get:4 http://deb.debian.org/debian trixie/main amd64 libkrb5support0 amd64 1.21.3-5+deb13u1 [33.1 kB]
+#20 3.252 Get:5 http://deb.debian.org/debian trixie/main amd64 libcom-err2 amd64 1.47.2-3+b12 [25.0 kB]
+#20 3.253 Get:6 http://deb.debian.org/debian trixie/main amd64 libk5crypto3 amd64 1.21.3-5+deb13u1 [81.2 kB]
+#20 3.255 Get:7 http://deb.debian.org/debian trixie/main amd64 libkeyutils1 amd64 1.6.3-6 [9456 B]
+#20 3.255 Get:8 http://deb.debian.org/debian trixie/main amd64 libkrb5-3 amd64 1.21.3-5+deb13u1 [326 kB]
+#20 3.257 Get:9 http://deb.debian.org/debian trixie/main amd64 libgssapi-krb5-2 amd64 1.21.3-5+deb13u1 [138 kB]
+#20 3.258 Get:10 http://deb.debian.org/debian trixie/main amd64 libunistring5 amd64 1.3-2 [477 kB]
+#20 3.261 Get:11 http://deb.debian.org/debian trixie/main amd64 libidn2-0 amd64 2.3.8-2 [109 kB]
+#20 3.263 Get:12 http://deb.debian.org/debian trixie/main amd64 libsasl2-modules-db amd64 2.1.28+dfsg1-9 [19.8 kB]
+#20 3.263 Get:13 http://deb.debian.org/debian trixie/main amd64 libsasl2-2 amd64 2.1.28+dfsg1-9 [57.5 kB]
+#20 3.264 Get:14 http://deb.debian.org/debian trixie/main amd64 libldap2 amd64 2.6.10+dfsg-1 [194 kB]
+#20 3.266 Get:15 http://deb.debian.org/debian trixie/main amd64 libnghttp2-14 amd64 1.64.0-1.1+deb13u1 [76.2 kB]
+#20 3.266 Get:16 http://deb.debian.org/debian trixie/main amd64 libnghttp3-9 amd64 1.8.0-1 [67.7 kB]
+#20 3.267 Get:17 http://deb.debian.org/debian trixie/main amd64 libpsl5t64 amd64 0.21.2-1.1+b1 [57.2 kB]
+#20 3.270 Get:18 http://deb.debian.org/debian trixie/main amd64 libffi8 amd64 3.4.8-2 [24.1 kB]
+#20 3.273 Get:19 http://deb.debian.org/debian trixie/main amd64 libp11-kit0 amd64 0.25.5-3 [425 kB]
+#20 3.275 Get:20 http://deb.debian.org/debian trixie/main amd64 libtasn1-6 amd64 4.20.0-2+deb13u1 [50.1 kB]
+#20 3.276 Get:21 http://deb.debian.org/debian trixie/main amd64 libgnutls30t64 amd64 3.8.9-3+deb13u4 [1469 kB]
+#20 3.289 Get:22 http://deb.debian.org/debian trixie/main amd64 librtmp1 amd64 2.4+20151223.gitfa8646d.1-2+b5 [58.8 kB]
+#20 3.291 Get:23 http://deb.debian.org/debian trixie/main amd64 libssh2-1t64 amd64 1.11.1-1+deb13u2 [245 kB]
+#20 3.297 Get:24 http://deb.debian.org/debian-security trixie-security/main amd64 libcurl4t64 amd64 8.14.1-2+deb13u7 [392 kB]
+#20 3.302 Get:25 http://deb.debian.org/debian-security trixie-security/main amd64 curl amd64 8.14.1-2+deb13u7 [270 kB]
+#20 3.303 Get:26 http://deb.debian.org/debian trixie/main amd64 libncurses6 amd64 6.5+20250216-2 [105 kB]
+#20 3.459 debconf: unable to initialize frontend: Dialog
+#20 3.459 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#20 3.459 debconf: falling back to frontend: Readline
+#20 3.459 debconf: unable to initialize frontend: Readline
+#20 3.459 debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 26.)
+#20 3.459 debconf: falling back to frontend: Teletype
+#20 3.466 debconf: unable to initialize frontend: Teletype
+#20 3.466 debconf: (This frontend requires a controlling tty.)
+#20 3.466 debconf: falling back to frontend: Noninteractive
+#20 4.134 Preconfiguring packages ...
+#20 4.218 Fetched 6683 kB in 0s (57.3 MB/s)
+#20 4.258 Selecting previously unselected package openssl.
+#20 4.258 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 4951 files and directories currently installed.)
+#20 4.258 Preparing to unpack .../00-openssl_3.5.7-1~deb13u3_amd64.deb ...
+#20 4.272 Unpacking openssl (3.5.7-1~deb13u3) ...
+#20 4.387 Selecting previously unselected package ca-certificates.
+#20 4.387 Preparing to unpack .../01-ca-certificates_20250419+deb13u1_all.deb ...
+#20 4.396 Unpacking ca-certificates (20250419+deb13u1) ...
+#20 4.482 Selecting previously unselected package libbrotli1:amd64.
+#20 4.483 Preparing to unpack .../02-libbrotli1_1.1.0-2+deb13u1_amd64.deb ...
+#20 4.497 Unpacking libbrotli1:amd64 (1.1.0-2+deb13u1) ...
+#20 4.589 Selecting previously unselected package libkrb5support0:amd64.
+#20 4.590 Preparing to unpack .../03-libkrb5support0_1.21.3-5+deb13u1_amd64.deb ...
+#20 4.597 Unpacking libkrb5support0:amd64 (1.21.3-5+deb13u1) ...
+#20 4.663 Selecting previously unselected package libcom-err2:amd64.
+#20 4.664 Preparing to unpack .../04-libcom-err2_1.47.2-3+b12_amd64.deb ...
+#20 4.672 Unpacking libcom-err2:amd64 (1.47.2-3+b12) ...
+#20 4.757 Selecting previously unselected package libk5crypto3:amd64.
+#20 4.758 Preparing to unpack .../05-libk5crypto3_1.21.3-5+deb13u1_amd64.deb ...
+#20 4.766 Unpacking libk5crypto3:amd64 (1.21.3-5+deb13u1) ...
+#20 4.848 Selecting previously unselected package libkeyutils1:amd64.
+#20 4.850 Preparing to unpack .../06-libkeyutils1_1.6.3-6_amd64.deb ...
+#20 4.858 Unpacking libkeyutils1:amd64 (1.6.3-6) ...
+#20 4.966 Selecting previously unselected package libkrb5-3:amd64.
+#20 4.967 Preparing to unpack .../07-libkrb5-3_1.21.3-5+deb13u1_amd64.deb ...
+#20 4.978 Unpacking libkrb5-3:amd64 (1.21.3-5+deb13u1) ...
+#20 ...
+
+#19 [builder  9/14] RUN mkdir -p src     && printf '{application, quod, [{vsn,"0.0.0"},{registered,[]},{applications,[kernel,stdlib]}]}.\n'          > src/quod.app.src     && rebar3 as prod compile     && rm -rf src _build/prod/lib/quod
+#19 5.999 ===> Fetching accept v0.3.7
+#19 6.027 ===> Fetching cowlib v2.21.0
+#19 6.072 ===> Fetching getopt v1.0.3
+#19 6.097 ===> Fetching grpcbox v0.18.0
+#19 6.142 ===> Fetching quantile_estimator v0.2.1
+#19 6.184 ===> Fetching rebar3_hex v7.4.0
+#19 6.242 ===> Fetching hex_core v0.21.1
+#19 6.279 ===> Fetching verl v1.1.1
+#19 6.326 ===> Analyzing applications...
+#19 6.653 ===> Compiling verl
+#19 6.961 ===> Compiling hex_core
+#19 8.485 ===> Compiling rebar3_hex
+#19 8.839 ===> Fetching ranch v2.3.0
+#19 8.872 ===> Fetching tls_certificate_check v1.33.0
+#19 8.905 ===> Fetching typerefl (from {git,"https://github.com/ieQu1/typerefl.git",
+#19 8.905                     {ref,"7b169a4b920c6d652e2ac165f6e669245cc9a3ac"}})
+#19 9.681 ===> Fetching acceptor_pool v1.0.1
+#19 9.697 ===> Fetching chatterbox v0.16.0
+#19 9.723 ===> Fetching ctx v0.6.0
+#19 9.737 ===> Fetching erlang_qq (from {git,"https://github.com/k32/erlang_qq.git",
+#19 9.737                      {ref,"21fe46d8c03ce2f65733aadf3ad97b7bb7edea28"}})
+#19 10.40 ===> Fetching ssl_verify_fun v1.1.7
+#19 ...
+
+#20 [runtime 2/6] RUN apt-get update && apt-get install -y --no-install-recommends         libncurses6 libstdc++6 libssl3 ca-certificates curl openssl     && rm -rf /var/lib/apt/lists/*
+#20 5.104 Selecting previously unselected package libgssapi-krb5-2:amd64.
+#20 5.105 Preparing to unpack .../08-libgssapi-krb5-2_1.21.3-5+deb13u1_amd64.deb ...
+#20 5.114 Unpacking libgssapi-krb5-2:amd64 (1.21.3-5+deb13u1) ...
+#20 5.209 Selecting previously unselected package libunistring5:amd64.
+#20 5.209 Preparing to unpack .../09-libunistring5_1.3-2_amd64.deb ...
+#20 5.233 Unpacking libunistring5:amd64 (1.3-2) ...
+#20 5.373 Selecting previously unselected package libidn2-0:amd64.
+#20 5.373 Preparing to unpack .../10-libidn2-0_2.3.8-2_amd64.deb ...
+#20 5.389 Unpacking libidn2-0:amd64 (2.3.8-2) ...
+#20 5.460 Selecting previously unselected package libsasl2-modules-db:amd64.
+#20 5.461 Preparing to unpack .../11-libsasl2-modules-db_2.1.28+dfsg1-9_amd64.deb ...
+#20 5.469 Unpacking libsasl2-modules-db:amd64 (2.1.28+dfsg1-9) ...
+#20 5.529 Selecting previously unselected package libsasl2-2:amd64.
+#20 5.529 Preparing to unpack .../12-libsasl2-2_2.1.28+dfsg1-9_amd64.deb ...
+#20 5.537 Unpacking libsasl2-2:amd64 (2.1.28+dfsg1-9) ...
+#20 5.611 Selecting previously unselected package libldap2:amd64.
+#20 5.611 Preparing to unpack .../13-libldap2_2.6.10+dfsg-1_amd64.deb ...
+#20 5.618 Unpacking libldap2:amd64 (2.6.10+dfsg-1) ...
+#20 5.702 Selecting previously unselected package libnghttp2-14:amd64.
+#20 5.702 Preparing to unpack .../14-libnghttp2-14_1.64.0-1.1+deb13u1_amd64.deb ...
+#20 5.710 Unpacking libnghttp2-14:amd64 (1.64.0-1.1+deb13u1) ...
+#20 5.784 Selecting previously unselected package libnghttp3-9:amd64.
+#20 5.786 Preparing to unpack .../15-libnghttp3-9_1.8.0-1_amd64.deb ...
+#20 5.794 Unpacking libnghttp3-9:amd64 (1.8.0-1) ...
+#20 5.861 Selecting previously unselected package libpsl5t64:amd64.
+#20 5.863 Preparing to unpack .../16-libpsl5t64_0.21.2-1.1+b1_amd64.deb ...
+#20 5.872 Unpacking libpsl5t64:amd64 (0.21.2-1.1+b1) ...
+#20 5.950 Selecting previously unselected package libffi8:amd64.
+#20 5.950 Preparing to unpack .../17-libffi8_3.4.8-2_amd64.deb ...
+#20 5.965 Unpacking libffi8:amd64 (3.4.8-2) ...
+#20 6.031 Selecting previously unselected package libp11-kit0:amd64.
+#20 6.031 Preparing to unpack .../18-libp11-kit0_0.25.5-3_amd64.deb ...
+#20 6.038 Unpacking libp11-kit0:amd64 (0.25.5-3) ...
+#20 6.163 Selecting previously unselected package libtasn1-6:amd64.
+#20 6.163 Preparing to unpack .../19-libtasn1-6_4.20.0-2+deb13u1_amd64.deb ...
+#20 6.185 Unpacking libtasn1-6:amd64 (4.20.0-2+deb13u1) ...
+#20 6.318 Selecting previously unselected package libgnutls30t64:amd64.
+#20 6.322 Preparing to unpack .../20-libgnutls30t64_3.8.9-3+deb13u4_amd64.deb ...
+#20 6.348 Unpacking libgnutls30t64:amd64 (3.8.9-3+deb13u4) ...
+#20 6.483 Selecting previously unselected package librtmp1:amd64.
+#20 6.484 Preparing to unpack .../21-librtmp1_2.4+20151223.gitfa8646d.1-2+b5_amd64.deb ...
+#20 6.498 Unpacking librtmp1:amd64 (2.4+20151223.gitfa8646d.1-2+b5) ...
+#20 6.569 Selecting previously unselected package libssh2-1t64:amd64.
+#20 6.571 Preparing to unpack .../22-libssh2-1t64_1.11.1-1+deb13u2_amd64.deb ...
+#20 6.579 Unpacking libssh2-1t64:amd64 (1.11.1-1+deb13u2) ...
+#20 6.652 Selecting previously unselected package libcurl4t64:amd64.
+#20 6.655 Preparing to unpack .../23-libcurl4t64_8.14.1-2+deb13u7_amd64.deb ...
+#20 6.663 Unpacking libcurl4t64:amd64 (8.14.1-2+deb13u7) ...
+#20 6.753 Selecting previously unselected package curl.
+#20 6.755 Preparing to unpack .../24-curl_8.14.1-2+deb13u7_amd64.deb ...
+#20 6.766 Unpacking curl (8.14.1-2+deb13u7) ...
+#20 6.842 Selecting previously unselected package libncurses6:amd64.
+#20 6.842 Preparing to unpack .../25-libncurses6_6.5+20250216-2_amd64.deb ...
+#20 6.849 Unpacking libncurses6:amd64 (6.5+20250216-2) ...
+#20 6.937 Setting up libkeyutils1:amd64 (1.6.3-6) ...
+#20 6.968 Setting up libbrotli1:amd64 (1.1.0-2+deb13u1) ...
+#20 6.991 Setting up libnghttp2-14:amd64 (1.64.0-1.1+deb13u1) ...
+#20 7.021 Setting up libcom-err2:amd64 (1.47.2-3+b12) ...
+#20 7.064 Setting up libkrb5support0:amd64 (1.21.3-5+deb13u1) ...
+#20 7.101 Setting up libsasl2-modules-db:amd64 (2.1.28+dfsg1-9) ...
+#20 7.124 Setting up libncurses6:amd64 (6.5+20250216-2) ...
+#20 7.145 Setting up libunistring5:amd64 (1.3-2) ...
+#20 7.176 Setting up libk5crypto3:amd64 (1.21.3-5+deb13u1) ...
+#20 7.201 Setting up libsasl2-2:amd64 (2.1.28+dfsg1-9) ...
+#20 7.230 Setting up libnghttp3-9:amd64 (1.8.0-1) ...
+#20 7.261 Setting up libffi8:amd64 (3.4.8-2) ...
+#20 7.292 Setting up libtasn1-6:amd64 (4.20.0-2+deb13u1) ...
+#20 7.329 Setting up libkrb5-3:amd64 (1.21.3-5+deb13u1) ...
+#20 7.362 Setting up libssh2-1t64:amd64 (1.11.1-1+deb13u2) ...
+#20 7.384 Setting up openssl (3.5.7-1~deb13u3) ...
+#20 7.431 Setting up libldap2:amd64 (2.6.10+dfsg-1) ...
+#20 7.462 Setting up libidn2-0:amd64 (2.3.8-2) ...
+#20 7.508 Setting up ca-certificates (20250419+deb13u1) ...
+#20 7.589 debconf: unable to initialize frontend: Dialog
+#20 7.589 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#20 7.589 debconf: falling back to frontend: Readline
+#20 7.589 debconf: unable to initialize frontend: Readline
+#20 7.589 debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8.)
+#20 7.589 debconf: falling back to frontend: Teletype
+#20 7.594 debconf: unable to initialize frontend: Teletype
+#20 7.594 debconf: (This frontend requires a controlling tty.)
+#20 7.594 debconf: falling back to frontend: Noninteractive
+#20 8.117 Updating certificates in /etc/ssl/certs...
+#20 8.688 148 added, 0 removed; done.
+#20 8.775 Setting up libp11-kit0:amd64 (0.25.5-3) ...
+#20 8.802 Setting up libgssapi-krb5-2:amd64 (1.21.3-5+deb13u1) ...
+#20 8.830 Setting up libgnutls30t64:amd64 (3.8.9-3+deb13u4) ...
+#20 8.860 Setting up libpsl5t64:amd64 (0.21.2-1.1+b1) ...
+#20 8.890 Setting up librtmp1:amd64 (2.4+20151223.gitfa8646d.1-2+b5) ...
+#20 8.918 Setting up libcurl4t64:amd64 (8.14.1-2+deb13u7) ...
+#20 8.939 Setting up curl (8.14.1-2+deb13u7) ...
+#20 8.961 Processing triggers for libc-bin (2.41-12+deb13u4) ...
+#20 8.995 Processing triggers for ca-certificates (20250419+deb13u1) ...
+#20 9.006 Updating certificates in /etc/ssl/certs...
+#20 9.318 0 added, 0 removed; done.
+#20 9.318 Running hooks in /etc/ca-certificates/update.d...
+#20 9.319 done.
+#20 DONE 9.7s
+
+#19 [builder  9/14] RUN mkdir -p src     && printf '{application, quod, [{vsn,"0.0.0"},{registered,[]},{applications,[kernel,stdlib]}]}.\n'          > src/quod.app.src     && rebar3 as prod compile     && rm -rf src _build/prod/lib/quod
+#19 10.44 ===> Fetching hpack v0.3.0
+#19 10.50 ===> Analyzing applications...
+#19 ...
+
+#21 [runtime 3/6] WORKDIR /opt/quod
+#21 DONE 0.1s
+
+#19 [builder  9/14] RUN mkdir -p src     && printf '{application, quod, [{vsn,"0.0.0"},{registered,[]},{applications,[kernel,stdlib]}]}.\n'          > src/quod.app.src     && rebar3 as prod compile     && rm -rf src _build/prod/lib/quod
+#19 11.92 ===> Compiling accept
+#19 11.94 ===> Compiling ctx
+#19 11.95 ===> Compiling quic
+#19 16.43 ===> Compiling quantile_estimator
+#19 16.45     \x{250C}\x{2500} _build/default/lib/quantile_estimator/src/quantile.erl:
+#19 16.45     \x{2502}
+#19 16.45  17 \x{2502}  quantile(0.0, [First|_]) ->
+#19 16.45     \x{2502}           \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+#19 16.45 If you specifically intend to match 0.0 alone, write +0.0 instead.
+#19 16.45 
+#19 16.45     \x{250C}\x{2500} _build/default/lib/quantile_estimator/src/quantile.erl:
+#19 16.45     \x{2502}
+#19 16.45  54 \x{2502}  			[ceil(Size * Quantile)]
+#19 16.45     \x{2502}  			 \x{2570}\x{2500}\x{2500} Warning: ambiguous call of overridden auto-imported BIF ceil/1 --
+#19 16.45 use erlang:ceil/1 or "-compile({no_auto_import,[ceil/1]})." to resolve name clash
+#19 16.45 
+#19 16.45 
+#19 16.47     \x{250C}\x{2500} _build/default/lib/quantile_estimator/src/quantile_estimator.erl:
+#19 16.47     \x{2502}
+#19 16.47  97 \x{2502}  				false -> #group{v = V, g = 1, delta = clamp(floor(Invariant(Ranki, N)) - 1), rank = RankLast +1}
+#19 16.47     \x{2502}  				                                            \x{2570}\x{2500}\x{2500} Warning: ambiguous call of overridden auto-imported BIF floor/1 --
+#19 16.47 use erlang:floor/1 or "-compile({no_auto_import,[floor/1]})." to resolve name clash
+#19 16.47 
+#19 16.47 
+#19 16.47 ===> Compiling prometheus
+#19 17.17 ===> Compiling prometheus_httpd
+#19 17.20 ===> Compiling ssl_verify_fun
+#19 17.25 ===> Compiling tls_certificate_check
+#19 17.39 ===> Compiling opentelemetry_api
+#19 17.53 ===> Compiling opentelemetry
+#19 17.86 ===> Compiling gproc
+#19 18.73 ===> Compiling hpack
+#19 19.11 ===> Compiling chatterbox
+#19 19.62 ===> Compiling acceptor_pool
+#19 19.73 ===> Compiling grpcbox
+#19 20.20 ===> Compiling opentelemetry_exporter
+#19 21.90 ===> Compiling erlang_qq
+#19 21.92 ===> Compiling typerefl
+#19 22.12 ===> Compiling getopt
+#19 22.24 ===> Compiling hocon
+#19 23.79 ===> Compiling erlog
+#19 23.89     \x{250C}\x{2500} _build/default/lib/erlog/src/erlog_ets.erl:
+#19 23.89     \x{2502}
+#19 23.89  23 \x{2502}  -compile(export_all).
+#19 23.89     \x{2502}   \x{2570}\x{2500}\x{2500} Warning: export_all flag enabled - all functions will be exported
+#19 23.89 
+#19 23.89 
+#19 23.91      \x{250C}\x{2500} _build/default/lib/erlog/src/erlog_io.erl:
+#19 23.91      \x{2502}
+#19 23.91  229 \x{2502}  write_term1({'$VAR',N}, _, #ops{numbervars=true}=Ops)
+#19 23.91      \x{2502}                                                   \x{2570}\x{2500}\x{2500} Warning: variable 'Ops' is unused
+#19 23.91 
+#19 23.91 
+#19 25.13 ===> Compiling ranch
+#19 25.38 ===> Compiling cowlib
+#19 35.80 ===> Compiling cowboy
+#19 37.02     Updating crates.io index
+#19 38.80  Downloading crates ...
+#19 38.86   Downloaded byteorder v1.5.0
+#19 38.86   Downloaded arrayvec v0.7.8
+#19 38.87   Downloaded cfg-if v1.0.5
+#19 38.87   Downloaded allocator-api2 v0.2.21
+#19 38.87   Downloaded autocfg v1.5.1
+#19 38.87   Downloaded rawpointer v0.2.1
+#19 38.87   Downloaded nalgebra-macros v0.3.0
+#19 38.88   Downloaded either v1.18.0
+#19 38.88   Downloaded rstar v0.13.0
+#19 38.88   Downloaded thiserror v2.0.21
+#19 38.88   Downloaded stable_deref_trait v1.2.1
+#19 38.89   Downloaded quote v1.0.47
+#19 38.89   Downloaded foldhash v0.2.0
+#19 38.89   Downloaded libloading v0.8.9
+#19 38.89   Downloaded num-integer v0.1.47
+#19 38.89   Downloaded rustler_codegen v0.36.2
+#19 38.89   Downloaded thiserror-impl v2.0.21
+#19 38.90   Downloaded static_assertions v1.1.0
+#19 38.90   Downloaded typenum v1.20.1
+#19 38.90   Downloaded unicode-ident v1.0.26
+#19 38.90   Downloaded serde v1.0.229
+#19 38.91   Downloaded regex-lite v0.1.9
+#19 38.91   Downloaded slab v0.4.12
+#19 38.91   Downloaded safe_arch v1.2.0
+#19 38.91   Downloaded log v0.4.34
+#19 38.92   Downloaded libm v0.2.16
+#19 38.92   Downloaded hashbrown v0.17.1
+#19 38.93   Downloaded hashbrown v0.16.1
+#19 38.93   Downloaded num-bigint v0.4.8
+#19 38.94   Downloaded wide v1.7.1
+#19 38.94   Downloaded syn v2.0.119
+#19 38.95   Downloaded ordered-float v5.5.0
+#19 38.95   Downloaded syn v3.0.6
+#19 38.96   Downloaded num-traits v0.2.19
+#19 38.96   Downloaded smallvec v1.16.2
+#19 38.97   Downloaded nalgebra v0.35.0
+#19 38.98   Downloaded serde_derive v1.0.229
+#19 38.98   Downloaded heapless v0.8.0
+#19 38.99   Downloaded proc-macro2 v1.0.107
+#19 38.99   Downloaded matrixmultiply v0.3.11
+#19 38.99   Downloaded glamx v0.3.1
+#19 38.99   Downloaded ena v0.14.4
+#19 39.00   Downloaded serde_core v1.0.229
+#19 39.00   Downloaded robust v1.2.0
+#19 39.00   Downloaded spade v2.15.1
+#19 39.01   Downloaded num-rational v0.4.2
+#19 39.02   Downloaded equivalent v1.0.2
+#19 39.02   Downloaded num-complex v0.4.6
+#19 39.02   Downloaded heck v0.5.0
+#19 39.02   Downloaded simba v0.10.2
+#19 39.02   Downloaded rustler v0.36.2
+#19 39.02   Downloaded profiling-procmacros v1.0.18
+#19 39.03   Downloaded rapier3d-f64 v0.36.0
+#19 39.04   Downloaded hash32 v0.3.1
+#19 39.05   Downloaded downcast-rs v2.0.2
+#19 39.05   Downloaded profiling v1.0.18
+#19 39.05   Downloaded num-derive v0.5.1
+#19 39.05   Downloaded inventory v0.3.24
+#19 39.05   Downloaded glam v0.30.10
+#19 39.07   Downloaded bytemuck v1.25.2
+#19 39.07   Downloaded bitflags v2.13.2
+#19 39.08   Downloaded approx v0.5.1
+#19 39.08   Downloaded glam v0.31.1
+#19 39.10   Downloaded glam v0.33.12
+#19 39.12   Downloaded glam v0.32.1
+#19 39.19    Compiling autocfg v1.5.1
+#19 39.20    Compiling proc-macro2 v1.0.107
+#19 39.20    Compiling unicode-ident v1.0.26
+#19 39.20    Compiling quote v1.0.47
+#19 39.20    Compiling libm v0.2.16
+#19 39.20    Compiling bytemuck v1.25.2
+#19 39.20    Compiling rawpointer v0.2.1
+#19 39.20    Compiling byteorder v1.5.0
+#19 39.50    Compiling heapless v0.8.0
+#19 39.53    Compiling safe_arch v1.2.0
+#19 39.60    Compiling hash32 v0.3.1
+#19 39.60    Compiling stable_deref_trait v1.2.1
+#19 39.64    Compiling thiserror v2.0.21
+#19 39.78    Compiling typenum v1.20.1
+#19 39.81    Compiling smallvec v1.16.2
+#19 39.85    Compiling num-traits v0.2.19
+#19 39.87    Compiling matrixmultiply v0.3.11
+#19 40.16    Compiling regex-lite v0.1.9
+#19 40.18    Compiling foldhash v0.2.0
+#19 40.52    Compiling wide v1.7.1
+#19 40.81    Compiling log v0.4.34
+#19 40.97    Compiling syn v2.0.119
+#19 41.02    Compiling syn v3.0.6
+#19 41.03    Compiling ena v0.14.4
+#19 41.17    Compiling hashbrown v0.17.1
+#19 41.37    Compiling rustler v0.36.2
+#19 41.62    Compiling cfg-if v1.0.5
+#19 41.68    Compiling either v1.18.0
+#19 41.89    Compiling arrayvec v0.7.8
+#19 42.03    Compiling approx v0.5.1
+#19 42.15    Compiling num-integer v0.1.47
+#19 42.16    Compiling num-complex v0.4.6
+#19 42.17    Compiling glam v0.33.12
+#19 42.68    Compiling num-rational v0.4.2
+#19 42.80    Compiling ordered-float v5.5.0
+#19 43.11    Compiling rstar v0.13.0
+#19 43.17    Compiling bitflags v2.13.2
+#19 43.61    Compiling slab v0.4.12
+#19 43.78    Compiling thiserror-impl v2.0.21
+#19 43.82    Compiling num-derive v0.5.1
+#19 43.82    Compiling inventory v0.3.24
+#19 43.87    Compiling downcast-rs v2.0.2
+#19 43.87    Compiling heck v0.5.0
+#19 43.94    Compiling libloading v0.8.9
+#19 44.18    Compiling static_assertions v1.1.0
+#19 44.22    Compiling robust v1.2.0
+#19 45.09    Compiling nalgebra-macros v0.3.0
+#19 45.10    Compiling profiling-procmacros v1.0.18
+#19 45.10    Compiling rustler_codegen v0.36.2
+#19 45.25    Compiling profiling v1.0.18
+#19 46.92    Compiling simba v0.10.2
+#19 50.05    Compiling nalgebra v0.35.0
+#19 55.02    Compiling glamx v0.3.1
+#19 55.23    Compiling parry3d-f64 v0.31.1 (/build/native/quod_physics/vendor/parry3d-f64)
+#19 57.71    Compiling rapier3d-f64 v0.36.0
+#19 73.21    Compiling quod_physics v0.1.0 (/build/native/quod_physics)
+#19 77.00     Finished `release` profile [optimized] target(s) in 40.17s
+#19 77.04 ===> Analyzing applications...
+#19 77.05 ===> Compiling quod
+#19 77.06 ===> "/build/_build/prod/lib/quod/ebin/quod.app" is missing description entry
+#19 DONE 77.6s
+
+#22 [builder 10/14] COPY config/  config/
+#22 DONE 0.1s
+
+#23 [builder 11/14] COPY include/ include/
+#23 DONE 0.1s
+
+#24 [builder 12/14] COPY priv/    priv/
+#24 DONE 0.2s
+
+#25 [builder 13/14] COPY src/     src/
+#25 DONE 0.1s
+
+#26 [builder 14/14] RUN rebar3 as prod release
+#26 0.595 ===> Verifying dependencies...
+#26 0.827     Finished `release` profile [optimized] target(s) in 0.04s
+#26 0.845 ===> Analyzing applications...
+#26 1.321 ===> Compiling quod
+#26 3.287       \x{250C}\x{2500} src/quod_physics.erl:
+#26 3.287       \x{2502}
+#26 3.287  1183 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+#26 3.287       \x{2502}                                                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+#26 3.287 If you specifically intend to match 0.0 alone, write +0.0 instead.
+#26 3.287 
+#26 3.287       \x{250C}\x{2500} src/quod_physics.erl:
+#26 3.287       \x{2502}
+#26 3.287  1183 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+#26 3.287       \x{2502}                                                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+#26 3.287 If you specifically intend to match 0.0 alone, write +0.0 instead.
+#26 3.287 
+#26 3.287       \x{250C}\x{2500} src/quod_physics.erl:
+#26 3.287       \x{2502}
+#26 3.287  1183 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+#26 3.287       \x{2502}                                                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+#26 3.287 If you specifically intend to match 0.0 alone, write +0.0 instead.
+#26 3.287 
+#26 3.287 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  416 \x{2502}  collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+#26 3.842      \x{2502}                                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  418 \x{2502}  collect_goal_symbols(Tuple, _Acc, Owner)
+#26 3.842      \x{2502}                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  447 \x{2502}  collect_goal_symbols(_Goal, Acc, Owner) ->
+#26 3.842      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  480 \x{2502}  collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+#26 3.842      \x{2502}                                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  489 \x{2502}  collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+#26 3.842      \x{2502}                                                 \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  516 \x{2502}  collect_goal_positions(_Tuple, [], Acc, Owner) ->
+#26 3.842      \x{2502}                                          \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  529 \x{2502}  replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+#26 3.842      \x{2502}                                               \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  558 \x{2502}  replace_goal_symbols(Goal, Owner) ->
+#26 3.842      \x{2502}                             \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842      \x{250C}\x{2500} src/quod_wire_term.erl:
+#26 3.842      \x{2502}
+#26 3.842  564 \x{2502}  replace_clause_symbol(Tuple, _Position, Owner) ->
+#26 3.842      \x{2502}                                          \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+#26 3.842 
+#26 3.842 
+#26 8.444 ===> Assembling release quod-0.7.275...
+#26 9.690 ===> Release successfully assembled: _build/prod/rel/quod
+#26 DONE 10.6s
+
+#27 [runtime 4/6] COPY --from=builder /build/_build/prod/rel/quod ./
+#27 DONE 0.4s
+
+#28 [runtime 5/6] RUN set -- /opt/quod/lib/quod-*/priv     && test "$#" -eq 1     && test -d "$1"     && ln -s "$1" /opt/quod/priv
+#28 DONE 0.3s
+
+#29 [runtime 6/6] RUN mkdir -p /opt/quod/certs     && openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=quod          -keyout /opt/quod/certs/key.pem -out /opt/quod/certs/cert.pem     && sed -i 's#"priv/certs/cert.pem"#"/opt/quod/certs/cert.pem"#;               s#"priv/certs/key.pem"#"/opt/quod/certs/key.pem"#'          /opt/quod/releases/*/sys.config
+#29 0.290 .+.+..+....+++++++++++++++++++++++++++++++++++++++*..+............+.+..+...+....+....................+.+...+..+....+.....+++++++++++++++++++++++++++++++++++++++*...+...+.+......+...+...........................+..+.+..+...+......+.+..+...+...+.......+...+.....+.......+.................+.......+......+.....+...+.+...............+........+.......+...+..+...+.......+......+...+.....+....+..+......+.............+..+...+.+...+......+..+....+.....+.........+.+......+............+..+.........+.+......+...+.....+...................+..+....+.....+.+.........+.....+......+...+.+.....+.........+.......+......+............+..+.+...+..+.......+......+..+...............+............+......+.+.....+...................+..+.......+.....+......+........................+..........+.....+.......+......+...+..+.......+..+.+...+.................+...+.+......+.....++++++
+#29 0.321 ...+....+++++++++++++++++++++++++++++++++++++++*...+...+.+...+......+..+.........+.............+..+....+.....+....+...+...+++++++++++++++++++++++++++++++++++++++*.+...+..+...+.......+...+.........+..+....+.........+.................+...+.+............+...+..............+...+....+...+...++++++
+#29 0.331 -----
+#29 DONE 0.4s
+
+#30 exporting to image
+#30 exporting layers
+#30 exporting layers 0.5s done
+#30 writing image sha256:78cc1923a850387ad2551896d3847e06a78bf6468c6bd953adeeeaf536e9693b done
+#30 naming to 192.168.1.11:5000/quod:0.7.275-stage2-45c581dd 0.0s done
+#30 DONE 0.6s

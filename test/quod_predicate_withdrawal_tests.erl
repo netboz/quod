@@ -13,7 +13,8 @@ signed_contents_and_selected_editor_withdraw_test_() ->
         Ns = <<"predicate-withdrawal">>,
         {Sup, _} = quod_lobby_tests:start_namespace(Ns, Base#{
             data_dir => filename:join(Dir, "subject"),
-            genesis_diff => quod_prolog:terms_to_diff([
+            genesis_diff => quod_prolog:terms_to_diff(
+                quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++ [
                 {can_invoke, {'_'}, Actor, {'_'}, {'_'}},
                 {ontology_source_mode, editable},
                 {rendering_vocabulary, <<"quod:gui">>, quod_simplex:genesis_hash(<<"quod:gui">>)},

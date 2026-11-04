@@ -185,7 +185,7 @@ assert_disk_ingress_refuses(Bad, F) ->
         {ok, Store} = quod_ledger_store:append(Store1, {proof_source([element(2, quod_ledger:block_from_entry(Content))]), [Content]}),
         %% Preserve framing, index position and CRC: rejection must come from
         %% the actual on-disk entry decoder, not a checksum or wrong offset.
-        Log = filename:join([Dir, base64url(?NS), "log.0001"]),
+        Log = filename:join(quod_ledger_store:ns_dir(Dir, ?NS), "log.0001"),
         Prefix = group_bytes(0, 1, [], [entry_bytes(quod_ledger, Genesis)]),
         {ok, ContentBlock} = quod_ledger:block_from_entry(Content),
         Corrupt = <<Prefix/binary, (group_bytes(byte_size(Prefix), 2,
@@ -212,7 +212,7 @@ artifact_bytes_survive_store_feed_and_sidecar_test() ->
         {ok, Store} = append_fixture(Store0, F, Entries),
         {ok, Read} = quod_ledger_store:read_range(Store, 1, length(Entries), all),
         ?assertEqual(Expected, [entry_bytes(quod_ledger, A) || A <- Read]),
-        {ok, FileBytes} = file:read_file(filename:join([Dir, base64url(?NS), "log.0001"])),
+        {ok, FileBytes} = file:read_file(filename:join(quod_ledger_store:ns_dir(Dir, ?NS), "log.0001")),
         ?assertEqual(fixture_archive(F), FileBytes),
         lists:foreach(fun(A) ->
             Bytes = entry_bytes(quod_ledger, A),
@@ -306,7 +306,7 @@ raw_entry_views_are_not_a_second_store_append_path_test() ->
         ?assertException(error, function_clause, quod_prolog:apply_entry(?NS, View, live)),
         ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(View)),
         ?assertEqual(error, quod_ledger:block_from_entry(View)),
-        ?assertEqual({ok, <<>>}, file:read_file(filename:join([Dir, base64url(?NS), "log.0001"])))
+        ?assertEqual({ok, <<>>}, file:read_file(filename:join(quod_ledger_store:ns_dir(Dir, ?NS), "log.0001")))
     after
         ok = quod_ledger_store:close(Store),
         _ = file:del_dir_r(Dir)
@@ -449,8 +449,5 @@ entry_bytes(Codec, Entry) -> {ok, Bytes} = Codec:encode_entry(Entry), Bytes.
 canonical(Term) -> {ok, Bytes} = quod_safe_term:encode_canonical(Term, 1024 * 1024), Bytes.
 digest(Bytes) -> crypto:hash(sha256, Bytes).
 frame(Bytes) -> <<?FRAME_MAGIC:32, (byte_size(Bytes)):32, (erlang:crc32(Bytes)):32, Bytes/binary>>.
-base64url(Bytes) -> binary_to_list(binary:replace(binary:replace(binary:replace(
-                      base64:encode(Bytes), <<"+">>, <<"-">>, [global]), <<"/">>, <<"_">>, [global]),
-                      <<"=">>, <<>>, [global])).
 tmp_dir() -> filename:join("/tmp", "quod-artifact-" ++ binary_to_list(
                                 binary:encode_hex(crypto:strong_rand_bytes(8)))).

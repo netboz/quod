@@ -1,0 +1,109 @@
+===> Verifying dependencies...
+===> Upgrading cowboy v2.19.0
+===> Upgrading cowlib v2.21.0
+===> Upgrading ranch v2.3.0
+===> Analyzing applications...
+===> Compiling ranch
+===> Compiling cowlib
+===> Compiling cowboy
+   Compiling parry3d-f64 v0.31.1 (/tmp/quod-server-stage2-20261104-zckjvoTs/native/quod_physics/vendor/parry3d-f64)
+   Compiling rapier3d-f64 v0.36.0
+   Compiling quod_physics v0.1.0 (/tmp/quod-server-stage2-20261104-zckjvoTs/native/quod_physics)
+    Finished `release` profile [optimized] target(s) in 39.88s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_wire_term.erl:
+     │
+ 416 │  collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+     │                                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 418 │  collect_goal_symbols(Tuple, _Acc, Owner)
+     │                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 447 │  collect_goal_symbols(_Goal, Acc, Owner) ->
+     │                                   ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 480 │  collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+     │                                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 489 │  collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+     │                                                 ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 516 │  collect_goal_positions(_Tuple, [], Acc, Owner) ->
+     │                                          ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 529 │  replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+     │                                               ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 558 │  replace_goal_symbols(Goal, Owner) ->
+     │                             ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 564 │  replace_clause_symbol(Tuple, _Position, Owner) ->
+     │                                          ╰── Warning: variable 'Owner' is unused
+
+
+      ┌─ src/quod_catchup.erl:
+      │
+ 1180 │  test_transfer_parts(Parts, Allowances) ->
+      │  ╰── Warning: function test_transfer_parts/2 is unused
+
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    ┌─ test/quod_catchup_verify_tests.erl:
+    │
+ 53 │  entry_with_data(Entry, Data) ->
+    │  ╰── Warning: function entry_with_data/2 is unused
+
+
+===> Compiling test/quod_remaining_admission_tests.erl failed
+   ┌─ test/quod_remaining_admission_tests.erl:
+   │
+ 3 │  -include("erlog_int.hrl").
+   │           ╰── can't find include file "erlog_int.hrl"
+
+
+    ┌─ test/quod_remaining_admission_tests.erl:
+    │
+ 57 │      Reasons = Next#est.fail_reasons,
+    │                    ╰── record est undefined
+
+    ┌─ test/quod_remaining_admission_tests.erl:
+    │
+ 66 │      ?assertEqual([fail_reasons_truncated,reason],Refused#est.fail_reasons).
+    │                                                          ╰── record est undefined
+
+

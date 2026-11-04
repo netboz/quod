@@ -1,0 +1,397 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=CRASH REPORT==== 4-Nov-2026::21:52:03.635427 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.701.0>
+    registered_name: []
+    exception exit: invalid_vault_configuration
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.700.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.700.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 233
+    stack_size: 29
+    reductions: 110
+  neighbours:
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=CRASH REPORT==== 4-Nov-2026::21:52:03.704158 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.717.0>
+    registered_name: []
+    exception exit: vault_receipts_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.716.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.716.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 1598
+    stack_size: 29
+    reductions: 2724
+  neighbours:
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=NOTICE REPORT==== 4-Nov-2026::21:52:04.620476 ===
+TLS server: In state wait_cert at tls_handshake_1_3.erl:446 generated SERVER ALERT: Fatal - Certificate required
+ - certificate_required
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 4-Nov-2026::21:52:05.769131 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.1288.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,role => member,
+                                       data_dir =>
+                                           "/tmp/quod_ask_41026753BE4F3615",
+                                       seed_peers => [],
+                                       node_id =>
+                                           <<211,133,31,117,23,63,61,153,175,
+                                             238,45,130,145,194,7,196,184,209,
+                                             1,218,93,130,204,171,54,120,28,
+                                             152,6,82,60,45>>,
+                                       external_predicate_modules => [],
+                                       genesis_file =>
+                                           "/tmp/quod_ask_41026753BE4F3615/slow.pl",
+                                       batch_window_ms => 25,
+                                       detailed_consensus_metrics => false,
+                                       transaction_ttl_ms => 30000,
+                                       max_proof_workers => unlimited,
+                                       max_scope_workers => 64,
+                                       proof_timeout_ms => 300000,
+                                       scope_timeout_ms => 300000,
+                                       scope_step_timeout_ms => 30000}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:52:32.833718 ===
+Failed to start Ranch listener quod_client_listener in ranch_ssl:listen(#{socket_opts => [{alpn_preferred_protocols,[<<"h2">>,<<"http/1.1">>]},{buffer,512},{port,46147},{ip,{127,0,0,1}},{cert,'...'},{key,'...'}],connection_type => supervisor}) for reason eaddrinuse (address already in use)
+
+=CRASH REPORT==== 4-Nov-2026::21:52:32.833827 ===
+  crasher:
+    initial call: supervisor:ranch_acceptors_sup/1
+    pid: <0.11023.0>
+    registered_name: []
+    process_label: {ranch_acceptors_sup,quod_client_listener}
+    exception exit: {listen_error,quod_client_listener,eaddrinuse}
+      in function  ranch_acceptors_sup:listen_error/5 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:95)
+      in call from ranch_acceptors_sup:start_listen_sockets/5 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:55)
+      in call from ranch_acceptors_sup:init/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:35)
+      in call from supervisor:init/1 (supervisor.erl:912)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.11011.0>,ranch_sup,<0.1031.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.11011.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 2586
+    stack_size: 29
+    reductions: 16213
+  neighbours:
+
+=SUPERVISOR REPORT==== 4-Nov-2026::21:52:32.834033 ===
+    supervisor: {<0.11011.0>,ranch_listener_sup}
+    errorContext: start_error
+    reason: {listen_error,quod_client_listener,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,ranch_acceptors_sup},
+               {mfargs,
+                   {ranch_acceptors_sup,start_link,
+                       [quod_client_listener,ranch_ssl,logger]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+=ERROR REPORT==== 4-Nov-2026::21:52:32.834251 ===
+quod: client bootstrap failed — listen on 127.0.0.1:46147 (eaddrinuse)
+[0;32m.[0m=WARNING REPORT==== 4-Nov-2026::21:52:32.904621 ===
+quod: replacing orphaned client listener
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 4-Nov-2026::21:52:34.956400 ===
+quod: client-visible outcome_unknown producer=gateway_execute_transport cause=invalid_response kind=operation namespace=<<"quod:test">> id=00000000000000000000000000000000000000000000000000000000000000cb
+[0;32m.[0m=WARNING REPORT==== 4-Nov-2026::21:52:34.961103 ===
+quod: client-visible outcome_unknown producer=target_execute cause=engine_result kind=operation namespace=<<"quod:test">> id=00000000000000000000000000000000000000000000000000000000000000cb
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:53:06.113280 ===
+Error in process <0.18731.0> with exit value:
+{endpoint_dependency_fault,
+    [{quod_dtx_current_view_tests,
+         '-programmer_fault_in_probe_terminates_monitored_certifier_test/0-fun-1-',
+         6,
+         [{file,
+              "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/test/quod_dtx_current_view_tests.erl"},
+          {line,988}]},
+     {quod_dtx_current_view,call_endpoint,7,
+         [{file,
+              "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_dtx_current_view.erl"},
+          {line,1471}]},
+     {quod_peer_route,walk,5,
+         [{file,
+              "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_peer_route.erl"},
+          {line,23}]},
+     {quod_dtx_current_view,'-collect_applied/6-fun-0-',6,
+         [{file,
+              "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_dtx_current_view.erl"},
+          {line,1195}]},
+     {quod_trace,'-with_span/6-fun-0-',3,
+         [{file,
+              "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_trace.erl"},
+          {line,81}]},
+     {quod_trace,with_context,2,
+         [{file,
+              "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_trace.erl"},
+          {line,59}]},
+     {quod_dtx_current_view,'-collect_quorum/6-fun-1-',7,
+         [{file,
+              "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_dtx_current_view.erl"},
+          {line,1239}]}]}
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=CRASH REPORT==== 4-Nov-2026::21:53:06.379273 ===
+  crasher:
+    initial call: quod_foreign_log:init/1
+    pid: <0.18866.0>
+    registered_name: []
+    exception error: {unsupported_foreign_cache_format,3}
+      in function  quod_foreign_log:load_history_dir/2 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_foreign_log.erl:6822)
+      in call from quod_foreign_log:'-retained_histories/1-fun-0-'/2 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_foreign_log.erl:6731)
+      in call from lists:flatmap_1/2 (lists.erl:2429)
+      in call from quod_foreign_log:init/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_foreign_log.erl:1058)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.18865.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.18865.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 987
+    stack_size: 29
+    reductions: 1185
+  neighbours:
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=CRASH REPORT==== 4-Nov-2026::21:53:06.937111 ===
+  crasher:
+    initial call: quod_effect_journal:init/1
+    pid: <0.19226.0>
+    registered_name: []
+    exception error: {effect_journal_format_unsupported,1}
+      in function  quod_effect_journal:decode_snapshot/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:1492)
+      in call from quod_effect_journal:init/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:272)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.597.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.597.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 610
+    stack_size: 29
+    reductions: 1295
+  neighbours:
+
+=CRASH REPORT==== 4-Nov-2026::21:53:06.937650 ===
+  crasher:
+    initial call: quod_effect_journal:init/1
+    pid: <0.19227.0>
+    registered_name: []
+    exception error: {effect_journal_format_unsupported,5}
+      in function  quod_effect_journal:decode_snapshot/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:1495)
+      in call from quod_effect_journal:init/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:272)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.597.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.597.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 610
+    stack_size: 29
+    reductions: 1297
+  neighbours:
+
+=CRASH REPORT==== 4-Nov-2026::21:53:06.938028 ===
+  crasher:
+    initial call: quod_effect_journal:init/1
+    pid: <0.19228.0>
+    registered_name: []
+    exception error: {effect_journal_format_unsupported,6}
+      in function  quod_effect_journal:decode_snapshot/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:1495)
+      in call from quod_effect_journal:init/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:272)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.597.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.597.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 610
+    stack_size: 29
+    reductions: 1299
+  neighbours:
+
+=CRASH REPORT==== 4-Nov-2026::21:53:06.938392 ===
+  crasher:
+    initial call: quod_effect_journal:init/1
+    pid: <0.19229.0>
+    registered_name: []
+    exception error: {effect_journal_format_unsupported,7}
+      in function  quod_effect_journal:decode_snapshot/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:1495)
+      in call from quod_effect_journal:init/1 (/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_effect_journal.erl:272)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.597.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.597.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 610
+    stack_size: 29
+    reductions: 1295
+  neighbours:
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:53:07.026338 ===
+quod effect journal: committed descriptor conflicts with local effect id <<218,221,
+                                                                           253,204,
+                                                                           4,234,
+                                                                           63,234,
+                                                                           159,181,
+                                                                           138,44,
+                                                                           165,172,
+                                                                           216,201,
+                                                                           1,225,
+                                                                           154,112,
+                                                                           13,216,
+                                                                           68,161,
+                                                                           146,214,
+                                                                           189,249,
+                                                                           133,18,
+                                                                           145,178>>
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 4-Nov-2026::21:53:07.104697 ===
+quod[quod:operation-target]: operation effect binding failed: {invalid_operation_transaction,
+                                                               transaction_id}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:53:15.696494 ===
+foreign history integrity failure; rebuilding identity={<<"foreign:test:647">>,
+                                                        <<27,149,74,194,12,
+                                                          226,100,118,175,180,
+                                                          183,100,91,198,129,
+                                                          106,153,12,213,124,
+                                                          85,134,219,254,174,
+                                                          126,87,230,251,80,
+                                                          226,228>>}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:53:17.678215 ===
+foreign history integrity unavailable identity={<<"foreign:test:1233">>,
+                                                <<12,156,0,249,245,148,185,
+                                                  147,176,204,66,135,224,172,
+                                                  79,240,223,133,54,69,47,33,
+                                                  195,216,231,100,190,190,63,
+                                                  61,79,3>>} cause=cache_corrupt
+[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:53:17.766618 ===
+foreign history integrity unavailable identity={<<"foreign:test:1240">>,
+                                                <<63,105,31,196,98,16,49,173,
+                                                  181,56,254,129,42,207,121,
+                                                  189,68,34,218,6,106,40,153,
+                                                  83,236,74,178,43,132,135,37,
+                                                  115>>} cause=cache_corrupt
+=ERROR REPORT==== 4-Nov-2026::21:53:17.768827 ===
+foreign history integrity failure; rebuilding identity={<<"foreign:test:1240">>,
+                                                        <<63,105,31,196,98,16,
+                                                          49,173,181,56,254,
+                                                          129,42,207,121,189,
+                                                          68,34,218,6,106,40,
+                                                          153,83,236,74,178,
+                                                          43,132,135,37,115>>}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:53:21.244152 ===
+foreign history integrity unavailable identity={<<"foreign:test:1325">>,
+                                                <<16,187,159,47,164,71,105,
+                                                  110,48,12,67,90,230,117,203,
+                                                  92,156,57,52,12,132,209,49,
+                                                  77,244,194,64,172,208,73,
+                                                  239,144>>} cause=custody_lost
+=ERROR REPORT==== 4-Nov-2026::21:53:21.244062 ===
+Error in process <0.26286.0> with exit value:
+{{resident_fetch_crash,{evidence,<<94,88,38,220,232,57,188,40,94,100,160,141,
+                                   105,106,166,110,147,161,145,209,214,77,149,
+                                   131,171,173,231,169,234,37,33,233>>,
+                                 tip}},
+ [{quod_foreign_log_tests,'-worker_down_after_phase_session_transfer_does_not_leave_fake_resident_test/0-fun-0-',
+                          8,
+                          [{file,"/tmp/quod-stage2-final-source-20261104-rcpkvrbd/test/quod_foreign_log_tests.erl"},
+                           {line,3132}]},
+  {quod_foreign_log,fetch_page,9,
+                    [{file,"/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_foreign_log.erl"},
+                     {line,6426}]},
+  {quod_foreign_log,fetch_evidence_pages,9,
+                    [{file,"/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_foreign_log.erl"},
+                     {line,5482}]},
+  {quod_peer_route,walk,5,
+                   [{file,"/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_peer_route.erl"},
+                    {line,23}]},
+  {quod_trace,with_context,2,
+              [{file,"/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_trace.erl"},
+               {line,59}]},
+  {quod_foreign_log,'-start_current_probes/3-fun-4-',8,
+                    [{file,"/tmp/quod-stage2-final-source-20261104-rcpkvrbd/src/quod_foreign_log.erl"},
+                     {line,6159}]}]}
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 4-Nov-2026::21:53:27.874795 ===
+foreign history integrity unavailable identity={<<"foreign:test:1672">>,
+                                                <<242,225,6,18,52,254,164,60,
+                                                  220,1,128,116,132,190,102,
+                                                  40,42,111,186,9,127,24,83,
+                                                  37,228,255,37,134,86,124,75,
+                                                  42>>} cause=custody_lost
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Pending:
+[0;33m  quod_foreign_log_tests:material_network_dependency_stops_route_failover_test/0
+[0m[0;36m    %% Unknown error: {timeout,
+                   #{stacktrace =>
+                         [{peer,start_it,2,[{file,"peer.erl"},{line,924}]},
+                          {quod_foreign_log_tests,
+                              material_network_dependency_stops_route_failover_test,
+                              0,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/test/quod_foreign_log_tests.erl"},
+                               {line,6498}]},
+                          {eunit_test,'-mf_wrapper/2-fun-0-',2,
+                              [{file,"eunit_test.erl"},{line,285}]},
+                          {eunit_test,run_testfun,1,
+                              [{file,"eunit_test.erl"},{line,83}]},
+                          {eunit_proc,run_test,1,
+                              [{file,"eunit_proc.erl"},{line,554}]},
+                          {eunit_proc,with_timeout,3,
+                              [{file,"eunit_proc.erl"},{line,379}]},
+                          {eunit_proc,handle_test,2,
+                              [{file,"eunit_proc.erl"},{line,537}]},
+                          {eunit_proc,tests_inorder,3,
+                              [{file,"eunit_proc.erl"},{line,479}]}]}}
+[0m[0;33m  undefined
+[0m[0;36m    %% Unknown error: {blame,[1,1,66,1,162]}
+[0m
+
+Finished in ? seconds
+[0;33m1160 tests, 0 failures, 6 cancelled
+[0m===> Error running tests

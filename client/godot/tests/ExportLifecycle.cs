@@ -12,8 +12,7 @@ public partial class ExportChecks
 {
     async Task CloseDuringConnect()
     {
-        await Press("create-key");
-        ((Button)app.FindChild("connect",true,false)).EmitSignal(BaseButton.SignalName.Pressed);
+        ((Button)app.FindChild("create-key",true,false)).EmitSignal(BaseButton.SignalName.Pressed);
         await Until(()=>Busy);
         Check(app.ActiveStore.Snapshot!.Pending.Count==0,"closing a pending sign-in has no durable domain submission");
         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { armed=true,checks }));
@@ -342,7 +341,8 @@ public partial class ExportChecks
             await BackupWidget(false, Env("M1B_ACCOUNT_BACKUP"), "wrong passphrase", false);
             Check(State["public_key"] == null, "failed import leaves empty active profile intact");
             await BackupWidget(false, Env("M1B_ACCOUNT_BACKUP"), phrase, true);
-            await Press("connect");
+            if (Busy) await Until(() => !Busy);
+            if (State["network"] == null) await Press("connect");
             await Until(() => State["world_accepted"]!.GetValue<bool>() && State["operation_available"]?.GetValue<bool>() == true);
             var expected = JsonNode.Parse(await File.ReadAllTextAsync(Env("M1B_ORIGINAL")))!;
             Check(State["public_key"]!.ToString() == expected["public_key"]!.ToString() && State["human"]!.ToJsonString() == expected["human"]!.ToJsonString() && State["setup"]!.ToString() == expected["setup"]!.ToString(), "encrypted account backup restores same U A S0 key pins and original results");

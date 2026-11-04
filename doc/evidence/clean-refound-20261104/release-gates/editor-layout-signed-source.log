@@ -1,0 +1,13 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_source_view_tests'
+  quod_source_view_tests: -source_authorization_is_retained_and_withdrawn_test_/0-fun-11-...[1.373 s] ok
+  quod_source_view_tests: -long_namespace_source_view_keeps_authorization_test_/0-fun-9-...[1.116 s] ok
+  [done in 2.495 s]
+quod_lobby_tests: large_signed_source_edit_does_not_return_inspection_scratch_test_...ok
+=======================================================
+  All 3 tests passed.

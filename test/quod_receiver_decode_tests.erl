@@ -1,6 +1,5 @@
 -module(quod_receiver_decode_tests).
 -include_lib("eunit/include/eunit.hrl").
--include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
@@ -126,19 +125,18 @@ failed_page_does_not_publish_or_retain_a_partial_context_test() ->
         ?assertMatch({ok, [_, _]}, decode_entries([B, B], wrapped)), ok
     end).
 
-page_count_limit_still_precedes_decoding_test() ->
-    {Tx, _, _} = signed(), Count = ?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES,
-    Parts = [{entry, entry_bytes(Tx, I)} || I <- lists:seq(2, Count + 1)],
-    ?assert(lists:sum([byte_size(B) || {entry, B} <- Parts]) =< ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES),
+noncontiguous_transfer_entry_is_rejected_after_authentication_test() ->
+    {Tx, _, _} = signed(),
+    Part = {entry, entry_bytes(Tx, 2)},
     F = quod_ct:protocol_fixture(<<"receiver:limit">>),
     Path = filename:join("/tmp", "quod-receiver-limit-" ++
         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     quod_ledger_store:with_proof_stage(Path, fun(Stage) ->
-        {ok, Transfer} = quod_catchup:transfer_begin(maps:get(identity, F), Count + 2,
+        {ok, Transfer} = quod_catchup:transfer_begin(maps:get(identity, F), 3,
             maps:get(projection, F), none, wrapped, Stage),
-        {{more, _}, 1} = counted(fun() -> quod_catchup:transfer_accept(Transfer, Parts, more) end),
-        {{error, malformed_transfer_page}, 0} = counted(fun() ->
-            quod_catchup:transfer_accept(Transfer, [hd(Parts) | Parts], more)
+        {{more, Next}, 1} = counted(fun() -> quod_catchup:transfer_accept(Transfer, [Part], more) end),
+        {{error, noncontiguous_transfer}, 1} = counted(fun() ->
+            quod_catchup:transfer_accept(Next, [Part], more)
         end)
     end).
 

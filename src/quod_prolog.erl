@@ -73,7 +73,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -export([prove_est/2]).
 %% Prove against a raw #est{} handle for the runtime projection.
 -ifdef(TEST).
--export([open_cursor/4,
+-export([open_cursor/4, worker_allowance/2, positive_limit/2,
          test_active_command_stack/1,
          test_scope_capacity_available/3,
          test_public_scope_reason/2,

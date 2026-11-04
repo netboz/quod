@@ -56,7 +56,7 @@ client_subject_name(Subject,Name) :-
     ; fail_with_reason(invalid_subject_name(Subject))).
 client_subject_label(Subject,Label) :-
     client_subject_name(Subject,Name),
-    (Name == unnamed -> Label = unlabelled
+    ((Name == unnamed; Name == <<"">>) -> Label = unlabelled
     ; Label = label(Name,<<"above">>)).
 
 client_view_dependencies([]).
@@ -199,10 +199,18 @@ class_eidolons(Classes,Purpose,Style,Eidolons) :-
         (member(Direct,Classes), (Class = Direct; isa(Direct,Class)),
          class_eidolon(Class,Purpose,Style,Recipe)), Candidates),
     findall(eidolon(Purpose,Style,Recipe),
-        (member(candidate(Class,Purpose,Style,Recipe),Candidates),
+        (member(Candidate,Candidates),
+         Candidate = candidate(Class,Purpose,Style,Recipe),
          \+ (member(candidate(Other,Purpose,Style,_),Candidates),
-             isa(Other,Class), \+ isa(Class,Other))), Choices),
+             isa(Other,Class), \+ isa(Class,Other)),
+         \+ local_recipe_overrides(Candidate,Candidates)), Choices),
     sort(Choices, Eidolons).
+
+%% A locally authored recipe of the same class, purpose, style and name
+%% replaces an imported copy. Other imported choices remain alternatives.
+local_recipe_overrides(candidate(Class,Purpose,Style,recipe(OtherNs,_,Name)),Candidates) :-
+    current_ontology_identity(Ns,A), OtherNs \== Ns,
+    member(candidate(Class,Purpose,Style,recipe(Ns,A,Name)),Candidates).
 
 entity_classes(Entity, Classes) :-
     findall(Class, ((instance_of(Direct,Entity); Direct = Entity, isa(Direct,Direct)),
@@ -758,9 +766,6 @@ entity_scene(Space, Mode, appearance(Space, Style, Space, Transform, Eidolons)) 
     space_instance(Space, space), attribute(Space, transform, Transform),
     attribute(Space, exterior, Style),
     member(Mode, [playing, edition]), entity_eidolons(Space, Mode, Style, Eidolons).
-
-class_eidolon(space,Mode,contents,recipe(Ns,A,space_contents)) :-
-    member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
 
 %% A composed vocabulary is an explicit owner pin. Otherwise the installed
 %% system GUI vocabulary supplies the common presentation policy and geometry.

@@ -1,0 +1,73 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.06s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_evidence_resolver_tests.erl:
+     │
+ 207 │                                       || {trace, P, call, {M, F, A}} <- T,
+     │                                                               ╰── Warning: variable 'F' shadowed in generate
+
+
+===> Performing EUnit tests...
+
+Pending:
+[0;33m  quod_evidence_resolver_tests:current_era_hit_has_one_committed_capture_and_zero_foreign_work_test/0
+[0m[0;36m    %% Unknown error: {timeout,
+                   #{stacktrace =>
+                         [{quod_evidence_resolver_tests,start_source,3,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/test/quod_evidence_resolver_tests.erl"},
+                               {line,831}]},
+                          {quod_evidence_resolver_tests,with_case,3,
+                              [{file,
+                                   "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/test/quod_evidence_resolver_tests.erl"},
+                               {line,812}]},
+                          {eunit_test,'-mf_wrapper/2-fun-0-',2,
+                              [{file,"eunit_test.erl"},{line,285}]},
+                          {eunit_test,run_testfun,1,
+                              [{file,"eunit_test.erl"},{line,83}]},
+                          {eunit_proc,run_test,1,
+                              [{file,"eunit_proc.erl"},{line,554}]},
+                          {eunit_proc,with_timeout,3,
+                              [{file,"eunit_proc.erl"},{line,379}]},
+                          {eunit_proc,handle_test,2,
+                              [{file,"eunit_proc.erl"},{line,537}]},
+                          {eunit_proc,tests_inorder,3,
+                              [{file,"eunit_proc.erl"},{line,479}]}]}}
+[0m[0;33m  undefined
+[0m[0;36m    %% Unknown error: {blame,[1,1]}
+[0m
+
+Finished in ? seconds
+[0;33m3 tests, 0 failures, 3 cancelled
+[0m=ERROR REPORT==== 4-Nov-2026::21:50:08.325178 ===
+** Generic server {n,l,{foreign_log,node}} terminating 
+** Last message in was {'EXIT',<0.597.0>,killed}
+** When Server state == {s,"/tmp/quod_foreign_log_resolver-cache_1301766_2",
+                           #Fun<quod_evidence_resolver_tests.29.35571043>,
+                           1000,#{},#{},#{},#{},#{},0,0,0,0,0,0,0,0,0,0,0,0,0,
+                           0,#{},#{},#{},#{},#{},#{},#{},
+                           #Ref<0.860171221.2671509505.26851>}
+** Reason for termination ==
+** killed
+
+=CRASH REPORT==== 4-Nov-2026::21:50:08.325334 ===
+  crasher:
+    initial call: quod_foreign_log:init/1
+    pid: <0.617.0>
+    registered_name: []
+    exception exit: killed
+      in function  gen_server:decode_msg/6 (gen_server.erl:2379)
+    ancestors: [<0.597.0>]
+    message_queue_len: 0
+    messages: []
+    links: []
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 4185
+    stack_size: 29
+    reductions: 6928
+  neighbours:
+
+===> Error running tests

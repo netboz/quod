@@ -129,7 +129,8 @@ Historical open-work and hardware acceptance records are in `doc/outdated/deferr
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
--export([genesis_table_name/1, apply_operation_projection/3, await_operation_recovery/5,
+-export([genesis_table_name/1, buffer_frame/2,
+         apply_operation_projection/3, await_operation_recovery/5,
          cancel_operation_waiter/4,
          finish_operation_target_result/5, install_operation_snapshot/2,
          drop_operation_recovery_owner/4, drop_operation_waiter/3,

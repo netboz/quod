@@ -6499,7 +6499,9 @@ material_network_dependency_stops_route_failover_test() ->
                           #{name => Name, connection => standard_io,
                             args => ["-setcookie", atom_to_list(erlang:get_cookie())]}),
     try
-        true = peer:call(Peer, code, set_path, [code:get_path()]),
+        %% rebar3's escript paths are virtual and cannot be installed in a peer VM.
+        Paths = [Path || Path <- code:get_path(), filelib:is_dir(Path)],
+        true = peer:call(Peer, code, set_path, [Paths]),
         %% Explicit parent loads do not reorder code:get_path(). Bind the
         %% fresh VM to the same test and production beams, even when a
         %% focused runner inherited an older build directory on its path.
@@ -8537,7 +8539,7 @@ current_feed_advance_between_first_proof_and_matching_quorum_keeps_job_test() ->
 
 all_authored_route_endpoints_keep_order_and_shape_test() ->
     Routes = [{<<1:256>>, [{"first", 1001}, {"second", 1002}, {"third", 1003}]}],
-    ?assertEqual({ok, Routes}, quod_foreign_log:normalize_route_candidates(Routes)),
-    ?assertEqual(error, quod_foreign_log:normalize_route_candidates(Routes ++ Routes)),
-    ?assertEqual(error, quod_foreign_log:normalize_route_candidates([{<<1:256>>, [{"first", 1001}, {"first", 1001}]}])),
-    ?assertEqual(error, quod_foreign_log:normalize_route_candidates([{<<1:256>>, [{"first", 0}]}])).
+    ?assert(quod_foreign_log:valid_route_candidates(Routes)),
+    ?assertNot(quod_foreign_log:valid_route_candidates(Routes ++ Routes)),
+    ?assertNot(quod_foreign_log:valid_route_candidates([{<<1:256>>, [{"first", 1001}, {"first", 1001}]}])),
+    ?assertNot(quod_foreign_log:valid_route_candidates([{<<1:256>>, [{"first", 0}]}])).

@@ -1,0 +1,73 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -live_source_signed_view_test_/0-fun-12-...*failed*
+in function quod_physics_tests:'-live_source_signed_view_test_/0-fun-11-'/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 579)
+in call from quod_physics_tests:'-with_live_source/2-fun-3-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 1283)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3261)
+in call from quod_agent_hosting_tests:with_host/4 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_agent_hosting_tests.erl, line 1654)
+in call from quod_physics_tests:with_world/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3264)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{badmatch,[]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_AA184B646966B591
+">>
+
+quod_physics_tests: -foreign_signed_control_view_and_reconnect_test_/0-fun-14-...*failed*
+in function erlang:map_get/2
+  called as map_get(<<"frame">>,#{<<"expires_ms">> => <<"1793806868806">>,<<"height">> => <<"1">>,
+  <<"marks">> => <<"[]">>,<<"name">> => null,
+  <<"selection">> => <<"unavailable">>,<<"type">> => <<"projection">>,
+  <<"view">> => <<"rBKDAgbWovmhgpIvciiAwPUHLA87t1G73gzV-15SlQw">>})
+in call from quod_physics_tests:'-foreign_signed_control_view_and_reconnect_test_/0-fun-13-'/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 2190)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3261)
+in call from quod_agent_hosting_tests:with_host/4 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_agent_hosting_tests.erl, line 1654)
+in call from quod_physics_tests:with_world/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3264)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{badkey,<<"frame">>}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_1CAA84AEE29F917E
+">>
+
+quod_physics_tests: -ordinary_space_views_test_/0-fun-14- (ordinary-workshop)...*failed*
+in function quod_physics_tests:'-ordinary_space_views_test_/0-fun-5-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 2413)
+in call from quod_physics_tests:'-ordinary_space_views_test_/0-fun-13-'/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 2417)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3261)
+in call from quod_agent_hosting_tests:with_host/4 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_agent_hosting_tests.erl, line 1654)
+in call from quod_physics_tests:with_world/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3264)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{assertEqual,[{module,quod_physics_tests},
+              {line,2413},
+              {expression,"maps : get ( << \"selection\" >> , simulation_reply ( Socket , << \"projection\" >> ) )"},
+              {expected,<<"disabled">>},
+              {value,<<"unavailable">>}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_B79A55C719241AD3
+">>
+
+quod_physics_tests: -ordinary_space_views_test_/0-fun-14- (ordinary-observatory)...*failed*
+in function quod_physics_tests:'-ordinary_space_views_test_/0-fun-5-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 2413)
+in call from quod_physics_tests:'-ordinary_space_views_test_/0-fun-13-'/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 2417)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3261)
+in call from quod_agent_hosting_tests:with_host/4 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_agent_hosting_tests.erl, line 1654)
+in call from quod_physics_tests:with_world/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_physics_tests.erl, line 3264)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{assertEqual,[{module,quod_physics_tests},
+              {line,2413},
+              {expression,"maps : get ( << \"selection\" >> , simulation_reply ( Socket , << \"projection\" >> ) )"},
+              {expected,<<"disabled">>},
+              {value,<<"unavailable">>}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_BF801B84EE28733C
+">>
+
+=======================================================
+  Failed: 4.  Skipped: 0.  Passed: 0.
+===> Error running tests

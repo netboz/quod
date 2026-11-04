@@ -1,6 +1,6 @@
 -module(reason_admission_tests).
 -include_lib("eunit/include/eunit.hrl").
--include("erlog_int.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
 
 native_admission_validates_each_reason_once_test() ->
     {ok,St}=erlog_int:new(erlog_db_dict,null),

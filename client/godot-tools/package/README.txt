@@ -16,14 +16,19 @@ node. No service, account, sign-in, keys or fixture is installed by this package
 It does not install a server or replace a network. Reconnect resolves original
 work; it never grants permission to repeat an uncertain operation.
 
-For a desktop-only launch use ./quod --xr-mode off. Engine arguments precede
-the -- separator; profile/node/CA arguments follow it, for example:
-./quod --xr-mode off -- --profile "/absolute/private profile" --node https://your-node:14570 --ca /absolute/trusted-ca.pem
+The normal app starts in desktop 3D. If a supported OpenXR runtime and headset
+initialize, Enter VR · F9 appears after account sign-in. Return to 3D is in
+the headset menu and on the desktop window. With no headset, VR controls stay
+hidden. Profile/node/CA arguments follow the -- separator, for example:
+./quod -- --profile "/absolute/private profile" --node https://your-node:14570 --ca /absolute/trusted-ca.pem
 Use your real node and trust paths; no example endpoint or CA is bundled.
 The server must provide the matching qualified space/world-name view contract
 and GUI resources. Compatibility with an arbitrary older endpoint is not qualified.
 
-On first run, follow the highlighted next action: Create my key, then Connect.
+On first run, follow the highlighted next action: Create my key. It saves the
+key and attempts sign-in; importing a backup does so after its dialog closes.
+Returning users sign in automatically with the saved active key. Failed sign-in
+keeps the key and offers Connect to retry.
 The account controls show only the next required step: Create my account,
 Review starting space storage, or Create my agent and starting space. Returning
 accounts recover the original identity and location. Active keys are protected
@@ -77,9 +82,11 @@ glibc 2.44+, libstdc++, graphics/OpenGL drivers with their EGL vendor data,
 keyboard-layout/compose data, fonts, ICU, zlib and OpenSSL support.
 These are dependency floors, not certification of every distribution. The
 qualification record states the actual tested host and isolated launch scope.
-OpenXR additionally needs a compatible installed runtime, Vulkan/display access
+OpenXR additionally needs a compatible installed runtime, headset access
 and actual hardware qualification. No runtime, drivers or Monado are bundled,
-installed or started by this package. Start OpenXR only on a prepared host.
+installed or started by this package. Enter VR only on a prepared host.
+The runtime and headset must be available when Quod opens. If they are absent,
+Godot may log an OpenXR initialization error while desktop mode remains usable.
 
 Optional local desktop launcher: create a .desktop file in your own applications
 directory with Type=Application, Name=Quod, Terminal=false and Exec="/absolute/

@@ -1106,6 +1106,8 @@ await_scope_reply_loop(
     receive
         {scope_reply, Pid, ProofId, SessionRef, RequestRef, Reply} ->
             Reply;
+        {scope_start_failed, Pid, ProofId, SessionRef, Reason} ->
+            {error, Reason};
         Message = {proof_nested_open, _, _, _, _, _, _, _, _} ->
             serve_nested(Message),
             await_scope_reply_loop(
@@ -1489,13 +1491,12 @@ refresh_session(St) ->
     end.
 
 %% Validate the incoming completion stack under the target's wire contract
-%% before exposing its reasons to the caller.
+%% before exposing its reasons to the caller. One whole-stack check: replaying
+%% it reason by reason under that policy would re-encode the stack per reason.
 checked_completion(Reasons) ->
-    Wire = erlog_int:set_failure_reason_policy(
-             {quod_wire_term, valid_failure_reason_stack}, #est{}),
-    case erlog_int:merge_failure_reasons(Reasons, Wire) of
-        {ok, _} -> {complete, Reasons};
-        error -> error
+    case quod_wire_term:valid_failure_reason_stack(Reasons) of
+        true -> {complete, Reasons};
+        false -> error
     end.
 
 close_stream({scope_invocation, Handle, InvocationId,

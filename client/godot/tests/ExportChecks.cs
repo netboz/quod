@@ -52,6 +52,7 @@ public partial class ExportChecks : Node
             };
             await Frame();
             string phase = Env("M1B_PHASE");
+            if (phase is "startup-new" or "startup-saved") { await Startup(phase); return; }
             if (phase == "menu") { await NativeMenu(); return; }
             if (phase == "scene") { await SceneAdapter(); return; }
             if (phase == "controller-input") { await ControllerAdapter(); return; }
@@ -68,7 +69,9 @@ public partial class ExportChecks : Node
             if (fresh) {
                 await Press("create-key"); Check(State["public_key"] != null, "offline durable identity created");
             } else Check(State["public_key"] != null, "saved active key restored without backup passphrase");
-            await Press("connect"); Check(State["network"]?.ToString() == Env("M1B_NETWORK"), "real challenge and authenticated network");
+            if (Busy) await Until(() => !Busy);
+            if (State["network"]?.ToString() != Env("M1B_NETWORK")) await Press("connect");
+            Check(State["network"]?.ToString() == Env("M1B_NETWORK"), "real challenge and authenticated network");
             if (fresh) {
                 await Press("register");
                 if (State["human"] == null) { Check(State["pending"]!.GetValue<int>() > 0, "lost signup response retains original signed work"); await Press("resolve"); }
@@ -169,6 +172,29 @@ public partial class ExportChecks : Node
                 Console.WriteLine("M1B_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
             }
         } catch (Exception error) { Console.Error.WriteLine(error.ToString()); Console.Error.WriteLine(app.Inspect()); Console.Error.Flush(); await app.CloseApplication(1); }
+    }
+    async Task Startup(string phase)
+    {
+        var logo=app.FindChild("quod-logo",true,false) as TextureRect;
+        Check(logo?.Texture?.ResourcePath=="res://assets/quod-logo.png", "opening screen uses packaged Quod logo");
+        var mode=app.FindChild("presentation-mode",true,false) as Button;
+        Check(mode is {Visible:false}, "VR entry hidden without initialized runtime");
+        if (phase=="startup-new") {
+            Check(State["public_key"]==null && !((Button)app.FindChild("create-key",true,false)).Disabled, "empty profile offers key creation");
+            await Press("create-key");
+            Check(State["public_key"]!=null && app.ActiveStore.Snapshot!=null, "new key saved before connection attempt");
+            Check(State["status"]!.ToString()!="Key saved on this device.", "key creation continues into authentication");
+            await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { key=State["public_key"]!.ToString(), checks }));
+        } else {
+            var original=JsonNode.Parse(await File.ReadAllTextAsync(Env("M1B_RESULT")))!;
+            if(Busy) await Until(()=>!Busy);
+            Check(State["public_key"]!.ToString()==original["key"]!.ToString(), "startup restores exact saved key");
+            Check(State["status"]!.ToString()!="Signing in with your saved key…", "startup attempts authentication without a click");
+            Check(!((Button)app.FindChild("connect",true,false)).Disabled && State["pending"]!.GetValue<int>()==0,
+                "failed sign-in leaves retry and no signed domain work");
+            await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true, key=State["public_key"]!.ToString(), checks }));
+        }
+        await app.CloseApplication();
     }
 
     readonly HashSet<SignedView> tracedOperationViews = [];

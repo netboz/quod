@@ -19,7 +19,6 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bootstrap', action='store_true')
 parser.add_argument('--build', action='store_true')
 parser.add_argument('--export', action='store_true')
-parser.add_argument('--xr', action='store_true', help='Enable the installed OpenXR runtime using the Vulkan mobile renderer')
 parser.add_argument('arguments', nargs=argparse.REMAINDER)
 args = parser.parse_args()
 artifacts = json.loads((repo / 'doc/evidence/godot-m0-20261027/inputs/godot-artifacts.json').read_text())
@@ -51,26 +50,27 @@ env = dict(os.environ, NUGET_PACKAGES=str(cache / 'nuget'), XDG_DATA_HOME=str(ca
 packages = cache / engine_name / 'GodotSharp/Tools/nupkgs'
 if not engine.exists():
     raise SystemExit('Run with --bootstrap to install the pinned engine and templates.')
-def run_engine(command):
-    # Godot can exit zero after a failed managed publish. Preserve its output
-    # and treat an engine error diagnostic as a failed launcher operation.
+def run_engine(command, strict_diagnostics=True):
+    # Godot can exit zero after a failed managed publish. Preserve all output;
+    # export diagnostics are fatal, while import and a running app own their exits.
     child = subprocess.Popen(command, cwd=repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     diagnostic = False
     for line in child.stdout:
         print(line, end='', flush=True)
         diagnostic |= 'ERROR:' in line
     result = child.wait()
-    if result or diagnostic:
+    if result or (strict_diagnostics and diagnostic):
         raise SystemExit(result or 1)
 if args.build or args.export:
     subprocess.run(['dotnet', 'restore', str(project / 'Quod.csproj'), '--locked-mode', '--source', str(packages), '--source', 'https://api.nuget.org/v3/index.json'], cwd=project, env=env, check=True)
     subprocess.run(['dotnet', 'build', str(project / 'Quod.csproj'), '--no-restore'], cwd=project, env=env, check=True)
+    # The source runner needs Godot's imported textures before the first launch.
+    run_engine([str(engine), '--headless', '--editor', '--import', '--xr-mode', 'off', '--path', str(project)], strict_diagnostics=False)
 if args.export:
     (project / 'dist').mkdir(exist_ok=True)
-    run_engine([str(engine), '--headless', '--path', str(project), '--export-release', 'Linux', str(project / 'dist/quod.x86_64')])
+    run_engine([str(engine), '--headless', '--xr-mode', 'off', '--path', str(project), '--export-release', 'Linux', str(project / 'dist/quod.x86_64')])
     for notice in sorted((project/'assets').glob('*LICENSE*')):
         shutil.copy2(notice,project/'dist'/notice.name)
 elif args.arguments:
     arguments = args.arguments[1:] if args.arguments[0] == '--' else args.arguments
-    xr_arguments = ['--xr-mode','on','--rendering-method','mobile','--rendering-driver','vulkan'] if args.xr else []
-    run_engine([str(engine), '--path', str(project), *xr_arguments,*arguments])
+    run_engine([str(engine), '--path', str(project), *arguments], strict_diagnostics=False)

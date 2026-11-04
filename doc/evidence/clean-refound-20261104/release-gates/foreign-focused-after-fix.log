@@ -1,0 +1,10 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_foreign_log_tests: material_network_dependency_stops_route_failover_test...[0.384 s] ok
+quod_foreign_log_tests: all_authored_route_endpoints_keep_order_and_shape_test...[0.012 s] ok
+=======================================================
+  2 tests passed.

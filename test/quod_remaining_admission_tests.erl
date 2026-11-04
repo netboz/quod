@@ -1,6 +1,6 @@
 -module(quod_remaining_admission_tests).
 -include_lib("eunit/include/eunit.hrl").
--include("erlog_int.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
 -export([two_reasons/1]).
 
 committee_population_keeps_crypto_and_exact_honest_count_test() ->
@@ -47,7 +47,7 @@ single_effect_with_canonical_large_actor_keeps_semantic_singleton_test() ->
     ?assert(quod_effect:validate_list([Effect])),
     ?assertNot(quod_effect:validate_list([Effect,Effect])),
     ?assertNot(quod_effect:validate_list([{invalid_effect}])),
-    ?assertMatch({ok,_,_,_,_,_},quod_dtx:encode_material([],#{},[Effect],[],[])).
+    ?assertMatch({ok,_},quod_wire_term:encode_canonical([Effect])).
 
 complete_diagnostics_and_explicit_finite_callback_test() ->
     {ok,Native} = erlog_int:new(erlog_db_dict,null),

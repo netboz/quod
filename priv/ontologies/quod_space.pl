@@ -424,6 +424,8 @@ gui_form(space_travel_form(Agent,Expected,Before,After),[],
 
 %% Pure space depiction, composed with the space vocabulary and ordinary
 %% entity Eidolons. Membership and physical bindings stay with their owners.
+class_eidolon(space,Mode,contents,recipe(Ns,A,space_contents)) :-
+    member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
 class_eidolon(space,Mode,Style,recipe(Ns,Anchor,Recipe)) :-
     member(Mode,[playing,edition]), space_exterior_recipe(Style,Recipe),
     current_ontology_identity(Ns,Anchor).

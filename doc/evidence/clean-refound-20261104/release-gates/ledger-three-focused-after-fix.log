@@ -1,0 +1,11 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_ledger_artifact_tests: actual_byte_ingress_rejects_bad_signature_and_non_envelopes_test...[0.106 s] ok
+quod_ledger_artifact_tests: artifact_bytes_survive_store_feed_and_sidecar_test...[0.016 s] ok
+quod_ledger_artifact_tests: raw_entry_views_are_not_a_second_store_append_path_test...[0.008 s] ok
+=======================================================
+  All 3 tests passed.

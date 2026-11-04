@@ -27,6 +27,8 @@ is class-first, remains authored, and does not itself expand ancestry.
 `space_instance(Entity, Class)` explicitly combines membership with ancestry.
 Neither declaration imports behavior or grants invocation rights. The existing
 lobby likewise explicitly expands its device classes before recipe selection.
+For the same class, purpose, style and recipe name, a local Eidolon recipe
+replaces an imported copy; differently named recipes remain separate choices.
 Ontology reflection specializes space for display; it does not change lobby classes.
 
 An `entity_ref(Namespace, GenesisAnchor, Entity)` refers to an existing entity

@@ -1,0 +1,13 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_schema_tests: worker_allowances_keep_explicit_finite_configuration_test...[0.031 s] ok
+quod_simplex_tests: outbox_preserves_every_distinct_frame_and_deduplicates_test...[0.055 s] ok
+quod_relay_tests: frame_shape_rejection_test...[0.004 s] ok
+quod_system_ontology_tests: catalogue_requires_exact_existing_identity_test...[0.023 s] ok
+quod_namespace_layout_tests: long_namespace_has_one_exact_representable_key_test...[0.008 s] ok
+=======================================================
+  All 5 tests passed.

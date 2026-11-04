@@ -576,8 +576,7 @@ live_source_signed_view_test_() ->
         %% This fixture intentionally depicts no source content. Replace the
         %% composed default, so a failed source read cannot become a dependency
         %% before backtracking to this explicitly authored empty view.
-        [DefaultView] = [T || T = {':-',{world_view,_,_,_},_} <-
-            quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
+        DefaultView = default_world_view_rule(),
         commit(Ns,list_conjunction([{'$quod_retract_exact',DefaultView},
             {assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}])),
         reconcile(Ns),
@@ -1122,18 +1121,8 @@ observe_live_geometry_work(Fun) ->
     after trace:session_destroy(Trace),unlink(Collector),exit(Collector,kill) end.
 
 await_live_receipt({ok,#{operation_ref := Op = {operation,Ns,_,_,_}},_}) ->
-    true = quod_reg:subscribe({runtime,Ns}),
-    try await_live_receipt(Ns,Op,quod_time:mono_ms()+5000)
-    after quod_reg:unsubscribe({runtime,Ns}) end.
-await_live_receipt(Ns,Op,Deadline) ->
-    Remaining = Deadline-quod_time:mono_ms(), ?assert(Remaining > 0),
-    {ok,#{applied_floor := Floor,outcome := Outcome}} = quod_prolog:outcome_snapshot(Ns,Op,Remaining),
-    case Outcome of
-        #{operation_state := terminal,receipt_height := Height} when Height =< Floor -> ok;
-        _ -> receive {projection_advanced,_,Height} when Height > Floor ->
-                    await_live_receipt(Ns,Op,Deadline)
-             after Remaining -> error(live_receipt_not_published) end
-    end.
+    #{operation_state := terminal} = quod_ct:await_operation_complete(Ns,Op,5000),
+    ok.
 
 live_source_atomic_conflicts_test_() ->
     {timeout,90,fun() -> with_live_source(<<"live-conflicts">>,fun(F =
@@ -1725,7 +1714,7 @@ hot_control_policy_reasons_test_() ->
         ?assertEqual([],[R || R = {coordinate_allowance,_} <- DecodedQueryReasons]),
         Allowances = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
         commit(Ns,{retract,Allowances}),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
+        commit(Ns,{assertz,{can_view_physics,room,Human}}),
         assert_view_selection(unavailable,body_read(Ns,{client_world_view,room,playing,[],{0}}))
         after sys:resume(Runtime) end
     end) end}.
@@ -2180,7 +2169,7 @@ foreign_signed_control_view_and_reconnect_test_() ->
         Motion = {motion,free,2000,1600,500,{query_limits,2,0,8,128},[]},
         {_,_,_,Ref,_} = install_test_control(F,Pid,World,Motion),
         quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
+        commit(Ns,{assertz,{can_view_physics,room,Human}}),
         reconcile(Ns),
         Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
         try
@@ -2240,7 +2229,7 @@ changed_control_view_retains_sequence_test_() ->
                 {drive,{vector,0,0,0},{angular,0,0,0}},{0}}})),
         _ = input_frame(Pid,Ref,Human,7),
         quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
+        commit(Ns,{assertz,{can_view_physics,room,Human}}),
         Move = door_action(Ns,{physics_move_body,room,2,1,1,{vector,-3000,1000,0}}),
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},Move),
         await_source_receipt(Move),
@@ -2454,7 +2443,7 @@ ordinary_space_views_test_() ->
             Socket ! {client,simulation_open(F#{space => absent},Session,Human)},
             ?assertMatch(#{<<"selection">> := <<"unavailable">>},simulation_reply(Socket,<<"projection">>))
         after Socket ! stop end
-      end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},{world_view,room,playing,[]}] end)
+      end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}}] end)
     end}} || Ns <- [<<"ordinary-workshop">>,<<"ordinary-observatory">>]].
 
 renew_simulation(Socket,Open,Count) ->
@@ -2547,7 +2536,7 @@ uncertain_renewal_attachment_closes_and_releases_test_() ->
         Motion = {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]},
         {_,Expected,_,Ref,_} = install_test_control(F,Pid,World,Motion),
         quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
+        commit(Ns,{assertz,{can_view_physics,room,Human}}),
         reconcile(Ns),
         Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
         SocketMonitor = monitor(process,Socket), Session = simulation_session(Identity),
@@ -2600,7 +2589,7 @@ renewal_retains_certified_foreign_dependency_test_() ->
                 dependency_monitors => #{Monitor => Foreign},follows => #{Follow => {Ns,Anchor,2,true}},
                 follow_requests => gen_server:reqids_new(),snapshots => gen_server:reqids_new()},
             {ok,Binding} = quod_wire_term:encode_bindings(#{<<"View">> =>
-                {world_view,{entity_ref,Ns,Anchor,room},[],nonphysical}},10000),
+                {world_view,{entity_ref,Ns,Anchor,room},unnamed,[],nonphysical}},10000),
             %% Enter at the trusted signed-proof completion seam. The foreign
             %% reference, certified progress and lifetime are the real owner's;
             %% this isolates retention from signature/ACL admission tests.
@@ -2694,7 +2683,7 @@ opening_cancellation_state(Worker,Proof,Socket) ->
 
 assert_view_selection(Selection,{ok,_,{normalized,{read,_,{answers,_,[Blob]}}}}) ->
     {ok,Pairs} = quod_client_result:decode_binding(Blob),
-    ?assert(lists:any(fun({_,{world_view,_,_,S}}) -> S =:= Selection; (_) -> false end,Pairs)).
+    ?assert(lists:any(fun({_,{world_view,_,_,_,S}}) -> S =:= Selection; (_) -> false end,Pairs)).
 
 signed_mixed_view_uses_rendering_policy_test_() ->
     {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns}) ->
@@ -2716,12 +2705,7 @@ signed_mixed_view_uses_rendering_policy_test_() ->
             assert_view_selection(unavailable,Read(Marks))
         end,[[Decoration,Body], [Body,Body], [setelement(8,Body,depicts_nothing)],
              [setelement(5,Body,{body_pose,1,2})],
-             [Body,setelement(5,Decoration,{relative,<<"body">>,{transform,0,0.5,0,0,0,0}})]]),
-        RenderingNs = <<"physics-test-rendering">>,
-        commit(RenderingNs,{',',{retract,{limit,<<"scene">>,512}},
-                               {assertz,{limit,<<"scene">>,2}}}),
-        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},Read([Body,Decoration])),
-        assert_view_selection(unavailable,Read([Body,Twin,Decoration]))
+             [Body,setelement(5,Decoration,{relative,<<"body">>,{transform,0,0.5,0,0,0,0}})]])
     end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}}] end) end}.
 
 registered_view_dependency_waits_for_replay_test_() ->
@@ -2781,6 +2765,7 @@ registered_view_dependency_waits_for_replay_test_() ->
 
 signed_client_view_lifecycle_test_() ->
     {timeout, 90, fun() -> with_door(fun(F = #{namespace := Ns, identity := Identity}) ->
+        commit(Ns,{'$quod_retract_exact',default_world_view_rule()}),
         {Pid, World} = enable(F),
         Pub = maps:get(pubkey, Identity),
         commit(Ns, {assertz, {agent_key, viewer, Pub, active}}),
@@ -2817,13 +2802,12 @@ signed_client_view_lifecycle_test_() ->
             Rendering = <<"physics-test-rendering">>,
             #{heights := ViewHeights} = simulation_state(Socket),
             ?assertEqual(quod_prolog:applied(Rendering),maps:get(Rendering,ViewHeights)),
-            commit(Rendering,{',',{retract,{limit,<<"scene">>,512}},
-                                  {assertz,{limit,<<"scene">>,2}}}),
+            ScenePolicy = well_formed_scene_rule(),
+            commit(Rendering,{'$quod_retract_exact',ScenePolicy}),
             _ = simulation_reply(Socket,<<"refresh">>),
             Open(), ?assertMatch(#{<<"selection">> := <<"unavailable">>},simulation_reply(Socket,<<"projection">>)),
             ?assertNot(maps:is_key(pid,simulation_state(Socket))),
-            commit(Rendering,{',',{retract,{limit,<<"scene">>,2}},
-                                  {assertz,{limit,<<"scene">>,512}}}),
+            commit(Rendering,{assertz,ScenePolicy}),
             _ = simulation_reply(Socket,<<"refresh">>),
             Open(), _ = simulation_reply(Socket,<<"projection">>),
             %% Hold the real engine's snapshot reply. The socket must still
@@ -3260,12 +3244,24 @@ with_world(Ns, Fun, Transform) ->
             quod_prolog:terms_to_diff(quod_ct:gui_terms()),
             [{can_invoke,{'_'},{node,maps:get(pubkey,Identity)},{'_'},RenderingNs}]),
         try
-            commit(Ns, {assertz, {rendering_vocabulary, RenderingNs, quod_simplex:genesis_hash(RenderingNs)}}),
+            RA = quod_simplex:genesis_hash(RenderingNs),
+            commit(Ns, {',', {assertz, {rendering_vocabulary, RenderingNs, RA}},
+                              {assertz, {modelling_vocabulary, RenderingNs, RA}}}),
             Fun(F)
         after quod_agent_hosting_tests:stop_ontology(Rendering) end
     end,
     try quod_agent_hosting_tests:with_host(WithRendering, Transform(Rules), current, Ns)
     after catch quod_reg:unsubscribe({physics, Ns}) end.
+
+default_world_view_rule() ->
+    [Rule] = [T || T = {':-',{world_view,_,_,_},_} <-
+                    quod_prolog:read_terms("priv/ontologies/common_predicates.pl")],
+    Rule.
+
+well_formed_scene_rule() ->
+    [Rule] = [T || T = {':-',{well_formed_scene,_},_} <-
+                    quod_prolog:read_terms("priv/ontologies/gui_scene.pl")],
+    Rule.
 
 world_rules(Ns) ->
     Actor = {agent_instance_ref, Ns, {'_'}, actor},
@@ -4901,8 +4897,7 @@ same_namespace_signed_chair_push_test_() ->
         {_,_,_,OldRef,_} = install_test_control(F#{node => Principal},Pid,World,
             {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]}),
         quod_physics:unwatch(Pid,OldRef), _ = gen_server:call(Pid,status),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Principal}},
-                       {assertz,{world_view,room,playing,[]}}}), reconcile(Ns),
+        commit(Ns,{assertz,{can_view_physics,room,Principal}}), reconcile(Ns),
         Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
         try
             Socket ! {client,simulation_open(F,simulation_session(Identity),Principal)},
@@ -5283,7 +5278,8 @@ verify_hinged_signed_view(F = #{namespace := Ns,identity := Identity,target := T
     Rules = quod_prolog:read_terms("priv/ontologies/hinged_example_view.pl") ++
         [{can_invoke,ViewGoal,Principal,{'_'},Ns},{can_view_physics,room,Principal},
          {':-',{world_view,room,playing,{'Marks'}},{hinged_example_view,room,{'Marks'}}}],
-    commit(Ns,list_conjunction([{assertz,R} || R <- Rules])), reconcile(Ns),
+    commit(Ns,list_conjunction([{'$quod_retract_exact',default_world_view_rule()} |
+                                [{assertz,R} || R <- Rules]])), reconcile(Ns),
     {ok,[#{'Marks' := AuthoredMarks}],_} = quod_prolog:prove_ro(Ns,{world_view,room,playing,{'Marks'}}),
     ?assertMatch({ok,[_],_},quod_prolog:prove_ro(<<"physics-test-rendering">>,{well_formed_scene,AuthoredMarks})),
     Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
@@ -5428,9 +5424,9 @@ with_hinged_examples(Fun) ->
     A = <<"hinged-gallery">>, B = <<"hinged-workshop">>,
     Door = "test/fixtures/hinged-door.pl", Lid = "test/fixtures/hinged-lid.pl",
     with_world(A,fun(F = #{node := Node,directory := Dir,identity := Identity}) ->
+        Render = <<"physics-test-rendering">>, RA = quod_simplex:genesis_hash(Render),
         Rules = hinged_example_rules(B,world_rules(B),Lid) ++
-            [{rendering_vocabulary,<<"physics-test-rendering">>,
-              quod_simplex:genesis_hash(<<"physics-test-rendering">>)}],
+            [{rendering_vocabulary,Render,RA},{modelling_vocabulary,Render,RA}],
         Sup = quod_agent_hosting_tests:start_ontology(B,Dir,Identity,
             quod_prolog:genesis_diff("priv/ontologies/agent_instance.pl"),
             [{can_assign_agent_host,{node,maps:get(pubkey,Identity)},actor,{'_'},{'_'},Node,{'_'}},
@@ -5869,7 +5865,10 @@ with_voxel_view(Fun,Distance,Resources,ExtraBodies,FieldSetup) ->
             quod_prolog:terms_to_diff(quod_ct:gui_terms()),
             [{rendering_vocabulary,<<"physics-test-rendering">>,quod_simplex:genesis_hash(<<"physics-test-rendering">>)}]),
         try
-        commit(Ns,{assertz,{modelling_vocabulary,ModellingNs,quod_simplex:genesis_hash(ModellingNs)}}),
+        commit(Ns,{',',
+            {retract,{modelling_vocabulary,<<"physics-test-rendering">>,
+                quod_simplex:genesis_hash(<<"physics-test-rendering">>)}},
+            {assertz,{modelling_vocabulary,ModellingNs,quod_simplex:genesis_hash(ModellingNs)}}}),
         Field = FieldSetup(F),
         Created = door_action(Ns,{voxel_create,room,0,
             {terrain_v1,unbounded,smooth,Field}}),

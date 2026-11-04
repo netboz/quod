@@ -8,7 +8,7 @@ long_namespace_has_one_exact_representable_key_test() ->
     ?assertNotEqual(Key, quod_ledger_store:namespace_key(<<Ns/binary, "x">>)),
     ?assertEqual(Key, quod_ledger_store:namespace_key(Ns)),
     ?assert(byte_size(quod_simplex:genesis_table_name(Ns)) < 255),
-    ?assert(byte_size(quod_feed:digest_table_name(Ns)) < 255).
+    ?assert(byte_size(atom_to_binary(quod_feed:digest_table(Ns), utf8)) < 255).
 
 old_journal_in_other_root_refuses_before_ledger_creation_test() ->
     temporary(fun(Root) ->

@@ -1,9 +1,12 @@
 # Clean Godot client
 
 This Linux .NET client adapts Quod's signed protocol and portable GUI model.
-Identity creation/import happens offline. Connect authenticates the original key,
-recovers original account/instruction results and opens the current authorized
-space. First-time setup starts in the ordinary empty black S0.
+Identity creation/import happens offline. A saved active key signs in when the
+client opens; creating a key continues into sign-in, and importing one continues
+after the backup dialog closes. Authentication recovers original
+account/instruction results and opens the current authorized space. A failed
+sign-in leaves the saved key and an explicit Connect retry. First-time setup
+starts in the ordinary empty black S0.
 Offered forms supply their controls, fields, revisions and binder; Save/Reset use
 the existing human instruction → governed personal-agent execution route.
 
@@ -31,8 +34,11 @@ the current consumer. An imported key without an account reference first checks
 its retained signup receipt; lookup failure cannot provision a replacement.
 The setup description names the policy-selected existing account storage for S0.
 
-On first run, **Create my key** stores a local identity; **Connect** then discovers
-its account. The current capability determines the highlighted next action:
+The Quod logo appears on the opening screen. On first run, **Create my key**
+stores a local identity and connects; **Import encrypted backup** restores an
+existing key and connects when its dialog closes. Returning users with a saved
+active key connect automatically. The current capability determines the
+highlighted next action:
 **Create my account**, **Review starting space storage**, or **Create my agent
 and starting space**. Storage review is a read, and setup remains a separate
 explicit action. Existing accounts skip completed provisioning. An imported key
@@ -208,14 +214,24 @@ control. Physical WASD/QE positions move an observer camera; right-drag changes 
 An explicitly selected controlled body instead uses the signed native control
 lane and authoritative viewpoint. Focus loss releases local input. No collision
 or domain simulation runs in the client.
-Start the installed desktop OpenXR runtime with the pinned Vulkan renderer:
+The normal build starts in desktop 3D with the existing OpenGL renderer and
+OpenXR enabled. If no supported runtime or headset initializes, the desktop
+client continues without a VR button. After account sign-in, an initialized
+runtime makes **Enter VR · F9** appear on the desktop window. F9 enters VR while
+the client is focused;
+**Return to 3D** is available in the headset menu and on the desktop window.
+These actions change local presentation, not the current agent or space.
+The runtime and headset must be available when Quod opens. Without them, Godot
+may log an OpenXR initialization error while the desktop client continues.
+
+Launch the normal client:
 
 ```sh
-python3 client/godot-tools/run.py --xr -- --profile /absolute/private/profile
-client/godot/dist/quod.x86_64 --xr-mode on --rendering-method mobile --rendering-driver vulkan -- --profile /absolute/private/profile
+python3 client/godot-tools/run.py -- --profile /absolute/private/profile
+client/godot/dist/quod.x86_64 -- --profile /absolute/private/profile
 ```
 
-After connecting, **Start OpenXR** attaches the runtime's current controller
+After entering VR, the client attaches the runtime's current controller
 trackers. The signed controller projection supplies descriptions, roles,
 bindings and appearance admission. Only the explicitly described Vive profile
 and named facilities are mapped. Unknown profiles, missing facilities and
@@ -340,7 +356,7 @@ contracts other than the authored `view_only` contract remain unsupported.
 Controller appearances share digest-verified static GLB bytes and engine
 templates while retaining independent source nodes. Authorization withdrawal
 hides inert resources until source removal; unchanged reauthorization reuses
-them. The complete export includes the model's MIT notice. **Stop OpenXR**
+them. The complete export includes the model's MIT notice. **Return to 3D**
 releases this consumer's sources, captures and render leases. Godot retains its
 native session for the application lifetime; application close requests session
 exit before uninitializing the engine interface. The scene owner releases the

@@ -44,7 +44,8 @@ identity and the historical certifying committee, never the serving peer.
 -export_type([finality_cursor/0, transfer/0, transfer_sender/0, range_receiver/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([contact_candidates/3, test_recovery_state/1, test_hold_next_reader/3]).
+-export([contact_candidates/3, test_recovery_state/1, test_hold_next_reader/3,
+         test_transfer_page/3, test_transfer_parts/2]).
 -endif.
 
 -define(REQ_TIMEOUT_MS,  8000).
@@ -1177,6 +1178,9 @@ handle_call(stats, _From, S) ->
 handle_call(Request, _From, S) -> test_call(Request, S).
 
 -ifdef(TEST).
+test_transfer_page(Store, Sender, Allowances) ->
+    transfer_page(Store, Sender, Allowances, [], 0).
+
 test_transfer_parts(Parts, Allowances) ->
     transfer_page(undefined, #transfer_sender{next = 1, last = 0, pending = Parts},
                   Allowances, [], 0).

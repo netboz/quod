@@ -1282,13 +1282,21 @@ init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
             put(?RUNTIME, Runtime),
             run_loop(Ns, Session);
         {error, {throw, {quod_ask_error, Reason}, _}} ->
-            exit({scope_error, Reason});
+            start_failed(Origin, ProofId, Ref, Reason);
         {error, {Class, Reason, Stack}} ->
             logger:warning(
               "quod_scope_session[~s]: start failed: ~p:~p ~p",
               [Ns, Class, Reason, Stack]),
-            exit({scope_error, {protocol_error, proof_engine}})
+            start_failed(Origin, ProofId, Ref, {protocol_error, proof_engine})
     end.
+
+%% The origin may monitor this worker only after it has already exited, which
+%% reports `noproc` rather than the refusal. Tell the origin first: that message
+%% precedes any later 'DOWN' in its mailbox.
+-spec start_failed(pid(), <<_:256>>, reference(), term()) -> no_return().
+start_failed(Origin, ProofId, Ref, Reason) ->
+    Origin ! {scope_start_failed, self(), ProofId, Ref, Reason},
+    exit({scope_error, Reason}).
 
 start_session(Est, Opts) ->
     try {ok, quod_proof_session:start(Est, Opts)}

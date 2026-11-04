@@ -81,8 +81,12 @@ offline client checks are not hardware acceptance. The two adjacent diagnostic
 truncations in the limit audit are still inventory observations, not claimed
 as corrected. These limits do not block the agreed Stage 2 software checks.
 
-The supplied tracker ID still cannot be resolved by `work_radar`; no duplicate
-item was created. The local Stage 2 task/checklist now records completion. An
-attempt to link this editor session to the plan was rejected by automatic
-approval review because it would add a persistent tracker association without
-explicit link authorization; no indirect link was attempted.
+The supplied Stage 2 task ID still cannot be resolved by `work_radar`; no
+duplicate item was created. The local Stage 2 task/checklist records completion.
+An initial attempt to link this editor session to the plan was rejected by
+automatic approval review because it would add a persistent tracker association
+without explicit link authorization; no indirect link was attempted. Yan then
+selected “Link session” in the editor approval prompt (response
+`1793799291001`), and `tracker_link_session` linked this session to the
+**existing** `fm:plan:nimbalyst-local/plans/space-conceptual-architecture-review.md`
+item. That plan has no published issue key; this link did not create a task.

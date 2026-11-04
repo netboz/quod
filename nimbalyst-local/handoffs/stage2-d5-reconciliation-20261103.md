@@ -1026,8 +1026,12 @@ truncation observations remain separate. No deployment, user-store operation,
 hardware test, deadline change or uncertain replay occurred. The supplied task
 ID remains unresolved by the live tracker; no duplicate was created.
 
-The editor's automatic approval review rejected linking this session to the
-plan, stating that a persistent tracker association lacked explicit link
-authorization. No indirect link was attempted. The local plan and task file
-record the completed Stage2 scope; this linkage rejection does not alter the
-source or acceptance evidence.
+The editor's automatic approval review initially rejected linking this session
+to the plan, stating that a persistent tracker association lacked explicit link
+authorization. No indirect link was attempted. Yan then explicitly selected
+“Link session” in the editor (response `1793799291001`); the direct
+`tracker_link_session` call linked this session to the existing file-backed plan.
+That plan has no published issue key, and the Stage2 task ID remains unresolved
+by `work_radar`; no duplicate item was created. The local plan and task file
+record the completed Stage2 scope. The link changed no source or acceptance
+evidence.

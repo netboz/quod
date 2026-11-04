@@ -12,8 +12,8 @@ tags:
   - eidolons
 created: '2026-10-17'
 startDate: '2026-10-24T14:22:52Z'
-updated: 2026-11-03T21:02:29.217648+00:00
-progress: 84
+updated: 2026-11-04T13:30:19+00:00
+progress: 90
 trackerStatus:
   type: plan
 ---
@@ -34,9 +34,11 @@ The full large-catalogue acceptance checkbox credits `configured-aggregate02`
 and the installed matching functional afterimages described by the renewal
 handoff; completed features and that aggregate campaign were not rerun here.
 Earlier failed and isolated-only status paragraphs below describe their labelled
-historical boundaries, rather than current blockers. Stage 2 remains partial:
-its remaining policy-owner audit stays open, while Stage 3, broader renewal work,
-ontology founding, deletion/recreation identity and clause selection stay separate.
+historical boundaries, rather than current blockers. Stage 2 implementation and
+local software acceptance are complete on the
+[source-reconciled closeout](../../doc/evidence/stage2-closeout-20261104/STATUS.md).
+Stage 3, broader renewal work, ontology founding, deletion/recreation identity
+and clause selection stay separate.
 Erlog `79b3874617a4eb9f76d5089a3fc908667e605e8a` was subsequently published,
 with Yan's explicit authorization, to his `netboz/erlog` repository on
 `codex/stage2-policy-diagnostics`. [Finalization evidence](../../doc/evidence/stage2-finalization-20261103/STATUS.md)
@@ -66,7 +68,7 @@ Yan clarified that predicates are ordinary Prolog instances with class-owned Eid
 
 ## Purpose and boundaries
 
-Implementation and agreed local acceptance for **stage 1 — one empty space through the user's agent** are complete. It includes generic constructors/inheritance, the permission rules, explicit storage, placement, signed submission and recovery of the original result. S1.1 is implemented, verified and committed (`671e1f76`), including ordinary foreign-only recovery; its ticket is completed. S1.2 is implemented, verified and committed (`6db307c5`); S1.3 is completed, implemented and verified with review corrections, and committed with this change; S1.4 is completed, implemented and verified, and committed with this change; S1.5 is completed, implemented and verified, and committed with this change; S1.6 is completed, implemented and verified with the requested review corrections, committed as `1f759530`; S1.7 is completed, implemented and verified, and committed with this change; S1.8 is completed, implemented and verified, and committed with this change; S1.9 is completed, implemented, verified and committed as `948b3c20`; Stage 2 is partially delivered; Stage 3 is unstarted.
+Implementation and agreed local acceptance for **stage 1 — one empty space through the user's agent** are complete. It includes generic constructors/inheritance, the permission rules, explicit storage, placement, signed submission and recovery of the original result. S1.1 is implemented, verified and committed (`671e1f76`), including ordinary foreign-only recovery; its ticket is completed. S1.2 is implemented, verified and committed (`6db307c5`); S1.3 is completed, implemented and verified with review corrections, and committed with this change; S1.4 is completed, implemented and verified, and committed with this change; S1.5 is completed, implemented and verified, and committed with this change; S1.6 is completed, implemented and verified with the requested review corrections, committed as `1f759530`; S1.7 is completed, implemented and verified, and committed with this change; S1.8 is completed, implemented and verified, and committed with this change; S1.9 is completed, implemented, verified and committed as `948b3c20`; Stage 2 is complete for its agreed local software scope; Stage 3 is unstarted.
 
 **Fixed scope:** the four final choices are settled below. Signing, result lookup, generated-ID binding, source loading and rollback are implementation obligations with acceptance checks, not further design approvals. Routine implementation choices are delegated within the agreed behavior. Recursive displays, ontology contents/founding, terrain/physical embodiment and live specialization remain the already-listed later work; they are not prerequisites for this first stage. Reopen an agreed decision only if concrete implementation evidence requires changing its behavior or guarantees, not to add another preference question.
 
@@ -130,7 +132,7 @@ Stage 0 records completed design decisions. Production implementation starts at 
   - [x] Support the specified finite space, explicit infinite extent, ordinary-space placement and unplaced creation; verify permissions, conflicts and lost replies (S1.7).
   - [x] Connect class discovery, exact-subject operations, explicit storage and A-signed submission to ordinary/spatial panels (S1.9).
   - [x] Verify the integrated signed stage-1 flow, recovery, failure cases, view updates and repeated-work counts; reconcile stage-1 evidence (S1.9).
-- [ ] **2 — Same-agent entry and space Eidolons**
+- [x] **2 — Same-agent entry and space Eidolons**
   - [x] Generalize assignment/admission for ordinary entry, preserving A's identity; navigation follows committed location (accepted M3a/M3b).
   - [x] Deliver the bounded D5 recursive contents/exterior contract: exact occurrence paths, composed frames, disclosure/cycles/revocation/reconnect, retained renewals and admitted shared-domain physics (accepted M3a/M3b; selected contents extended by Stage2-147/167).
   - [x] Deliver exact-subject exterior/contents/GUI choices, native presentation and guarded source editing through existing owners (accepted Stage2-147/167).
@@ -140,7 +142,7 @@ Stage 0 records completed design decisions. Production implementation starts at 
   - [x] Remove the duplicated nested128KiB and result/view/terrain512KiB subquotas through shared owners; preserve finite authored allowances, malformed/denied/cancelled requests and original-operation recovery on delivery failure (boundary campaign codecs/proof/browser/native/terrain checks).
   - [x] Require an authoritative source read in the ontology class contents recipe; direct interior and selected contents use the same recipe and preserve exact frame binding (denial-fixed01, selective-fixed01, projection01; actual enumeration query is guarded).
   - [x] Finish full large-catalogue signed renewal/update/revocation/reconnect acceptance under unchanged deadlines: configured-aggregate02 passes on the exact installed functional source; retain earlier failures and distinguish isolated runtime evidence from a new installed-runtime run.
-  - [ ] Retire remaining on-path transport, signed-ingress and structural policy literals through existing owners. Yan clarified ordinary contact-node connection then root synchronization; no separate bootstrap policy/flow or numeric defaults.
+  - [x] Retire remaining on-path transport, signed-ingress and structural policy literals through existing owners. Yan clarified ordinary contact-node connection then root synchronization; no separate bootstrap policy/flow or numeric defaults. The 2026-11-04 inventory found one missed 255-byte source-access target guard; its one-line shared-owner correction now passes signed 1024-byte access, denial, wrong-anchor, revocation and unchanged zero-I/O checks, with the original failing baseline and production build retained. Adjacent diagnostic truncations remain explicitly separate. [Audit and delivery](../../doc/evidence/stage2-limit-audit-20261104/STATUS.md).
   - [x] Complete Stage 2 caller/retirement accounting against actual dispatch and source composition; prior replacements are already retired, live landscape/question/physical paths remain D7/Stage 3 dependencies (2026-11-03 impact audit).
 - [ ] **3 — Terrain and helper retirement**
   - [ ] Separate terrain state from the space and retain physical, ownership and revision protections.
@@ -152,7 +154,7 @@ The follow-up impact audit traces all 20 changed historical product inputs to th
 
 ## Implementation tickets
 
-S1.1 is **completed / implemented, verified and committed**; S1.2 is **completed / implemented, verified and committed**; S1.3 is **completed / implemented, verified and committed with this change**; S1.4 is **completed / implemented and verified with optional review corrections, committed with this change**; S1.5 is **completed / implemented, verified and committed with this change**; S1.6 is **completed / implemented, verified and committed (`1f759530`)**; S1.7 is **completed / implemented, verified and committed with this change**; S1.8 is **completed / implemented and verified, requested review findings addressed; committed with this change**; S1.9 is **completed / implemented, verified and committed (`948b3c20`)**. Stage-1 implementation and agreed local acceptance are complete. S1.9 is committed as `948b3c20`; its ticket and the stage-1 parent are completed. The overall plan remains incomplete; Stage 2 is partially delivered; Stage 3 is unstarted. Stage 0 is complete and has no additional ticket. The installed task schema has dependencies but no parent/child field, so parentage is recorded by explicit reciprocal links rather than an invented hierarchy field.
+S1.1 is **completed / implemented, verified and committed**; S1.2 is **completed / implemented, verified and committed**; S1.3 is **completed / implemented, verified and committed with this change**; S1.4 is **completed / implemented and verified with optional review corrections, committed with this change**; S1.5 is **completed / implemented, verified and committed with this change**; S1.6 is **completed / implemented, verified and committed (`1f759530`)**; S1.7 is **completed / implemented, verified and committed with this change**; S1.8 is **completed / implemented and verified, requested review findings addressed; committed with this change**; S1.9 is **completed / implemented, verified and committed (`948b3c20`)**. Stage-1 implementation and agreed local acceptance are complete. S1.9 is committed as `948b3c20`; its ticket and the stage-1 parent are completed. The overall plan remains incomplete; Stage 2 is complete for its agreed local software scope; Stage 3 is unstarted. Stage 0 is complete and has no additional ticket. The installed task schema has dependencies but no parent/child field, so parentage is recorded by explicit reciprocal links rather than an invented hierarchy field.
 
 S1.2 review follow-up: both confirmed Claude Fable findings are corrected and verified. Definite refusals preserve prior-operation uncertainty; authorization no longer reparses historical instructions. Final gates passed: 372 backend tests, 234 client tests, TypeScript and xref. [Correction evidence and retained failures](/tmp/quod-s1.2-refinement-verification.md). S1.2 is committed as `6db307c5`. The isolated commit includes Yan-approved account/setup prerequisites and passed 370 backend tests, 196 client tests, TypeScript and xref. [Commit verification and scope](/tmp/quod-s1.2-commit-verification.md). Unrelated user-owned work remains uncommitted.
 
@@ -593,7 +595,7 @@ D3/D4/D8/D9 are implementation obligations within the first complete creation st
 
 ## Smallest staged normalization
 
-Stages 0 and 1 are complete. Stage 2 has delivered same-agent travel, recursive contents and exact-subject presentation; its D6 predicate subject/editor slice now uses ordinary class/instance composition. Large-ontology signed acceptance is reconciled to the installed matching source; true definition-withdrawal coverage is delivered in the separate bounded campaign. Caller/retirement accounting is complete; live physical/terrain helper replacements remain D7/Stage 3 dependencies. Stage 3 remains sequenced after Stage 2. The table preserves the agreed scope and acceptance checks, rather than reporting every implementation as unstarted.
+Stages 0, 1 and 2 are complete for their agreed local software scope. Stage 2 delivers same-agent travel, recursive contents and exact-subject presentation; its D6 predicate subject/editor slice uses ordinary class/instance composition. Large-ontology signed acceptance is reconciled to the installed matching source; true definition-withdrawal coverage is delivered in the separate bounded campaign. Caller/retirement accounting is complete; live physical/terrain helper replacements remain D7/Stage 3 dependencies. Stage 3 remains sequenced after Stage 2. The [closeout](../../doc/evidence/stage2-closeout-20261104/STATUS.md) records source provenance and retained acceptance limits.
 
 | Stage | Scope | Completion evidence |
 | --- | --- | --- |

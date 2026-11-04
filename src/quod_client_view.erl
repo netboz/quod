@@ -229,7 +229,7 @@ gui_view_goal(controller_preferences,{_,Human,{0}}) ->
         false -> error
     end;
 gui_view_goal(source_access,{_,Target = {_,Ns,Anchor},_,{0}})
-  when is_binary(Ns), byte_size(Ns) > 0, byte_size(Ns) =< 255,
+  when is_binary(Ns), byte_size(Ns) > 0,
        is_binary(Anchor), byte_size(Anchor) =:= 32 ->
     case quod_wire_term:encode_canonical(Target) =:=
          quod_wire_term:encode_canonical({ontology_ref,Ns,Anchor}) of

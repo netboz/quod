@@ -970,3 +970,64 @@ Erlog `79b38746` is published on Yan's `netboz/erlog` branch
 skills, review archives and ignored build artifacts remain preserved outside Git.
 Stage 2's remaining policy-owner audit and the recorded runtime acceptance gaps
 are unchanged; this closes the bounded removal and source-delivery work only.
+
+### Original restriction inventory cross-check — 2026-11-04
+
+User requested check1 only. [Audit and source/test bindings](../../doc/evidence/stage2-limit-audit-20261104/STATUS.md) compare all three original inventories with the current committed tree and existing receipts. The enumerated removals remain present, but one missed source-access guard rejects target namespaces over255 bytes in `quod_client_view:gui_view_goal/2`. A production WebSocket-callback probe observes255 accepted and256/1024 rejected by its shape validator. Expired requests prevent permission workers or stores opening; this is pre-admission reproduction, not full signed acceptance. True child exit0/bothEOF and exact source/beam hashes are retained.
+
+The checklist stays open for that concrete correction and affected signed-view coverage. Effect-journal reason4096 and one Simplex log namespace255 truncation are separately inventoried diagnostic observations, not silently included as fixed. No production change, new limit, existing test rerun, store access, migration or deployment. Production delta0/0; audit artifacts and this clarification are uncommitted. The supplied tracker ID still has no match; no duplicate was created.
+
+### Long-name source-view correction — 2026-11-04
+
+The preceding audit paragraph is a retained checkpoint. The bounded gap is now
+corrected in `quod_client_view:gui_view_goal(source_access,...)` by removing only
+its 255-byte target guard. Existing signed source authorization, canonical target
+and anchor validation, subscription, revocation and installed-view ownership remain.
+The signed real-owner baseline `source-long-baseline03` fails with
+`invalid_view_request` on a valid 1024-byte ontology target (exit1, both EOF);
+the same test on final source `source-long-fixed03` passes both source-view tests
+(exit0, both EOF). The test covers allowed read-only view, wrong-anchor denial,
+root-policy revocation/stale-view withdrawal and unchanged repeat with zero
+file I/O. Normal production `source-long-production01` compiles (exit0, both EOF).
+The fixed production-callback probe accepts255/256/1024-byte shapes. Earlier
+anchor-undefined fixture failures and the baseline02 driver failure remain
+labelled failures, not acceptance. [Full logs, receipt hashes and source bindings](../../doc/evidence/stage2-limit-audit-20261104/STATUS.md#long-namespace-source-view-delivery-2026-11-04).
+
+Actual production delta **+1/-1 line, net0** in one owner; one signed test adds52
+lines. The plan's recorded policy-literal item is complete; the Stage2 parent
+remains open for separate current whole-tree/runtime acceptance. Existing
+diagnostic truncation observations remain unresolved and separate. No new
+hardcoded limit, user-store change, uncertain replay, migration, deployment,
+hardware/shutdown retry or new review occurred. The supplied tracker ID still
+does not resolve; no duplicate was created. This delivery is uncommitted.
+
+### Stage 2 local software closeout — 2026-11-04
+
+Yan authorized committing the name correction and finishing Stage 2. The
+[closeout](../../doc/evidence/stage2-closeout-20261104/STATUS.md) reconciles the
+current source to the 29-check signed large-catalogue run, the durable
+predicate-removal campaign, the long-name signed test and current offline
+native checks. Its reproducible read-only script checks 676 candidate inputs,
+446 later predicate inputs and 98 native inputs. All 20 candidate-to-current
+differences have named owners; the later predicate manifest differs only at the
+name-view owner/test, both matching their passing receipt. No functional change
+was made during this reconciliation and no broad suite was repeated merely to
+obtain a new green result.
+
+The agreed same-agent entry, exact-subject exterior/GUI/contents, recursive
+disclosure/cycles/reconnect, guarded predicate editing, true definition
+withdrawal, shared-owner limit removal and caller/retirement checks are now
+recorded complete in the plan and existing local Stage2 task. The overall plan
+remains in development because Stage3 is unstarted. Earlier failed campaigns
+retain their literal exits. The 29-check aggregate is one isolated-runtime pass
+on source-reconciled functionality, not an installed-tree rerun or latency
+distribution; native preview/shutdown/headset reliability and the two diagnostic
+truncation observations remain separate. No deployment, user-store operation,
+hardware test, deadline change or uncertain replay occurred. The supplied task
+ID remains unresolved by the live tracker; no duplicate was created.
+
+The editor's automatic approval review rejected linking this session to the
+plan, stating that a persistent tracker association lacked explicit link
+authorization. No indirect link was attempted. The local plan and task file
+record the completed Stage2 scope; this linkage rejection does not alter the
+source or acceptance evidence.

@@ -19,7 +19,8 @@ found(Ns, Files, Terms, Modules) when is_binary(Ns), is_list(Files),
         {ok, [#{'Profile' := Expected}], _} =
             quod_prolog:prove_ro(Ns, {external_predicate_modules, {'Profile'}}),
         #{namespace => Ns, anchor => binary:encode_hex(Anchor),
-          sources => [{list_to_binary(F), binary:encode_hex(source_hash(F))} || F <- Files]}
+          sources => maps:from_list(
+              [{list_to_binary(F), binary:encode_hex(source_hash(F))} || F <- Files])}
     after quod_reg:unsubscribe({runtime, Ns}) end.
 
 publish(Ns, Anchor, Creation) when is_binary(Ns), byte_size(Anchor) =:= 32,
@@ -42,7 +43,7 @@ enrolled_node() ->
         ok = quod_namespace_manager:enroll_node(),
         Ref = await_node(),
         #{reference => iolist_to_binary(io_lib:format("~0p", [Ref])),
-          manager => quod_namespace_manager:stats()}
+          manager => iolist_to_binary(io_lib:format("~0p", [quod_namespace_manager:stats()]))}
     after quod_reg:unsubscribe({node_actor, node}) end.
 
 node_ref() ->
@@ -95,7 +96,7 @@ catalogue() ->
                          {ok, State} <- [quod_ontology:local_state(Ns)], State =/= ready],
     Node = node_ref(),
     #{height => Height, names => Expected, anchors =>
-        [{Ns, binary:encode_hex(Anchor)} || #{namespace := Ns, anchor := Anchor} <- Descriptors],
+        maps:from_list([{Ns, binary:encode_hex(Anchor)} || #{namespace := Ns, anchor := Anchor} <- Descriptors]),
       node => iolist_to_binary(io_lib:format("~0p", [Node]))}.
 
 source_file(File) ->

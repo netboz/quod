@@ -97,3 +97,56 @@ The 46 remaining Dialyzer warnings come from the committed quota removal `b30967
 - The rest are dead `too_large` / `busy` / `{error, _}` branches left after the caps were retired: `quod_client_goal`, `quod_client_goal_endpoint`, `quod_client_goal_parser`, `quod_scope_wire`, `quod_dtx_phase_index`, `quod_effect_journal`, `quod_simplex`, `quod_prolog` and `quod_scope_session:822`.
 
 The Dialyzer gate is therefore **not green**. Remaining sequence: commit, version bump commit, image build from that commit, disposable founding rehearsal, then the live cutover.
+
+## Image, rehearsal and cutover state — 2026-11-04 (late)
+
+Committed `737f8fb6` (gated source) and `3a24361c` (0.7.276 bump). The image was built from `git archive 3a24361c` and pushed as `192.168.1.11:5000/quod:0.7.276`, digest `sha256:9a16da53df63317f9f1fc1ab1081bb7a7f21d01282debea5981ce952609e1f78`. Build, push and release smoke all exited 0 (`deployment/image-{build,push}-0.7.276.log`).
+
+Disposable founding rehearsal on a local container of that image (`rehearsal/`):
+- Attempt 1 created `quod:node`, then crashed while encoding the helper's report. `found/4` returned `{File, Hash}` tuples, which `json:encode` rejects; `catalogue/0` had the same issue with its anchors list, and `enrolled_node/0` returned raw `stats()`. On the live cluster this would have left a founded but unrecorded ontology. Literal outputs are in `rehearsal/attempt1/`.
+- Fix in `deployment/quod_foundation_operator.erl`: sources and anchors are now maps, and stats is formatted text. This is operator tooling only, not shipped code; it is uncommitted.
+- Attempt 2, on a fresh data dir, ran every phase with exit 0: root, node (+ enrollment), agent, gui, controllers, space, user (+ root admin), and signed user registration with status `committed`. The final catalogue at height 17 holds exactly the six system ontologies. The container log has 0 error/critical lines.
+
+Cloud host check (read-only, via a running cloud alloc): `quod-node-cloud` contains only `arch206/{0,1}`. The new deploy file's satellites use `/quod/data/{0,1}`, which do not exist, so they start empty.
+
+**Live cutover NOT started.** `nomad job stop quod` was refused by the Claude Code permission classifier (twice). The live job remains v246 / 0.7.252 with all allocations running; nothing was stopped or deleted.
+
+Remaining commands (NOMAD_ADDR=http://192.168.1.10:4646, from the pearl-stone worktree):
+1. `nomad job stop -yes quod`
+2. Delete the old node volumes `quod-node-arch206[0..7]` (IDs in `cutover/before-volumes.txt`): `nomad volume delete -type host <ID>` for each.
+3. `nomad job run doc/evidence/clean-refound-20261104/deployment/quod-old-cloud-ledger-cleanup-20261104.nomad` removes cloud `arch206/{0,1}`.
+4. `nomad job run -var image_tag=0.7.276 -var bootstrap=true deploy/quod.nomad` starts one founder on the new empty `quod-node-local[0]`.
+5. Read the `genesis anchor` line from the founder's log. Write the founder alloc ID to `/tmp/quod-stage2-deployment-20261104/founder-allocation-id`, then run `python3 -I foundations.py <phase>` for load, root, node, agent, gui, controllers, space, user, user-register, catalogue. The fixed `.beam` is already compiled there.
+6. `nomad job run -var image_tag=0.7.276 -var node_count=8 -var genesis_hash=<HEX> deploy/quod.nomad` (cloud satellites join here).
+
+## Live cutover DONE — 2026-11-04 (Yan authorized the nomad commands)
+
+Evidence: `doc/evidence/clean-refound-20261104/cutover/`.
+1. `nomad job stop quod`: exit 0; all 8 node + 2 cloud allocations complete.
+2. Deleted the 8 old volumes `quod-node-arch206[0..7]`, all exit 0 (`volume-delete.log`). A read-only sysbatch listing of `/var/lib/nomad/host_volumes` on caton/corin/conrad (`hostvol-check.log`) shows none of their directories remain, and every on-disk directory belongs to a registered volume.
+3. Cloud cleanup job: `old-cloud-ledgers-removed`.
+4. Bootstrap `-var image_tag=0.7.276 -var bootstrap=true`: founder on conrad. **New root anchor `297382CBBBEF18D3D5B480C392F68BB0818754FBD3D07E2D5F123207220DAA01`.**
+5. The fixed operator ran every phase with exit 0 (`founding/`). Anchors:
+   - quod:node `065F9293…5A14`
+   - quod:agent `5CB98E9A…7282`
+   - quod:gui `5BA0EA8B…605C`
+   - quod:controllers `2F5069DE…AF6F`
+   - quod:space `9995213E…FCAD`
+   - quod:user `71C22020…A14A`
+   
+   User registration `committed`; catalogue height 17 with exactly the six ontologies.
+6. Fleet `-var node_count=8 -var genesis_hash=297382CB…`: deployment `1382b8e4` successful, 8/8 nodes + 2/2 cloud healthy.
+7. Joiners stay observers until admitted (deploy/quod.nomad:174). Compute nodes idx 1–7 were admitted one at a time through validator idx 0 with the `scripts/loadtest.sh` admit goal; the committee went 1→8 (`admissions.log`). The two cloud satellites remain **non-voting observers**, following the earlier 8-compute committee shape and the recorded satellite OOM when two validators were stacked on the 1-core VM.
+
+Final probe (`fleet-probe-final.txt`): all 10 nodes show the same root anchor, height 52, 8 admitted, 6 system ontologies.
+
+Not touched: the separate running network `quod-finality-candidate-v6-20260926` (0.7.275-movement, 8 nodes on `movement01` volumes) and its traefik ingresses `quod-candidate-browser-ingress` and `quod27-client-30519`. Also untouched: 24 unused old candidate volumes (`…-v12`, `…-stage1-c05`, `…-xr-demo02`, 8 each). These still hold previous ledgers; Yan to decide.
+
+Godot client: the exported build defaults to localhost; it needs the new network's endpoint and certificate to connect.
+
+## Old networks cleanup — 2026-11-05
+
+- Deleted 24 unused candidate volumes (`…-20261017-v12`, `…-20261025-stage1-c05`, `…-20261026-xr-demo02`, 8 each), all exit 0, after checking none had allocations (`cutover/unused-volume-delete-summary.txt`).
+- `quod-finality-candidate-v6-20260926` was the browser/Vive demo fleet: 8 nodes on 0.7.275-movement, refounded Oct 7/17/25/26/27, last founded 2026-10-27 on `movement01`. Its only exposure was two traefik TCP passthroughs to node 0's client port: `quod-candidate-browser-ingress` (192.168.1.10:31609) and `quod27-client-30519` (192.168.1.10:30519). Its recent logs showed only OTLP export retries, no client sessions. All three jobs are **stopped** (`cutover/candidate-shutdown/`, job specs saved before stopping).
+- Its 8 `movement01` volumes **remain**: every `nomad volume delete` on them failed at the tool layer with an empty error, even for a single volume. Awaiting Yan's explicit go.
+- Yan then said "delete the movement01 volumes": all 8 deleted, exit 0 (`cutover/candidate-shutdown/volume-delete.log`). The host-volume listing (`cutover/hostvol-check-final.log`) now shows 8 folders total (corin 3, conrad 3, caton 2), exactly `quod-node-local[0..7]`. No previous quod ledger remains on the cluster.

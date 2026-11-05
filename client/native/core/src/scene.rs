@@ -147,7 +147,7 @@ fn fraction(t: &Term) -> Result<f64> {
     Ok(n as f64 / 1000.0)
 }
 fn surface(t: &Term) -> Result<Value> {
-    let a = t.args("surface", 5)?;
+    let a = t.args("surface", 6)?;
     let colour = a[0].text()?;
     require(
         colour.len() == 7
@@ -158,7 +158,7 @@ fn surface(t: &Term) -> Result<Value> {
         "invalid colour",
     )?;
     let mut slots = HashSet::new();
-    let textures = a[4].list()?.iter().map(|t| {
+    let textures = a[5].list()?.iter().map(|t| {
         let b = t.args("texture", 3)?;
         let slot = choice(&b[0], &["base_colour", "normal", "orm"])?;
         require(slots.insert(slot), "duplicate texture slot")?;
@@ -168,7 +168,7 @@ fn surface(t: &Term) -> Result<Value> {
         Ok(json!({"slot":slot,"digest":digest(&asset[0])?,"repeat":[positive(&repeat[0])? as f64/1000.0,positive(&repeat[1])? as f64/1000.0]}))
     }).collect::<Result<Vec<_>>>()?;
     Ok(
-        json!({"colour":colour,"metallic":fraction(&a[1])?,"roughness":fraction(&a[2])?,"emission":fraction(&a[3])?,"textures":textures}),
+        json!({"colour":colour,"metallic":fraction(&a[1])?,"roughness":fraction(&a[2])?,"emission":fraction(&a[3])?,"opacity":fraction(&a[4])?,"textures":textures}),
     )
 }
 fn mesh(t: &Term) -> Result<Value> {

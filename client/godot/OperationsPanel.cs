@@ -53,7 +53,7 @@ public partial class OperationsPanel : VBoxContainer
     long generation;
     bool disposed, busy;
     string? requested;
-    bool revealPending;
+    bool revealPending,submitPending;
     string DraftKey(Offer offer) => string.Join("\n",session.Network,session.Key.PublicText,human.Entity,offer.Subject,offer.Name);
     Buffer Draft(Offer offer) => drafts[DraftKey(offer)];
     public override void _Ready()
@@ -181,8 +181,10 @@ public partial class OperationsPanel : VBoxContainer
         view.Withdrawn += reason => { if (expected != generation) return; Available = false; FormPanel.Lock(true); FormPanel.Hide(); status.Text = reason; Changed?.Invoke(); };
         _ = view.Start();
     }
-    public void Choose(string name,bool reveal=false)
-    { requested=name;revealPending|=reveal;if(Available && offers.SingleOrDefault(o=>o.Name==name) is Offer offered)Select(offered); }
+    // A chosen action without input fields is submitted as soon as its current
+    // offer is selected; with fields it only opens the form for editing.
+    public void Choose(string name,bool reveal=false,bool submit=false)
+    { requested=name;revealPending|=reveal;submitPending=submit;if(Available && offers.SingleOrDefault(o=>o.Name==name) is Offer offered)Select(offered); }
     void Select(Offer offer)
     {
         targeting.Hide();
@@ -204,6 +206,8 @@ public partial class OperationsPanel : VBoxContainer
             : draft.Settled ? "This draft was submitted. Choose current defaults explicitly for another operation." : "Unsubmitted local draft";
         if(revealPending)Reveal(FormPanel);
         revealPending=false;
+        bool submit=submitPending&&offer.Name==requested;submitPending=false;
+        if(submit&&!stale&&!draft.Settled&&!accounts.Uncertain&&!offer.Form.Tree.Leaves.Any(c=>c.Input))_=Submit();
         Changed?.Invoke();
     }
     public void Defaults()
@@ -282,7 +286,7 @@ public partial class OperationsPanel : VBoxContainer
     void RetireView()
     { var completion = view?.Completion ?? Task.CompletedTask; view?.Dispose(); view = null; retired = retired.IsCompleted ? completion : Task.WhenAll(retired, completion); }
     void Invalidate()
-    { generation++;revealPending=false; RetireView(); Available = false; Current = null; subject = null; offers = []; FormPanel.Clear(); }
+    { generation++;revealPending=false;submitPending=false; RetireView(); Available = false; Current = null; subject = null; offers = []; FormPanel.Clear(); }
     public void Suspend() { if(busy)return;Invalidate();Hide(); }
     public void Cancel() { generation++;revealPending=false; work?.Cancel(); RetireView(); Available = false; Hide(); Cancelled?.Invoke();Changed?.Invoke(); }
     public void DisposeView()

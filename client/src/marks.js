@@ -172,7 +172,7 @@ function readTransform(term) {
 }
 
 function readMaterial(term) {
-  const [colour, metallic, roughness, emission, bindings] = args(term, 'surface', 5)
+  const [colour, metallic, roughness, emission, opacity, bindings] = args(term, 'surface', 6)
   if (bindings.type !== 'list' || bindings.tail !== null) throw new Error('expected texture bindings')
   const slots = new Set()
   const textures = bindings.items.map(binding => {
@@ -190,7 +190,7 @@ function readMaterial(term) {
     return Object.freeze({ slot, digest, repeat: Object.freeze(repeat) })
   })
   return Object.freeze({ colour: readColour(colour), metallic: fraction(metallic),
-    roughness: fraction(roughness), emission: fraction(emission), textures: Object.freeze(textures) })
+    roughness: fraction(roughness), emission: fraction(emission), opacity: fraction(opacity), textures: Object.freeze(textures) })
 }
 
 export function readImageAsset(asset) {

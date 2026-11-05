@@ -10,7 +10,7 @@ public partial class ExportChecks
         string anchor = Term.Binary(new byte[32]).ToString();
         var subject = Term.Call("entity_ref", Term.Text("scene-fixture"), Term.Binary(new byte[32]), Term.Atom("artifact"));
         string Group(string pose) => $"mark(<<\"subject\">>,<<\"group\">>,[],{pose},no_surface,unlabelled,depicts(<<\"scene-fixture\">>,{anchor},artifact))";
-        string Box(string kind, string w, string h, string d) => $"mark(<<\"subject/shape\">>,<<\"{kind}\">>,[f(<<\"width\">>,{w}),f(<<\"height\">>,{h}),f(<<\"depth\">>,{d})],relative(<<\"subject\">>,transform(0,0,0,0,0,0)),surface(<<\"#6A90D9\">>,0,700,1000,[]),unlabelled,depicts_nothing)";
+        string Box(string kind, string w, string h, string d) => $"mark(<<\"subject/shape\">>,<<\"{kind}\">>,[f(<<\"width\">>,{w}),f(<<\"height\">>,{h}),f(<<\"depth\">>,{d})],relative(<<\"subject\">>,transform(0,0,0,0,0,0)),surface(<<\"#6A90D9\">>,0,700,1000,1000,[]),unlabelled,depicts_nothing)";
         Term Marks(string pose, string kind, string w, string h, string d) => Term.Parse("[" + Group(pose) + "," + Box(kind,w,h,d) + "]");
         var normal = Marks("transform(0,0,0,0,0,0)","wire_box","100000","100000","100000");
         scene.Apply(normal); await Frame();

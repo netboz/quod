@@ -326,7 +326,10 @@ export function createSurface(scene, name, definition, resources, sky = false) {
     material.metallic = definition.metallic; material.roughness = definition.roughness
     if (sky) material.albedoColor.scaleInPlace(definition.emission)
     else material.emissiveColor = material.albedoColor.scale(definition.emission)
-    material.unlit = sky; material.backFaceCulling = !sky; material.disableDepthWrite = sky
+    // Below full opacity a surface is translucent and drawn from both sides.
+    const translucent = !sky && definition.opacity !== undefined && definition.opacity < 1
+    if (translucent) { material.alpha = definition.opacity; material.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND }
+    material.unlit = sky; material.backFaceCulling = !sky && !translucent; material.disableDepthWrite = sky
     material.invertNormalMapX = !scene.useRightHandedSystem
     material.invertNormalMapY = scene.useRightHandedSystem
     material.useRoughnessFromMetallicTextureAlpha = false

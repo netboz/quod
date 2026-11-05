@@ -34,9 +34,10 @@
 %%     Size      ordered mm fields (exact rational for wire_box), or typed assets
 %%     Transform transform(X,Y,Z,RX,RY,RZ) | body_pose(Id, Revision)
 %%               | relative(Parent, transform(...)) | relative(Parent, body_pose(...))
-%%     Material  surface(Colour, Metal, Rough, Emission, Textures) |
+%%     Material  surface(Colour, Metal, Rough, Emission, Opacity, Textures) |
 %%               asset_surfaces for meshes | no_surface for groups.
-%%               Optical factors/repeats are permille.
+%%               Optical factors, opacity and repeats are permille; a surface
+%%               below full opacity is drawn from both sides.
 %%     Label     label(Text, Placement) | unlabelled
 %%     Depicts   depicts(Ontology, Anchor, Entity) | depicts_nothing
 %%               Unanchored depicts(Ontology, Entity) is display-only.
@@ -208,8 +209,8 @@ offset(V) :- integer(V).
 
 turn(V) :- integer(V), V >= 0, V < 360.
 
-surfaced(surface(Colour, Metallic, Roughness, Emission, Textures)) :-
-    colour(Colour), fraction(Metallic), fraction(Roughness), fraction(Emission),
+surfaced(surface(Colour, Metallic, Roughness, Emission, Opacity, Textures)) :-
+    colour(Colour), fraction(Metallic), fraction(Roughness), fraction(Emission), fraction(Opacity),
     texture_bindings(Textures, []).
 
 %% One binding per semantic slot. Assets are verified JPEG bytes, addressed by

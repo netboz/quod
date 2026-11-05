@@ -33,6 +33,8 @@ public partial class ExportChecks : Node
         }
     }
     async Task Frame() => await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    // The same local action a "This device" wedge runs; no domain permission.
+    async Task Device(string action) { app.DeviceAction(action); await Until(() => !Busy); }
     async Task Press(string name)
     {
         var button = app.FindChild(name, true, false) as Button ?? throw new Exception("Missing button " + name);
@@ -76,7 +78,7 @@ public partial class ExportChecks : Node
                 await Press("register");
                 if (State["human"] == null) { Check(State["pending"]!.GetValue<int>() > 0, "lost signup response retains original signed work"); await Press("resolve"); }
                 Check(State["human"] != null, "original fresh human recovered");
-                await Press("prepare"); Check(State["status"]!.ToString().Contains("existing account ontology"), "policy-selected existing S0 storage explained");
+                await Press("prepare"); Check(State["status"]!.ToString().Contains("saved in your personal account"), "starting space storage explained in plain words");
                 await Press("setup");
                 if (State["setup"] == null) { Check(State["pending"]!.GetValue<int>() > 0, "lost setup response retains original signed work"); await Press("resolve"); }
             }
@@ -103,7 +105,7 @@ public partial class ExportChecks : Node
             if(phase=="m4-live") { await ControllerLive(operations);return; }
             if (phase.StartsWith("m2-")) { await SpaceCreation(phase, original); return; }
             if (phase == "closing") {
-                await Press("inspect");
+                await Device("account_source");
                 await app.CloseApplication();
                 Check(SignedView.LiveSockets == 0, "normal application close awaits opening consumer disposal");
                 using var reopened = new LocalStore(profile);
@@ -141,7 +143,7 @@ public partial class ExportChecks : Node
                     operations.Defaults();
                     // Cancellation is local and never dispatches an unsent form.
                     int pending = State["pending"]!.GetValue<int>(); operations.Cancel();
-                    await Press("open-gui"); await Until(() => State["operation_available"]?.GetValue<bool>() == true);
+                    await Device("account_controls"); await Until(() => State["operation_available"]?.GetValue<bool>() == true);
                     Check(State["pending"]!.GetValue<int>() == pending, "unsent cancel/reopen does not dispatch");
                 } else {
                     var reset = operations.FormPanel.Input("controller_reset") as CheckButton ?? throw new Exception("Offered Reset checkbox");
@@ -176,11 +178,11 @@ public partial class ExportChecks : Node
     async Task Startup(string phase)
     {
         var logo=app.FindChild("quod-logo",true,false) as TextureRect;
-        Check(logo?.Texture?.ResourcePath=="res://assets/quod-logo.png", "opening screen uses packaged Quod logo");
-        var mode=app.FindChild("presentation-mode",true,false) as Button;
-        Check(mode is {Visible:false}, "VR entry hidden without initialized runtime");
+        Check(logo?.Texture?.ResourcePath=="res://assets/quod-icon.png", "opening screen uses packaged Quod icon");
+        Check(app.FindChild("presentation-mode",true,false)==null, "fullscreen has no VR chrome button; entry lives in This device");
         if (phase=="startup-new") {
             Check(State["public_key"]==null && !((Button)app.FindChild("create-key",true,false)).Disabled, "empty profile offers key creation");
+            await Capture("welcome");
             await Press("create-key");
             Check(State["public_key"]!=null && app.ActiveStore.Snapshot!=null, "new key saved before connection attempt");
             Check(State["status"]!.ToString()!="Key saved on this device.", "key creation continues into authentication");
@@ -189,12 +191,21 @@ public partial class ExportChecks : Node
             var original=JsonNode.Parse(await File.ReadAllTextAsync(Env("M1B_RESULT")))!;
             if(Busy) await Until(()=>!Busy);
             Check(State["public_key"]!.ToString()==original["key"]!.ToString(), "startup restores exact saved key");
-            Check(State["status"]!.ToString()!="Signing in with your saved key…", "startup attempts authentication without a click");
+            Check(State["status"]!.ToString()!="Signing in…", "startup attempts authentication without a click");
             Check(!((Button)app.FindChild("connect",true,false)).Disabled && State["pending"]!.GetValue<int>()==0,
                 "failed sign-in leaves retry and no signed domain work");
+            await Capture("sign-in-failed");
             await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true, key=State["public_key"]!.ToString(), checks }));
         }
         await app.CloseApplication();
+    }
+
+    // Optional rendered evidence of the opening screen (M1B_SCREENSHOT=/path/prefix.png).
+    async Task Capture(string label)
+    {
+        if (Environment.GetEnvironmentVariable("M1B_SCREENSHOT") is not string path || DisplayServer.GetName() == "headless") return;
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        Check(GetViewport().GetTexture().GetImage().SavePng(path.Replace(".png", "-" + label + ".png")) == Error.Ok, "opening screen rendered: " + label);
     }
 
     readonly HashSet<SignedView> tracedOperationViews = [];
@@ -239,7 +250,7 @@ public partial class ExportChecks : Node
         string secondPath = profile + "-second-device";
         using var store = new LocalStore(secondPath); store.Create(saved.Payload);
         var human = JsonSerializer.Deserialize<Actor>(original["human"]!.ToJsonString())!;
-        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.CaFile));
+        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.NodeKey(saved.Endpoint)));
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         await session.Authenticate(timeout.Token);
         var instructions = Json.Binding(await session.Read(human, "personal_instructions(Instructions).", timeout.Token), "Instructions").Items;
@@ -248,7 +259,7 @@ public partial class ExportChecks : Node
         foreach (var row in instructions) Check(Json.Committed(await session.ResolveInstruction(human, Identity.Encode(row.Require("instruction", 3)[0].Bytes), timeout.Token)), "original result recovered without originating journal");
         using var stranger = Identity.Create();
         using var strangerStore = new LocalStore(profile + "-stranger"); strangerStore.Create(stranger.Payload());
-        using var wrong = new SignedSession(stranger, strangerStore, new Transport(saved.Endpoint, saved.CaFile)); await wrong.Authenticate(timeout.Token);
+        using var wrong = new SignedSession(stranger, strangerStore, new Transport(saved.Endpoint, saved.NodeKey(saved.Endpoint))); await wrong.Authenticate(timeout.Token);
         bool denied = false;
         try { denied = (await wrong.Read(human, "account_setup_state(State).", timeout.Token))["result"]?.ToString() == "fail"; }
         catch (ApiError) { denied = true; }

@@ -6,12 +6,12 @@ import { readMarks } from '../src/marks.js'
 
 test('terrain descriptors bind generated resources to an anchored physical body', () => {
   const anchor = '\\x7\\'.repeat(32)
-  const descriptor = 'terrain_geometry(<<"qvt1">>,[material(9,surface(<<"#447722">>,0,900,0,[]))],view_distance(4000,1000,2000),resources(500000,1000000,20000,10000,64))'
+  const descriptor = 'terrain_geometry(<<"qvt1">>,[material(9,surface(<<"#447722">>,0,900,0,1000,[]))],view_distance(4000,1000,2000),resources(500000,1000000,20000,10000,64))'
   const mark = `mark(<<"ground">>,<<"terrain">>,${descriptor},body_pose(4,2),terrain_surfaces,unlabelled,` +
     `depicts(<<"world">>,<<"${anchor}">>,land))`
   const [terrain] = readMarks(`[${mark}]`)
   assert.deepEqual(terrain.body, { id: '4', revision: '2' })
-  assert.deepEqual(terrain.size, { profile: 'qvt1', viewDistance: [4000, 1000, 2000], palette: [[9, { colour: '#447722', metallic: 0, roughness: 0.9, emission: 0, textures: [] }]],
+  assert.deepEqual(terrain.size, { profile: 'qvt1', viewDistance: [4000, 1000, 2000], palette: [[9, { colour: '#447722', metallic: 0, roughness: 0.9, emission: 0, opacity: 1, textures: [] }]],
     allowed: [500000, 1000000, 20000, 10000], chunks: 64 })
   const [unallocated] = readMarks(`[${mark.replace('resources(500000,1000000,20000,10000,64)', 'resources(unlimited,unlimited,unlimited,unlimited,unlimited)')}]`)
   assert.deepEqual(unallocated.size.allowed, Array(4).fill(Infinity))
@@ -19,15 +19,15 @@ test('terrain descriptors bind generated resources to an anchored physical body'
   assert.throws(() => readMarks(`[${mark.replace('body_pose(4,2)', 'transform(0,0,0,0,0,0)')}]`), /anchored body/)
   assert.throws(() => readMarks(`[${mark.replace('resources(500000', 'resources(0')}]`), /terrain allowance/)
   assert.throws(() => readMarks(`[${mark.replace('view_distance(4000,1000,2000)', 'view_distance(4000,2000,1000)')}]`), /view distance/)
-  assert.throws(() => readMarks(`[${mark.replace('material(9,surface(<<"#447722">>,0,900,0,[]))',
-    'material(9,surface(<<"#447722">>,0,900,0,[])),material(9,surface(<<"#FFFFFF">>,0,900,0,[]))')}]`), /material identity/)
+  assert.throws(() => readMarks(`[${mark.replace('material(9,surface(<<"#447722">>,0,900,0,1000,[]))',
+    'material(9,surface(<<"#447722">>,0,900,0,1000,[])),material(9,surface(<<"#FFFFFF">>,0,900,0,1000,[]))')}]`), /material identity/)
 })
 
 test('multiple ontology mark occurrences retain one exact instance and no body identity', () => {
   const anchor = '\\x7\\'.repeat(32)
   const target = `ontology_ref(<<"private:ontology">>,<<"${anchor}">>)`
   const mark = id => `mark(<<"${id}">>,<<"box">>,[f(<<"width">>,10),f(<<"height">>,10),f(<<"depth">>,10)],` +
-    `transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,900,0,[]),unlabelled,depicts(<<"private:ontology">>,<<"${anchor}">>,${target}))`
+    `transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,900,0,1000,[]),unlabelled,depicts(<<"private:ontology">>,<<"${anchor}">>,${target}))`
   const [first, second] = readMarks(`[${mark('first')},${mark('second')}]`)
   assert.notEqual(first.id, second.id)
   assert.deepEqual(first.depicts, second.depicts)
@@ -44,11 +44,11 @@ import { diagnosisGoal, viewGoal } from '../src/lens.js'
 const REPLY =
   '[mark(<<"m0">>, <<"box">>, [f(<<"width">>, 400), f(<<"height">>, 1500), ' +
   'f(<<"depth">>, 400)], transform(0, 750, 0, 0, 0, 0), ' +
-  'surface(<<"#F9C80E">>, 0, 900, 0, []), label(<<"NOASSERTION">>, <<"above">>), ' +
+  'surface(<<"#F9C80E">>, 0, 900, 0, 1000, []), label(<<"NOASSERTION">>, <<"above">>), ' +
   'depicts(<<"quod:licence">>, ships(<<"quod">>, <<"NOASSERTION">>))), ' +
   'mark(<<"m1">>, <<"box">>, [f(<<"width">>, 400), f(<<"height">>, 300), ' +
   'f(<<"depth">>, 400)], transform(600, 150, -900, 0, 0, 0), ' +
-  'surface(<<"#698F3F">>, 0, 900, 0, []), label(<<"cowboy">>, <<"above">>), ' +
+  'surface(<<"#698F3F">>, 0, 900, 0, 1000, []), label(<<"cowboy">>, <<"above">>), ' +
   'depicts(<<"quod:licence">>, component(<<"quod">>, <<"cowboy">>)))]'
 
 test('a reply becomes drawable marks', () => {
@@ -59,7 +59,7 @@ test('a reply becomes drawable marks', () => {
   assert.equal(verdict.kind, 'box')
   assert.deepEqual(verdict.size, { width: 400, height: 1500, depth: 400 })
   assert.deepEqual(verdict.transform, { x: 0, y: 750, z: 0, rx: 0, ry: 0, rz: 0 })
-  assert.deepEqual(verdict.material, { colour: '#F9C80E', metallic: 0, roughness: 0.9, emission: 0, textures: [] })
+  assert.deepEqual(verdict.material, { colour: '#F9C80E', metallic: 0, roughness: 0.9, emission: 0, opacity: 1, textures: [] })
   assert.deepEqual(verdict.label, { text: 'NOASSERTION', placement: 'above' })
   assert.equal(verdict.depicts.ontology, 'quod:licence')
   // the subject stays a term: selection resolves through it, not a mesh name
@@ -71,7 +71,7 @@ test('a reply becomes drawable marks', () => {
 test('a mark may show nothing and carry no label', () => {
   const [mark] = readMarks(
     '[mark(<<"m0">>, <<"sphere">>, [f(<<"diameter">>, 900)], ' +
-    'transform(0, 0, 0, 0, 0, 0), surface(<<"#C14953">>, 0, 900, 650, []), ' +
+    'transform(0, 0, 0, 0, 0, 0), surface(<<"#C14953">>, 0, 900, 650, 1000, []), ' +
     'unlabelled, depicts_nothing)]')
   assert.equal(mark.label, null)
   assert.equal(mark.depicts, null)
@@ -96,7 +96,9 @@ test('an unreadable descriptor fails closed', () => {
       '[f(<<"width">>, 400), f(<<"height">>, 1500), f(<<"depth">>, 400)]',
       '[f(<<"height">>, 1500), f(<<"width">>, 400), f(<<"depth">>, 400)]'),
     'a colour that is not one': REPLY.replace('<<"#F9C80E">>', '<<"gold">>'),
-    'an invalid factor': REPLY.replace('0, 900, 0, []', '0, 1001, 0, []'),
+    'an invalid factor': REPLY.replace('0, 900, 0, 1000, []', '0, 1001, 0, 1000, []'),
+    'an invalid opacity': REPLY.replace('0, 900, 0, 1000, []', '0, 900, 0, 1001, []'),
+    'a surface without opacity': REPLY.replace('0, 900, 0, 1000, []', '0, 900, 0, []'),
     'an unknown placement': REPLY.replace('<<"above">>', '<<"left">>'),
     'a fractional dimension': REPLY.replace('400)', '400.5)'),
     'a repeated mark identity': REPLY.replace('<<"m1">>', '<<"m0">>'),
@@ -109,7 +111,7 @@ test('an unreadable descriptor fails closed', () => {
 })
 
 test('capsules and tori keep their neutral dimensions', () => {
-  const surface = 'surface(<<"#F9C80E">>,0,900,0,[])'
+  const surface = 'surface(<<"#F9C80E">>,0,900,0,1000,[])'
   const [capsule, torus] = readMarks(
     `[mark(<<"support">>,<<"capsule">>,[f(<<"diameter">>,460),f(<<"height">>,850)],` +
     `transform(0,425,0,0,0,0),${surface},unlabelled,depicts_nothing),` +
@@ -128,7 +130,7 @@ test('capsules and tori keep their neutral dimensions', () => {
 test('a sky sphere keeps its renderer-neutral diameter', () => {
   const [sky] = readMarks(
     '[mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
-    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
+    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,1000,[]),' +
     'unlabelled,depicts_nothing)]')
   assert.equal(sky.kind, 'sky_sphere')
   assert.deepEqual(sky.size, { diameter: 80000 })
@@ -184,7 +186,7 @@ test('binary identities and UTF-8 text survive lossless signed bindings', () => 
 test('texture slots carry digest identity and explicit sampling; invalid bindings fail', () => {
   const hash = 'a'.repeat(64)
   const texture = `texture(<<"base_colour">>,asset(<<"${hash}">>,<<"image/jpeg">>),repeat(1000,2500))`
-  const textured = REPLY.replace('0, 900, 0, []', `0, 900, 0, [${texture}]`)
+  const textured = REPLY.replace('0, 900, 0, 1000, []', `0, 900, 0, 1000, [${texture}]`)
   assert.deepEqual(readMarks(textured)[0].material.textures,
     [{ slot: 'base_colour', digest: hash, repeat: [1, 2.5] }])
   for (const invalid of [
@@ -223,7 +225,7 @@ test('mesh marks carry typed digest, local frame, scale and asset surfaces', () 
 
 test('complete large scene preserves long names, labels and coordinates', () => {
   const label = 'full descriptive name '.repeat(20), ns = 'namespace'.repeat(10)
-  const mark = i => `mark(<<"${'id'.repeat(150)}${i}">>,<<"box">>,[f(<<"width">>,100001),f(<<"height">>,10),f(<<"depth">>,10)],transform(1000001,0,0,0,0,0),surface(<<"#FFFFFF">>,0,900,0,[]),label(<<"${label}">>,<<"above">>),depicts(<<"${ns}">>,item(${i})))`
+  const mark = i => `mark(<<"${'id'.repeat(150)}${i}">>,<<"box">>,[f(<<"width">>,100001),f(<<"height">>,10),f(<<"depth">>,10)],transform(1000001,0,0,0,0,0),surface(<<"#FFFFFF">>,0,900,0,1000,[]),label(<<"${label}">>,<<"above">>),depicts(<<"${ns}">>,item(${i})))`
   const marks = readMarks(`[${Array.from({length: 600}, (_, i) => mark(i)).join(',')}]`)
   assert.equal(marks.length, 600)
   assert.equal(marks[599].label.text, label)

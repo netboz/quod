@@ -5,6 +5,11 @@ using Json=Quod.Client.Json;
 
 public partial class ExportChecks
 {
+    // A fixed authored-shaped pie for injected-input qualification.
+    internal static MenuNode QualificationPie(params (int Slot,string Label,bool Enabled)[] items)=>
+        new(Term.Atom("menu"),"Qualification","",true,0,8,0,null,false,items.Select(i=>new MenuNode(
+            Term.Call("wedge",Term.List(Term.Number(i.Slot.ToString()))),i.Label,i.Enabled ? "" : "Not here.",i.Enabled,i.Slot,8,0,
+            new MenuTarget(Term.Atom("qualification"),Term.Atom("choice_"+i.Slot)),false,[])).ToArray());
     async Task ControllerAdapter()
     {
         // Frames are injected through real XRServer trackers. GUI events,
@@ -17,7 +22,9 @@ public partial class ExportChecks
         var adapter=new OpenXRInput();scene.Viewport.AddChild(adapter);
         int fetched=0,clicked=0,menuActivated=0;bool overlay=false,menuEnabled=true;
         using var resources=new RenderModels((asset,cancellation)=> { fetched++;return Task.FromResult(model); });
-        adapter.Configure(scene,gui,resources,()=>null,()=>overlay,()=>new[]{("Test existing menu consumer",(Func<bool>)(()=>menuEnabled),(Action)(()=>menuActivated++))});
+        var pie=new PieMenu();gui.Surface.AddChild(pie);pie.Selected+=_=>menuActivated++;
+        adapter.Configure(scene,gui,resources,()=>null,()=>overlay,pie,_=>{
+            pie.Open(gui.Surface.Size/2,300,"Reading…");pie.Present(QualificationPie((1,"Test existing menu consumer",menuEnabled)),"");return true;});
         adapter.GuiSurface.Visible=true;adapter.GuiSurface.Transform=Transform3D.Identity;
         var button=new Button { Text="Controller capture qualification",Position=new(430,310),Size=new(300,80),MouseFilter=Control.MouseFilterEnum.Stop };
         gui.Surface.AddChild(button);button.Pressed+=()=>clicked++;
@@ -150,32 +157,33 @@ public partial class ExportChecks
         // Entry/status updates do not replace a mapping or cancel other input.
         int beforeRedraw=adapter.MenuRedraws;
         right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);int menuDraw=adapter.MenuRedraws;
-        for(int i=0;i<20;i++)Advance();Check(adapter.MenuRedraws==menuDraw && menuDraw>beforeRedraw,"unchanged radial selection does not redraw menu labels or textures");
-        var menu=gui.Surface.FindChild("xr-menu",true,false) as PanelContainer??throw new Exception("Expected native menu");await Frame();
-        var entry=menu.FindChildren("*","Button",true,false).OfType<Button>().Single();ulong entryId=entry.GetInstanceId();
-        var choice=(Label)menu.FindChild("xr-menu-choice",true,false);
-        Check(entry.ButtonPressed && choice.Text=="Release: "+entry.Text && ((Label)menu.FindChild("xr-menu-direction-1",true,false)).Text=="[1]","pad direction, native pressed state and release caption show the same selection");
-        menuEnabled=false;adapter.RefreshMenu();Check(entry.Disabled && entry.GetInstanceId()==entryId && adapter.MenuRedraws==menuDraw+1 && choice.Text=="Unavailable: "+entry.Text,"changed menu availability updates the existing entry and truthful selection feedback once");
+        for(int i=0;i<20;i++)Advance();Check(adapter.MenuRedraws==menuDraw && menuDraw>beforeRedraw,"unchanged radial selection does not redraw the pie");
+        Check(pie.Navigator!.Hovered==1 && pie.Caption=="Test existing menu consumer","pad direction and the pie centre name the same wedge");
+        menuEnabled=false;pie.Present(QualificationPie((1,"Test existing menu consumer",false)),"");
+        Check(pie.Navigator!.Hovered==1 && !pie.Navigator.HoveredItem!.Enabled && adapter.MenuRedraws==menuDraw+1 && pie.Caption=="Test existing menu consumer · Not here.",
+            "changed availability keeps the pointed wedge and shows its reason with one redraw");
         int disabledDraw=adapter.MenuRedraws;string disabledResources=System.Text.Json.JsonSerializer.Serialize(resources.Metrics);
         for(int i=0;i<20;i++)Advance();
         Check(adapter.MenuRedraws==disabledDraw && System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==disabledResources,"unchanged disabled selection performs no menu redraw acquisition decode or lease work");
-        Held(right,"pad_press",false);Check(menuActivated==0 && adapter.Router.MenuOwner==null,"releasing an unavailable native menu entry cancels without activation");
-        right.SetInput("pad_axes",Vector2.Zero);Advance();menuEnabled=true;
+        Held(right,"pad_press",false);Check(menuActivated==0 && adapter.Router.MenuOwner==null && pie.IsOpen,"releasing on an unavailable wedge keeps the pie and its reason without activation");
+        adapter.CancelMenu();right.SetInput("pad_axes",Vector2.Zero);Advance();menuEnabled=true;
         right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);
         right.SetInput("pad_axes",Vector2.Zero);Advance();
-        menu=(PanelContainer)gui.Surface.FindChild("xr-menu",true,false);entry=menu.FindChildren("*","Button",true,false).OfType<Button>().Single();
-        Check(!entry.ButtonPressed && ((Label)menu.FindChild("xr-menu-choice",true,false)).Text.Contains("cancel"),"centre visibly clears the pad choice and describes cancellation");
-        Held(right,"pad_press",false);Check(menuActivated==0 && adapter.Router.MenuOwner==null,"centre release activates no menu callback");
+        Check(pie.Navigator!.Hovered==0 && pie.Caption=="Qualification","the centre clears the pad choice and names the menu");
+        Held(right,"pad_press",false);Check(menuActivated==0 && adapter.Router.MenuOwner==null && !pie.IsOpen,"centre release cancels without a menu callback");
         Advance();right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);adapter.Router.CancelMenu();Advance();
-        Check(adapter.Router.MenuOwner==null && menuActivated==0,"cancelled held pad cannot reopen without a neutral release");
+        Check(adapter.Router.MenuOwner==null && menuActivated==0 && !pie.IsOpen,"cancelled held pad cannot reopen without a neutral release");
         Held(right,"pad_press",false);right.SetInput("pad_axes",Vector2.Zero);Advance();
         right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);Held(right,"pad_press",false);Advance();
-        Check(menuActivated==1 && adapter.Router.MenuOwner==null,"neutral then a new angular selection commits its native callback exactly once on release");
+        Check(menuActivated==1 && adapter.Router.MenuOwner==null && !pie.IsOpen,"neutral then a new angular selection commits its wedge exactly once on release (turbo)");
         right.SetInput("pad_axes",Vector2.Zero);Advance();right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);await Frame();
-        menu=(PanelContainer)gui.Surface.FindChild("xr-menu",true,false);entry=menu.FindChildren("*","Button",true,false).OfType<Button>().Single();entryId=entry.GetInstanceId();menuDraw=adapter.MenuRedraws;
-        adapter.RefreshMenu();Check(!entry.Disabled && entry.GetInstanceId()==entryId && adapter.MenuRedraws==menuDraw,"unchanged enabled availability retains native entry and selection without redraw");Pose(right,entry.GetGlobalRect().GetCenter());
+        menuDraw=adapter.MenuRedraws;pie.Present(QualificationPie((1,"Test existing menu consumer",true)),"");
+        Check(adapter.MenuRedraws==menuDraw,"an unchanged menu projection retains the pie and selection without redraw");
+        right.SetInput("pad_axes",Vector2.Zero);Advance();Check(pie.Navigator!.Hovered==0,"returning the thumb to the pad centre points no wedge");
+        Pose(right,gui.Surface.Size/2-new Vector2(0,300*.66f));Advance();
+        Check(pie.Navigator!.Hovered==1,"the controller ray on the pie surface points the same wedge as the pad");
         Held(right,"trigger_press",true);Held(right,"trigger_press",false);Held(right,"pad_press",false);
-        Check(menuActivated==2 && adapter.Router.MenuOwner==null,"trigger menu choice consumes its later pad release exactly once");
+        Check(menuActivated==2 && adapter.Router.MenuOwner==null,"trigger wedge choice consumes its later pad release exactly once");
         right.SetInput("pad_axes",Vector2.Zero);Advance();right.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();beforeRedraw=adapter.MenuRedraws;Held(right,"pad_press",true);
         Check(adapter.MenuRedraws==beforeRedraw,"unknown handedness does not receive the default menu role");Held(right,"pad_press",false);
         left.Profile="unsupported-profile";Advance();Pose(left,button.GetGlobalRect().GetCenter());Held(left,"trigger_press",true);Held(left,"trigger_press",false);

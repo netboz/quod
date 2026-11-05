@@ -66,6 +66,7 @@ decode_command(Bytes) ->
                          <<"gui_question">> -> gui_question; <<"gui_operations">> -> gui_operations;
                          <<"source_access">> -> source_access;
                          <<"eidolons">> -> eidolons; <<"eidolon">> -> eidolon;
+                         <<"menu">> -> menu; <<"hud_commands">> -> hud_commands;
                          <<"eidolon_scene">> -> eidolon_scene;
                          <<"controller_preferences">> -> controller_preferences end,
                 {open, Session, Decode(Request64), Signature, Ns, Anchor, Kind};
@@ -211,6 +212,8 @@ view_request(Kind,#{goal_text := Text,parser_version := Version},Ns,Anchor) ->
 
 gui_view_goal(gui_hud,{_,{0}}) ->
     {ok,hud,{gui_pending_questions,{0}}};
+gui_view_goal(hud_commands,{_,{0}}) ->
+    {ok,hud_commands,{hud_commands,{0}}};
 gui_view_goal(navigation,{_,{0}}) ->
     {ok,navigation,{account_navigation,{0}}};
 gui_view_goal(gui_question,{_,Question,{0}}) ->
@@ -239,6 +242,11 @@ gui_view_goal(source_access,{_,Target = {_,Ns,Anchor},_,{0}})
 gui_view_goal(eidolons,{_,Entity,{0}}) ->
     case quod_wire_term:is_ground(Entity) of
         true -> {ok,Entity,{entity_eidolons,Entity,{0}}};
+        false -> error
+    end;
+gui_view_goal(menu,{_,Entity,{0}}) ->
+    case quod_wire_term:is_ground(Entity) of
+        true -> {ok,Entity,{client_menu,Entity,{0}}};
         false -> error
     end;
 gui_view_goal(Kind,{_,Entity,Choice,{0}}) when Kind =:= eidolon; Kind =:= eidolon_scene ->
@@ -446,7 +454,8 @@ open_view({answers, Height, [Binding]}, Digest, Expiry, S = #{kind := eidolon_sc
     end;
 open_view({answers, Height, [Binding]}, Digest, Expiry, S = #{kind := Kind})
   when Kind =:= gui_hud; Kind =:= gui_question; Kind =:= gui_operations;
-       Kind =:= controller_preferences; Kind =:= source_access; Kind =:= navigation; Kind =:= eidolons; Kind =:= eidolon ->
+       Kind =:= controller_preferences; Kind =:= source_access; Kind =:= navigation; Kind =:= eidolons; Kind =:= eidolon;
+       Kind =:= menu; Kind =:= hud_commands ->
     {ok, Pairs} = quod_client_result:decode_binding(Binding),
     case proplists:get_value(<<"View">>, Pairs, missing) of
         missing -> reply(#{type => unavailable, reason => invalid_projection},release(S));

@@ -9,7 +9,7 @@ public partial class ExportChecks
 {
     async Task ExactSubject(OperationsPanel panel,Term subject)
     {
-        var actor=Actor.FromTerm(subject); await Press("create-operations");
+        var actor=Actor.FromTerm(subject); await Device("create");
         await Type((LineEdit)panel.FindChild("exact-storage-namespace",true,false),actor.Namespace);
         await Type((LineEdit)panel.FindChild("exact-storage-anchor",true,false),actor.Anchor);
         await Type((LineEdit)panel.FindChild("exact-subject-instance",true,false),actor.InstanceText.TrimEnd('.'));
@@ -76,8 +76,7 @@ public partial class ExportChecks
             await Move(panel,s1); await Move(panel,s0);
             route["s2"]=s2.ToString(); route["leaf"]=leaf.ToString(); await File.WriteAllTextAsync(routePath,route.ToJsonString());
             await RecursiveScene(scene,human,s0,s1,s2,leaf);
-            await Press("location-operations"); await Until(()=>panel.Available);
-            await Move(panel,s0,leave:true,lose:true,open:false); return;
+            await Move(panel,s0,leave:true,lose:true); return;
         }
         if(phase=="m3-left") {
             Check(State["current_location"]?.ToString()=="unplaced" && scene.Count==0 && !State["world_accepted"]!.GetValue<bool>(),"lost Leave reply recovers explicit unplaced state with no stale scene");
@@ -133,7 +132,7 @@ public partial class ExportChecks
         var t3=Term.Parse("transform(300,500,-900,23,47,71)");
         foreach(var (subject,pose,style) in new[] { (s1,t1,"contents"),(s2,t2,"contents"),(leaf,t3,"solid") }) {
             var actor=Actor.FromTerm(subject);
-            string goal=$"attribute({actor.InstanceText.TrimEnd('.')},exterior,Old),attribute({actor.InstanceText.TrimEnd('.')},transform,Pose),space_represent({actor.InstanceText.TrimEnd('.')},Old,Pose,{style},{pose}).";
+            string goal=$"attribute({actor.InstanceText.TrimEnd('.')},exterior,Old),attribute({actor.InstanceText.TrimEnd('.')},transform,Pose),space_represent({actor.InstanceText.TrimEnd('.')},Old,Pose,none,{style},{pose},none).";
             await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,goal,timeout.Token);
         }
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==1);
@@ -147,10 +146,10 @@ public partial class ExportChecks
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
         Check(scene.SubjectIds(leaf).Distinct().Count()==4,"independent recursive paths preserve four occurrences of the same exact subject");
         Check(scene.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="Contents cycle")==2,"exact ancestor cycles render explicit terminal occurrences on each independent branch");
-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"space_represent({Entity(s2)},contents,{t2},wireframe,{t2}).",timeout.Token);
+        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"space_represent({Entity(s2)},contents,{t2},none,wireframe,{t2},none).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==1 && scene.SubjectIds(s2).Length==2);
         Check(scene.SubjectIds(s2).Length==2,"wireframe terminates each selected S2 occurrence while the independent S1 leaf remains visible");
-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"space_represent({Entity(s2)},wireframe,{t2},contents,{t2}).",timeout.Token);
+        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"space_represent({Entity(s2)},wireframe,{t2},none,contents,{t2},none).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
         int rebuilt=scene.Rebuilt;var ids=scene.Ids.ToArray();
         var view=(SignedView)typeof(Main).GetField("worldView",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(app)!;

@@ -187,7 +187,7 @@ one_mark(row(Thing, Group, Rank, Text), Encoding, Ontology, Depth, Across, Next,
          mark(Id, <<"box">>,
               [f(<<"width">>, Side), f(<<"height">>, High), f(<<"depth">>, Side)],
               transform(X, Y, Z, 0, 0, 0),
-              surface(Colour, 0, 900, 0, []),
+              surface(Colour, 0, 900, 0, 1000, []),
               label(Text, <<"above">>),
               Depicts)) :-
     mark_id(Next, Id),
@@ -721,7 +721,7 @@ workbench_marks([node(Kind, Ref) | Rest], Ns, A, Index, [Mark | Marks]) :-
     Ref =.. [_ | RefParts], append(_, [Local], RefParts),
     '$quod_program_source'([Local], Label),
     Mark = mark(Id, Shape, Sizes, transform(X, Y, 0, 0, 0, 0),
-                surface(Colour, 0, 900, 0, []), label(Label, <<"above">>), depicts(Ns, A, Depicted)),
+                surface(Colour, 0, 900, 0, 1000, []), label(Label, <<"above">>), depicts(Ns, A, Depicted)),
     Next is Index + 1, workbench_marks(Rest, Ns, A, Next, Marks).
 workbench_links([], _, _, _, _, []).
 workbench_links([Fact | Rest], Nodes, Ns, A, Index, Marks) :-
@@ -733,7 +733,7 @@ workbench_links([Fact | Rest], Nodes, Ns, A, Index, Marks) :-
     X is (X1 + X2) // 2, Y is (Y1 + Y2) // 2, Z is -200,
     mark_id(Index, Base), binary_codes(Base, Codes),
     binary_codes(H, [104 | Codes]), binary_codes(V, [118 | Codes]),
-    Surface = surface(Colour, 0, 900, 0, []),
+    Surface = surface(Colour, 0, 900, 0, 1000, []),
     Horizontal = mark(H, <<"box">>, [f(<<"width">>, Width), f(<<"height">>, 20), f(<<"depth">>, 20)],
                       transform(X, Y1, Z, 0, 0, 0), Surface, unlabelled, depicts_nothing),
     Vertical = mark(V, <<"box">>, [f(<<"width">>, 20), f(<<"height">>, Height), f(<<"depth">>, 20)],

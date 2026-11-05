@@ -82,6 +82,16 @@ public partial class ScenePanel : SubViewportContainer
     }
     internal string? ControlIdentity=>world?.Controlled==null ? null : world.Control+"\n"+world.Sample!.Fence;
     public event Action<Selection>? Selected;
+    public enum MenuStep { Open, Move, Release }
+    // Right button: open the pointed target's pie, drag through wedges, release.
+    public event Action<MenuStep,Selection?,Vector2>? MenuGesture;
+    // The cursor's target before any press: the occurrence under it, or none.
+    public event Action<Selection?,Vector2>? Hovered;
+    bool menuHeld;
+    Occurrence? highlighted;
+    // A local tint on the pointed mark; it reads and changes no domain state.
+    static readonly StandardMaterial3D Highlight=new() { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,
+        AlbedoColor=new(0xF9/255f,0xC8/255f,0x0E/255f,.28f),Transparency=BaseMaterial3D.TransparencyEnum.Alpha };
     public event Action? PresentationChanged;
     public int Rebuilt { get; private set; }
     public int Count => occurrences.Count;
@@ -99,6 +109,7 @@ public partial class ScenePanel : SubViewportContainer
         camera.Position = new(0, 0, 5);
         viewport.SizeChanged += () => { if(!viewport.UseXR && world?.Controlled==null)RequestFraming(); };
         FocusExited += ReleaseInput;
+        MouseExited += () => Hovered?.Invoke(null,new(float.NaN,float.NaN));
     }
     static Vector3[] Corners(Vector3 size) => [
         new Vector3(-size.X,-size.Y,-size.Z)/2,new Vector3(size.X,-size.Y,-size.Z)/2,
@@ -186,11 +197,13 @@ public partial class ScenePanel : SubViewportContainer
                     lines.SurfaceEnd(); mesh = lines;
                 } else if (mark.Kind=="sphere") mesh=new SphereMesh { Radius=sizes[mark.Id].X/2,Height=sizes[mark.Id].X };
                 else mesh = new BoxMesh { Size = sizes[mark.Id] };
-                var colour=new Color(mark.Colour);
+                // Below full opacity a surface is translucent; both sides already draw.
+                var colour=new Color(mark.Colour) with {A=mark.Opacity/1000f};
                 node.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = new StandardMaterial3D {
                     ShadingMode = mark.Kind=="wire_box" ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel,
                     AlbedoColor=colour,Metallic=mark.Metallic/1000f,Roughness=mark.Roughness/1000f,
                     EmissionEnabled=mark.Emission>0,Emission=colour,EmissionEnergyMultiplier=mark.Emission/1000f,
+                    Transparency=mark.Opacity<1000 ? BaseMaterial3D.TransparencyEnum.Alpha : BaseMaterial3D.TransparencyEnum.Disabled,
                     CullMode = BaseMaterial3D.CullModeEnum.Disabled } });
             }
             if(mark.Label.Kind!="atom" || mark.Label.Name!="unlabelled") {
@@ -336,7 +349,7 @@ public partial class ScenePanel : SubViewportContainer
     public Vector3[] WorldCorners(string id) => occurrences[id].Corners.Select(p => occurrences[id].Node.GlobalTransform * p).ToArray();
     public Transform3D WorldPose(string id) => occurrences[id].Node.GlobalTransform;
     public void ReleaseInput()
-    { bool active = held.Count != 0; held.Clear(); looking=false;pressedSubject=null; if (active && Controlled) Drive?.Invoke(Vector3.Zero,Vector3.Zero); }
+    { bool active = held.Count != 0; held.Clear(); looking=false;menuHeld=false;pressedSubject=null; if (active && Controlled) Drive?.Invoke(Vector3.Zero,Vector3.Zero); }
     public override void _Process(double delta)
     {
         if (Controlled || navigationBlocked || held.Count == 0) return;
@@ -357,7 +370,15 @@ public partial class ScenePanel : SubViewportContainer
             if (key.Pressed) held.Add(key.PhysicalKeycode); else held.Remove(key.PhysicalKeycode);
             if (Controlled) Drive?.Invoke(DomainDirection(),Vector3.Zero); AcceptEvent();
         }
-        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right } look) { looking=look.Pressed; GrabFocus(); AcceptEvent(); }
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Middle } look) { looking=look.Pressed; GrabFocus(); AcceptEvent(); }
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right } menu) {
+            GrabFocus();menuHeld=menu.Pressed;
+            MenuGesture?.Invoke(menu.Pressed ? MenuStep.Open : MenuStep.Release,
+                menu.Pressed ? Pick(menu.Position * ((Vector2)viewport.Size / Size)) : null,menu.Position);
+            AcceptEvent();
+        }
+        if (@event is InputEventMouseMotion dragged && menuHeld) { MenuGesture?.Invoke(MenuStep.Move,null,dragged.Position); AcceptEvent(); }
+        else if (@event is InputEventMouseMotion hover && !looking) Hovered?.Invoke(Pick(hover.Position * ((Vector2)viewport.Size / Size)),hover.Position);
         if (@event is InputEventMouseMotion motion && looking && !Controlled) {
             camera.RotateY(-motion.Relative.X*.004f); camera.RotateObjectLocal(Vector3.Right,-motion.Relative.Y*.004f); AcceptEvent();
         }
@@ -373,4 +394,14 @@ public partial class ScenePanel : SubViewportContainer
     public void Withdraw()
     { Suspend();foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) { item.Node.GetParent()?.RemoveChild(item.Node); item.Node.QueueFree(); } occurrences.Clear(); }
     internal void Select(Selection selected){if(Resolve(selected)!=null)Selected?.Invoke(selected);}
+    public void Outline(Selection? selected)
+    {
+        var next=selected==null ? null : Resolve(selected);
+        if(ReferenceEquals(next,highlighted))return;
+        foreach(var item in new[]{highlighted,next})
+            if(item!=null&&IsInstanceValid(item.Node))
+                foreach(var mesh in item.Node.FindChildren("*","GeometryInstance3D",true,false).OfType<GeometryInstance3D>().Prepend(item.Node as GeometryInstance3D).OfType<GeometryInstance3D>())
+                    mesh.MaterialOverlay=item==next ? Highlight : null;
+        highlighted=next;
+    }
 }

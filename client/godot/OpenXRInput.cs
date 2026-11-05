@@ -64,6 +64,16 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     readonly XROrigin3D origin=new() { Name="xr-origin" };
     readonly XRCamera3D camera=new() { Name="xr-camera" };
     readonly MeshInstance3D panel=new() { Name="shared-gui-surface",Mesh=new QuadMesh { Size=new(1.5f,1) } };
+    // The pie has its own world-locked surface; the working panel stays put.
+    readonly SubViewport pieViewport=new() { Name="pie-viewport",Size=new(800,800),TransparentBg=true,HandleInputLocally=true,Disable3D=true };
+    readonly MeshInstance3D pieQuad=new() { Name="pie-surface",Mesh=new QuadMesh(),Visible=false };
+    // The HUD strip: body-locked below the central view, tagging along.
+    readonly SubViewport hudViewport=new() { Name="hud-viewport",Size=new(1200,72),TransparentBg=true,HandleInputLocally=true,Disable3D=true };
+    readonly MeshInstance3D hudQuad=new() { Name="hud-surface",Mesh=new QuadMesh(),Visible=false };
+    float? hudYaw;
+    bool pointingHud;
+    readonly Label3D rayLabel=new() { Name="ray-label",Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,PixelSize=.0015f,FontSize=28,
+        OutlineSize=8,Modulate=new(0xF5/255f,0xF1/255f,0xEB/255f),OutlineModulate=new(0x19/255f,0x2B/255f,0x32/255f),Visible=false,NoDepthTest=true };
     readonly OpenXRApiExtension api=new();
     OpenXRInterface? xr;
     ScenePanel scene=null!;
@@ -71,15 +81,9 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     RenderModels models=null!;
     Func<PhysicsInput?> controls=null!;
     Func<bool> blocked=null!;
-    Func<(string Text,Func<bool> Enabled,Action Activate)[]> menuEntries=null!;
-    PanelContainer? menuPanel;
-    ScrollContainer? menuScroll;
-    Button[] menuButtons=[];
-    Label[] menuDirections=[];
-    Label? menuChoice;
-    Func<bool>[] menuEnabled=[];
-    int selection=-1;
-    bool attached,presentationSubscribed,active,lifecycleSubscribed,shuttingDown,visible=true,disposed,pointingGui;
+    PieMenu pie=null!;
+    Func<ScenePanel.Selection?,bool> openPie=null!;
+    bool attached,presentationSubscribed,active,lifecycleSubscribed,shuttingDown,visible=true,disposed,pointingGui,pointingPie;
     bool workspaceShown=true,placeRequested,movingWorkspace;
     float workspaceDistance=2;
     Transform3D? calibration;
@@ -89,14 +93,14 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     ScenePanel.Selection? occurrence;
     Transform3D personalPose;
     Basis occurrenceBasis;
-    IControllerSource? pointerSource;
+    IControllerSource? pointerSource,pieSource;
     public ControllerInput Router { get; private set; }=null!;
     public bool Running=>active;
     public bool Available=>XRServer.FindInterface("OpenXR") is OpenXRInterface candidate && candidate.IsInitialized() &&
         candidate.GetSessionState() is not (OpenXRInterface.SessionState.Stopping or OpenXRInterface.SessionState.LossPending or OpenXRInterface.SessionState.Exiting);
     public bool WorkspaceVisible=>workspaceShown;
     public bool MovingWorkspace=>movingWorkspace;
-    public int MenuRedraws { get; private set; }
+    public int MenuRedraws=>pie.Redraws;
     public int LateCallbacks { get; private set; }
     public int Subscriptions { get; private set; }
     public int DriveRequests { get; private set; }
@@ -111,10 +115,23 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     internal ScenePanel.Selection? BoundOccurrence=>occurrence;
     internal Source[] Sources=>sources.Values.ToArray();
     public bool Blocked=>blocked() || gui.TextEntryActive;
-    public void Configure(ScenePanel scene,SpatialGui gui,RenderModels models,Func<PhysicsInput?> controls,Func<bool> blocked,Func<(string,Func<bool>,Action)[]> menuEntries)
+    internal SubViewport PieSurface=>pieViewport;
+    internal SubViewport HudSurface=>hudViewport;
+    internal MeshInstance3D HudQuad=>hudQuad;
+    internal MeshInstance3D PieQuad=>pieQuad;
+    // Plain words naming the pointed target before any press, from Main.
+    public Func<ScenePanel.Selection?,string?> TargetLabel { get; set; }=_=>null;
+    public DeviceProfile Profile { get; set; }=DeviceProfile.Vive;
+    // The caller resolves the pointed target and starts its signed menu read.
+    public void Configure(ScenePanel scene,SpatialGui gui,RenderModels models,Func<PhysicsInput?> controls,Func<bool> blocked,PieMenu pie,Func<ScenePanel.Selection?,bool> openPie)
     {
-        this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.menuEntries=menuEntries;
-        AddChild(origin);origin.AddChild(camera);AddChild(panel);
+        this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.pie=pie;this.openPie=openPie;
+        pie.Selected+=_=>MenuClosed();pie.Dismissed+=MenuClosed;
+        AddChild(origin);origin.AddChild(camera);AddChild(panel);AddChild(pieViewport);AddChild(pieQuad);AddChild(hudViewport);AddChild(hudQuad);AddChild(rayLabel);
+        hudQuad.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=hudViewport.GetTexture(),
+            Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled };
+        pieQuad.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=pieViewport.GetTexture(),
+            Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled };
         panel.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=gui.Surface.GetTexture(),Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled };
         panel.Visible=false;Router=new(this);Router.Changed+=()=>Changed?.Invoke();
     }
@@ -230,10 +247,43 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     public void MoveWorkspace() { CancelPresentation();workspaceShown=true;movingWorkspace=!movingWorkspace;placeRequested=movingWorkspace;Changed?.Invoke(); }
     public void WorkspaceDistance(float change)
     { float next=Math.Clamp(workspaceDistance+change,.6f,4);if(next==workspaceDistance)return;workspaceDistance=next;ResizePanel();ShowWorkspace(); }
+    // Below the central view, at reading distance, facing the head; hidden
+    // while a pie is open in front of it.
+    void PlaceHud()
+    {
+        bool shown=gui.Spatial&&!pie.IsOpen&&hudViewport.GetChildren().OfType<Control>().Any(c=>c.Visible);
+        hudQuad.Visible=shown;if(!shown)return;
+        var head=XRServer.GetTracker("head") as XRPositionalTracker;
+        if(head?.HasPose("default")!=true||!head.GetPose("default").HasTrackingData)return;
+        var headWorld=origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform();
+        var forward=-headWorld.Basis.Z;forward.Y=0;if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
+        float yaw=Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z));
+        hudYaw=Profile.FollowYaw(hudYaw,yaw);float heading=Mathf.DegToRad(hudYaw!.Value);
+        var direction=new Vector3(-Mathf.Sin(heading),0,-Mathf.Cos(heading));float reading=Profile.ReadingDistance;
+        var at=headWorld.Origin+direction*reading*Mathf.Cos(Mathf.DegToRad(Profile.HudBelowEyeDegrees))
+            -Vector3.Up*reading*Mathf.Sin(Mathf.DegToRad(Profile.HudBelowEyeDegrees));
+        // The workspace's own angular text density: 1600 surface pixels per metre of distance.
+        ((QuadMesh)hudQuad.Mesh).Size=new(hudViewport.Size.X*reading/1600,hudViewport.Size.Y*reading/1600);
+        hudQuad.GlobalTransform=new(Basis.LookingAt((at-headWorld.Origin).Normalized(),Vector3.Up),at);
+    }
+    Vector2? HudHit(IControllerSource source)
+    {
+        if(!hudQuad.Visible)return null;
+        var ray=Ray(source);var inverse=hudQuad.GlobalTransform.AffineInverse();var start=inverse*ray.Origin;var direction=inverse.Basis*ray.Direction;
+        if(Math.Abs(direction.Z)<0.000001f)return null;float distance=-start.Z/direction.Z;if(distance<0)return null;
+        var size=((QuadMesh)hudQuad.Mesh).Size;var point=start+direction*distance;
+        if(Math.Abs(point.X)>size.X/2||Math.Abs(point.Y)>size.Y/2)return null;
+        return new Vector2((point.X/size.X+0.5f)*hudViewport.Size.X,(0.5f-point.Y/size.Y)*hudViewport.Size.Y);
+    }
+    void HudPointer(Vector2 at,bool? pressed)
+    {
+        InputEventMouse e=pressed is bool down ? new InputEventMouseButton { ButtonIndex=MouseButton.Left,Pressed=down } : new InputEventMouseMotion();
+        e.Position=e.GlobalPosition=at;hudViewport.PushInput(e,true);
+    }
     void PlaceWorkspace(bool interactive)
     {
         if(!interactive) { if(StopMovingWorkspace())Changed?.Invoke();return; }
-        if(occurrence!=null&&ReferenceEquals(occurrence.Owner,scene)&&menuPanel==null)return;
+        if(occurrence!=null&&ReferenceEquals(occurrence.Owner,scene))return;
         if(!gui.Spatial || (!placeRequested && !movingWorkspace))return;
         var head=XRServer.GetTracker("head") as XRPositionalTracker;
         if(head?.HasPose("default")!=true)return;
@@ -245,7 +295,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         forward=forward.Normalized();
         var target=new Transform3D(Basis.LookingAt(forward,Vector3.Up),headWorld.Origin+forward*workspaceDistance);
         if(panel.GlobalTransform!=target)panel.GlobalTransform=target;
-        placeRequested=false;panel.Visible=workspaceShown || menuPanel!=null;
+        placeRequested=false;panel.Visible=workspaceShown;
     }
     void ResizePanel()
     {
@@ -286,7 +336,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         bool interactive=focused && running && tracked && visible;
         if(!interactive)gui.EndTextInput();
         foreach(var source in sources.Values)source.UpdatePose();
-        PlaceWorkspace(interactive);
+        PlaceWorkspace(interactive);PlaceHud();
         Router.Frame(frame,interactive);
         foreach(var (source,visual) in visuals)if(visual.Model!=null)visual.Model.Visible=interactive && visual.Profile!=null && source.Current(frame);
     }
@@ -333,87 +383,107 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(pointerSource!=null && pointerSource!=input)return;
         ((Source)input).Pointer.Visible=true;
         var source=(Source)input;var hit=GuiHit(input);source.Pointer.Scale=new(1,1,(hit?.Distance??2)/2);
+        // Only the controller that opened the pie steers it with its ray.
+        // Only the controller that opened the pie steers it; a strip-opened pie has none yet.
+        if(pie.IsOpen){rayLabel.Visible=false;if((pieSource==null||input==pieSource)&&(pieQuad.Visible ? PieHit(input) : hit?.Point) is {} on)pie.PointerAt(on);return;}
+        if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.Outline(null);return;}
+        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.Outline(null);}
         if(hit is {} at)gui.Move(at.Point,gui.PresentationSurface);else if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();
     }
-    public void Hide(IControllerSource input)=>((Source)input).Pointer.Visible=false;
+    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.Outline(null);}
+    // Feedback before the press: outline the pointed mark and name the target
+    // (the occurrence, else the containing space) at the ray tip.
+    void PointTarget(IControllerSource input)
+    {
+        var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.Outline(hit);
+        string? text=TargetLabel(hit);rayLabel.Visible=text!=null;if(text==null)return;
+        float distance=hit?.Pose is Transform3D pose ? Math.Max(.3f,(pose.Origin-ray.Origin).Dot(ray.Direction)) : 2;
+        rayLabel.Text=text;rayLabel.GlobalPosition=ray.Origin+ray.Direction*distance+Vector3.Up*.06f;
+    }
+    // World-locked placement, never following the head: in front of the
+    // pointed object (pulled in to reading distance), or along the ray at
+    // reading distance slightly below eye level for the space.
+    void PlacePie(IControllerSource input,ScenePanel.Selection? hit)
+    {
+        var ray=Ray(input);float reading=Profile.ReadingDistance,radius=PieRadius;
+        float distance=hit?.Pose is Transform3D pose ? Math.Clamp((pose.Origin-ray.Origin).Dot(ray.Direction)-radius,radius,reading) : reading;
+        var at=ray.Origin+ray.Direction*distance;var head=Head();
+        if(hit==null){float lowest=head.Origin.Y-distance*Mathf.Sin(Mathf.DegToRad(Profile.BelowEyeDegrees));at.Y=Math.Min(at.Y,lowest);}
+        PlacePieQuad(at,head);
+    }
+    // A strip command's pie opens just in front of that command.
+    internal void PlacePieAtHud(Vector2 surfacePoint)
+    {
+        var size=((QuadMesh)hudQuad.Mesh).Size;
+        var on=hudQuad.GlobalTransform*new Vector3((surfacePoint.X/hudViewport.Size.X-.5f)*size.X,(.5f-surfacePoint.Y/hudViewport.Size.Y)*size.Y,0);
+        var head=Head();var toward=head.Origin-on;
+        PlacePieQuad(toward.LengthSquared()>1e-6f ? on+toward.Normalized()*PieRadius : on,head);
+    }
+    // The workspace's own angular text density: 1600 surface pixels per metre of distance.
+    float PieRadius=>300*Profile.ReadingDistance/1600;
+    Transform3D Head()=>XRServer.GetTracker("head") is XRPositionalTracker tracker && tracker.HasPose("default") ?
+        origin.GlobalTransform*tracker.GetPose("default").GetAdjustedTransform() : camera.GlobalTransform;
+    void PlacePieQuad(Vector3 at,Transform3D head)
+    {
+        float size=pieViewport.Size.X*Profile.ReadingDistance/1600;var facing=at-head.Origin;
+        ((QuadMesh)pieQuad.Mesh).Size=new(size,size);
+        pieQuad.GlobalTransform=new(facing.LengthSquared()>1e-6f ? Basis.LookingAt(facing.Normalized(),Vector3.Up) : head.Basis,at);
+        pieQuad.Visible=true;
+    }
+    Vector2? PieHit(IControllerSource source)
+    {
+        if(!pieQuad.Visible)return null;
+        var ray=Ray(source);var inverse=pieQuad.GlobalTransform.AffineInverse();var start=inverse*ray.Origin;var direction=inverse.Basis*ray.Direction;
+        if(Math.Abs(direction.Z)<0.000001f)return null;float distance=-start.Z/direction.Z;if(distance<0)return null;
+        var size=((QuadMesh)pieQuad.Mesh).Size;var point=start+direction*distance;
+        return new Vector2((point.X/size.X+0.5f)*pieViewport.Size.X,(0.5f-point.Y/size.Y)*pieViewport.Size.Y);
+    }
     public void Press(IControllerSource input)
     {
         if(gui.NativePressed)return;
         pointerSource=input;pressedSubject=null;
+        if(pie.IsOpen){pointingPie=true;return;}
+        if(HudHit(input) is {} onHud){pointingHud=true;HudPointer(onHud,true);return;}
         if(GuiHit(input) is {} hit) { pointingGui=true;gui.Move(hit.Point,gui.PresentationSurface);gui.Press(); }
         else { pointingGui=false;if(!Blocked && Router.MenuOwner==null){var ray=Ray(input);pressedSubject=scene.PickRay(ray.Origin,ray.Direction);} }
     }
     public void Release(IControllerSource input)
     {
         if(pointerSource!=input)return;pointerSource=null;
+        if(pointingPie){pointingPie=false;if(pie.IsOpen)pie.Commit();return;}
+        if(pointingHud){pointingHud=false;HudPointer(HudHit(input)??new(-1,-1),false);return;}
         if(pointingGui) { gui.Release();return; }
         var before=pressedSubject;pressedSubject=null;
         if(before!=null && !Blocked && Router.MenuOwner==null) { var ray=Ray(input);if(scene.PickRay(ray.Origin,ray.Direction)==before)scene.Select(before); }
     }
     public void Cancel(IControllerSource input)
-    { if(pointerSource!=input)return;pointerSource=null;pressedSubject=null;gui.Cancel(); }
+    { if(pointerSource!=input)return;pointerSource=null;pressedSubject=null;pointingPie=false;
+      if(pointingHud){pointingHud=false;HudPointer(new(-1,-1),false);}gui.Cancel(); }
     bool MenuObscured=>gui.NativePressed || gui.Surface.GetEmbeddedSubwindows().Concat(gui.FormSurface.GetEmbeddedSubwindows()).Any(w=>w.Visible) ||
         GetWindow().FindChildren("*","Window",true,false).OfType<Window>().Any(w=>w.Visible && w.Exclusive);
+    // Pad press opens the pointed target's pie; holding it is turbo mode. A
+    // pie left open by a release (sub-pie, confirmation) continues on the next
+    // press, so the second press on Leave space happens inside the same pie.
     public bool OpenMenu(IControllerSource input,NumericsVector2 axes,float threshold)
     {
-        if(menuPanel!=null || MenuObscured)return false;
-        var entries=menuEntries();if(entries.Length==0)return false;
-        gui.EndTextInput();
-        menuEnabled=entries.Select(e=>e.Enabled).ToArray();
-        var pixels=(Vector2)gui.WorkspaceSize;var size=new Vector2(Math.Clamp(pixels.X-32,1,1168),Math.Clamp(pixels.Y-32,1,768));
-        menuPanel=new() { Name="xr-menu",Position=(pixels-size)/2,Size=size,Theme=gui.Appearance };gui.PresentationSurface.AddChild(menuPanel);
-        if(gui.Spatial)placeRequested=true;
-        var layout=new VBoxContainer();menuPanel.AddChild(layout);
-        layout.AddChild(new Label { Name="xr-menu-instruction",Text="Hold pad · slide thumb · release",AutowrapMode=TextServer.AutowrapMode.WordSmart });
-        var row=new HBoxContainer { SizeFlagsVertical=Control.SizeFlags.ExpandFill };layout.AddChild(row);
-        float font=gui.Appearance.DefaultFontSize,side=font*8.5f+24;
-        var directions=new Control { Name="xr-menu-directions",CustomMinimumSize=new(side,side),SizeFlagsVertical=Control.SizeFlags.ShrinkCenter,MouseFilter=Control.MouseFilterEnum.Ignore };row.AddChild(directions);
-        var centre=new Label { Text="Centre:\ncancel",Position=new(side*.3f,side*.35f),Size=new(side*.4f,side*.3f),HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,MouseFilter=Control.MouseFilterEnum.Ignore };directions.AddChild(centre);
-        menuDirections=entries.Select((e,i)=> {
-            var mark=new Label { Name="xr-menu-direction-"+(i+1),HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,MouseFilter=Control.MouseFilterEnum.Ignore };
-            directions.AddChild(mark);return mark;
-        }).ToArray();
-        menuScroll=new() { FollowFocus=true,HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,SizeFlagsHorizontal=Control.SizeFlags.ExpandFill };row.AddChild(menuScroll);
-        var column=new VBoxContainer { SizeFlagsHorizontal=Control.SizeFlags.ExpandFill };menuScroll.AddChild(column);
-        menuButtons=entries.Select((e,i)=> {
-            var button=new Button { Text=$"{i+1}. {e.Text}",Disabled=!e.Enabled(),ToggleMode=true,AutowrapMode=TextServer.AutowrapMode.WordSmart };column.AddChild(button);
-            button.Pressed+=()=> { Router.MenuSelected();CancelMenu();if(e.Enabled())e.Activate(); };return button;
-        }).ToArray();
-        menuChoice=new() { Name="xr-menu-choice",Text="Centre — release cancels",AutowrapMode=TextServer.AutowrapMode.WordSmart };layout.AddChild(menuChoice);
-        layout.AddChild(new Label { Text="Or aim ray + trigger.",AutowrapMode=TextServer.AutowrapMode.WordSmart });
-        selection=-1;PresentMenuSelection();MenuRedraws++;MoveMenu(axes,threshold);return true;
+        if(MenuObscured)return false;
+        if(!pie.IsOpen) {
+            gui.EndTextInput();var ray=Ray(input);
+            var hit=GuiHit(input)!=null ? null : scene.PickRay(ray.Origin,ray.Direction);
+            if(!openPie(hit))return false;
+            pieSource=input;rayLabel.Visible=false;scene.Outline(null);if(gui.Spatial)PlacePie(input,hit);
+        }
+        pie.Threshold=threshold;pie.MoveAxes(axes);return true;
     }
     public void MoveMenu(NumericsVector2 axes,float threshold)
     {
-        if(menuPanel==null)return;
+        if(!pie.IsOpen)return;
         if(MenuObscured){Router.CancelMenu();return;}
-        int next=axes.Length()<threshold ? -1 : (int)Math.Floor(((Math.Atan2(axes.X,-axes.Y)+Math.PI*2+Math.PI/menuButtons.Length)%(Math.PI*2))/(Math.PI*2/menuButtons.Length));
-        if(next==selection)return;selection=next;MenuRedraws++;
-        PresentMenuSelection();
-        if(selection>=0) { menuButtons[selection].GrabFocus();menuScroll?.EnsureControlVisible(menuButtons[selection]); }
-        else menuPanel.GetViewport().GuiReleaseFocus();
+        pie.MoveAxes(axes);
     }
-    void PresentMenuSelection()
-    {
-        for(int i=0;i<menuButtons.Length;i++) {
-            menuButtons[i].SetPressedNoSignal(i==selection);
-            var mark=menuDirections[i];mark.Text=i==selection ? $"[{i+1}]" : (i+1).ToString();mark.Size=mark.GetCombinedMinimumSize();
-            float side=((Control)mark.GetParent()).CustomMinimumSize.X;double angle=Math.PI*2*i/menuButtons.Length;
-            mark.Position=new Vector2(side/2+(float)Math.Sin(angle)*side*.4f,side/2-(float)Math.Cos(angle)*side*.4f)-mark.Size/2;
-            mark.Modulate=menuButtons[i].Disabled ? new Color(1,1,1,.5f) : Colors.White;
-        }
-        if(menuChoice!=null)menuChoice.Text=selection<0 ? "Centre — release cancels" :
-            (menuButtons[selection].Disabled ? "Unavailable: " : "Release: ")+menuButtons[selection].Text;
-    }
-    public void CommitMenu()
-    { var selected=selection>=0 && selection<menuButtons.Length ? menuButtons[selection] : null;if(selected?.Disabled==false)selected.EmitSignal(BaseButton.SignalName.Pressed);else CancelMenu(); }
-    public void RefreshMenu()
-    {
-        bool changed=false;for(int i=0;i<menuButtons.Length;i++) { bool disabled=!menuEnabled[i]();if(disabled==menuButtons[i].Disabled)continue;menuButtons[i].Disabled=disabled;changed=true; }
-        if(changed){MenuRedraws++;PresentMenuSelection();}
-    }
-    public void CancelMenu()
-    { if(menuPanel==null)return;menuPanel.GetParent()?.RemoveChild(menuPanel);menuPanel.QueueFree();menuPanel=null;menuScroll=null;menuChoice=null;menuButtons=[];menuDirections=[];menuEnabled=[];selection=-1;if(!workspaceShown)panel.Visible=false;RefreshOccurrence(); }
+    public void CommitMenu(){if(pie.IsOpen)pie.Commit();}
+    public void CancelMenu(){if(!pie.IsOpen)return;pie.Close();MenuClosed();}
+    void MenuClosed(){Router.MenuSelected();pieQuad.Visible=false;pieSource=null;}
     public void Drive(IControllerSource source,NumericsVector2 axes)
     {
         DriveRequests++;

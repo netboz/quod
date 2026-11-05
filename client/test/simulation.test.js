@@ -12,7 +12,7 @@ import { paintMarks, paintBodyPoses } from '../src/scene.js'
 const anchor = 'a'.repeat(32)
 const mark = (body = '10', revision = '2', colour = '#FFFFFF', id = 'door') =>
   `mark(<<"${id}">>,<<"box">>,[f(<<"width">>,2000),f(<<"height">>,2000),f(<<"depth">>,200)],` +
-  `body_pose(${body},${revision}),surface(<<"${colour}">>,0,900,0,[]),unlabelled,` +
+  `body_pose(${body},${revision}),surface(<<"${colour}">>,0,900,0,1000,[]),unlabelled,` +
   `depicts(<<"room">>,<<"${anchor}">>,door(${body})))`
 const sample = (changes = {}) => ({ schema: 2, units: 'metres_seconds', space: 'local', origin_mm: ['0', '0', '0'], origin_seq: '0',
   world: 'room', authority: 'actor', epoch: '1', generation: '1', incarnation: 'token',

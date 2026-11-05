@@ -111,7 +111,7 @@ public partial class ExportChecks
     }
     async Task CreationTarget(OperationsPanel panel, Actor target, string operation)
     {
-        await Press("create-operations");
+        await Device("create");
         var storage=(OptionButton)panel.FindChild("operation-storage",true,false);
         int index=Enumerable.Range(0,storage.ItemCount).FirstOrDefault(i=>storage.GetItemTooltip(i)==target.Namespace+" @ "+target.Anchor,-1);
         if(index<0) {
@@ -154,7 +154,7 @@ public partial class ExportChecks
             await clicked.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Check(panel.IsWorking && ((OptionButton)panel.FindChild("operation-storage",true,false)).Disabled &&
                 ((OptionButton)panel.FindChild("operation-class",true,false)).Disabled &&
-                app.FindChild("representation-choices",true,false).FindChildren("*","Button",true,false).OfType<Button>().All(b=>b.Disabled) &&
+                !app.OpenSpacePie() &&
                 !((LineEdit)panel.FindChild("exact-storage-namespace",true,false)).Editable,
                 "active creation locks its actual target and offered selection");
         } finally { button.Pressed-=Pressed; }
@@ -219,7 +219,7 @@ public partial class ExportChecks
         using(var key=Identity.FromPayload(app.ActiveStore.Snapshot!.Payload))
         using(var store=new LocalStore(profile+"-new-device")) {
             store.Create(app.ActiveStore.PortablePayload());
-            using var session=new SignedSession(key,store,new Transport(app.ActiveStore.Snapshot.Endpoint,app.ActiveStore.Snapshot.CaFile));
+            using var session=new SignedSession(key,store,new Transport(app.ActiveStore.Snapshot.Endpoint,app.ActiveStore.Snapshot.NodeKey(app.ActiveStore.Snapshot.Endpoint)));
             using var cancellation=new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await session.Authenticate(cancellation.Token); var accounts=new Accounts(session,store); long writes=await Writes();
             await accounts.Discover(cancellation.Token);
@@ -337,7 +337,7 @@ public partial class ExportChecks
         using(var key=Identity.Create())
         using(var store=new LocalStore(profile+"-m2-stranger")) {
             store.Create(key.Payload());
-            using var wrong=new SignedSession(key,store,new Transport(app.ActiveStore.Snapshot!.Endpoint,app.ActiveStore.Snapshot.CaFile));
+            using var wrong=new SignedSession(key,store,new Transport(app.ActiveStore.Snapshot!.Endpoint,app.ActiveStore.Snapshot.NodeKey(app.ActiveStore.Snapshot.Endpoint)));
             await wrong.Authenticate(timeout.Token); bool denied=false;
             try { denied=!Json.Committed(await wrong.Execute(human,offer.Goal(offer.Form.Defaults),"m2-wrong-identity",timeout.Token)); }
             catch(ApiError error) { denied=error.Definite; }
@@ -349,7 +349,7 @@ public partial class ExportChecks
         Check(Json.Terminal(panel.LastOutcome!) && !Json.Committed(panel.LastOutcome!),"normal mouse creation displays definitive destination-admission refusal");
         Check(await StateOfSpaces()==before && scene.Count==10,"denied construction leaves no generated space owner or assignment");
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({space},space_admit,deny)).",timeout.Token);
-        await Press("create-operations");
+        await Device("create");
         await Type((LineEdit)panel.FindChild("exact-storage-namespace",true,false),human.Namespace);
         await Type((LineEdit)panel.FindChild("exact-storage-anchor",true,false),Identity.Encode(new byte[32]));
         long writes=await Writes();

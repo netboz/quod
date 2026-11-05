@@ -9,13 +9,9 @@ public partial class EidolonPanel : VBoxContainer
     readonly Label context=new() { Name="representation-subject",Text="Selected subject",AutowrapMode=TextServer.AutowrapMode.WordSmart };
     readonly Label title=new() { Name="representation-title",ThemeTypeVariation="Title",AutowrapMode=TextServer.AutowrapMode.WordSmart };
     readonly Label status=new() { Name="representation-status",AutowrapMode=TextServer.AutowrapMode.WordSmart };
-    readonly VBoxContainer choices=new() {Name="representation-choices"};
     readonly VBoxContainer content=new() {Name="representation-content"};
     readonly Label placement=new() {Name="representation-placement",AutowrapMode=TextServer.AutowrapMode.WordSmart};
-    Button near=null!,personal=null!,browse=null!;
-    readonly Dictionary<string,Button> choiceButtons=[];
-    VBoxContainer? secondaryChoices;
-    Button? moreChoices;
+    Button near=null!,personal=null!;
     readonly Label exact=new() { Name="representation-identity",Visible=false,AutowrapMode=TextServer.AutowrapMode.WordSmart };
     readonly ScenePanel preview=new() { Name="representation-scene",Visible=false };
     public ScenePanel Preview=>preview;
@@ -38,6 +34,12 @@ public partial class EidolonPanel : VBoxContainer
     Task retired=Task.CompletedTask;
     long generation,selection;
     string? preferred;
+    // One pie selection in flight: consumed by the discovery that answers it,
+    // dropped when another subject opens. Never a mode that outlives it.
+    sealed record Request(string Subject,string Choice,bool Execute);
+    Request? request;
+    // Authored wedge labels for this subject's choices, as the pie showed them.
+    readonly Dictionary<string,string> labels=[];
     bool disposed,workbenchSource,previewRead;
     public Task Completion=>Task.WhenAll(retired,discovery?.Completion??Task.CompletedTask,
         representation?.Completion??Task.CompletedTask,Operations.Completion,source.Completion);
@@ -54,19 +56,15 @@ public partial class EidolonPanel : VBoxContainer
         var scroll=new ScrollContainer {Name="subject-task-scroll",HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true,SizeFlagsVertical=SizeFlags.ExpandFill};
         AddChild(scroll);scroll.AddChild(content);content.SizeFlagsHorizontal=SizeFlags.ExpandFill;
         content.AddChild(status);content.AddChild(Operations);content.AddChild(workbench);content.AddChild(source);
-        browse=SpatialGui.ActionButton("Views & actions","representation-browse");browse.ToggleMode=true;content.AddChild(browse);
-        browse.Pressed+=()=>choices.Visible=browse.ButtonPressed;
-        content.AddChild(choices);
-        var actions=new HFlowContainer();content.AddChild(actions);
-        var inspect=SpatialGui.ActionButton("Inspect storage source","inspect-subject-storage");actions.AddChild(inspect);
-        inspect.Pressed+=()=>{var storage=Current?.Target??Operations.SelectedStorage;if(storage!=null&&!Operations.IsWorking)Open(session,accounts,store,storage.Ontology);};
-        var details=SpatialGui.ActionButton("Details");actions.AddChild(details);details.Pressed+=()=>exact.Visible=!exact.Visible;
+        // The pie is the chooser; the panel keeps the opened content, its
+        // placement toggle, Close and the exact identity on request.
+        var details=SpatialGui.ActionButton("Details");content.AddChild(details);details.Pressed+=()=>exact.Visible=!exact.Visible;
         content.AddChild(exact);
         Operations.SubjectOpened+=SubjectOpened;Operations.Changed+=()=>{
             if(Selected?.Operation==true&&(!Operations.Available||Operations.Current?.Name!=Selected.Style)) {
                 WithdrawRepresentation(KeepVisual);Operations.Hide();status.Text="The selected action is unavailable. Choose a current view or action.";
             }
-            RefreshContext();inspect.Disabled=Operations.IsWorking||(Current==null&&Operations.SelectedStorage==null);Changed?.Invoke();};
+            RefreshContext();Changed?.Invoke();};
         Operations.Cancelled+=()=>{Retire();Hide();HiddenByUser?.Invoke();Changed?.Invoke();};
         source.Changed+=()=>{workbench.UpdateAccess();Changed?.Invoke();};
         preview.Selected+=s=>{if(workbench.Visible)workbench.Select(s.Subject);else OpenOccurrence(session,accounts,store,s);};
@@ -76,7 +74,8 @@ public partial class EidolonPanel : VBoxContainer
         workbench.ShowSource+=()=>{workbenchSource=!workbenchSource;source.Visible=workbenchSource;};
         workbench.OpenSubject+=s=>Open(session,accounts,store,s);
     }
-    string Caption(Eidolon e)=>e.Operation ? Operations.Offered.FirstOrDefault(o=>o.Name==e.Style)?.Form.Tree.Label??e.Caption
+    string Caption(Eidolon e)=>labels.TryGetValue(e.Exact.ToString(),out var authored) ? authored
+        : e.Operation ? Operations.Offered.FirstOrDefault(o=>o.Name==e.Style)?.Form.Tree.Label??e.Caption
         : e.Purpose.Name switch {
             "playing"=>e.Style.Replace('_',' ')+" view",
             "edition"=>e.Style.Replace('_',' ')+" view · editing",
@@ -92,12 +91,6 @@ public partial class EidolonPanel : VBoxContainer
         title.Text=Selected==null ? Operations.Current?.Form.Tree.Label??"Views & actions" : Caption(Selected);
         Operations.FormPanel.TitleVisible=Selected?.Operation!=true&&Operations.Current==null;
         status.Visible=status.Text.Length>0;
-        foreach(var e in Offered)if(choiceButtons.TryGetValue(e.Exact.ToString(),out var button)) {
-            bool selected=Selected?.Exact.ToString()==e.Exact.ToString();
-            bool available=Available&&!Operations.IsWorking&&(!e.Operation || Operations.Available&&Operations.Offered.Any(o=>o.Name==e.Style));
-            button.Text=(selected ? "✓ " : "")+Caption(e)+(available ? "" : " · unavailable");
-            button.Disabled=!available;button.SetPressedNoSignal(selected);
-        }
         RefreshPlacement();
     }
     void SetOccurrence(ScenePanel.Selection? next)
@@ -123,36 +116,26 @@ public partial class EidolonPanel : VBoxContainer
     }
     public void PlacePersonal(){if(!NearOccurrence)return;NearOccurrence=false;RefreshPlacement();Changed?.Invoke();}
     public void PlaceNear(){if(Occurrence?.Pose==null||NearOccurrence)return;NearOccurrence=true;RefreshPlacement();Changed?.Invoke();}
+    // A pie leaf is exactly one of this subject's offered choices. An action
+    // without input fields runs on selection; one with fields opens its form.
+    public void OpenChoice(SignedSession session,Accounts accounts,LocalStore store,MenuTarget chosen,ScenePanel.Selection? occurrence)
+    {
+        if(Operations.IsWorking)return;
+        if(occurrence?.Pose!=null&&occurrence.Subject.ToString()==chosen.Subject.ToString())SetOccurrence(occurrence);
+        else if(Occurrence?.Subject.ToString()!=chosen.Subject.ToString())SetOccurrence(null);
+        var asked=new Request(chosen.Subject.ToString(),chosen.Choice.ToString(),Execute:true);
+        if(chosen.Label.Length>0)labels[asked.Choice]=chosen.Label;
+        if(Current?.Exact.ToString()==asked.Subject&&Available&&ReferenceEquals(this.session,session)) {
+            request=null;var offered=Offered.FirstOrDefault(e=>e.Exact.ToString()==asked.Choice);
+            if(offered!=null)Choose(offered,reveal:true,execute:true);else status.Text="That choice is no longer offered.";
+            RefreshPlacement();Changed?.Invoke();return;
+        }
+        request=asked;Open(session,accounts,store,chosen.Subject);RefreshPlacement();Changed?.Invoke();
+    }
     public void OpenOccurrence(SignedSession session,Accounts accounts,LocalStore store,ScenePanel.Selection selected)
     {
         if(Operations.IsWorking||selected.Pose==null)return;
         SetOccurrence(selected);Open(session,accounts,store,selected.Subject);RefreshPlacement();Changed?.Invoke();
-    }
-    void PresentChoices()
-    {
-        choiceButtons.Clear();foreach(var child in choices.GetChildren()){choices.RemoveChild(child);child.QueueFree();}
-        secondaryChoices=null;moreChoices=null;
-        foreach(int group in new[]{0,1,2}) {
-            var items=Offered.Where(e=>(e.Operation ? 1 : e.Purpose.Name=="playing" ? 0 : 2)==group).ToArray();if(items.Length==0)continue;
-            VBoxContainer container=choices;
-            if(group==2) {
-                secondaryChoices=new() {Visible=false};
-                moreChoices=SpatialGui.ActionButton("More views & editors","representation-more");moreChoices.ToggleMode=true;choices.AddChild(moreChoices);
-                moreChoices.Pressed+=()=>{secondaryChoices.Visible=moreChoices.ButtonPressed;Changed?.Invoke();};
-                choices.AddChild(secondaryChoices);container=secondaryChoices;
-            } else container.AddChild(new Label {Text=group==1 ? "Actions" : "Views",ThemeTypeVariation="Heading"});
-            var row=new HFlowContainer();container.AddChild(row);
-            foreach(var item in items) {
-                var button=SpatialGui.ActionButton(Caption(item));button.ToggleMode=true;button.TooltipText=item.Exact.ToString();
-                choiceButtons.Add(item.Exact.ToString(),button);row.AddChild(button);long expected=generation;
-                button.Pressed+=()=>{
-                    if(!disposed&&expected==generation&&Available&&!Operations.IsWorking&&Offered.Any(e=>e.Exact.ToString()==item.Exact.ToString())&&
-                       (!item.Operation||Operations.Available&&Operations.Offered.Any(o=>o.Name==item.Style)))Choose(item,true);
-                    RefreshContext();
-                };
-            }
-        }
-        RefreshContext();
     }
     void Configure(SignedSession session,Accounts accounts,LocalStore store)
     {
@@ -179,44 +162,43 @@ public partial class EidolonPanel : VBoxContainer
         else Operations.OpenSubject(session,accounts,subject.Target,exact);
     }
     public void OpenStorage(SignedSession session,Accounts accounts,LocalStore store,Actor? location)
-    {SetOccurrence(null);Configure(session,accounts,store);Retire();Current=null;preferred=null;choices.Hide();source.Hide();preview.Hide();Operations.Show();Operations.OpenStorage(session,accounts,location);}
+    {SetOccurrence(null);Configure(session,accounts,store);Retire();Current=null;preferred=null;source.Hide();preview.Hide();Operations.Show();Operations.OpenStorage(session,accounts,location);}
     void SubjectOpened(Actor target,Term exactSubject)
     {
         if(Current?.Exact.ToString()!=exactSubject.ToString())preferred=null;
+        if(request!=null&&request.Subject!=exactSubject.ToString())request=null;
+        if(request!=null)preferred=request.Choice;
         Retire(KeepVisual);Current=Subject.Decode(exactSubject);long expected=generation;
         Operations.Hide();
         if(Current.Target.Namespace!=target.Namespace || Current.Target.Anchor!=target.Anchor)throw new FormatException("Subject names another storage identity.");
         exact.Text=exactSubject.ToString();status.Text="Reading this subject's authored representations…";
-        choices.Show();PresentChoices();
         discovery=new(session,accounts.Human!,target,"eidolons",SignedSession.ViewGoal(target,Term.Call("entity_eidolons",Current.Local,Term.Variable("View"))));
         discovery.Projection+=message=>{
             if(disposed||expected!=generation)return;
             var next=Eidolon.Decode(Json.S(message,"value"));
-            bool same=Offered.Select(x=>x.Exact.ToString()).SequenceEqual(next.Select(x=>x.Exact.ToString()));
             Offered=next;Available=true;
-            if(!same)PresentChoices();
             var chosen=next.SingleOrDefault(e=>e.Exact.ToString()==preferred);
             if(preferred==null)chosen=next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Style==Operations.Current?.Name)??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
-            if(chosen!=null)Choose(chosen);else{WithdrawRepresentation(KeepVisual);status.Text=next.Length==0 ? "No authored representations are currently offered." : "The selected representation was withdrawn. Choose a current offered representation.";}
+            var answered=request;request=null;
+            bool asked=answered!=null&&chosen?.Exact.ToString()==answered.Choice;
+            if(chosen!=null)Choose(chosen,reveal:asked,execute:asked&&answered!.Execute);else{WithdrawRepresentation(KeepVisual);status.Text=next.Length==0 ? "No authored representations are currently offered." : "The selected representation was withdrawn. Choose a current offered representation.";}
             RefreshContext();Changed?.Invoke();
         };
         discovery.Withdrawn+=reason=>{if(expected!=generation)return;Available=false;WithdrawRepresentation(KeepVisual);Operations.Hide();status.Text=reason;RefreshContext();Changed?.Invoke();};
         _=discovery.Start();Changed?.Invoke();
     }
-    public void Choose(Eidolon choice,bool reveal=false)
+    public void Choose(Eidolon choice,bool reveal=false,bool execute=false)
     {
         if(!Available || Current==null || !Offered.Any(e=>e.Exact.ToString()==choice.Exact.ToString()))throw new InvalidOperationException("Choose a current authored representation.");
-        if(!choice.Operation&&choice.Purpose.Name!="playing"&&secondaryChoices!=null){secondaryChoices.Show();moreChoices!.SetPressedNoSignal(true);}
         if(Selected?.Exact.ToString()==choice.Exact.ToString()) {
-            if(reveal&&choice.Operation)Operations.Choose(choice.Style,true);
+            if(reveal&&choice.Operation)Operations.Choose(choice.Style,true,execute);
             else if(reveal&&preview.Visible)RevealPreview();
             return;
         }
         if(preferred!=choice.Exact.ToString())workbenchSource=false;
-        choices.Hide();browse.SetPressedNoSignal(false);
         WithdrawRepresentation(choice.Operation&&KeepVisual);Selected=choice;preferred=choice.Exact.ToString();RefreshContext();
         exact.Text=Current.Exact+"\n"+choice.Exact;
-        if(choice.Operation){Operations.Show();Operations.Choose(choice.Style,reveal);status.Text="";Changed?.Invoke();return;}
+        if(choice.Operation){Operations.Show();Operations.Choose(choice.Style,reveal,execute);status.Text="";Changed?.Invoke();return;}
         Operations.Hide();bool revealPreview=reveal;var viewed=Current;
         string kind=choice.Purpose.Kind=="atom" && choice.Purpose.Name is "playing" or "edition" ? "eidolon_scene" : "eidolon";
         var view=new SignedView(session,accounts.Human!,viewed.Target,kind,SignedSession.ViewGoal(viewed.Target,choice.Read(viewed.Local)));representation=view;previewRead=kind=="eidolon_scene";

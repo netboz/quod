@@ -102,7 +102,9 @@ offered_creation_and_instance_operation_test_() ->
         edit(Ns,{assertz,{class_permission,space,space_enter,allow}}),
         edit(Ns,{retract,{class_permission,space,space_enter,{check,creation_entry}}}),
         {Placed,_} = signed(C,scoped(Ns,{space_place,Id,0,Destination})), wait_complete(Placed),
-        [Withdraw] = views(C,Ns,Ref),
+        %% The instance also offers how its inside looks (Show as).
+        ?assertEqual([show_matrix,show_wireframe],lists:sort([N || {operation_view,N,_,_,_,_,_,_,_,_} <- views(C,Ns,Ref), N =/= withdraw])),
+        [Withdraw] = withdraw_views(C,Ns,Ref),
         {operation_view,withdraw,Ref,WR,_,_,WV,WC,[],available} = Withdraw,
         ?assertEqual([{field,{destination,Id},Destination}],WV),
         Bad = [{field,{destination,Id},ref(ActorNs,room)}],
@@ -111,11 +113,11 @@ offered_creation_and_instance_operation_test_() ->
         {Withdrawn,_} = signed(C,scoped(Ns,conj([
             {gui_operation_bind,Ref,withdraw,WR,WC,WV,{'G'},{'R'}},{call,{'G'}}]))),
         wait_complete(Withdrawn), holds(Ns,{space_assignment,Id,2,none}),
-        ?assertEqual([],views(C,Ns,Ref)),
+        ?assertEqual([],withdraw_views(C,Ns,Ref)),
         denied(C,Ns,{gui_operation_bind,Ref,withdraw,WR,WC,WV,{'G'},{'R'}}),
         NextDestination = ref(ActorNs,room),
         {Replaced,_} = signed(C,scoped(Ns,{space_place,Id,2,NextDestination})), wait_complete(Replaced),
-        [{operation_view,withdraw,Ref,NextR,_,_,NextV,WC,[],available}] = views(C,Ns,Ref),
+        [{operation_view,withdraw,Ref,NextR,_,_,NextV,WC,[],available}] = withdraw_views(C,Ns,Ref),
         ?assertNotEqual(WR,NextR),
         ?assertEqual([{field,{destination,Id},NextDestination}],NextV),
         denied(C,Ns,{gui_operation_bind,Ref,withdraw,WR,WC,WV,{'G'},{'R'}}),
@@ -291,3 +293,5 @@ scoped(Ns,Goal) -> {'::',Ns,{',',{current_ontology_identity,Ns,quod_simplex:gene
 conj([G]) -> G;
 conj([G|Rest]) -> {',',G,conj(Rest)}.
 default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
+
+withdraw_views(C,Ns,Ref) -> [V || V = {operation_view,withdraw,_,_,_,_,_,_,_,_} <- views(C,Ns,Ref)].

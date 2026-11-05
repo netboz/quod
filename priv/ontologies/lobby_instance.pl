@@ -138,10 +138,17 @@ entity_scene(Entity,Mode,appearance(Id,Style,Context,Layout,Eidolons)) :-
     ; Style = solid, Context = device(Entity), Layout = physical),
     member(Mode,[playing,edition]), entity_eidolons(Entity,Mode,Style,Eidolons).
 
+%% The shared thing base is composed here as in the vocabulary. A recipe this
+%% ontology already offers for thing is not forwarded again: the vocabulary's
+%% inherited copy would be filed under the requested class and beat a more
+%% specific local recipe, such as the space's own menu. thing itself is never
+%% forwarded, so the local check below cannot re-enter this clause.
 class_eidolon(Class,Mode,Style,Recipe) :-
+    Class \== thing,
     lobby_vocabulary(Ns,A), vocabulary_class(Class,Ns,Local),
     in_ontology(Ns,A,class_eidolons([Local],Mode,Style,Choices)),
-    member(eidolon(Mode,Style,Recipe),Choices).
+    member(eidolon(Mode,Style,Recipe),Choices),
+    \+ (isa(Class,thing), class_eidolon(thing,Mode,Style,Recipe)).
 class_eidolon(sky_sphere,Mode,Style,Recipe) :-
     environment_eidolons(Ns,A),
     in_ontology(Ns,A,class_eidolon(sky_sphere,Mode,Style,Recipe)).

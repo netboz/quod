@@ -18,7 +18,7 @@ public partial class ExportChecks
         var outer=Actor.FromTerm(Term.Parse(Json.S(metadata,"s0")));var leaf=Term.Parse(Json.S(metadata,"leaf"));
         using var identity=Identity.FromPayload(await File.ReadAllTextAsync(Env("M3_PHYSICS_KEY")));
         using var store=new LocalStore(profile+"-physical-viewer");store.Create(identity.Payload());
-        using var session=new SignedSession(identity,store,new Transport(Env("M3_NODE"),Env("M3_CA")));
+        using var session=new SignedSession(identity,store,new Transport(Env("M3_NODE"),""));
         using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(5));await session.Authenticate(deadline.Token);
         var scene=(ScenePanel)app.FindChild("space-scene",true,false);
         using var input=new PhysicsInput(session,human);testedInput=input;
@@ -125,7 +125,7 @@ public partial class ExportChecks
         var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
         var gui=(SpatialGui)app.FindChild("shared-gui",true,false);var mapped=new OpenXRInput();scene.Viewport.AddChild(mapped);
         using var models=new RenderModels((asset,cancel)=>session.Transport.Model(asset.Digest,asset.Allowed[0],cancel));
-        mapped.Configure(scene,gui,models,()=>input,()=>false,()=>[]);mapped.Install(mapping);mapped.AttachSources();
+        mapped.Configure(scene,gui,models,()=>input,()=>false,new PieMenu(),_=>false);mapped.Install(mapping);mapped.AttachSources();
         var tracker=new XRControllerTracker { Name="m4_native_motion",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
         tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
         tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);

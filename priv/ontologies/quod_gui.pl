@@ -153,6 +153,26 @@ gui_kind(button).
 gui_kind(editor).
 gui_kind(bindings).
 gui_kind(catalogue_selection).
+gui_kind(menu_item).
+
+%% A HUD is an ordinary class; each human composes one instance. Its strip is
+%% one menu level whose wedges are the human's authored allowance, so commands
+%% past it nest under "More" like any pie. Commands are menu items.
+isa(hud, thing).
+
+%% Pie menus. Each `menu` level offers its authored number of wedges; a wedge
+%% is a `menu_item` choosing one Eidolon of one exact subject, or a nested menu.
+%% Items keep fixed positions: `slot` 1 is the top wedge, then clockwise.
+isa(menu_item, gui_component).
+gui_attribute(menu_item, target, menu_target, required).
+gui_attribute(menu_item, confirm, boolean, default(false)).
+gui_attribute(Kind, image, optional_image_asset, default(none)) :- member(Kind, [menu, menu_item]).
+gui_attribute(Kind, slot, menu_slot, default(auto)) :- member(Kind, [menu, menu_item]).
+%% A nested menu keeps the wedge opposite its parent item for going back.
+gui_attribute(menu, back, menu_back, default(none)).
+%% Authored allowance, not a client cap: about eight directions per level stay
+%% learnable (Kurtenbach & Buxton). Recipes may declare another count per menu.
+gui_attribute(menu, wedges, positive_integer, default(8)).
 
 gui_component_schema(Classes, Attributes, Kind, Properties) :-
     term_variables(Classes-Attributes, []),
@@ -237,6 +257,10 @@ no_follow(gui_appearance/1).
 no_follow(gui_appearance_tokens/2).
 no_follow(gui_appearance_token/2).
 no_follow(gui_rgb/1).
+no_follow(menu_slot/1).
+no_follow(menu_back/1).
+no_follow(menu_target/1).
+no_follow(menu_subject/1).
 gui_appearance(inherit).
 gui_appearance(appearance(1, Tokens)) :- gui_appearance_tokens(Tokens, []).
 gui_appearance_tokens([], _).
@@ -262,6 +286,17 @@ optional_image_asset(none).
 optional_image_asset(Value) :- image_asset(Value).
 image_asset(asset(Digest, <<"image/jpeg">>)) :-
     binary(Digest), binary_codes(Digest, Bytes), length(Bytes, 64), gui_digest(Bytes).
+menu_slot(auto).
+menu_slot(Slot) :- integer(Slot), Slot > 0.
+menu_back(none).
+menu_back(Slot) :- integer(Slot), Slot > 0.
+%% A wedge names its exact subject: one menu may offer several subjects' choices.
+menu_target(choice(Subject, eidolon(Purpose, Style, recipe(Ns, Anchor, Recipe)))) :-
+    term_variables(Subject-Purpose-Recipe, []), atom(Style), binary(Ns), binary(Anchor),
+    menu_subject(Subject).
+menu_subject(entity_ref(Ns, Anchor, _)) :- binary(Ns), binary(Anchor).
+menu_subject(class_ref(Ns, Anchor, Class)) :- binary(Ns), binary(Anchor), atom(Class).
+menu_subject(ontology_ref(Ns, Anchor)) :- binary(Ns), binary(Anchor).
 
 no_follow(gui_texts/1).
 gui_texts([]).
@@ -359,6 +394,191 @@ gui_workspace(Title, Fields, Tree) :-
 gui_workspace_fields([], []).
 gui_workspace_fields([Field | Rest], [component(Id, [Kind], [attribute(label, Label)], []) | Children]) :-
     Field =.. [Kind, Id, Label], gui_workspace_fields(Rest, Children).
+
+%% menu_tree(+Spec, -Tree) compiles one pie through the ordinary component
+%% schema. Spec is menu(Label, Help, Options, Entries); each entry is
+%%   item(choice(Subject, Eidolon), Label, Help, Availability, Options)
+%% (as returned by gui_menu_source/2), a nested menu/4, or
+%% group(Label, Options, Purposes, Items): a nested menu of those items whose
+%% Eidolon purpose is listed, omitted when none is. Options are slot(N),
+%% confirm(true), image(Asset) and, on menus, wedges(N). A level holding more
+%% entries than its wedges keeps its pinned entries and nests the rest under
+%% "More"; nothing is dropped. Every wedge leaves with its concrete slot. A
+%% nested menu reserves its `back` wedge, the direction of its parent's centre.
+no_follow(menu_tree/2).
+no_follow(menu_raw/5).
+no_follow(menu_back_slot/4).
+no_follow(menu_children/4).
+no_follow(menu_wedges/2).
+no_follow(menu_child_id/3).
+no_follow(menu_child/5).
+no_follow(menu_fit/4).
+no_follow(menu_pinned/3).
+no_follow(menu_take/4).
+no_follow(menu_entry_slot/2).
+no_follow(menu_slots/4).
+no_follow(menu_free_slots/4).
+no_follow(menu_assign/3).
+no_follow(menu_enabled/4).
+no_follow(menu_image/2).
+no_follow(menu_choice_label/2).
+no_follow(menu_caption/3).
+no_follow(menu_purpose_caption/2).
+no_follow(menu_title/2).
+no_follow(menu_expand/2).
+gui_query(menu_tree(_, _)).
+
+menu_tree(Spec, Tree) :-
+    term_variables(Spec, []),
+    menu_raw(Spec, menu, auto, none, Raw),
+    gui_tree_schema(Raw, Tree, _).
+
+menu_raw(menu(Label, Help, Options, Entries), Id, Slot, Back,
+         component(Id, [menu], [attribute(label, Label), attribute(help, Help),
+                                attribute(wedges, Wedges), attribute(slot, Slot),
+                                attribute(back, Back) | Image],
+                   Children)) :-
+    menu_wedges(Options, Wedges),
+    menu_expand(Entries, Expanded),
+    (Back == none -> Capacity = Wedges; Capacity is Wedges - 1),
+    menu_fit(Expanded, Capacity, Wedges, Fitted),
+    menu_slots(Fitted, Wedges, Back, Placed),
+    menu_children(Placed, Id, Wedges, Children),
+    menu_image(Options, Image).
+
+menu_wedges(Options, Wedges) :-
+    (member(wedges(Wedges), Options) -> true; gui_attribute(menu, wedges, _, default(Wedges))).
+
+menu_children([], _, _, []).
+menu_children([Slot-Entry | Rest], Parent, Wedges, [Child | Children]) :-
+    menu_child_id(Parent, Slot, Id),
+    menu_child(Entry, Id, Slot, Wedges, Child),
+    menu_children(Rest, Parent, Wedges, Children).
+menu_child_id(menu, Slot, wedge([Slot])).
+menu_child_id(wedge(Path), Slot, wedge(Next)) :- append(Path, [Slot], Next).
+
+menu_child(menu(Label, Help, Options, Entries), Id, Slot, ParentWedges, Raw) :-
+    menu_wedges(Options, Wedges), menu_back_slot(Slot, ParentWedges, Wedges, Back),
+    menu_raw(menu(Label, Help, Options, Entries), Id, Slot, Back, Raw).
+menu_child(item(Target, Authored, Offered, Availability, Options), Id, Slot, _,
+           component(Id, [menu_item], [attribute(label, Label), attribute(help, Help),
+                attribute(target, Target), attribute(enabled, Enabled), attribute(slot, Slot),
+                attribute(confirm, Confirm) | Image], [])) :-
+    Target = choice(_, Choice),
+    (Authored == none -> menu_choice_label(Choice, Label); Label = Authored),
+    menu_enabled(Availability, Offered, Enabled, Help),
+    (member(confirm(true), Options) -> Confirm = true; Confirm = false),
+    menu_image(Options, Image).
+
+%% Unavailable choices stay in place, dimmed, so learned paths stay true.
+%% Operations still recheck their authorization on submission.
+menu_enabled(unavailable, _, false, <<"You are not allowed to do this here.">>).
+menu_enabled(unreachable, _, false, <<"Unavailable: its source can't be reached.">>).
+menu_enabled(available, Help, true, Help).
+menu_enabled(requires_input, Help, true, Help).
+
+menu_image(Options, [attribute(image, Image)]) :- member(image(Image), Options), !.
+menu_image(_, []).
+
+%% The parent item's direction, turned half a circle, in this menu's wedges.
+menu_back_slot(Slot, ParentWedges, Wedges, Back) :-
+    Back is (((2 * (Slot - 1) + ParentWedges) * Wedges + ParentWedges) // (2 * ParentWedges)) mod Wedges + 1.
+
+menu_fit(Entries, Capacity, _, Entries) :- length(Entries, Count), Count =< Capacity, !.
+menu_fit(Entries, Capacity, Wedges, Fitted) :-
+    menu_pinned(Entries, Pinned, Free),
+    length(Pinned, Count), Keep is Capacity - Count - 1,
+    %% Every level must place at least one entry, or nesting never ends.
+    (Keep >= 1 -> true; fail_with_reason(menu_wedges_too_few(Wedges))),
+    menu_take(Keep, Free, Kept, Rest),
+    append(Pinned, Kept, Placed),
+    append(Placed, [menu(<<"More">>, <<"">>, [], Rest)], Fitted).
+
+menu_pinned([], [], []).
+menu_pinned([Entry | Rest], Pinned, Free) :-
+    menu_pinned(Rest, PinnedRest, FreeRest),
+    (menu_entry_slot(Entry, _) -> Pinned = [Entry | PinnedRest], Free = FreeRest
+    ; Pinned = PinnedRest, Free = [Entry | FreeRest]).
+
+menu_take(0, Rest, [], Rest) :- !.
+menu_take(Count, [Entry | Entries], [Entry | Kept], Rest) :-
+    Next is Count - 1, menu_take(Next, Entries, Kept, Rest).
+
+menu_entry_slot(item(_, _, _, _, Options), Slot) :- member(slot(Slot), Options), !.
+menu_entry_slot(menu(_, _, Options, _), Slot) :- member(slot(Slot), Options), !.
+
+menu_slots(Entries, Wedges, Back, Placed) :-
+    findall(Slot, (member(Entry, Entries), menu_entry_slot(Entry, Slot)), Pinned),
+    sort(Pinned, Unique), length(Pinned, Count),
+    (length(Unique, Count) -> true; fail_with_reason(duplicate_menu_slot(Pinned))),
+    (member(Slot, Pinned), \+ (integer(Slot), Slot >= 1, Slot =< Wedges, Slot \== Back) ->
+        fail_with_reason(menu_slot_unavailable(Slot, Wedges))
+    ; true),
+    menu_free_slots(1, Wedges, [Back | Pinned], Free),
+    menu_assign(Entries, Free, Unsorted),
+    sort(Unsorted, Placed).
+
+menu_free_slots(Slot, Wedges, _, []) :- Slot > Wedges, !.
+menu_free_slots(Slot, Wedges, Pinned, Free) :-
+    Next is Slot + 1, menu_free_slots(Next, Wedges, Pinned, Rest),
+    (member(Slot, Pinned) -> Free = Rest; Free = [Slot | Rest]).
+
+menu_assign([], _, []).
+menu_assign([Entry | Entries], Free, [Slot-Entry | Placed]) :-
+    menu_entry_slot(Entry, Slot), !, menu_assign(Entries, Free, Placed).
+menu_assign([Entry | Entries], [Slot | Free], [Slot-Entry | Placed]) :-
+    menu_assign(Entries, Free, Placed).
+
+%% Plain captions for the shared view and inspection styles. A source's own
+%% label (operation forms) always wins; unknown styles get their purpose's.
+menu_choice_label(eidolon(Purpose, Style, _), Label) :- menu_caption(Purpose, Style, Label), !.
+menu_choice_label(eidolon(Purpose, _, _), Label) :- menu_purpose_caption(Purpose, Label), !.
+menu_choice_label(_, <<"Open">>).
+menu_caption(playing, solid, <<"Solid">>).
+menu_caption(playing, wireframe, <<"Wire box">>).
+menu_caption(playing, contents, <<"Permitted contents">>).
+menu_caption(playing, matrix, <<"Matrix walls">>).
+menu_caption(edition, solid, <<"Edit as solid">>).
+menu_caption(edition, wireframe, <<"Edit as wire box">>).
+menu_caption(edition, contents, <<"Edit permitted contents">>).
+menu_caption(edition, matrix, <<"Edit as matrix walls">>).
+menu_caption(prolog, source, <<"Source">>).
+menu_caption(inspection, policy, <<"Policy">>).
+menu_caption(inspection, interfaces, <<"Interfaces">>).
+menu_caption(inspection, routes, <<"Routes">>).
+menu_caption(workspace, workbench, <<"Workbench">>).
+menu_purpose_caption(playing, <<"Another view">>).
+menu_purpose_caption(edition, <<"Another editing view">>).
+menu_purpose_caption(prolog, <<"Source view">>).
+menu_purpose_caption(inspection, <<"Inspection">>).
+menu_purpose_caption(workspace, <<"Workspace">>).
+menu_purpose_caption(operation(_), <<"Action">>).
+
+menu_title(Name, Name) :- binary(Name), Name \== <<"">>, !.
+menu_title(_, <<"Actions">>).
+
+menu_expand([], []).
+menu_expand([group(Label, Options, Purposes, Items) | Rest], Expanded) :- !,
+    findall(Item, (member(Item, Items), Item = item(choice(_, eidolon(P, _, _)), _, _, _, _),
+                   member(P, Purposes)), Selected),
+    menu_expand(Rest, Tail),
+    (Selected = [] -> Expanded = Tail; Expanded = [menu(Label, <<"">>, Options, Selected) | Tail]).
+menu_expand([Entry | Rest], [Entry | Tail]) :- menu_expand(Rest, Tail).
+
+%% The default pie of any thing: its offered actions first, then its views
+%% under "Show as" and its source and inspections under "Inspect".
+no_follow(gui_menu_default_spec/2).
+eidolon(default_menu, subject(ontology_ref(Ns, Anchor), Entity), menu(Tree)) :-
+    term_variables(Ns-Anchor-Entity, []),
+    in_ontology(Ns, Anchor, gui_menu_source(Entity, Source)),
+    gui_menu_default_spec(Source, Spec),
+    menu_tree(Spec, Tree).
+gui_menu_default_spec(menu_source(Name, Items), menu(Title, <<"">>, [], Entries)) :-
+    menu_title(Name, Title),
+    findall(Item, (member(Item, Items),
+                   Item = item(choice(_, eidolon(operation(_), _, _)), _, _, _, _)), Actions),
+    append(Actions, [group(<<"Show as">>, [], [playing, edition], Items),
+                     group(<<"Inspect">>, [], [prolog, inspection, workspace], Items)], Entries).
 
 %% Private native operations retain the original verified execute request.
 %% Their live results are consumed only by actual prepared presentation work.

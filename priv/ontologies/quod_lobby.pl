@@ -142,12 +142,12 @@ material_surface(Material, Surface) :-
 
 %% New worlds freeze these catalogue-selected surfaces into their own state.
 world_palette([
-    material(1,surface(<<"#B7D6AA">>,0,950,0,[Grass])),
-    material(2,surface(<<"#A58868">>,0,950,0,[Ground])),
-    material(3,surface(<<"#E5D8AC">>,0,900,0,[Ground])),
-    material(4,surface(<<"#C99B79">>,0,900,0,[Ground])),
-    material(5,surface(<<"#E7E9E5">>,0,800,0,[])),
-    material(6,surface(<<"#A1A5A5">>,0,900,0,[Ground]))]) :-
+    material(1,surface(<<"#B7D6AA">>,0,950,0,1000,[Grass])),
+    material(2,surface(<<"#A58868">>,0,950,0,1000,[Ground])),
+    material(3,surface(<<"#E5D8AC">>,0,900,0,1000,[Ground])),
+    material(4,surface(<<"#C99B79">>,0,900,0,1000,[Ground])),
+    material(5,surface(<<"#E7E9E5">>,0,800,0,1000,[])),
+    material(6,surface(<<"#A1A5A5">>,0,900,0,1000,[Ground]))]) :-
     material_eidolons(Ns,A),
     Ns::(current_ontology_identity(Ns,A),texture_asset(babylon_grass,<<"base_colour">>,GrassAsset,_)),
     Ns::(current_ontology_identity(Ns,A),texture_asset(babylon_ground,<<"base_colour">>,GroundAsset,_)),
@@ -230,10 +230,10 @@ console_parts(
           relative(<<"body">>, transform(0, 650, -150, 0, 0, 0)),
           Bronze, label(Title, <<"above">>), depicts_nothing)]) :-
     material_surface(oak_wood, Wood), material_surface(bronze, Bronze),
-    Shell = surface(<<"#253239">>,650,420,0,[]),
-    Inset = surface(<<"#10191E">>,250,300,40,[]),
-    Screen = surface(<<"#071419">>,0,350,120,[]),
-    Glow = surface(<<"#F4B942">>,0,350,700,[]),
+    Shell = surface(<<"#253239">>,650,420,0,1000,[]),
+    Inset = surface(<<"#10191E">>,250,300,40,1000,[]),
+    Screen = surface(<<"#071419">>,0,350,120,1000,[]),
+    Glow = surface(<<"#F4B942">>,0,350,700,1000,[]),
     console_layout(Gap, Title, BaseLabel, SupportLabel, BodyLabel,
                    ScreenLabel, ShelfLabel, ControlLabel),
     modelling_vocabulary(Ns, Anchor),

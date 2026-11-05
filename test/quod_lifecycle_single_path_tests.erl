@@ -743,8 +743,8 @@ m3a_recursive(User,C,S0,S1,S2) ->
     Old1=m1a_read(User,{attribute,I1,transform,{0}}),
     Old2=m1a_read(User,{attribute,I2,transform,{0}}),
     m2_edit(User,{transaction,m1a_conj([
-        {space_represent,I1,solid,Old1,contents,T1},
-        {space_represent,I2,solid,Old2,contents,T2}])}),
+        {space_represent,I1,solid,Old1,none,contents,T1,none},
+        {space_represent,I2,solid,Old2,none,contents,T2,none}])}),
     Class=setelement(1,setelement(4,S0,space),class_ref),
     [Create|_]=m1a_read(User,{gui_operations,Class,{0}}),
     Fields=m1a_field(element(7,Create),space_placement,{at,S2,{transform,0,0,0,0,0,0}}),

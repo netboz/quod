@@ -36,9 +36,9 @@ exact_edge_box_retains_rational_lengths_test() ->
         Mark = sized(<<"wire_box">>,Size),
         holds({well_formed_mark,Mark},St),
         Expected = {mark,<<"edges">>,<<"wire_box">>,Size,{transform,10,20,30,15,35,75},
-            {surface,<<"#FFFFFF">>,0,700,0,[]},unlabelled,depicts_nothing},
+            {surface,<<"#FFFFFF">>,0,700,0,1000,[]},unlabelled,depicts_nothing},
         holds({model,[{part,<<"edges">>,{wire_box,Width,Height,Depth},
-            {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,[]},
+            {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,1000,[]},
             unlabelled,depicts_nothing}],[Expected]},St),
         [fails({well_formed_mark,sized(<<"wire_box">>,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
             || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]],
@@ -51,7 +51,7 @@ a_well_formed_mark_test() ->
         holds({well_formed_mark,
                {mark, <<"m2">>, <<"sphere">>, [{f, <<"diameter">>, 900}],
                 {transform, 0, 450, 0, 0, 0, 0},
-                {surface, <<"#C14953">>, 0, 900, 650, []},
+                {surface, <<"#C14953">>, 0, 900, 650, 1000, []},
                 unlabelled, depicts_nothing}}, St),
         holds({well_formed_mark,
                sized(<<"capsule">>, [{f, <<"diameter">>, 460},
@@ -66,7 +66,7 @@ a_well_formed_mark_test() ->
                {mark, <<"m3">>, <<"plane">>,
                 [{f, <<"width">>, 4000}, {f, <<"height">>, 3000}],
                 {transform, -2200, 10, -1800, 270, 0, 45},
-                {surface, <<"#0B3954">>, 0, 900, 0, []},
+                {surface, <<"#0B3954">>, 0, 900, 0, 1000, []},
                 {label, <<"ground">>, <<"centre">>}, depicts_nothing}}, St)
     end).
 
@@ -101,7 +101,7 @@ transforms_are_whole_millimetres_and_degrees_test() ->
         Turned = fun(RX) ->
                      {mark, <<"m1">>, <<"sphere">>, [{f, <<"diameter">>, 100}],
                       {transform, 0, 0, 0, RX, 0, 0},
-                      {surface, <<"#698F3F">>, 0, 900, 0, []},
+                      {surface, <<"#698F3F">>, 0, 900, 0, 1000, []},
                       unlabelled, depicts_nothing}
                  end,
         holds({well_formed_mark, Turned(359)}, St),
@@ -111,7 +111,7 @@ transforms_are_whole_millimetres_and_degrees_test() ->
         Moved = fun(X) ->
                     {mark, <<"m1">>, <<"sphere">>, [{f, <<"diameter">>, 100}],
                      {transform, X, 0, 0, 0, 0, 0},
-                     {surface, <<"#698F3F">>, 0, 900, 0, []},
+                     {surface, <<"#698F3F">>, 0, 900, 0, 1000, []},
                      unlabelled, depicts_nothing}
                 end,
         holds({well_formed_mark, Moved(-1000000)}, St),
@@ -126,17 +126,22 @@ materials_are_typed_and_labels_complete_test() ->
                         {transform, 0, 0, 0, 0, 0, 0}, Material,
                         unlabelled, depicts_nothing}
                    end,
-        holds({well_formed_mark, Surfaced({surface, <<"#F9C80E">>, 0, 200, 0, []})}, St),
-        fails({well_formed_mark, Surfaced({surface, <<"F9C80E">>, 0, 200, 0, []})}, St),
-        fails({well_formed_mark, Surfaced({surface, <<"#f9c80e">>, 0, 200, 0, []})}, St),
-        fails({well_formed_mark, Surfaced({surface, <<"#F9C80">>, 0, 200, 0, []})}, St),
-        fails({well_formed_mark, Surfaced({surface, <<"#F9C80EE">>, 0, 200, 0, []})}, St),
-        fails({well_formed_mark, Surfaced({surface, <<"#GGGGGG">>, 0, 200, 0, []})}, St),
+        holds({well_formed_mark, Surfaced({surface, <<"#F9C80E">>, 0, 200, 0, 1000, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"F9C80E">>, 0, 200, 0, 1000, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"#f9c80e">>, 0, 200, 0, 1000, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"#F9C80">>, 0, 200, 0, 1000, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"#F9C80EE">>, 0, 200, 0, 1000, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"#GGGGGG">>, 0, 200, 0, 1000, []})}, St),
         fails({well_formed_mark, Surfaced({material, <<"#F9C80E">>, <<"velvet">>})}, St),
+        %% Opacity is permille like the optical factors; translucency is explicit.
+        holds({well_formed_mark, Surfaced({surface, <<"#F9C80E">>, 0, 200, 0, 0, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"#F9C80E">>, 0, 200, 0, 1001, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"#F9C80E">>, 0, 200, 0, -1, []})}, St),
+        fails({well_formed_mark, Surfaced({surface, <<"#F9C80E">>, 0, 200, 0, []})}, St),
         Labelled = fun(Label) ->
                        {mark, <<"m1">>, <<"sphere">>, [{f, <<"diameter">>, 100}],
                         {transform, 0, 0, 0, 0, 0, 0},
-                        {surface, <<"#F9C80E">>, 0, 900, 0, []}, Label, depicts_nothing}
+                        {surface, <<"#F9C80E">>, 0, 900, 0, 1000, []}, Label, depicts_nothing}
                    end,
         holds({well_formed_mark, Labelled({label, text(24), <<"above">>})}, St),
         holds({well_formed_mark, Labelled({label, text(1025), <<"above">>})}, St),
@@ -150,7 +155,7 @@ a_mark_names_the_thing_it_shows_or_says_it_shows_none_test() ->
         Refers = fun(Depicts) ->
                      {mark, <<"m1">>, <<"sphere">>, [{f, <<"diameter">>, 100}],
                       {transform, 0, 0, 0, 0, 0, 0},
-                      {surface, <<"#F9C80E">>, 0, 900, 0, []}, unlabelled, Depicts}
+                      {surface, <<"#F9C80E">>, 0, 900, 0, 1000, []}, unlabelled, Depicts}
                  end,
         holds({well_formed_mark, Refers(depicts_nothing)}, St),
         holds({well_formed_mark,
@@ -221,7 +226,7 @@ texture_bindings_are_typed_and_unique_test() ->
         Asset = {asset, binary:copy(<<"a">>, 64), <<"image/jpeg">>},
         Texture = {texture, <<"base_colour">>, Asset, {repeat, 1000, 2500}},
         Surface = fun(Ts) -> setelement(6, box(<<"wood">>),
-            {surface, <<"#FFFFFF">>, 0, 1000, 0, Ts}) end,
+            {surface, <<"#FFFFFF">>, 0, 1000, 0, 1000, Ts}) end,
         holds({well_formed_mark, Surface([Texture])}, St),
         lists:foreach(fun(Ts) -> fails({well_formed_mark, Surface(Ts)}, St) end,
             [[Texture, Texture],
@@ -255,7 +260,7 @@ parent_order_prevents_cycles_and_dangling_children_test() ->
                            {relative, <<"child">>, {transform, 0, 0, 0, 0, 0, 0}}),
         fails({well_formed_scene, [Cycle, Child]}, St),
         fails({well_formed_scene, [Group, Group]}, St),
-        fails({well_formed_scene, [setelement(6, Group, {surface, <<"#FFFFFF">>, 0, 900, 0, []})]}, St)
+        fails({well_formed_scene, [setelement(6, Group, {surface, <<"#FFFFFF">>, 0, 900, 0, 1000, []})]}, St)
     end).
 
 model_recipes_preserve_body_and_attachment_references_test() ->
@@ -274,11 +279,11 @@ model_recipes_preserve_body_and_attachment_references_test() ->
 pbr_factors_are_bounded_integers_test() ->
     with_rendering(fun(St) ->
         lists:foreach(fun(Value) ->
-            Mark = setelement(6, box(<<"surface">>), {surface, <<"#F9C80E">>, Value, 300, 0, []}),
+            Mark = setelement(6, box(<<"surface">>), {surface, <<"#F9C80E">>, Value, 300, 0, 1000, []}),
             fails({well_formed_mark, Mark}, St)
         end, [-1, 1001, 0.5, {'X'}]),
         holds({well_formed_mark, setelement(6, box(<<"surface">>),
-                                          {surface, <<"#F9C80E">>, 1000, 0, 1000, []})}, St)
+                                          {surface, <<"#F9C80E">>, 1000, 0, 1000, 1000, []})}, St)
     end).
 
 mesh_geometry_is_typed_and_resource_policy_owned_test() ->
@@ -305,12 +310,12 @@ mesh_geometry_is_typed_and_resource_policy_owned_test() ->
         holds({well_formed_mark, setelement(4, Mark,
             setelement(6, Asset, {resources, 8000001, 1000, 100, 100, 10, 2, 1000}))}, St),
         fails({well_formed_mark, setelement(6, Mark,
-            {surface, <<"#FFFFFF">>, 0, 1000, 0, []})}, St)
+            {surface, <<"#FFFFFF">>, 0, 1000, 0, 1000, []})}, St)
     end).
 
 terrain_descriptor_is_body_bound_and_allocated_test() ->
     with_rendering(fun(St) ->
-        Geometry = {terrain_geometry,<<"qvt1">>,[{material,9,{surface,<<"#447722">>,0,900,0,[]}}],
+        Geometry = {terrain_geometry,<<"qvt1">>,[{material,9,{surface,<<"#447722">>,0,900,0,1000,[]}}],
                     {view_distance,4000,1000,2000},
                     {resources,500000,1000000,20000,10000,64}},
         Mark = {mark,<<"ground">>,<<"terrain">>,Geometry,{body_pose,4,2},
@@ -320,7 +325,7 @@ terrain_descriptor_is_body_bound_and_allocated_test() ->
         fails({well_formed_mark,setelement(8,Mark,depicts_nothing)},St),
         fails({well_formed_mark,setelement(4,Mark,[])},St),
         fails({well_formed_mark,setelement(4,Mark,setelement(3,Geometry,
-            [{material,9,{surface,<<"#447722">>,0,900,0,[]}},{material,9,{surface,<<"#FFFFFF">>,0,900,0,[]}}]))},St),
+            [{material,9,{surface,<<"#447722">>,0,900,0,1000,[]}},{material,9,{surface,<<"#FFFFFF">>,0,900,0,1000,[]}}]))},St),
         holds({well_formed_mark,setelement(4,Mark,setelement(5,Geometry,
             {resources,500000,1000000,20000,10000,1025}))},St)
     end).
@@ -329,7 +334,7 @@ lobby_terrain_recipe_uses_shared_unallocated_resources_test() ->
     {ok,Source}=file:read_file("priv/ontologies/lobby_worlds.pl"),
     with_committed_rendering(Source,fun(_,St) ->
         [Resources]=solutions({'R'},{world_render_resources,{'R'}},St),
-        Geometry={terrain_geometry,<<"qvt1">>,[{material,9,{surface,<<"#447722">>,0,900,0,[]}}],
+        Geometry={terrain_geometry,<<"qvt1">>,[{material,9,{surface,<<"#447722">>,0,900,0,1000,[]}}],
                   {view_distance,100001,1000,2000},Resources},
         holds({well_formed_mark,{mark,<<"ground">>,<<"terrain">>,Geometry,{body_pose,4,2},
               terrain_surfaces,unlabelled,{depicts,<<"world">>,<<7:256>>,land}}},St)
@@ -371,13 +376,13 @@ sized(Kind, Size) -> sized_with(<<"m1">>, Kind, Size).
 
 sized_with(Id, Kind, Size) ->
     {mark, Id, Kind, Size, {transform, 0, 200, 0, 0, 0, 0},
-     {surface, <<"#0B3954">>, 0, 900, 0, []},
+     {surface, <<"#0B3954">>, 0, 900, 0, 1000, []},
      {label, <<"part">>, <<"above">>}, depicts_nothing}.
 
 depicting(Id, Thing) ->
     {mark, Id, <<"box">>,
      [{f, <<"width">>, 400}, {f, <<"height">>, 400}, {f, <<"depth">>, 400}],
-     {transform, 0, 200, 0, 0, 0, 0}, {surface, <<"#0B3954">>, 0, 900, 0, []},
+     {transform, 0, 200, 0, 0, 0, 0}, {surface, <<"#0B3954">>, 0, 900, 0, 1000, []},
      unlabelled, {depicts, <<"quod:licence">>, Thing}}.
 
 text(N) -> list_to_binary(lists:duplicate(N, $a)).

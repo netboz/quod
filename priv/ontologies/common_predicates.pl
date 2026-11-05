@@ -127,7 +127,7 @@ entity_scene(predicate(Indicator),Mode,
     entity_eidolons(predicate(Indicator),Mode,solid,Eidolons).
 eidolon(predicate_model,predicate(Indicator),
         [part(<<"predicate">>,box(800,500,200),transform(0,0,0,0,0,0),
-              surface(<<"#6A90D9">>,0,700,0,[]),label(Label,<<"above">>),depicts_nothing)]) :-
+              surface(<<"#6A90D9">>,0,700,0,1000,[]),label(Label,<<"above">>),depicts_nothing)]) :-
     instance_of(predicate,predicate(Indicator)),
     '$quod_program_source'([Indicator],Source), binary_codes(Source,Codes),
     append(LabelCodes,[46,10],Codes), binary_codes(Label,LabelCodes).
@@ -155,6 +155,27 @@ class_eidolon(ontology,Mode,contents,recipe(Ns,A,ontology_contents)) :-
     member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
 eidolon(ontology_contents,Space,contents(Exposure)) :-
     ontology_inspect(predicates(_),_), space_contents_projection(Space,Exposure).
+
+%% Menus are class-selected Eidolons like views. The pinned GUI vocabulary
+%% supplies every thing's default pie; a class overrides it with its own
+%% `menu` recipe through the ordinary most-specific-class rule.
+class_eidolon(thing, menu, default, recipe(Ns, Anchor, default_menu)) :-
+    menu_vocabulary(Ns, Anchor).
+
+%% Forms already pin their GUI vocabulary; otherwise the installed system
+%% GUI ontology supplies menus, as it does for scene vocabulary.
+menu_vocabulary(Ns, Anchor) :-
+    findall(ontology_ref(N, H), gui_vocabulary(N, H), Pins),
+    (Pins = [] -> Ns = <<"quod:gui">>, quod:root::system_ontology(Ns, Anchor)
+    ; Pins = [ontology_ref(Ns, Anchor)]).
+
+%% One signed read per pie: the subject's single selected menu recipe.
+client_menu(Entity, View) :-
+    term_variables(Entity, []),
+    entity_eidolons(Entity, menu, _, Choices),
+    (Choices = [Choice] -> client_eidolon(Entity, Choice, View)
+    ; Choices = [] -> View = none
+    ; fail_with_reason(ambiguous_menu(Entity))).
 
 entity_eidolons(Entity,Eidolons) :- entity_eidolons(Entity,_,_,Eidolons).
 entity_eidolons(Entity,Purpose,Style,Eidolons) :-
@@ -323,6 +344,8 @@ public_source_query(class_eidolons(_, _, _, _)).
 public_source_query(entity_eidolons(_, _, _, _)).
 public_source_query(client_eidolon(_, _, _)).
 public_source_query(entity_scene(_, _, _)).
+public_source_query(client_menu(_, _)).
+public_source_query(gui_menu_source(_, _)).
 
 %% Targets admit only these exact source/read and administrator-edit shapes.
 %% The root policy describes whole-ontology read access, never API visibility.
@@ -636,6 +659,8 @@ space_contains(Space, Subject) :- space_member(Space, Subject).
 space_contains(Space, Subject) :- space_placement(Space, Subject, _).
 
 space_simulation_domain(_,_,_,_) :- fail.
+%% Composition supplies the space's own boundary seen from inside, if any.
+space_interior_boundary(_,_) :- fail.
 
 %% Contents is a recipe result, not a substitute mesh. The source owns the
 %% complete permitted subject set and physical bindings in its own frame.
@@ -684,8 +709,20 @@ space_exposure_projection(exposure(Frame,_,Subjects),Mode,Marks,Exposures) :-
     unique_solution(scene_vocabulary(Ns,A)),
     (space_simulation_domain(Space,World,_,_) -> true; World = none),
     space_scene_parts(Subjects,Mode,[interior(Frame)],
-        [representation(Frame,contents(Mode))],none,role(physical,World),Parts,Exposures),
+        [representation(Frame,contents(Mode))],none,role(physical,World),Contents,Exposures),
+    space_boundary_parts(Frame,Ns,A,Contents,Parts),
     in_ontology(Ns,A,model(Parts,Marks)).
+
+%% The viewed space's own boundary sits at its interior origin, after its
+%% contents, depicting the space itself. It is not a contained subject.
+space_boundary_parts(Frame,MNs,MA,Contents,Parts) :-
+    Frame = entity_ref(Here,History,Space),
+    (space_interior_boundary(Space,Recipe) ->
+        space_entity_model([recipe(Here,History,Recipe)],Space,Model),
+        term_hex_digest([interior(Frame),boundary],Occurrence),
+        in_ontology(MNs,MA,place_model(Occurrence,transform(0,0,0,0,0,0),depicts(Here,History,Space),Model,Boundary)),
+        append(Contents,Boundary,Parts)
+    ; Parts = Contents).
 
 space_scene_parts([],_,_,_,_,_,[],[]).
 space_scene_parts([exposed(Subject,Relation,Binding)|Rest],Mode,Path,Seen,Parent,Role,

@@ -28,8 +28,12 @@ normal restoration has no backup passphrase. Encrypted portable backups use the
 existing PBKDF2-SHA256/AES256-GCM format and a separate passphrase. Import targets
 an empty profile; a damaged or uncertain store is never replaced silently.
 
-Enter an HTTPS origin and, when needed, an explicitly trusted CA PEM. Certificate
-chain, validity and hostname checks remain enabled. Endpoint changes disconnect
+Enter the node address: a name such as `quod-0.service.consul` (port 443 by
+default) or `IP:port`; `--node` sets it from the command line. A node serves
+HTTPS with its own self-signed certificate, re-signed in place from one key, so
+the first connection trusts and remembers that key per address, like SSH. Later
+runs reconnect to the saved address and refuse any other key; "Forget this
+node's key" accepts a deliberately re-founded node. Address changes disconnect
 the current consumer. An imported key without an account reference first checks
 its retained signup receipt; lookup failure cannot provision a replacement.
 The setup description names the policy-selected existing account storage for S0.
@@ -62,29 +66,27 @@ form cancels local/opening work and retains uncertain signed work. Only explicit
 original-outcome reads follow uncertainty or restart; reconnect never dispatches
 saved work. Source inspection subscribes to its existing Prolog authorization
 before reading a cursor snapshot, and withdraws content on invalidation or denial.
-After ordinary account setup or Connect, **Current space** foregrounds the actual
-authorized interior and permitted contents. Its name comes from that same signed
-view's authored `name` attribute. Missing names stay unnamed; invalid/ambiguous
-names or unavailable views cannot masquerade as an empty space. A content pick
-opens the exact depicted subject. Current place and selected subject stay distinct.
-**Create…** opens the existing explicit storage/class catalogue; it creates nothing
-until the offered form's confirmation. **Space views & actions** inspects the
-current subject. Account controls, settings and source tools are deliberate choices.
+After ordinary account setup or Connect, the actual authorized interior and
+permitted contents fill the window. The corner names the space from that same
+signed view's authored `name` attribute. Missing names stay unnamed;
+invalid/ambiguous names or unavailable views cannot masquerade as an empty
+space. A left click opens the exact depicted subject's default view; current
+place and selected subject stay distinct. Every other choice comes from the
+pointed target's pie (below). Opened views and forms float on glass panels
+docked away from their target, closed with Esc or Close; the panel keeps only
+the content, its placement toggle and the exact identity on request. The
+**This device** HUD command holds the local tools: text size, panel opacity,
+VR, workspace placement, **Account and keys** (the login card), and Tools
+(the storage/class catalogue, this account's source, account controls and
+connected controllers). A same-profile reconnect retains the open subject and
+durable work, without replay. Full subject and recipe identities remain
+inspectable in **Details**. Layout never assigns or moves a domain object.
 
-Selected subjects expose their authored playing views and action forms as native
-buttons under **Views & actions**. **More views & editors** discloses alternate and source representations;
-**Inspect storage source** opens the exact ontology's source/Workbench choices.
-The selected button is marked; unavailable actions remain disabled. **Current
-space** returns to the interior, and **Inspector** recalls the retained selection,
-native draft and editor. Navigation updates the current-place heading without
-replacing a deliberate inspector. A same-profile reconnect retains that choice
-and durable work, without replay. Full subject and recipe identities remain
-inspectable in **Details**.
 Exterior, permitted contents, offered actions and source tools retain that same
 namespace, genesis anchor and entity. Representation choice never enters a space
 or grants permission. A view opens presentation; an action opens the existing
-form, whose authored confirmation button alone submits it. The representation
-chooser is the single selection route, without a competing operation dropdown.
+form, whose authored confirmation button alone submits it. The pie is the single
+selection route, without a competing operation dropdown.
 Operation forms keep their existing draft and controls
 when another representation is opened. Contents reuse the shared recursive
 projection and scene resources; unavailable dependencies withdraw that consumer.
@@ -98,8 +100,8 @@ In spatial presentation, its authored action form appears above that occurrence.
 to the still-current occurrence. Native controls, unsent draft, caret/selection,
 operation revision and received original outcome stay with the existing owner.
 Choosing either placement performs no domain action. **Close** returns to current
-space while retaining the form. Desktop presents a bounded task region beside
-the visual where width permits, or at full width for narrow/enlarged text.
+space while retaining the form. Desktop presents it as a floating glass panel
+docked to the side of the window farther from its target.
 
 This also applies to an occurrence selected inside an offered visual preview.
 Its signed visual consumer stays installed while that form uses it. The form has
@@ -141,8 +143,8 @@ selection inputs survive control refresh; withdrawal disables all actions, and
 opening another ontology clears those local inputs. Layout never assigns or
 moves a domain object.
 
-**Inspect storage source** opens the selected catalogue/storage ontology even
-when it offers no class operation. Ontology identity is independent of spatial
+A storage's pie (**Inspect**) opens its source even when it offers no class
+operation. Ontology identity is independent of spatial
 membership. Source workspaces use the existing native editor and predicate
 catalogue; policy/interface/route lenses use the same complete UTF8 cursor reader.
 System source remains read only. An authorized edit keeps its original committed
@@ -165,8 +167,6 @@ refresh does not revoke an independently accepted question. Question withdrawal
 hides and locks its fields, releases native capture/keyboard input and retains
 its last-known outcome separately from the unavailable notice. Accepted question
 recovery restores that same controller; it never clears an unknown write barrier.
-Expanded Account/Tools controls scroll with the home contents, whose interior
-viewport retains a readable minimum instead of collapsing beneath the chrome.
 
 **Later** and **Back** hide work locally; the same open-window controller retains
 its unsent draft, native field and selection. **Cancel request** is a separate
@@ -210,16 +210,15 @@ An explicitly unplaced agent keeps navigation subscribed without a scene.
 Recursive parent-first marks, absolute body poses and decorative source-frame
 poses share the scene adapter. Native samples retain world/run/structure and
 registration fences; missing or unavailable sources withdraw presentation and
-control. Physical WASD/QE positions move an observer camera; right-drag changes its viewing angle.
+control. Physical WASD/QE positions move an observer camera; middle-drag changes its viewing angle.
 An explicitly selected controlled body instead uses the signed native control
 lane and authoritative viewpoint. Focus loss releases local input. No collision
 or domain simulation runs in the client.
 The normal build starts in desktop 3D with the existing OpenGL renderer and
 OpenXR enabled. If no supported runtime or headset initializes, the desktop
-client continues without a VR button. After account sign-in, an initialized
-runtime makes **Enter VR · F9** appear on the desktop window. F9 enters VR while
-the client is focused;
-**Return to 3D** is available in the headset menu and on the desktop window.
+client continues without VR. After account sign-in with an initialized runtime,
+F9 or **This device ▸ Enter VR** enters VR while the client is focused;
+**This device ▸ Return to 3D** leaves it.
 These actions change local presentation, not the current agent or space.
 The runtime and headset must be available when Quod opens. Without them, Godot
 may log an OpenXR initialization error while the desktop client continues.
@@ -235,7 +234,7 @@ After entering VR, the client attaches the runtime's current controller
 trackers. The signed controller projection supplies descriptions, roles,
 bindings and appearance admission. Only the explicitly described Vive profile
 and named facilities are mapped. Unknown profiles, missing facilities and
-ambiguous roles remain visible and disabled. **Connected controllers** offers
+ambiguous roles remain visible and disabled. **Tools ▸ Connected controllers** offers
 session-only source choices; saved preferences still use ordinary account forms.
 No source IDs or per-frame poses are written to an ontology.
 
@@ -244,10 +243,10 @@ picker. The display texture owns no focus; native buttons/editors retain it.
 Both use the shared opaque control palette, bounded editable fields and distinct
 hover, focus, pressed and disabled states. The actual authored submission role
 receives the primary-action treatment; its label and authority remain authored.
-Completed account setup is collapsed behind **Connection / identity**. Required
-first-run controls remain visible on desktop; **Inspection & settings** holds
-the existing source/controller/runtime actions. Status and refusals stay visible.
-**Appearance** adjusts the same controls without replacing their drafts.
+Completed account setup is collapsed behind **Account and keys**. Required
+first-run controls remain visible on the login card. Status and refusals appear
+as one sentence in the HUD strip. Text size and opacity adjust the same
+controls without replacing their drafts.
 Authored forms may also select a renderer-neutral `appearance(1, Tokens)` on
 their container. The anchored GUI vocabulary validates unique RGB colour,
 integer spacing/padding/corner and permille panel-opacity tokens. `inherit`
@@ -269,8 +268,7 @@ themes requiring this native adapter. They do not silently discard appearance.
 The XR workspace uses the same controls and drafts in a reflowing 1200×800
 surface, with connection/identity details collapsed behind a local action.
 Verbose identity/controller references and retired setup controls remain in
-that detail view; the working form keeps the primary surface. Appearance
-controls expand locally from Appearance without replacing the form.
+that detail view; the working form keeps the primary surface.
 Its initial 26px text retains approximately the former 16px/496px nominal
 angular size at the same 1m height and 2m distance. These are presentation trial
 defaults, not physical readability or comfort qualification. Larger/smaller
@@ -314,14 +312,27 @@ shown before the form; full exact identities and replies remain inspectable in
 the bounded **Exact identity / outcome details** view. Opening details or a newly
 returned subject action reveals it through the same native scroll owner.
 The desktop mirror converts pointer positions/relative motion into that surface
-once; XR ray hits already use surface coordinates. The mapped menu shows the
-authored clockwise pad sectors as numbered directions beside the same numbered
-native buttons. Hold the pad, slide the thumb towards a number, then release to
-choose the visibly selected entry. Returning to centre and releasing cancels;
-unavailable entries cannot activate. The same buttons also accept ray/trigger
-selection, consuming the later pad release once. Instructions stay in the menu,
-whose opaque shared palette separates it from the retained form beneath it.
-Larger text scrolls the list and reveals the selection without shrinking text.
+once; XR ray hits already use surface coordinates.
+
+Menus are pies read from the pointed target's authored `menu` Eidolon
+(`client_menu/2`): the pointed occurrence, else the space the agent is placed
+in, else the agent itself. Right-click on desktop or the pad on the menu hand
+opens it; direction, not distance, picks a wedge. Holding and releasing selects
+(turbo), resting on a sub-pie opens it where its item was, the reserved back
+wedge returns to the parent, and releasing in the centre cancels. Unavailable
+wedges stay visible with their reason; a confirmed wedge asks for a second
+press. On desktop, Backspace goes back, Enter commits, digits pick wedges and
+the Menu key opens the pointed target's pie. In VR the pie has its own
+world-locked surface at the device profile's reading distance; only the
+controller that opened it steers it with its ray. A chosen action without
+input fields runs at once; one with fields opens its form. The HUD strip
+shows the human's `hud_commands/1` view, the one local "This device" command
+and the last status sentence: along the bottom edge on desktop, and in VR on
+its own surface 25° below eye level that follows the body only after a 35°
+head turn. Agents the human already lets put questions before them may offer a command;
+the offer waits until the human answers it through **Offered commands** in
+their own pie. A strip click is committed by the same pie as any wedge, so a
+command that asks for confirmation still asks.
 Editable text, numeric and source fields in the spatial workspace expose an
 opaque adjacent AZERTY keyboard. Keys use the same native editor, caret,
 selection, undo and draft events; Enter follows the field's native semantics

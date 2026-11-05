@@ -140,7 +140,7 @@ account_space_visit(Principal,instance(Space),space_visit(Actor,_)) :-
     attribute(Space,owner,Owner), Owner = agent_instance_ref(Ns,Anchor,me),
     (Principal = Owner, account_owner_policy(Owner)
     ; Principal = Actor, account_personal_actor(Actor,Owner)).
-account_space_represent(Principal,instance(Space),space_represent(_,_,_,_)) :-
+account_space_represent(Principal,instance(Space),space_represent(_,_,_,_,_,_)) :-
     account_setup(me,complete(_)), attribute(Space,owner,Owner),
     (Principal = Owner, account_owner_policy(Owner)
     ; account_personal_actor(Principal,Owner)).
@@ -172,6 +172,31 @@ entity_scene(personal, Mode, hidden) :- member(Mode, [playing, edition]).
 
 %% The human and personal actor share account storage, never identity or keys.
 instance_of(agent, personal).
+
+%% Pointing at nothing while unplaced targets the agent itself: its pie is
+%% the ways in. Known spaces of this storage, creating one, and the human's
+%% own choices; the same menu serves while placed.
+class_eidolon(agent,menu,default,recipe(Ns,A,personal_menu)) :- current_ontology_identity(Ns,A).
+eidolon(personal_menu,subject(ontology_ref(Ns,A),personal),menu(Tree)) :-
+    current_ontology_identity(Ns,A),
+    findall(Item,personal_menu_destination(Item),Known),
+    gui_menu_source(space,menu_source(_,Create)),
+    findall(Item,(instance_of(human_user,Human),gui_menu_source(Human,menu_source(_,Own)),member(Item,Own)),Account),
+    (space_location(personal,unplaced) -> Title = <<"You are nowhere yet">>; Title = <<"You">>),
+    menu_vocabulary(Gui,GuiAnchor),
+    in_ontology(Gui,GuiAnchor,menu_tree(menu(Title,<<"">>,[],
+        [group(<<"Enter a known space">>,[slot(1)],[operation(instance)],Known),
+         group(<<"Create a space">>,[slot(3)],[operation(class)],Create),
+         group(<<"Your account">>,[slot(5)],[operation(instance),playing,edition,prolog,inspection,workspace],Account)]),Tree)).
+%% The human is an agent too and keeps the shared default pie.
+eidolon(personal_menu,subject(Target,Entity),View) :-
+    Entity \== personal, menu_vocabulary(Gui,GuiAnchor),
+    in_ontology(Gui,GuiAnchor,eidolon(default_menu,subject(Target,Entity),View)).
+personal_menu_destination(item(T,Label,H,Av,[])) :-
+    space_instance(Space,space), Space \= ontology_ref(_,_),
+    gui_menu_source(Space,menu_source(Name,Items)),
+    member(item(T,Offered,H,Av,_),Items), T = choice(_,eidolon(operation(instance),enter,_)),
+    (binary(Name), Name \== <<"">> -> Label = Name; Label = Offered).
 
 %% A's constructor queries its existing account relationship and location;
 %% neither a target's proposed owner nor a failed lookup supplies this evidence.
@@ -387,6 +412,134 @@ gui_link_question(Opening) :-
     gui_receiver_accept(Instance, Receiver, Capacity),
     ActorNs::(current_ontology_identity(ActorNs, ActorAnchor), gui_accepting(Opening)),
     \+ gui_pending(Instance, Reference), assertz(gui_pending(Instance, Reference)).
+
+%% The human's HUD. Commands are references, as gui_pending/2 stores question
+%% references: standing ones, those offered by the space the agent is placed
+%% in, then accepted contributions in acceptance order. The client's own
+%% "This device" command is the only one not authored here (decision 3).
+instance_of(quod:gui:hud, my_hud).
+%% Authored allowance before "More" (decision 5), beside gui_pending_allowance/2.
+hud_allowance(my_hud, 12).
+no_follow(hud_commands/1).
+no_follow(hud_command/1).
+no_follow(hud_direct_contributor/1).
+no_follow(hud_contribute/2).
+no_follow(hud_withdraw/2).
+hud_commands(hud(Tree)) :-
+    current_principal(Owner), human_user_owner(Owner),
+    findall(Item, hud_command(Item), Items),
+    findall(N, hud_allowance(my_hud, N), [Allowance]),
+    menu_vocabulary(Gui, GuiAnchor),
+    in_ontology(Gui, GuiAnchor, menu_tree(menu(<<"Commands">>, <<"">>, [wedges(Allowance)], Items), Tree)).
+
+hud_command(item(choice(Me, Choice), <<"Your attention">>, <<"Questions waiting for you">>, available, [])) :-
+    current_ontology_identity(Ns, A), Me = entity_ref(Ns, A, me),
+    entity_eidolons(me, attention, _, [Choice]).
+hud_command(item(choice(Me, Choice), <<"Me">>, <<"Your settings, keys and account">>, available, [])) :-
+    current_ontology_identity(Ns, A), Me = entity_ref(Ns, A, me),
+    entity_eidolons(me, menu, _, [Choice]).
+hud_command(Item) :-
+    space_location(personal, placed(entity_ref(Ns, A, Space), _)),
+    in_ontology(Ns, A, (entity_eidolons(Space, hud, _, Choices), member(Choice, Choices),
+                        client_eidolon(Space, Choice, hud(Items)))),
+    member(Item, Items).
+%% A human placed the contribution; an unreadable source stays, dimmed.
+hud_command(Item) :-
+    hud_contribution(my_hud, Subject, Choice, _),
+    Subject = entity_ref(Ns, A, Entity),
+    (in_ontology(Ns, A, gui_menu_source(Entity, menu_source(_, Items))),
+     member(Offered, Items), Offered = item(choice(Subject, Choice), _, _, _, _) -> Item = Offered
+    ; Item = item(choice(Subject, Choice), <<"Unavailable">>, <<"">>, unreachable, [])).
+
+%% The question count is the existing pending-question view, as a choice.
+class_eidolon(human_user, attention, questions, recipe(Ns, A, attention)) :- current_ontology_identity(Ns, A).
+eidolon(attention, subject(_, Human), attention(References)) :-
+    instance_of(human_user, Human), gui_pending_questions(References).
+
+%% The human, the personal agent and the owner of the space the agent is
+%% placed in add commands directly; the human removes any, a contributor its
+%% own. Admission names exactly those principals: nobody else reaches these.
+can_invoke(Goal, Principal, _, _) :- hud_entry(Goal, Principal).
+can_invoke((current_ontology_identity(_, _), Goal), Principal, _, _) :- hud_entry(Goal, Principal).
+hud_entry(hud_contribute(_, _), Principal) :- hud_direct_contributor(Principal).
+hud_entry(hud_withdraw(Subject, Choice), Principal) :-
+    (human_user_owner(Principal) ; hud_contribution(my_hud, Subject, Choice, Principal)).
+hud_direct_contributor(Principal) :- human_user_owner(Principal).
+hud_direct_contributor(agent_instance_ref(Ns, A, personal)) :- current_ontology_identity(Ns, A).
+hud_direct_contributor(Principal) :-
+    space_location(personal, placed(entity_ref(Ns, A, Space), _)),
+    in_ontology(Ns, A, attribute(Space, owner, Principal)).
+hud_contribute(Subject, Choice) :-
+    term_variables([Subject, Choice], []),
+    Subject = entity_ref(_, _, _), Choice = eidolon(_, Style, recipe(_, _, _)), atom(Style),
+    current_principal(Principal), hud_direct_contributor(Principal),
+    transaction((\+ hud_contribution(my_hud, Subject, Choice, _),
+                 assertz(hud_contribution(my_hud, Subject, Choice, Principal)))).
+%% An agent the human already lets put questions before them (their authored
+%% gui_receiver_policy/2) may leave an offer instead. It waits here, unplaced,
+%% until the human's own signed answer places or drops it; no foreign answer is
+%% trusted. A contributor may withdraw its own waiting offer. Nobody else writes.
+can_invoke(Goal, Principal, _, _) :- hud_offer_entry(Goal, Principal).
+can_invoke((current_ontology_identity(_, _), Goal), Principal, _, _) :- hud_offer_entry(Goal, Principal).
+hud_offer_entry(hud_offer(_, _), Principal) :-
+    instance_of(human_user, Instance), gui_receiver_policy(Instance, Principal).
+hud_offer_entry(hud_withdraw_offer(Subject, Choice), Principal) :- hud_offered(my_hud, Principal, Subject, Choice).
+no_follow(hud_offer/2).
+no_follow(hud_withdraw_offer/2).
+no_follow(hud_answer_offer/3).
+hud_offer(Subject, Choice) :-
+    term_variables([Subject, Choice], []),
+    Subject = entity_ref(_, _, _), Choice = eidolon(_, Style, recipe(_, _, _)), atom(Style),
+    current_principal(Principal),
+    (hud_direct_contributor(Principal) -> fail_with_reason(hud_contribute_directly); true),
+    transaction((\+ hud_offered(my_hud, _, Subject, Choice), \+ hud_contribution(my_hud, Subject, Choice, _),
+                 assertz(hud_offered(my_hud, Principal, Subject, Choice)))).
+hud_withdraw_offer(Subject, Choice) :-
+    term_variables([Subject, Choice], []), current_principal(Principal),
+    transaction(retract(hud_offered(my_hud, Principal, Subject, Choice))).
+%% The human's answer is an ordinary offered operation of their own instance.
+class_permission(human_user, answer_hud_offer, check(hud_answer_actor)).
+hud_answer_actor(Actor, instance(Human), answer_hud_offer(_, _)) :-
+    Owner = agent_instance_ref(_, _, Human),
+    (Actor = Owner, account_owner_policy(Owner) ; account_personal_actor(Actor, Owner)).
+hud_answer_offer(Human, Offer, Answer) :-
+    term_variables([Human, Offer, Answer], []),
+    Offer = offer(Contributor, Subject, Choice),
+    operation_authorized(instance(Human), answer_hud_offer(Offer, Answer)),
+    transaction((retract(hud_offered(my_hud, Contributor, Subject, Choice)),
+                 (Answer == accept -> assertz(hud_contribution(my_hud, Subject, Choice, Contributor)); true))).
+class_eidolon(human_user, operation(instance), answer_hud_offer, recipe(Ns, A, answer_hud_offer)) :-
+    current_ontology_identity(Ns, A).
+eidolon(answer_hud_offer, subject(ontology_ref(Ns, A), instance(Human)), operation(hud_offers(Human))) :-
+    current_ontology_identity(Ns, A), instance_of(human_user, Human), hud_offered(my_hud, _, _, _), !.
+instance_of(quod:gui:form, hud_offers(H)) :- instance_of(human_user, H).
+instance_of(quod:gui:selection, hud_offer_choice).
+instance_of(quod:gui:selection, hud_offer_answer).
+instance_of(quod:gui:button, hud_offer_submit).
+attribute(hud_offers(_), label, <<"Offered commands">>).
+attribute(hud_offers(_), help, <<"Other agents asked to add these commands to your HUD. Nothing is added unless you accept.">>).
+attribute(hud_offer_choice, label, <<"Offer">>).
+attribute(hud_offer_choice, options, Options) :-
+    findall(option(offer(P, S, C), Label), (hud_offered(my_hud, P, S, C), hud_offer_label(S, C, Label)), Options).
+attribute(hud_offer_answer, label, <<"Answer">>).
+attribute(hud_offer_answer, options, [option(accept, <<"Add it to my HUD">>), option(decline, <<"Decline">>)]).
+attribute(hud_offer_submit, label, <<"Answer">>).
+gui_children(hud_offers(_), [hud_offer_choice, hud_offer_answer, hud_offer_submit]).
+gui_initial(hud_offers(_), hud_offer_answer, decline).
+gui_form(hud_offers(Human), [field(hud_offer_choice, Offer), field(hud_offer_answer, Answer)],
+    submit(hud_offer_submit, hud_answer_offer(Human, Offer, Answer), operation(answer_hud_offer(Offer, Answer), []))).
+%% The command's own label from its source, or a plain placeholder.
+hud_offer_label(entity_ref(Ns, A, Entity), Choice, Label) :-
+    (in_ontology(Ns, A, gui_menu_source(Entity, menu_source(_, Items))),
+     member(item(choice(_, Choice), Offered, _, _, _), Items), binary(Offered) -> Label = Offered
+    ; Label = <<"A command whose source can't be reached">>).
+
+%% The human removes any contribution; a contributor withdraws its own.
+hud_withdraw(Subject, Choice) :-
+    term_variables([Subject, Choice], []), current_principal(Principal),
+    transaction((hud_contribution(my_hud, Subject, Choice, Contributor),
+                 (human_user_owner(Principal) -> true; Principal = Contributor),
+                 retract(hud_contribution(my_hud, Subject, Choice, Contributor)))).
 
 %% Private human preferences. Connection, pose and button observations never
 %% enter this source. Compose the existing GUI form and operation owners.

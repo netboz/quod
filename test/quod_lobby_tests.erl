@@ -510,7 +510,7 @@ modelling_and_material_libraries_test_() ->
             {ok, [#{<<"V0">> := ScreenAt}], _} = Ask(ModelNs,
                 {align, {plane, 1000, 600}, centre, {box, 1200, 800, 200}, front, 5, {0}}),
             ?assertEqual({transform, 0, 0, -105, 0, 0, 0}, ScreenAt),
-            Surface = {surface, <<"#93613D">>, 0, 700, 0, []},
+            Surface = {surface, <<"#93613D">>, 0, 700, 0, 1000, []},
             Parts = [{part, <<"body">>, {box, 1200, 800, 200},
                       {transform, 0, 900, 0, 0, 30, 0}, Surface, unlabelled, depicts_nothing},
                      {part, <<"screen">>, {plane, 1000, 600},
@@ -781,7 +781,7 @@ ontology_instances_share_selection_and_authorized_inspection_test_() ->
             System = system_target(<<"quod:gui">>),
             {ok, [#{<<"V0">> := SystemChoices}], _} = read(Ctx,
                 editor_scope(<<"quod:gui">>, {entity_eidolons, System, {0}})),
-            assert_ontology_choices(OwnedChoices, Target, [solid, wireframe]),
+            assert_ontology_choices(OwnedChoices, Target, [solid, wireframe, matrix]),
             assert_ontology_choices(SystemChoices, System, []),
             ?assertMatch({fail, _}, read(Reader,
                 editor_scope(Ns, {entity_eidolons, Target, {0}}))),
@@ -1196,13 +1196,18 @@ assert_ontology_choices(Choices, {ontology_ref, TargetNs, TargetAnchor}, Exterio
                 || Mode <- [playing, edition]] ++
                [{eidolon, Mode, Style,
                  {recipe, TargetNs, TargetAnchor,
-                  case Style of solid -> space; wireframe -> space_wireframe end}}
+                  case Style of solid -> space; wireframe -> space_wireframe; matrix -> space_matrix end}}
                 || Mode <- [playing, edition], Style <- Exteriors] ++
                case Exteriors of
-                   [] -> [];
-                   _ -> [{eidolon, {operation, instance}, Name,
-                          {recipe, TargetNs, TargetAnchor, Recipe}}
-                         || {Name, Recipe} <- [{enter, space_enter}, {leave, space_leave}]]
+                   %% Every thing has the vocabulary's default pie; a composed
+                   %% space vocabulary replaces it with the space's own.
+                   [] -> [{eidolon, menu, default, {recipe, Ns, Anchor, default_menu}}];
+                   _ -> [{eidolon, menu, default, {recipe, TargetNs, TargetAnchor, space_menu}} |
+                         [{eidolon, {operation, instance}, Name,
+                           {recipe, TargetNs, TargetAnchor, Recipe}}
+                          || {Name, Recipe} <- [{enter, space_enter}, {leave, space_leave},
+                                               {show_none, space_show_none}, {show_wireframe, space_show_wireframe},
+                                               {show_matrix, space_show_matrix}]]]
                end,
     ?assertEqual(lists:sort(Expected), lists:sort(Choices)).
 

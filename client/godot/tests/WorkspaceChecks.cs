@@ -13,7 +13,7 @@ public partial class ExportChecks
         var reports=new List<object>();
         foreach(var dimensions in new[]{new Vector2(1850,496),new Vector2(600,900)}) {
             gui.Size=dimensions;await Frame();await Frame();
-            var target=(Button)app.FindChild("location-operations",true,false);
+            var target=(Button)app.FindChild("create-key",true,false);
             var rectangle=target.GetGlobalRect();
             var clip=target.GetViewport().GetVisibleRect();
             for(Node? parent=target.GetParent();parent!=null;parent=parent.GetParent())
@@ -21,7 +21,7 @@ public partial class ExportChecks
             bool accessible=clip.Encloses(rectangle);
             reports.Add(new { pixels=new[]{gui.Surface.Size.X,gui.Surface.Size.Y},target=rectangle.ToString(),clip=clip.ToString(),accessible });
             await File.WriteAllTextAsync(Env("M1B_RESULT"),System.Text.Json.JsonSerializer.Serialize(new { reports,checks }));
-            Check(accessible,"the actual Current space operations control remains fully inside the shared workspace at "+dimensions);
+            Check(accessible,"the actual primary login action remains fully inside the shared workspace at "+dimensions);
         }
         gui.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);await Frame();await Frame();
         var desktopPixels=gui.Surface.Size;
@@ -36,13 +36,11 @@ public partial class ExportChecks
         actual.PresentWorkspace(true);await Frame();await Frame();
         Check(gui.Surface.Size==new Vector2I(1200,800) && form.GetThemeDefaultFontSize()==26,"XR uses the actual shared controls with a readable-density layout profile");
         Check(!((Control)app.FindChild("location",true,false)).IsVisibleInTree() && !((Control)app.FindChild("controllers",true,false)).IsVisibleInTree() && ((Button)app.FindChild("create-key",true,false)).IsVisibleInTree() && ((Button)app.FindChild("create-key",true,false)).ThemeTypeVariation=="PrimaryAction","offline spatial presentation retains its required key action while collapsing raw identity/controller detail");
-        await Press("workspace-settings");
-        Check(((Button)app.FindChild("workspace-text-larger",true,false)).IsVisibleInTree(),"local appearance controls are accessible through the existing workspace settings action");
-        await Press("workspace-text-larger");await Frame();
+        await Device("text_larger");await Frame();
         Check(form.Input("note")!.GetInstanceId()==editorId && ReferenceEquals(form.Draft,draft) && draft["note"]=="unsent exact draft" && form.GetThemeDefaultFontSize()==30,$"larger text preserves the actual control/draft: identity={form.Input("note")!.GetInstanceId()==editorId}, sameDraft={ReferenceEquals(form.Draft,draft)}, value={draft["note"]}, font={form.GetThemeDefaultFontSize()}");
         var desktopUpdate=scene.Viewport.RenderTargetUpdateMode;
         scene.Viewport.RenderTargetUpdateMode=SubViewport.UpdateMode.Always;
-        await Press("workspace-hide");
+        await Device("workspace_hide");
         Check(!form.IsVisibleInTree() && !actual.WorkspaceVisible && submits==0,"Hide removes presentation without submitting or discarding the form");
         Check(scene.Viewport.RenderTargetUpdateMode==SubViewport.UpdateMode.Always,"hiding workspace controls preserves the independently active scene render target");
         scene.Viewport.RenderTargetUpdateMode=desktopUpdate;
@@ -56,8 +54,11 @@ public partial class ExportChecks
         var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
         using var models=new RenderModels((asset,cancellation)=>Task.FromResult(bytes));
         var adapter=new OpenXRInput();scene.Viewport.AddChild(adapter);
-        bool fullMenu=false;
-        adapter.Configure(scene,gui,models,()=>null,()=>form.IsVisibleInTree(),()=>fullMenu ? app.WorkspaceMenuEntries() : new[]{("Show retained workspace",(Func<bool>)(()=>true),(Action)adapter.ShowWorkspace)});
+        bool fullMenu=false;var pie=new PieMenu();gui.Surface.AddChild(pie);
+        var full=QualificationPie(Enumerable.Range(1,8).Select(i=>(i,"Long authored wedge label "+i,i%3!=0)).ToArray());
+        pie.Selected+=_=>{if(!fullMenu)adapter.ShowWorkspace();};
+        adapter.Configure(scene,gui,models,()=>null,()=>form.IsVisibleInTree(),pie,_=>{
+            pie.Open(gui.Surface.Size/2,300,"Reading…");pie.Present(fullMenu ? full : QualificationPie((1,"Show retained workspace",true)),"");return true;});
         void PresentForm()=>form.Visible=adapter.WorkspaceVisible;
         adapter.Changed+=PresentForm;form.TreeExiting+=()=>adapter.Changed-=PresentForm;
         adapter.AttachSources();adapter.Install(mapping);adapter.PresentWorkspace(true);
@@ -124,9 +125,20 @@ public partial class ExportChecks
         right.SetInput("pad_press",false);right.SetInput("pad_axes",Vector2.Zero);Advance();
         Check(adapter.Sources.Single(s=>s.Hand=="right").Read("xr-standard-touchpad")!.Neutral,"fixture supplies an actually released neutral touchpad before the next menu gesture");
         right.SetInput("pad_axes",new Vector2(0,1));right.SetInput("pad_press",true);Advance();Advance();
-        Check(adapter.Router.MenuOwner!=null && adapter.GuiSurface.Visible && !form.IsVisibleInTree(),"the existing mapped menu is visible and usable while the working panel is hidden");
+        Check(adapter.Router.MenuOwner!=null && adapter.PieQuad.Visible && !adapter.GuiSurface.Visible && !form.IsVisibleInTree(),"the pie opens on its own surface while the working panel stays hidden");
         right.SetInput("pad_press",false);Advance();Advance();
         Check(adapter.WorkspaceVisible && form.IsVisibleInTree() && adapter.Router.MenuOwner==null && ReferenceEquals(form.Draft,draft) && submits==0,"mapped menu recall restores the same unsent working form without submitting it");
+        // The HUD strip is body-locked below the view and tags along.
+        var strip=new Button {Text="Strip command",Size=new(200,60)};adapter.HudSurface.AddChild(strip);
+        Head(new(0,1.6f,0),0);Advance();
+        var hudPose=adapter.HudQuad.GlobalTransform;var eye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;
+        var offset=hudPose.Origin-eye;float below=Mathf.RadToDeg(Mathf.Atan2(-offset.Y,new Vector2(offset.X,offset.Z).Length()));
+        Check(adapter.HudQuad.Visible && Math.Abs(below-25)<.5f && Math.Abs(offset.Length()-1.5f)<.01f,"the HUD strip sits 25° below eye level at reading distance");
+        Head(new(0,1.6f,0),Mathf.DegToRad(30));Advance();
+        Check(Same(adapter.HudQuad.GlobalTransform,hudPose),"a head turn within 35° leaves the strip where it is");
+        Head(new(0,1.6f,0),Mathf.DegToRad(40));Advance();
+        Check(!Same(adapter.HudQuad.GlobalTransform,hudPose),"a head turn past 35° brings the strip along");
+        strip.Free();Advance();Check(!adapter.HudQuad.Visible,"an empty strip surface shows nothing");
         string retained=System.Text.Json.JsonSerializer.Serialize(models.Metrics);fixedPose=adapter.GuiSurface.GlobalTransform;
         for(int i=0;i<20;i++)Advance();
         Check(retained==System.Text.Json.JsonSerializer.Serialize(models.Metrics) && Same(adapter.GuiSurface.GlobalTransform,fixedPose),"unchanged frames retain placement and perform no model acquisition decode instance or texture work");
@@ -150,34 +162,21 @@ public partial class ExportChecks
         Probe(clicks==beforeRay+1,"XR GUI hits remain in surface coordinates when the desktop mirror has a different size");
         while(gui.Appearance.DefaultFontSize<48)gui.TextSize(4);
         fullMenu=true;adapter.HideWorkspace();right.SetInput("pad_axes",Vector2.Zero);Advance();right.SetInput("pad_axes",new Vector2(0,1));right.SetInput("pad_press",true);Advance();Advance();await Frame();await Frame();
-        var menu=(PanelContainer)gui.Surface.FindChild("xr-menu",true,false);var entries=menu.FindChildren("*","Button",true,false).OfType<Button>().ToArray();
-        Probe(entries.Length==11 && new Rect2(Vector2.Zero,gui.Surface.Size).Encloses(menu.GetGlobalRect()),"the actual eleven-entry native menu fits the surface at largest supported text");
-        double angle=Math.PI*2*(entries.Length-1)/entries.Length;right.SetInput("pad_axes",new Vector2((float)Math.Sin(angle),(float)Math.Cos(angle)));Advance();await Frame();await Frame();
-        Probe(new Rect2(Vector2.Zero,gui.Surface.Size).Encloses(entries[^1].GetGlobalRect()),"radial selection brings the actual final Stop entry into view without shrinking text");
-        reports.Add(new { maximumFont=gui.Appearance.DefaultFontSize,menu=menu.GetGlobalRect().ToString(),lastEntry=entries[^1].GetGlobalRect().ToString() });
+        var reach=new Rect2(gui.Surface.Size/2-new Vector2(300,300)*1.04f,new Vector2(600,600)*1.04f);
+        Probe(pie.IsOpen && pie.Navigator!.Level.Children.Length==8 && new Rect2(Vector2.Zero,gui.Surface.Size).Encloses(reach),
+            "the full eight-wedge pie fits the surface at largest supported text");
         right.SetInput("pad_axes",new Vector2(1,0));Advance();await Frame();await Frame();
-        int rightSector=(int)Math.Round(entries.Length/4.0);var compass=menu.FindChild("xr-menu-directions",true,false) as Control;
-        var direction=menu.FindChild("xr-menu-direction-"+(rightSector+1),true,false) as Label;
-        var instruction=menu.FindChild("xr-menu-instruction",true,false) as Label;
-        var choice=menu.FindChild("xr-menu-choice",true,false) as Label;
-        Probe((entries[rightSector].Disabled || entries[rightSector].HasFocus()) && entries[rightSector].ButtonPressed && compass!=null && direction!=null &&
-            direction.GetGlobalRect().GetCenter().X>compass.GetGlobalRect().GetCenter().X &&
-            choice?.Text.Contains(entries[rightSector].Text)==true && instruction?.Text.Contains("release")==true,
-            "actual right-pad selection has matching visible direction, selected native entry and release instruction");
-        var marks=menu.FindChildren("xr-menu-direction-*","Label",true,false).OfType<Label>().ToArray();
-        reports.Add(new { compass=compass?.GetGlobalRect().ToString(),marks=marks.Select(mark=>new { text=mark.Text,rect=mark.GetGlobalRect().ToString(),minimum=mark.GetCombinedMinimumSize().ToString() }).ToArray(),
-            overlaps=marks.SelectMany(mark=>marks.Where(other=>mark.GetInstanceId()<other.GetInstanceId() && mark.GetGlobalRect().Intersects(other.GetGlobalRect())).Select(other=>new[]{mark.Text,other.Text})).ToArray() });
-        Probe(compass!=null && marks.Length==entries.Length && marks.All(mark=>compass.GetGlobalRect().Encloses(mark.GetGlobalRect())) &&
-            marks.All(mark=>marks.All(other=>ReferenceEquals(mark,other) || !mark.GetGlobalRect().Intersects(other.GetGlobalRect()))),
-            "all actual angular direction labels remain enclosed and distinct at maximum text size");
-        Probe(((StyleBoxFlat)menu.GetThemeStylebox("panel")).BgColor.A==1 && ReferenceEquals(form.Draft,draft) && form.Input("note")!.GetInstanceId()==editorId && submits==0,
-            "opaque menu appearance preserves the same unsent native form and draft beneath it");
-        reports.Add(new { rightSector,selectedEntry=entries[rightSector].Text,disabled=entries[rightSector].Disabled,selectedPressed=entries[rightSector].ButtonPressed,
-            directionCount=menu.FindChildren("xr-menu-direction-*","Label",true,false).Count,choice=choice?.Text,instruction=instruction?.Text });
+        Probe(pie.Navigator!.Hovered==3 && pie.Caption==full.At(3)!.Label+" · Not here.",
+            "actual right-pad selection points wedge 3 and the centre names it with its reason");
+        right.SetInput("pad_axes",new Vector2(-.71f,.7f));Advance();
+        Probe(pie.Navigator!.Hovered==8 && pie.Caption==full.At(8)!.Label,"the last wedge is reachable by direction without scrolling");
+        Probe(ReferenceEquals(form.Draft,draft) && form.Input("note")!.GetInstanceId()==editorId && submits==0,
+            "the pie over the panel preserves the same unsent native form and draft beneath it");
+        reports.Add(new { maximumFont=gui.Appearance.DefaultFontSize,reach=reach.ToString(),caption=pie.Caption });
         if(DisplayServer.GetName()!="headless") {
             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);using var image=gui.Surface.GetTexture().GetImage();
             string directory=Env("M4_PRESENTATION_IMAGES");System.IO.Directory.CreateDirectory(directory);
-            Probe(image.SavePng(System.IO.Path.Combine(directory,"menu-selection.png"))==Error.Ok,"actual menu selection raster retained");
+            Probe(image.SavePng(System.IO.Path.Combine(directory,"pie-selection.png"))==Error.Ok,"actual pie selection raster retained");
         }
         adapter.Router.CancelMenu();right.SetInput("pad_press",false);Advance();adapter.ShowWorkspace();Advance();
         await File.WriteAllTextAsync(Env("M1B_RESULT"),System.Text.Json.JsonSerializer.Serialize(new { reports,checks,probeFailures }));
@@ -195,9 +194,9 @@ public partial class ExportChecks
                 int opaqueText=0;for(int y=0;y<image.GetHeight();y++)for(int x=0;x<image.GetWidth();x++) { var c=image.GetPixel(x,y);if(c.A>.99f && c.R>.7f && c.G>.7f && c.B>.7f)opaqueText++; }
                 reports.Add(new { raster=name,opaqueText });Check(opaqueText>100,"workspace text remains opaque in "+name+" mode");return image.GetPixel(3,3);
             }
-            await Press("workspace-settings");gui.Opaque(true);await Press("workspace-opaque");await Press("workspace-settings");
+            gui.Opaque(true);await Device("opaque");
             var tinted=await Background("tinted");
-            await Press("workspace-settings");await Press("workspace-opaque");await Press("workspace-settings");
+            await Device("opaque");
             var opaque=await Background("opaque");
             Check(tinted.A>.7f && tinted.A<.9f && opaque.A>.99f,"real renderer applies translucency to the background and keeps an opaque option");
         }

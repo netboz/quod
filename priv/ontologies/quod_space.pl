@@ -25,6 +25,9 @@ have_attribute(space, owner, space_owner, default_from(space_creator_owner)).
 %% Consumed by construction; the assignment remains the sole location record.
 have_attribute(space, placement, space_initial_placement).
 have_attribute(space, exterior, space_exterior, default(solid)).
+%% The same boundary recipes seen from inside: the interior frame is the
+%% space's own frame, so the boundary mark at its origin is the room's walls.
+have_attribute(space, interior, space_interior, default(none)).
 have_part(space, initial_occupants).
 
 %% The pin certifies the composed source, not a remote constructor or class alias.
@@ -274,13 +277,18 @@ space_physical_change(_, _, _) :- fail.
 
 %% Representation edits compare their exact source values. A destination's
 %% installed physical component changes in this same transaction, if present.
-space_represent(Space,BeforeStyle,BeforePose,Style,Pose) :-
-    term_variables([Space,BeforeStyle,BeforePose,Style,Pose],[]),
-    transaction((space_instance(Space,space),space_transform(Pose),space_exterior(Style),
-        space_authorized_representation(Space,BeforeStyle,BeforePose,Style,Pose),
+space_represent(Space,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior) :-
+    term_variables([Space,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior],[]),
+    transaction((space_instance(Space,space),space_transform(Pose),space_exterior(Style),space_interior(Interior),
+        space_authorized_representation(Space,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior),
         unique_solution((attribute(Space,exterior,PriorStyle),attribute(Space,transform,PriorPose))),
-        PriorStyle = BeforeStyle, PriorPose = BeforePose,
+        PriorStyle = BeforeStyle, PriorPose = BeforePose, space_interior_of(Space,BeforeInterior),
         attribute(Space,dimensions,Dimensions),space_exterior_available(Style,Dimensions),
+        space_exterior_available(Interior,Dimensions),
+        %% The interior changes only this space's own view; no parent sees it.
+        (BeforeInterior == Interior -> true
+        ; (BeforeInterior == none -> true; retract(attribute(Space,interior,BeforeInterior))),
+          (Interior == none -> true; assertz(attribute(Space,interior,Interior)))),
         (BeforeStyle == Style, BeforePose == Pose -> true
         ; retract(attribute(Space,exterior,BeforeStyle)),assertz(attribute(Space,exterior,Style)),
         retract(attribute(Space,transform,BeforePose)),assertz(attribute(Space,transform,Pose)),
@@ -289,8 +297,17 @@ space_represent(Space,BeforeStyle,BeforePose,Style,Pose) :-
         ; Destination = entity_ref(Ns,A,Parent),current_ontology_identity(Here,History),
           in_ontology(Ns,A,
                space_representation_changed(Parent,entity_ref(Here,History,Space))))))).
-space_authorized_representation(Space,BeforeStyle,BeforePose,Style,Pose) :-
-    operation_authorized(instance(Space),space_represent(BeforeStyle,BeforePose,Style,Pose)).
+space_authorized_representation(Space,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior) :-
+    operation_authorized(instance(Space),
+        space_represent(BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior)).
+%% An absent interior is the class default; two values are refused.
+space_interior_of(Space,Interior) :-
+    findall(I,attribute(Space,interior,I),Rows),
+    (Rows = [] -> Interior = none
+    ; Rows = [Interior] -> true
+    ; fail_with_reason(ambiguous_space_interior(Space))).
+space_interior_boundary(Space,Recipe) :-
+    space_interior_of(Space,Interior), Interior \== none, space_exterior_recipe(Interior,Recipe).
 space_representation_changed(Space,Subject) :-
     space_placement(Space,Subject,Assignment),current_ontology_identity(Ns,A),
     Subject = entity_ref(Source,Anchor,Entity),
@@ -422,6 +439,60 @@ gui_form(space_travel_form(Agent,Expected,Before,After),[],
     Agent = agent_instance_ref(Source,Anchor,Entity),
     (After = unplaced -> Destination = none; After = placed(Destination,_)).
 
+%% The space's own pie overrides the default. Fixed wedges keep paths
+%% learnable: Create here at the top, Show as and Inspect clockwise, Leave on
+%% the bottom wedge asking for a second press. "Go to" offers this storage's
+%% contained spaces, so a far child stays reachable without pointing at it.
+class_eidolon(space,menu,default,recipe(Ns,A,space_menu)) :- current_ontology_identity(Ns,A).
+eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
+    current_ontology_identity(Ns,A), space_instance(Space,space),
+    gui_menu_source(Space,menu_source(Name,Own)),
+    gui_menu_source(space,menu_source(_,Class)),
+    gui_menu_source(ontology_ref(Ns,A),menu_source(_,Storage)),
+    findall(Item,(member(Item,Own),space_menu_shows(Item)),Shows),
+    findall(Item,(member(Offered,Own),\+ space_menu_shows(Offered),space_menu_action(Offered,Item)),Actions),
+    findall(Item,space_menu_destination(Space,Ns,A,Item),Destinations),
+    append([group(<<"Create here">>,[slot(1)],[operation(class)],Class),
+            group(<<"Show as">>,[slot(2)],[operation(instance)],Shows),
+            group(<<"Inspect">>,[slot(3)],[prolog,inspection,workspace],Storage)|Actions],
+           [group(<<"Go to">>,[],[operation(instance)],Destinations)],Entries),
+    (binary(Name), Name \== <<"">> -> Title = Name; Title = <<"Space">>),
+    menu_vocabulary(Gui,GuiAnchor),
+    in_ontology(Gui,GuiAnchor,menu_tree(menu(Title,<<"">>,[],Entries),Tree)).
+space_menu_shows(item(choice(_,eidolon(operation(instance),Name,_)),_,_,_,_)) :- space_show_recipe(Name,_,_).
+space_menu_action(item(T,L,H,Av,_),item(T,L,H,Av,[slot(5),confirm(true)])) :-
+    T = choice(_,eidolon(operation(instance),leave,_)), !.
+space_menu_action(Item,Item) :- Item = item(choice(_,eidolon(operation(_),_,_)),_,_,_,_).
+space_menu_destination(Space,Ns,A,item(T,Label,H,Av,[])) :-
+    space_contains(Space,entity_ref(Ns,A,Child)), Child \== Space, space_instance(Child,space),
+    gui_menu_source(Child,menu_source(ChildName,Items)),
+    member(item(T,Offered,H,Av,_),Items), T = choice(_,eidolon(operation(instance),enter,_)),
+    (binary(ChildName), ChildName \== <<"">> -> Label = ChildName; Label = Offered).
+
+%% Show as: this space's interior choices as offered actions without input
+%% fields, each through the one representation operation.
+class_eidolon(space,operation(instance),Name,recipe(Ns,A,Recipe)) :-
+    space_show_recipe(Name,Recipe,_), current_ontology_identity(Ns,A).
+space_show_recipe(show_none,space_show_none,none).
+space_show_recipe(show_wireframe,space_show_wireframe,wireframe).
+space_show_recipe(show_matrix,space_show_matrix,matrix).
+eidolon(Recipe,subject(ontology_ref(Ns,A),instance(Space)),operation(space_show_form(Space,Style,Pose,Before,Interior))) :-
+    space_show_recipe(_,Recipe,Interior), current_ontology_identity(Ns,A), space_instance(Space,space),
+    unique_solution((attribute(Space,exterior,Style),attribute(Space,transform,Pose))),
+    space_interior_of(Space,Before), Before \== Interior,
+    attribute(Space,dimensions,Dimensions), space_exterior_available(Interior,Dimensions).
+instance_of(quod:gui:form,space_show_form(_,_,_,_,_)).
+instance_of(quod:gui:button,space_show_submit).
+attribute(space_show_form(_,_,_,_,none),label,<<"No walls inside">>).
+attribute(space_show_form(_,_,_,_,wireframe),label,<<"Wire box walls">>).
+attribute(space_show_form(_,_,_,_,matrix),label,<<"Matrix walls">>).
+attribute(space_show_form(_,_,_,_,_),help,<<"Changes how this space looks from inside. Nothing moves.">>).
+attribute(space_show_submit,label,<<"Show">>).
+gui_children(space_show_form(_,_,_,_,_),[space_show_submit]).
+gui_form(space_show_form(Space,Style,Pose,Before,After),[],
+    submit(space_show_submit,space_represent(Space,Style,Pose,Before,Style,Pose,After),
+        operation(space_represent(Style,Pose,Before,Style,Pose,After),[]))).
+
 %% Pure space depiction, composed with the space vocabulary and ordinary
 %% entity Eidolons. Membership and physical bindings stay with their owners.
 class_eidolon(space,Mode,contents,recipe(Ns,A,space_contents)) :-
@@ -431,6 +502,10 @@ class_eidolon(space,Mode,Style,recipe(Ns,Anchor,Recipe)) :-
     current_ontology_identity(Ns,Anchor).
 space_exterior_recipe(solid,space).
 space_exterior_recipe(wireframe,space_wireframe).
+space_exterior_recipe(matrix,space_matrix).
+space_interior(none).
+space_interior(wireframe).
+space_interior(matrix).
 space_exterior(solid).
 space_exterior(wireframe).
 space_exterior(contents).
@@ -438,17 +513,34 @@ space_exterior_available(solid,_).
 space_exterior_available(contents,_).
 space_exterior_available(wireframe,box(_,_,_)).
 space_exterior_available(wireframe,infinite) :- fail_with_reason(space_exterior_unavailable(wireframe,infinite)).
+space_exterior_available(none,_).
+space_exterior_available(matrix,box(_,_,_)).
+space_exterior_available(matrix,infinite) :- fail_with_reason(space_exterior_unavailable(matrix,infinite)).
 %% A half-metre exterior depicts even an infinite interior with finite geometry.
 eidolon(space, Space,
     [part(<<"space">>, box(500,500,500), transform(0,0,0,0,0,0),
-          surface(<<"#6A90D9">>, 0, 700, 0, []), Label, depicts_nothing)]) :-
+          surface(<<"#6A90D9">>, 0, 700, 0, 1000, []), Label, depicts_nothing)]) :-
     client_subject_label(Space,Label).
 eidolon(space_wireframe, Space,
     [part(<<"extent">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
-          surface(<<"#6A90D9">>,0,700,1000,[]),Label,depicts_nothing)]) :-
+          surface(<<"#6A90D9">>,0,700,1000,1000,[]),Label,depicts_nothing)]) :-
     client_subject_label(Space,Label),
     attribute(Space,dimensions,box(X,Y,Z)),
     unique_solution(measure_vocabulary(Ns,Anchor)),
     space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D).
+%% Matrix walls: the exact wire box in emissive green over translucent
+%% near-black faces, drawn from both sides so they read from in and out.
+eidolon(space_matrix, Space,
+    [part(<<"walls">>, box(WI,HI,DI), transform(0,0,0,0,0,0),
+          surface(<<"#030F08">>,0,900,80,220,[]), unlabelled, depicts_nothing),
+     part(<<"grid">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
+          surface(<<"#3CFF7A">>,0,700,1000,1000,[]), Label, depicts_nothing)]) :-
+    client_subject_label(Space,Label),
+    attribute(Space,dimensions,box(X,Y,Z)),
+    unique_solution(measure_vocabulary(Ns,Anchor)),
+    space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D),
+    space_whole_mm(W,WI), space_whole_mm(H,HI), space_whole_mm(D,DI).
+space_whole_mm(N/D,Whole) :- !, Whole is max(1,(N + D // 2) // D).
+space_whole_mm(Length,Length).
 space_millimetres(Ns,Anchor,q(Value,Unit),Length) :-
     in_ontology(Ns,Anchor,convert(Value,Unit,<<"mm">>,Length)).

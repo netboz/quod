@@ -101,11 +101,11 @@ world_library() ->
                     ?assert(lists:any(fun({mark,_,<<"terrain">>,_,_,_,_,_}) -> true;
                                         (_) -> false end,Visible)),
                     ?assert(lists:any(fun({mark,_,<<"sky_sphere">>,_,_,
-                        {surface,_,_,_,1000,[{texture,<<"base_colour">>,_,_}]},_,_}) -> true;
+                        {surface,_,_,_,1000,1000,[{texture,<<"base_colour">>,_,_}]},_,_}) -> true;
                         (_) -> false end,Visible)),
                     {ok,[#{<<"V0">> := Palette}],_} = read(Ctx,Ns,
                         {voxel_presentation,W,<<"terrain">>,{0},{1},{2}}),
-                    ?assertMatch({material,1,{surface,_,_,_,_,[{texture,<<"base_colour">>,_,_}]}},
+                    ?assertMatch({material,1,{surface,_,_,_,_,1000,[{texture,<<"base_colour">>,_,_}]}},
                         lists:keyfind(1,2,Palette)),
                     ?assertMatch({ok,[_],_},read(Ctx,Ns,{instance_of,sky_sphere,{world_sky,W}})),
                     {W,Owner}
@@ -240,7 +240,7 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                 {rendering_vocabulary,<<"lobby-test-rendering">>,quod_simplex:genesis_hash(<<"lobby-test-rendering">>)},
                 {modelling_vocabulary,<<"lobby-test-modelling">>,quod_simplex:genesis_hash(<<"lobby-test-modelling">>)},
                 {voxel_presentation,land,<<"land">>,
-                    [{material,I,{surface,<<"#887755">>,0,900,0,[]}} || I <- lists:seq(1,6)],
+                    [{material,I,{surface,<<"#887755">>,0,900,0,1000,[]}} || I <- lists:seq(1,6)],
                     {view_distance,8000,4000,4000},{resources,1000000,2000000,20000,10000,64}},
                 {voxel_view_range,land,{range,4,32,4}},
                 {voxel_brush_controls,land,{range,-64000,64000,100},{range,600,2000,100}},

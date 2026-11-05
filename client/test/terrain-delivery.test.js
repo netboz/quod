@@ -11,7 +11,7 @@ import { createRenderResources } from '../src/render-resources.js'
 
 const payload = new Uint8Array(readFileSync(new URL('./fixtures/voxel-plane.qvt', import.meta.url)))
 const digest = createHash('sha256').update(payload).digest('hex')
-const terrain = 'mark(<<"land">>,<<"terrain">>,terrain_geometry(<<"qvt1">>,[material(9,surface(<<"#447722">>,0,900,0,[]))],view_distance(4000,1000,2000),resources(10000,40000,1000,1000,2)),body_pose(0,1),terrain_surfaces,unlabelled,depicts(<<"room">>,<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,land))'
+const terrain = 'mark(<<"land">>,<<"terrain">>,terrain_geometry(<<"qvt1">>,[material(9,surface(<<"#447722">>,0,900,0,1000,[]))],view_distance(4000,1000,2000),resources(10000,40000,1000,1000,2)),body_pose(0,1),terrain_surfaces,unlabelled,depicts(<<"room">>,<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,land))'
 const frame = { schema: 2, units: 'metres_seconds', space: 'local', origin_mm: ['0', '0', '0'], origin_seq: '0', world: 'room', authority: 'actor',
   epoch: '1', generation: '1', incarnation: 'token', structure: '1', tick: '1',
   poses: [{ body: '0', revision: '1', position: [0, 0, 0], rotation: [0, 0, 0, 1] }] }

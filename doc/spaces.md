@@ -313,10 +313,19 @@ it is neither a naming service nor a second current-location record. Ordinary
 solid/wireframe space recipes use the same authored name in their scene label.
 An empty permitted scene remains black; its context belongs to the GUI chrome.
 
-`space_represent(Space, BeforeStyle, BeforePose, Style, Pose)` checks the exact
-source values and committed `space_represent` instance policy. A changed
-representation invokes the admitting destination's physical consequence in the
-same transaction. An unchanged representation performs no state mutation.
+`space_represent(Space, BeforeStyle, BeforePose, BeforeInterior, Style, Pose,
+Interior)` checks the exact source values and committed `space_represent`
+instance policy. A changed exterior or pose invokes the admitting destination's
+physical consequence in the same transaction. An unchanged representation
+performs no state mutation.
+
+`interior` (`none`, `wireframe` or `matrix`; absent means `none`) shows the
+space's own boundary from inside. The same class-selected boundary recipes serve
+`exterior` and `interior`: the interior projection places that boundary at the
+space's origin after its contents, depicting the space itself. `matrix` draws the
+exact wire box in emissive green over translucent faces. Infinite spaces refuse
+both finite boundaries with the existing `space_exterior_unavailable` reason.
+The space's pie offers the interior choices under **Show as**.
 
 ## Invocation policy
 

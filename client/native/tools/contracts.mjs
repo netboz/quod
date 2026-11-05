@@ -48,7 +48,7 @@ assert.equal(challengeNonce.length, 43)
 const reference = { namespace: 'quod:lobby-test', anchor: new Uint8Array(32).fill(8) }
 const lobbyBinding = renderTerm(compound('ontology_ref', [binary(utf8(reference.namespace)), binary(reference.anchor)]))
 const lobbyGoal = anchoredGoal(reference, compound(',', [compound('lobby_modes', [variable('Modes')]), compound('lobby_view', [atom('playing'), variable('Scene')])]))
-const surface = 'surface(<<"#F9C80E">>,0,900,0,[])'
+const surface = 'surface(<<"#F9C80E">>,0,900,0,1000,[])'
 const depicts = `depicts(<<"quod:test">>,${renderTerm(binary(reference.anchor))},entity(18446744073709551615))`
 const mark = (id, kind, size, transform='transform(0,750,0,15,30,45)', material=surface) => `mark(<<"${id}">>,<<"${kind}">>,${size},${transform},${material},label(<<"fixture">>,<<"above">>),${depicts})`
 const primitive = mark('box','box','[f(<<"width">>,400),f(<<"height">>,1500),f(<<"depth">>,300)]')
@@ -64,7 +64,7 @@ validMarks.push(`[${mark('model','mesh',`mesh_asset(asset(<<"${g.digest}">>,<<"m
 const normalize = marks => marks.map(m => ({ ...m, depicts: m.depicts && { ontology: m.depicts.ontology, anchor: m.depicts.anchor && b64url(m.depicts.anchor), entityText: renderTerm(m.depicts.entity) } }))
 const invalidMarks = [
   `[${primitive},${primitive}]`, `[${primitive.replace(',<<"box">>',',<<"cone">>')}]`,
-  `[${primitive.replace('900,0,[]','1001,0,[]')}]`, `[${primitive.replace('400)','400.5)')}]`,
+  `[${primitive.replace('900,0,1000,[]','1001,0,1000,[]')}]`, `[${primitive.replace('0,1000,[]','0,1001,[]')}]`, `[${primitive.replace('400)','400.5)')}]`,
   `[${primitive.replace('<<"above">>','<<"left">>')}]`, '[X]', '[a|b]',
 ]
 for (const text of invalidMarks) assert.throws(()=>readMarks(text), undefined, text)

@@ -55,21 +55,62 @@ static class Tests
                 }
             }
             Check(verified == 100, "all 100 real production fixtures including Reset");
-            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo);
+            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo); Menus();
             Console.WriteLine("CORE_PASS checks=" + checks); return 0;
         } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
     static void awaitRecovery(string path) => RecoveryErrorChecks.Run(path).GetAwaiter().GetResult();
+    static void Menus()
+    {
+        string anchor = "<<\"" + new string('a', 32) + "\">>";
+        string Choice(string style) => "choice(entity_ref(<<\"ns\">>," + anchor + ",room),eidolon(playing," + style + ",recipe(<<\"ns\">>," + anchor + ",r)))";
+        string Item(string id, string label, int slot, bool enabled = true, bool confirm = false, string help = "") =>
+            $"component({id},menu_item,[property(label,<<\"{label}\">>),property(help,<<\"{help}\">>),property(enabled,{(enabled ? "true" : "false")})," +
+            $"property(target,{Choice(id)}),property(confirm,{(confirm ? "true" : "false")}),property(image,none),property(slot,{slot})],[])";
+        string Menu(string id, string label, string slot, int wedges, string back, params string[] children) =>
+            $"component({id},menu,[property(label,<<\"{label}\">>),property(help,<<\"\">>),property(enabled,true),property(layout,column)," +
+            $"property(appearance,inherit),property(image,none),property(slot,{slot}),property(wedges,{wedges}),property(back,{back})],[{string.Join(",", children)}])";
+        var view = Term.Parse("menu(" + Menu("menu", "Workshop", "auto", 8, "none",
+            Item("leave", "Leave space", 5, confirm: true),
+            Menu("show", "Show as", "2", 8, "6", Item("solid", "Solid", 1), Item("wire", "Wire box", 3, false, help: "Not here."))) + ")");
+        var root = MenuNode.Decode(view)!;
+        Check(root.Label == "Workshop" && root.At(5)!.Confirm && root.At(2)!.Back == 6 && root.At(2)!.At(3)!.Enabled == false, "pie decodes authored wedges, confirmation and back direction");
+        Check(MenuNode.Decode(Term.Atom("none")) == null, "a subject without a menu decodes as none");
+        Reject(() => MenuNode.Decode(Term.Parse(view.ToString().Replace("property(back,6)", "property(back,3)"))), "a back wedge may not overlap an item");
+        Reject(() => MenuNode.Decode(Term.Parse(view.ToString().Replace("menu_item", "button"))), "only menus and menu items form a pie");
+        Check(MenuNode.Direction(new(0, -1), .24f, 8) == 1 && MenuNode.Direction(new(1, 0), .24f, 8) == 3 && MenuNode.Direction(new(0, 1), .24f, 8) == 5, "forward, right and back map to wedges 1, 3 and 5");
+        Check(MenuNode.Direction(new(.2f, 0), .24f, 8) == 0 && MenuNode.Direction(new(.25f, 0), .24f, 8) == 3, "the authored dead zone keeps the centre");
+        Check(MenuNode.Direction(MenuNode.Toward(7, 8), .24f, 8) == 7 && MenuNode.Direction(new(-.71f, -.7f), .24f, 8) == 8, "every wedge round-trips its own direction");
+        var profile = DeviceProfile.Vive;
+        Check(profile.FollowYaw(null, 10) == 10 && profile.FollowYaw(10, 40) == 10 && profile.FollowYaw(10, 50) == 50 && profile.FollowYaw(350, 20) == 350 && profile.FollowYaw(350, 30) == 30,
+            "the HUD strip keeps its heading until the head turns past 35°, across north");
+        var nav = new PieNavigator(root, .24f, 300);
+        Check(nav.Commit() == PieOutcome.Cancelled, "commit in the centre cancels");
+        nav.Move(new(0, 1), 0); Check(nav.Caption == "Leave space" && nav.Commit() == PieOutcome.Open && nav.Caption == "Press again · Leave space", "a confirmed item asks for a second press");
+        nav.Move(new(0, -1), 10); Check(nav.Armed == null && nav.Hovered == 0, "moving off an armed wedge disarms it; empty wedges count as centre");
+        nav.Move(new(.7f, -.7f), 20); nav.Move(new(.7f, -.7f), 200); Check(nav.Level == root, "a short rest does not open the sub-pie");
+        nav.Move(new(.71f, -.7f), 400); Check(nav.Level.Label == "Show as" && nav.Hovered == 0, "resting on a sub-pie opens it (marking mode)");
+        nav.Move(new(.71f, -.7f), 405); nav.Move(new(.7f, -.71f), 800);
+        Check(nav.Hovered == 0 && nav.Level.Label == "Show as", "the still-held pad direction points nothing in the new level, however long it rests");
+        nav.Move(new(0, 0), 810); nav.Move(new(.71f, -.7f), 820); Check(nav.Hovered == 0, "wedge 2 of the sub-pie is empty, so that direction is the centre");
+        nav.Move(new(1, 0), 410); Check(nav.Hovered == 3 && !nav.HoveredItem!.Enabled && nav.Caption == "Wire box · Not here." && nav.Commit() == PieOutcome.Open, "a disabled wedge stays visible with its reason and never selects");
+        nav.Move(new(-.7f, .7f), 420); Check(nav.HoveringBack && nav.Caption == "Back · Workshop" && nav.Commit() == PieOutcome.Open && nav.Level == root, "the reserved back wedge returns to the parent");
+        Check(nav.Choose(2) && nav.Commit() == PieOutcome.Open && nav.Choose(1) && nav.Commit() == PieOutcome.Selected && nav.Selection!.Choice.ToString().Contains("solid"), "click and keyboard choice open sub-pies and select a leaf");
+    }
     static void Scenes()
     {
         string anchor = Term.Binary(new byte[32]).ToString();
         string group = $"mark(<<\"source\">>,<<\"group\">>,[],transform(1000,2000,3000,15,35,75),no_surface,unlabelled,depicts(<<\"storage\">>,{anchor},object))";
-        string box = "mark(<<\"source/edges\">>,<<\"wire_box\">>,[f(<<\"width\">>,'/'(1,3)),f(<<\"height\">>,1001),f(<<\"depth\">>,'/'(1001,2))],relative(<<\"source\">>,transform(0,0,0,0,0,0)),surface(<<\"#6A90D9\">>,0,700,1000,[]),unlabelled,depicts_nothing)";
+        string box = "mark(<<\"source/edges\">>,<<\"wire_box\">>,[f(<<\"width\">>,'/'(1,3)),f(<<\"height\">>,1001),f(<<\"depth\">>,'/'(1001,2))],relative(<<\"source\">>,transform(0,0,0,0,0,0)),surface(<<\"#6A90D9\">>,0,700,1000,1000,[]),unlabelled,depicts_nothing)";
         var marks = SceneMark.Decode(Term.Parse("[" + group + "," + box + "]"));
         Check(marks[1].Size[0] == new Length(1,3) && marks[1].Size[1] == new Length(1001,1) && marks[1].Parent == "source", "scene retains odd and submillimetre exact rational lengths and parent");
         Check(Math.Abs(marks[1].Size[0].RenderMetres() - 1f/3000) < 1e-10f, "rational conversion occurs at engine boundary without millimetre rounding");
         Check(marks[0].Subject!.ToString().StartsWith("entity_ref("), "scene keeps exact anchored subject independent of occurrence");
         Check(new Length(100000,1).RenderMetres() == 100, "default wireframe extent is 100 metres");
+        Check(marks[1].Opacity == 1000 && SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,220,[])") + "]"))[1].Opacity == 220,
+            "surface opacity is decoded as authored permille");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,1001,[])") + "]")), "opacity above 1000 refuses");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,[])") + "]")), "a surface without opacity refuses");
         var huge = BigInteger.One << 1600;
         Check(Math.Abs(new Length(huge,huge+1).RenderMetres() - .001f) < 1e-9, "wide exact fractions convert without intermediate double overflow");
         Reject(() => SceneMark.Decode(Term.Parse("[" + box + "]")), "orphan relative scene refuses");

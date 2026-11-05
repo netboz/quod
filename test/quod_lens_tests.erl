@@ -322,7 +322,7 @@ view(Work, St) ->
     [Marks] = solutions({'M'}, {view, <<"work_licences">>, [Work], {'M'}}, St),
     Marks.
 
-group_of({mark, _Id, _K, _S, _T, {surface, Colour, _M, _R, _E, _Textures}, _L, _D}) -> Colour.
+group_of({mark, _Id, _K, _S, _T, {surface, Colour, _M, _R, _E, _Opacity, _Textures}, _L, _D}) -> Colour.
 label_of({mark, _Id, _K, _S, _T, _M, {label, Text, _P}, _D}) -> Text.
 depicts_of({mark, _Id, _K, _S, _T, _M, _L, Depicts}) -> Depicts.
 across_of({mark, _Id, _K, _S, {transform, X, _Y, _Z, _A, _B, _C}, _M, _L, _D}) -> X.

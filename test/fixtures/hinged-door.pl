@@ -12,4 +12,4 @@ physics_hinged_consequence(room,10,Request,closed,
 hinged_example_appearance(room, 10, <<"hinged-example">>, vertical_door,
     [part(<<"hinged-example/panel">>, <<"box">>,
           [f(<<"width">>,2000),f(<<"height">>,2000),f(<<"depth">>,200)],
-          transform(0,0,0,0,0,0), surface(<<"#4678AB">>,0,900,0,[]))]).
+          transform(0,0,0,0,0,0), surface(<<"#4678AB">>,0,900,0,1000,[]))]).

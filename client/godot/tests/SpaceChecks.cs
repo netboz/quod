@@ -21,13 +21,26 @@ public partial class ExportChecks
         Check(index >= 0 && index < control.ItemCount,"offered selection exists: "+control.Name);
         control.Select(index); control.EmitSignal(OptionButton.SignalName.ItemSelected,index); await Frame();
     }
-    async Task ChooseOfferedOperation(OperationsPanel panel,string name)
+    // Actions are chosen through the subject's own pie, as a user does: the
+    // wedge path is found in the authored tree, then committed level by level.
+    async Task ChooseOfferedOperation(OperationsPanel panel,string name,Term? subject=null)
     {
         var pane=(EidolonPanel)app.FindChild("representations",true,false);
         await Until(()=>pane.Available&&panel.Available);
-        var choice=pane.Offered.Single(e=>e.Operation&&e.Style==name);
-        var button=pane.FindChildren("*","Button",true,false).OfType<Button>().Single(b=>b.TooltipText==choice.Exact.ToString());
-        await NativePress(button);await Until(()=>panel.Current?.Name==name);
+        var pie=(PieMenu)app.FindChild("pie-menu",true,false);
+        if(!pie.IsOpen)Check(app.OpenSubjectPie(subject??pane.Current!.Exact),"the subject's pie opens");
+        await Until(()=>pie.Navigator!=null||!pie.IsOpen);
+        Check(pie.Navigator!=null,"the subject's authored pie arrives: "+app.Inspect());
+        List<MenuNode>? Path(MenuNode node)=>node.Leaf
+            ? (node.Target!.Choice.Require("eidolon",3)[1].Name==name&&node.Target.Choice.Args[0].Name=="operation" ? [node] : null)
+            : node.Children.Select(c=>Path(c) is {} p ? p.Prepend(node).ToList() : null).FirstOrDefault(p=>p!=null);
+        var path=Path(pie.Navigator!.Root)??throw new Exception("No wedge offers "+name);
+        foreach(var step in path.Skip(1)) {
+            Check(pie.Choose(step.Slot),"wedge "+step.Label+" is on the current level");
+            if(step.Leaf&&step.Confirm)pie.Commit();
+            pie.Commit();
+        }
+        await Until(()=>panel.Current?.Name==name);
     }
     async Task ChooseNativeOption(OptionButton control,int index)
     {
@@ -154,7 +167,7 @@ public partial class ExportChecks
             await clicked.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Check(panel.IsWorking && ((OptionButton)panel.FindChild("operation-storage",true,false)).Disabled &&
                 ((OptionButton)panel.FindChild("operation-class",true,false)).Disabled &&
-                !app.OpenSpacePie() &&
+                !app.OpenSubjectPie() &&
                 !((LineEdit)panel.FindChild("exact-storage-namespace",true,false)).Editable,
                 "active creation locks its actual target and offered selection");
         } finally { button.Pressed-=Pressed; }

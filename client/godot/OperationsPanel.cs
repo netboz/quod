@@ -15,6 +15,8 @@ public partial class OperationsPanel : VBoxContainer
     public System.Text.Json.Nodes.JsonNode? LastOutcome { get; private set; }
     public event Action? Changed;
     public event Action<Actor,Term>? SubjectOpened;
+    // A kind of thing was chosen in the storage catalogue: its pie chooses the action.
+    public event Action<Term>? ClassChosen;
     public event Action? Cancelled;
     SignedSession session = null!;
     Accounts accounts = null!;
@@ -86,7 +88,11 @@ public partial class OperationsPanel : VBoxContainer
             } catch (Exception error) { status.Text=error.Message; Changed?.Invoke(); }
         });
         storage.ItemSelected += index => { if (index > 0) _ = ChooseStorage(targets[(int)index - 1]); };
-        classSelector.ItemSelected += index => { if (index > 0) PresentSubject(target, Term.Call("class_ref", Term.Text(target.Namespace), Term.Binary(Identity.Decode(target.Anchor)), classes[(int)index - 1]),true); };
+        classSelector.ItemSelected += index => {
+            if (index <= 0) return;
+            var chosen = Term.Call("class_ref", Term.Text(target.Namespace), Term.Binary(Identity.Decode(target.Anchor)), classes[(int)index - 1]);
+            PresentSubject(target, chosen, true); ClassChosen?.Invoke(chosen);
+        };
         AddChild(status);AddChild(results);
         FormPanel = new() { Name = "offered-form" }; AddChild(FormPanel);
         FormPanel.Invoked += role => { if (Current != null && role == Current.Form.Submit.ToString()) _ = Submit(); };

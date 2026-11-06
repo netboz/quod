@@ -291,7 +291,8 @@ public partial class Main : Control
         view.Projection+=message=>{
             if(expected!=pieGeneration)return;
             try{pie.Present(MenuNode.Decode(Term.Parse(Json.S(message,"value"))),"Nothing is offered here.");}
-            catch(Exception error){ClosePie();status.Text="This menu is unavailable: "+error.Message;Notify();}
+            catch(Exception error){ClosePie();status.Text="This menu is unavailable: "+error.Message;}
+            Notify();
         };
         view.Withdrawn+=reason=>{
             if(expected!=pieGeneration||view.Updating)return;
@@ -306,7 +307,8 @@ public partial class Main : Control
         : !navigationAvailable||accounts?.Setup==null ? null
         : navigation?.Space==null ? "You are nowhere yet"
         : "Space · "+(projection?.Name is {Length:>0} name ? name : "unnamed");
-    internal bool OpenSpacePie()=>OpenPie(null,null);
+    // A subject's own pie, centred; with no subject, the target rule's.
+    internal bool OpenSubjectPie(Term? subject=null)=>OpenPie(null,null,subject);
     void ClosePie()
     {
         pieGeneration++;pieOccurrence=null;pie.Close();
@@ -588,7 +590,7 @@ public partial class Main : Control
             SubjectLabel=exact=>navigationAvailable&&navigation?.Space?.Entity.ToString()==exact.ToString() ? projection?.Name : scene.SubjectLabel(exact) };
         visualHost.AddChild(representations.Preview);gui.SetForm(representations);
         gui.PreviewFormHit=point=>representations?.NearOccurrence==true&&gui.Spatial&&ReferenceEquals(representations.Occurrence?.Owner,representations.Preview) ? representations.Preview.FormHit(point) : null;
-        operations=representations.Operations;representations.Changed+=Notify;representations.HiddenByUser+=ShowHome;return representations;
+        operations=representations.Operations;operations.ClassChosen+=subject=>OpenSubjectPie(subject);representations.Changed+=Notify;representations.HiddenByUser+=ShowHome;return representations;
     }
     void SettingsChanged()
     { if (session != null) Disconnect(); }

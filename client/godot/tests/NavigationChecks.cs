@@ -21,10 +21,12 @@ public partial class ExportChecks
     {
         if(open) await ExactSubject(panel,subject);
         string label=leave ? "Leave space" : "Enter space";
-        await ChooseOfferedOperation(panel,leave ? "leave" : "enter");
-        NewDraft(panel);
+        // Travel has no input fields, so its wedge submits on selection: arm
+        // any reply loss first, then choose it from the space's pie.
         if(lose) await app.ActiveSession.Transport.Send("/qualification/arm-instruction-drop",new() { ["operation"]=leave ? "leave" : "enter" },CancellationToken.None);
-        await ClickSubmit(panel);
+        var outcome=panel.LastOutcome;
+        await ChooseOfferedOperation(panel,leave ? "leave" : "enter",subject);
+        await Until(()=>!panel.IsWorking&&(!ReferenceEquals(panel.LastOutcome,outcome)||State["pending"]!.GetValue<int>()>0));
         if(denied) {
             Check(panel.LastOutcome!=null && Json.Terminal(panel.LastOutcome) && !Json.Committed(panel.LastOutcome),"ordinary GUI reports a definitive denied travel outcome");
             return;

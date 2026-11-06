@@ -278,10 +278,12 @@ public partial class ExportChecks
         var unknown = await app.ActiveSession.Resolve(originalWork, timeout.Token);
         Check(!Json.Terminal(unknown) && app.ActiveStore.Snapshot!.Pending.Any(w => w.Id == originalWork.Id), "original question absence remains uncertain after portable lookup");
     }
+    // The question the hub still lists as pending. A retired one stays on
+    // screen with its last-known outcome until Later, but is no longer pending.
     static QuestionPanel? FindQuestion(Node root)
     {
         foreach (var child in root.GetChildren()) {
-            if (child is QuestionPanel panel && !panel.IsQueuedForDeletion()) return panel;
+            if (child is QuestionPanel { Discovered: true } panel && !panel.IsQueuedForDeletion()) return panel;
             if (FindQuestion(child) is QuestionPanel found) return found;
         }
         return null;

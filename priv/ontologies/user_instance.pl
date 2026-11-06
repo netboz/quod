@@ -508,10 +508,11 @@ hud_answer_offer(Human, Offer, Answer) :-
     operation_authorized(instance(Human), answer_hud_offer(Offer, Answer)),
     transaction((retract(hud_offered(my_hud, Contributor, Subject, Choice)),
                  (Answer == accept -> assertz(hud_contribution(my_hud, Subject, Choice, Contributor)); true))).
+%% Offered only while something waits: an advertised choice always opens.
 class_eidolon(human_user, operation(instance), answer_hud_offer, recipe(Ns, A, answer_hud_offer)) :-
-    current_ontology_identity(Ns, A).
+    current_ontology_identity(Ns, A), once(hud_offered(my_hud, _, _, _)).
 eidolon(answer_hud_offer, subject(ontology_ref(Ns, A), instance(Human)), operation(hud_offers(Human))) :-
-    current_ontology_identity(Ns, A), instance_of(human_user, Human), hud_offered(my_hud, _, _, _), !.
+    current_ontology_identity(Ns, A), instance_of(human_user, Human), once(hud_offered(my_hud, _, _, _)).
 instance_of(quod:gui:form, hud_offers(H)) :- instance_of(human_user, H).
 instance_of(quod:gui:selection, hud_offer_choice).
 instance_of(quod:gui:selection, hud_offer_answer).

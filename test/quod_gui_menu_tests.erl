@@ -62,6 +62,11 @@ space_pie_overrides_the_default_test_() ->
         ?assertEqual(<<"Closet">>,property(Closet,label)),
         ?assertMatch({choice,{entity_ref,Ns,Anchor,closed},{eidolon,{operation,instance},enter,_}},
                      property(Closet,target)),
+        %% The class itself keeps the shared default pie: its creation forms.
+        {menu,ClassPie} = menu(C,space),
+        ?assertEqual(lists:sort([<<"Create space">>,<<"Create space with rational lengths">>,<<"Create infinite space">>]),
+                     lists:sort([property(W,label) || W <- children(ClassPie), property(W,target) =/= undefined,
+                                 element(1,element(2,property(W,target))) =:= class_ref])),
         %% Authorization is advisory and read again: ownership enables Leave.
         edit(Ns,{assertz,{attribute,room,owner,maps:get(human,C)}}),
         {menu,Owned} = menu(C,room),
@@ -152,6 +157,21 @@ unplaced_agent_pie_offers_the_ways_in_test_() ->
         %% The human, also an agent, keeps the shared default pie.
         {menu,Human} = menu(C,me),
         ?assertEqual([<<"Inspect">>],[property(W,label) || W <- children(Human)])
+    end) end}.
+
+%% The pie arrives through the same live view socket the client opens.
+menu_view_socket_projects_the_pie_test_() ->
+    {timeout,90,fun() -> with_menus(fun(C=#{namespace:=Ns}) ->
+        Parent = self(),
+        Socket = spawn_link(fun() -> quod_physics_tests:simulation_socket(Parent,#{peer=>{127,0,0,1}}) end),
+        Reader = #{agent=>{Ns,quod_simplex:genesis_hash(Ns)},key_pair=>maps:get(human_pair,C),
+                   network=>maps:get(network,C),instance=><<"me.">>},
+        try
+            Socket ! {client,quod_gui_question_tests:gui_open_message(Reader,maps:get(session,C),menu,Ns,
+                quod_simplex:genesis_hash(Ns),space,0)},
+            #{<<"value">>:=Value,<<"kind">>:=<<"menu">>} = quod_physics_tests:simulation_reply(Socket,<<"projection">>),
+            ?assertNotEqual(nomatch,binary:match(Value,<<"Create infinite space">>))
+        after Socket ! stop end
     end) end}.
 
 overflow_nests_under_more_and_keeps_pins_test_() ->

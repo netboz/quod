@@ -444,6 +444,11 @@ gui_form(space_travel_form(Agent,Expected,Before,After),[],
 %% the bottom wedge asking for a second press. "Go to" offers this storage's
 %% contained spaces, so a far child stays reachable without pointing at it.
 class_eidolon(space,menu,default,recipe(Ns,A,space_menu)) :- current_ontology_identity(Ns,A).
+%% The class itself is not a space: it keeps the shared default pie, whose
+%% leaves are its creation forms.
+eidolon(space_menu,subject(Target,space),View) :- !,
+    menu_vocabulary(Gui,GuiAnchor),
+    in_ontology(Gui,GuiAnchor,eidolon(default_menu,subject(Target,space),View)).
 eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
     current_ontology_identity(Ns,A), space_instance(Space,space),
     gui_menu_source(Space,menu_source(Name,Own)),

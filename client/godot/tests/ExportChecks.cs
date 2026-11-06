@@ -82,7 +82,10 @@ public partial class ExportChecks : Node
                 await Press("setup");
                 if (State["setup"] == null) { Check(State["pending"]!.GetValue<int>() > 0, "lost setup response retains original signed work"); await Press("resolve"); }
             }
-            await Until(() => (State["world_accepted"]!.GetValue<bool>() || (phase=="m3-left" && State["current_location"]?.ToString()=="unplaced")) && State["operation_available"]?.GetValue<bool>() == true);
+            await Until(() => State["world_accepted"]!.GetValue<bool>() || (phase=="m3-left" && State["current_location"]?.ToString()=="unplaced"));
+            // Nothing opens at sign-in; the human's own operations are one deliberate choice away.
+            await Device("account_controls");
+            await Until(() => State["operation_available"]?.GetValue<bool>() == true);
             var original = new JsonObject { ["public_key"] = State["public_key"]!.DeepClone(), ["human"] = State["human"]!.DeepClone(), ["setup"] = State["setup"]!.DeepClone() };
             string previousPath = Env("M1B_ORIGINAL");
             if (fresh) await File.WriteAllTextAsync(previousPath, original.ToJsonString());

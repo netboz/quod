@@ -242,4 +242,8 @@ public partial class EidolonPanel : VBoxContainer
     public void DisposeView(){if(disposed)return;disposed=true;SetOccurrence(null);Retire();source.DisposeView();Operations.DisposeView();}
     public void Cancel()=>Operations.Cancel();
     public override void _ExitTree()=>DisposeView();
+    // The host places the preview elsewhere in its layout; it still lives and
+    // dies with this panel.
+    public override void _Notification(int what)
+    { if(what==NotificationPredelete&&IsInstanceValid(preview))preview.QueueFree(); }
 }

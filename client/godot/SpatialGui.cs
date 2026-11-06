@@ -250,6 +250,15 @@ public partial class SpatialGui : TextureRect
         MouseInside(pointerViewport,new Rect2(Vector2.Zero,pointerViewport.Size).HasPoint(point));
         if(!rootMotion||pointerViewport!=Surface)pointerViewport.PushInput(new InputEventMouseMotion { Position=point,GlobalPosition=point,Relative=point-previous,ButtonMask=pressed ? MouseButtonMask.Left : 0 },true);
     }
+    // The inverse of Move for desktop pointers: where a point of one of this
+    // owner's surfaces appears in the window. The form surface is shown through
+    // its mirror; the workspace surface through this rectangle.
+    internal Vector2 WindowPoint(Viewport viewport,Vector2 point)
+    {
+        if(viewport==FormSurface)point=FormMirror.GlobalPosition+point/formTexture.Region.Size*FormMirror.Size;
+        else if(viewport!=Surface)return point;
+        return GlobalPosition+point*Size/(Vector2)Surface.Size;
+    }
     static bool VisiblePoint(Control control,Vector2 position)
     {
         if(!control.IsVisibleInTree())return false;

@@ -27,6 +27,8 @@ public partial class HudBar : PanelContainer
         layout.AddChild(new Control {SizeFlagsHorizontal=SizeFlags.ExpandFill,MouseFilter=MouseFilterEnum.Ignore});
         device.TooltipText="This device · text size, panels, VR";device.CustomMinimumSize=new(44,44);
         device.Pressed+=()=>DeviceRequested?.Invoke(device);
+        // The local command always belongs to the strip, before any authored command arrives.
+        row.AddChild(device);
     }
     public string Status { get=>status.Text; set { status.Text=value;status.TooltipText=value; } }
     // An unchanged projection rebuilds nothing.
@@ -43,7 +45,7 @@ public partial class HudBar : PanelContainer
             button.SetMeta("label",command.Label);
             var chosen=command;button.Pressed+=()=>Activated?.Invoke(chosen,button);row.AddChild(button);
         }
-        if(device.GetParent()!=row)row.AddChild(device);else row.MoveChild(device,-1);
+        row.MoveChild(device,-1);
         RefreshAttention();
     }
     // The question count shows "0" rather than vanishing.

@@ -7,13 +7,16 @@ using Json = Quod.Client.Json;
 
 public partial class ExportChecks
 {
-    async Task ExactSubject(OperationsPanel panel,Term subject)
+    // Covered: the sign-in card's barrier is in front, so no click reaches the
+    // form; its buttons are pressed directly to prove the node's own barrier.
+    async Task ExactSubject(OperationsPanel panel,Term subject,bool covered=false)
     {
-        var actor=Actor.FromTerm(subject); await Device("create");
+        Func<Button,Task> press=covered ? button=>{button.EmitSignal(BaseButton.SignalName.Pressed);return Frame();} : NativePress;
+        var actor=Actor.FromTerm(subject); await OpenExactTarget(panel,press);
         await Type((LineEdit)panel.FindChild("exact-storage-namespace",true,false),actor.Namespace);
         await Type((LineEdit)panel.FindChild("exact-storage-anchor",true,false),actor.Anchor);
         await Type((LineEdit)panel.FindChild("exact-subject-instance",true,false),actor.InstanceText.TrimEnd('.'));
-        await NativePress((Button)panel.FindChild("open-exact-subject",true,false));
+        await press((Button)panel.FindChild("open-exact-subject",true,false));
         await Until(()=>panel.Available);
         Check(((Label)panel.FindChild("operation-scope",true,false)).Text.Contains(subject.ToString()),"explicit existing subject retains its exact storage and anchor");
     }
@@ -65,7 +68,8 @@ public partial class ExportChecks
             await File.WriteAllTextAsync(routePath,new JsonObject { ["s1"]=s1.ToString() }.ToJsonString());
             await Until(()=>scene.SubjectIds(s1).Length==1);
             await PickSpace(scene,scene.SubjectIds(s1).Single(),Vector3.Zero,s1);
-            await Until(()=>panel.Available && panel.Current?.Name=="enter");
+            // A click opens the subject; its actions are chosen from its pie.
+            await Until(()=>panel.Available && panel.Offered.Any(o=>o.Name=="enter"));
             await Move(panel,s1,lose:true,open:false); return;
         }
         var route=JsonNode.Parse(await File.ReadAllTextAsync(routePath))!.AsObject(); s1=Term.Parse(Json.S(route,"s1"));
@@ -111,16 +115,21 @@ public partial class ExportChecks
             await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"assertz(instance_permission({entity},space_admit,deny)).",cancellation.Token);
             await Move(panel,s0,denied:true);
             Check(State["current_location"]?.ToString()==Term.Call("placed",s1,Term.Parse("transform(0,0,0,0,0,0)")).ToString() && State["assignment_revision"]?.ToString()=="11","denied GUI entry leaves the existing assignment and location unchanged");
-            await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({entity},space_admit,deny)).",cancellation.Token);
-            var instruction=Json.Binding(await app.ActiveSession.Read(human,"personal_instructions(Instructions).",cancellation.Token),"Instructions").Items.Single(t=>!before.Contains(t.Args[0].ToString()));
+            // The budget covers signed operations, not the user's travel in between.
+            using var after=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({entity},space_admit,deny)).",after.Token);
+            var instruction=Json.Binding(await app.ActiveSession.Read(human,"personal_instructions(Instructions).",after.Token),"Instructions").Items.Single(t=>!before.Contains(t.Args[0].ToString()));
             string id=Identity.Encode(instruction.Args[0].Bytes);route["negative_instruction"]=id;await File.WriteAllTextAsync(routePath,route.ToJsonString());
-            var outcome=await app.ActiveSession.ResolveInstruction(human,id,cancellation.Token);
+            var outcome=await app.ActiveSession.ResolveInstruction(human,id,after.Token);
             Check(!Json.Terminal(outcome),"an unclaimed denied attempt remains an explicitly unresolved original outcome across devices");
             await File.WriteAllTextAsync(Env("M1B_RESULT")+".negative.json",outcome.ToJsonString());
         } else {
             Check(app.ActiveAccounts.Uncertain && State["pending"]!.GetValue<int>()==0,"fresh process retains the unknown-association barrier without an originating device journal");
-            await ExactSubject(panel,s0);NewDraft(panel);
-            long writes=await Writes();await panel.Submit();Check(await Writes()==writes,"unknown original association blocks another instructed write without resubmission or inferred rejection");
+            await Device("create");
+            Check(((Control)app.FindChild("login",true,false)).IsVisibleInTree() && ((Control)app.FindChild("resolve",true,false)).IsVisibleInTree(),
+                "the unknown outcome keeps Check earlier actions in front of the world");
+            await ExactSubject(panel,s0,covered:true);
+            long writes=await Writes();await ChooseOfferedOperation(panel,"enter",s0);await panel.Submit();Check(await Writes()==writes,"unknown original association blocks another instructed write without resubmission or inferred rejection");
             Check(State["current_location"]?.ToString()==Term.Call("placed",s1,Term.Parse("transform(0,0,0,0,0,0)")).ToString(),"unknown outcome leaves the independently verified committed location intact");
         }
         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,phase,checks,current_location=State["current_location"]?.ToString(),setup=app.ActiveAccounts.Setup!.ToString() }));

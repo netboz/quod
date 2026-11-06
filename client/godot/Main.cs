@@ -68,7 +68,8 @@ public partial class Main : Control
     bool disposed, closing, released;
     bool busy, worldAccepted;
     string state = "offline";
-    readonly Label status = new() { Name = "status", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+    // The last status sentence; the HUD strip and the login card show it.
+    string statusText = "";
     readonly Label identityLabel = new() { Name = "identity", AutowrapMode = TextServer.AutowrapMode.WordSmart };
     readonly Label location = new() { Name = "location", AutowrapMode = TextServer.AutowrapMode.WordSmart };
     readonly Label controllers = new() { Name = "controllers", AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -175,7 +176,7 @@ public partial class Main : Control
         };
         gui.Surface.AddChild(pointerLabel);pointerLabel.Theme=gui.Appearance;
         scene.PresentationChanged+=()=>{
-            if(pie.IsOpen&&pieOccurrence!=null&&pieOccurrence.Pose==null){ClosePie();status.Text="That thing is no longer here.";Notify();}
+            if(pie.IsOpen&&pieOccurrence!=null&&pieOccurrence.Pose==null){ClosePie();statusText="That thing is no longer here.";Notify();}
         };
         xr.Changed+=UpdateControllerStatus;xr.TargetLabel=TargetLabel;
         gui.NativeCaptureChanged+=()=>{if(gui.NativePressed){xr.Router.Cancel();scene.ReleaseInput();}xr.ContextChanged();};
@@ -200,10 +201,10 @@ public partial class Main : Control
             store = new LocalStore(profile);
             if (store.Snapshot is LocalState saved) {
                 key = Identity.FromPayload(saved.Payload); endpoint.Text = saved.Endpoint;
-                status.Text = "Signing in…";
-            } else status.Text = "";
+                statusText = "Signing in…";
+            } else statusText = "";
             if (Argument("--node") is string node) endpoint.Text = node;
-        } catch (Exception error) { state = "storage-error"; status.Text = error.Message; }
+        } catch (Exception error) { state = "storage-error"; statusText = error.Message; }
         UpdateButtons(); Notify();
         if(key!=null)activeAction=Run(Connect);
         if (OS.GetCmdlineUserArgs().Contains("--qualification")) {
@@ -291,13 +292,13 @@ public partial class Main : Control
         view.Projection+=message=>{
             if(expected!=pieGeneration)return;
             try{pie.Present(MenuNode.Decode(Term.Parse(Json.S(message,"value"))),"Nothing is offered here.");}
-            catch(Exception error){ClosePie();status.Text="This menu is unavailable: "+error.Message;}
+            catch(Exception error){ClosePie();statusText="This menu is unavailable: "+error.Message;}
             Notify();
         };
         view.Withdrawn+=reason=>{
             if(expected!=pieGeneration||view.Updating)return;
             bool shown=pie.Navigator!=null;ClosePie();
-            status.Text=shown ? "That thing is no longer here." : "This menu is unavailable: "+reason;Notify();
+            statusText=shown ? "That thing is no longer here." : "This menu is unavailable: "+reason;Notify();
         };
         _=view.Start();Notify();return true;
     }
@@ -329,7 +330,7 @@ public partial class Main : Control
         if (busy || disposed || closing) return;
         busy = true; action = new(TimeSpan.FromMinutes(5)); var running = action; UpdateButtons(); Notify();
         try { await operation(); }
-        catch (Exception error) { if (!running.IsCancellationRequested) status.Text = error.Message + (accounts?.Uncertain == true ? " Original work retained; resolve its outcome." : ""); }
+        catch (Exception error) { if (!running.IsCancellationRequested) statusText = error.Message + (accounts?.Uncertain == true ? " Original work retained; resolve its outcome." : ""); }
         finally { busy = false; running.Dispose(); if (ReferenceEquals(action, running)) action = null;
             if (!disposed) { UpdateButtons(); Notify(); } }
     }
@@ -338,7 +339,7 @@ public partial class Main : Control
     {
         if (key != null || store == null) throw new InvalidOperationException("Local identity storage is unavailable or already occupied.");
         using var created = Identity.Create(); store.Create(created.Payload(), true); key = Identity.FromPayload(store.Snapshot!.Payload);
-        status.Text = "Key saved on this device."; return Connect();
+        statusText = "Key saved on this device."; return Connect();
     }
     async Task Connect()
     {
@@ -349,11 +350,11 @@ public partial class Main : Control
         string origin = Transport.NodeOrigin(endpoint.Text), pinned = store.Snapshot!.NodeKey(origin);
         store.Update(s => s.Endpoint = origin);
         var connecting = new SignedSession(key, store, new Transport(origin, pinned));
-        session = connecting; status.Text = "Signing in…"; Notify();
+        session = connecting; statusText = "Signing in…"; Notify();
         connecting.Expired+=()=>{
             if(!ReferenceEquals(session,connecting)||disposed||closing)return;
             Disconnect();state="sign-in-expired";
-            status.Text="Your sign-in expired. Sign in again; nothing was lost.";
+            statusText="Your sign-in expired. Sign in again; nothing was lost.";
             UpdateButtons();Notify();
         };
         try {
@@ -369,7 +370,7 @@ public partial class Main : Control
             accounts = discovered;
         } catch { if (ReferenceEquals(session, connecting)) CloseSession(); throw; }
         state = accounts.Human == null ? "signed-in-no-account" : accounts.Setup == null ? "setup-pending" : "account-ready";
-        status.Text = accounts.Uncertain ? "An earlier action has no confirmed result yet. Check it before continuing." : "Signed in.";
+        statusText = accounts.Uncertain ? "An earlier action has no confirmed result yet. Check it before continuing." : "Signed in.";
         if (accounts.Setup != null) await PresentAccount();
     }
     async Task Register()
@@ -377,13 +378,13 @@ public partial class Main : Control
         RequireSession(); long expected = incarnation; await accounts!.Register(Cancellation);
         if (disposed || expected != incarnation) return;
         state = accounts.Human == null ? "signup-uncertain" : "setup-pending";
-        status.Text = accounts.Human == null ? "We could not confirm your account yet. Use “Check earlier actions”." : "Your account is ready. Next, set up your starting space.";
+        statusText = accounts.Human == null ? "We could not confirm your account yet. Use “Check earlier actions”." : "Your account is ready. Next, set up your starting space.";
     }
     async Task Prepare()
     {
         RequireSession(); long expected = incarnation; await accounts!.Prepare(Cancellation);
         if (disposed || expected != incarnation) return;
-        status.Text = accounts.StorageDescription.Length == 0 ? "Your starting space is ready." : accounts.StorageDescription + " Nothing is created until you confirm.";
+        statusText = accounts.StorageDescription.Length == 0 ? "Your starting space is ready." : accounts.StorageDescription + " Nothing is created until you confirm.";
         if (accounts.Setup != null) await PresentAccount();
     }
     async Task Setup()
@@ -391,14 +392,14 @@ public partial class Main : Control
         RequireSession(); long expected = incarnation; await accounts!.FinishSetup(Cancellation);
         if (disposed || expected != incarnation) return;
         if (accounts.Setup != null) { state = "account-ready"; await PresentAccount(); }
-        else status.Text = "We could not confirm the setup yet. Use “Check earlier actions”.";
+        else statusText = "We could not confirm the setup yet. Use “Check earlier actions”.";
     }
     async Task Resolve()
     {
         RequireSession(); long expected = incarnation; await accounts!.Resolve(Cancellation);
         if (disposed || expected != incarnation) return;
         state = accounts.Human == null ? "signed-in-no-account" : accounts.Setup == null ? "setup-pending" : "account-ready";
-        status.Text = accounts.Uncertain ? "The result is still unknown. Nothing was sent again." : "Earlier actions checked. Nothing was sent again.";
+        statusText = accounts.Uncertain ? "The result is still unknown. Nothing was sent again." : "Earlier actions checked. Nothing was sent again.";
         if (accounts.Setup != null && views.Count == 0) await PresentAccount();
     }
     void RequireSession()
@@ -412,7 +413,7 @@ public partial class Main : Control
         location.Text = $"U: {Reference(human)}\nA: {Reference(personal)}\nS0: {Reference(space)}\nS0 storage: the existing account ontology {human.Namespace} @ {human.Anchor}";
         var consumer = session!;
         controls?.Dispose(); controls=new(consumer,human);
-        controls.Suspended += reason => { status.Text="Control suspended: "+reason; Notify(); };
+        controls.Suspended += reason => { statusText="Control suspended: "+reason; Notify(); };
         foreach (var view in views) view.Dispose(); views.Clear();
         var route = new SignedView(consumer,human,human,"navigation",SignedSession.ViewGoal(human,Term.Call("account_navigation",Term.Variable("View")))); views.Add(route);
         route.Projection += message => {
@@ -440,7 +441,7 @@ public partial class Main : Control
         var commands=new SignedView(consumer,human,human,"hud_commands",SignedSession.ViewGoal(human,Term.Call("hud_commands",Term.Variable("View")))); views.Add(commands);
         commands.Projection+=message=>{
             try{hud.Present(MenuNode.Decode(Term.Call("menu",Term.Parse(Json.S(message,"value")).Require("hud",1)[0])));}
-            catch(Exception error){hud.Present(null);status.Text="Your commands are unavailable: "+error.Message;}
+            catch(Exception error){hud.Present(null);statusText="Your commands are unavailable: "+error.Message;}
             Notify();
         };
         commands.Withdrawn+=reason=>{if(!commands.Updating){hud.Present(null);Notify();}};
@@ -459,7 +460,7 @@ public partial class Main : Control
     }
     void OpenWorld(SignedSession consumer,Actor human,Actor? space)
     {
-        if (space == null) { SuspendWorld(); status.Text="You are not in a space yet."; return; }
+        if (space == null) { SuspendWorld(); statusText="You are not in a space yet."; return; }
         if (worldView?.Completion?.IsCompleted==true) RetireWorld();
         if (worldView != null) {
             bool same=worldView.Target==space;
@@ -485,7 +486,7 @@ public partial class Main : Control
                 if (!navigationAvailable || navigation?.Space != view.Target) { WithdrawWorld("Committed location changed."); return; }
                 var next = scene.ApplyProjection(message,view.Target,human,ack=>_ = view.Send(ack)); projection=next; worldAccepted=true;
                 controls?.Present(next);
-                status.Text="";
+                statusText="";
             } catch (Exception error) { WithdrawWorld(error.Message); }
             UpdateButtons(); Notify();
         };
@@ -507,7 +508,7 @@ public partial class Main : Control
         catch (Exception error) { if (!disposed && !closing) { WithdrawWorld(error.Message); Notify(); } }
     }
     void WithdrawWorld(string reason,bool refreshing=false)
-    { projection=null; controls?.Withdraw();xr.InvalidateWorld();if(refreshing)scene.Suspend();else scene.Withdraw();worldAccepted=false; status.Text="Space unavailable: " + reason; UpdateButtons(); }
+    { projection=null; controls?.Withdraw();xr.InvalidateWorld();if(refreshing)scene.Suspend();else scene.Withdraw();worldAccepted=false; statusText="Space unavailable: " + reason; UpdateButtons(); }
     bool GuiOpen=>pie.IsOpen || representations?.IsVisibleInTree()==true || backupDialog!=null || (localControllers?.IsVisibleInTree()??false) || questions?.Expanded==true;
     void UpdateWorkspace()
     {
@@ -518,11 +519,11 @@ public partial class Main : Control
         bool ready=accounts?.Setup!=null&&session is {IsExpired:false};
         loginView.Visible=showConnection || accounts?.Setup==null || accounts.Uncertain || session?.IsExpired==true;
         loginBackdrop.BgColor=loginBackdrop.BgColor with {A=ready ? .94f : 1};
-        loginStatus.Text=status.Text;loginStatus.Visible=status.Text.Length>0;
+        loginStatus.Text=statusText;loginStatus.Visible=statusText.Length>0;
         location.Visible=controllers.Visible=loginView.Visible;
         accountSetup.Visible=accounts!=null;
         // Status is one plain sentence in the HUD strip, never a permanent panel.
-        hud.Visible=ready&&!loginView.Visible;hud.Status=status.Text;
+        hud.Visible=ready&&!loginView.Visible;hud.Status=statusText;
         hud.Attention=System.Text.RegularExpressions.Regex.Match(questions?.Caption??"",@"\d+").Value;
         bool attention=ready&&questions?.Expanded==true;
         bool form=!attention&&!home&&ready&&representations!=null;
@@ -599,7 +600,7 @@ public partial class Main : Control
         if (store == null) throw new InvalidOperationException("Local identity storage is unavailable.");
         string origin = Transport.NodeOrigin(endpoint.Text);
         Disconnect(); store.Update(s => s.NodeKeys.Remove(origin));
-        status.Text = "Forgot the key remembered for " + origin + ". The next connection trusts the key that node presents.";
+        statusText = "Forgot the key remembered for " + origin + ". The next connection trusts the key that node presents.";
         return Task.CompletedTask;
     }
     void CloseSession(bool retainDrafts=true)
@@ -622,7 +623,7 @@ public partial class Main : Control
         }
         questions?.Dispose(); questions = null;
         foreach (var view in views) view.Dispose(); views.Clear();
-        if(!retainDrafts){if(representations!=null){visualHost.RemoveChild(representations.Preview);representations.Preview.QueueFree();gui.RemoveForm(representations);representations.QueueFree();}operations=null;representations=null;}
+        if(!retainDrafts){if(representations!=null){gui.RemoveForm(representations);representations.QueueFree();}operations=null;representations=null;}
         foreach (var node in body.GetChildren()) {
             body.RemoveChild(node); node.QueueFree();
         }
@@ -638,7 +639,7 @@ public partial class Main : Control
     }
     public void Disconnect()
     {
-        action?.Cancel(); CloseSession(); state = "offline"; status.Text = "Disconnected. Your key and unsent work stay on this device."; UpdateButtons(); Notify();
+        action?.Cancel(); CloseSession(); state = "offline"; statusText = "Disconnected. Your key and unsent work stay on this device."; UpdateButtons(); Notify();
     }
     public override void _UnhandledKeyInput(InputEvent @event)
     {
@@ -711,7 +712,7 @@ public partial class Main : Control
         pending = store?.Snapshot?.Pending.Count, world_accepted = worldAccepted, live_sockets = SignedView.LiveSockets, ignored_projections = SignedView.IgnoredProjections, question_receiver_ready = questions?.Ready,
         current_location = navigationAvailable ? navigation?.Location.ToString() : null, assignment_revision = navigationAvailable ? navigation?.Revision.ToString() : null,
         physical_selection = projection?.Selection, physical_tick = projection?.Sample?.Tick, scene_count = scene?.Count,
-        operation_available = operations?.Available, operation_status = operations?.StatusText, status = status.Text,
+        operation_available = operations?.Available, operation_status = operations?.StatusText, status = statusText,
         controller_status=xr?.Router?.Status,controller_metrics=xr?.Metrics });
     internal LocalStore ActiveStore => store ?? throw new InvalidOperationException("No active store.");
     internal SignedSession ActiveSession => session ?? throw new InvalidOperationException("No active session.");

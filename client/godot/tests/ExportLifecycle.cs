@@ -42,24 +42,22 @@ public partial class ExportChecks
         string role = offered.Form.Tree.Leaves.First(c => c.Family == "boolean").Role;
         var control = operations.FormPanel.Input(role) as CheckButton ?? throw new Exception("Boolean pointer adapter");
         if (control.Size.Y <= 0) await ToSignal(control, Control.SignalName.Resized);
-        for (Node? node = control.GetParent(); node != null; node = node.GetParent())
-            if (node is ScrollContainer scroll) scroll.EnsureControlVisible(control);
-        await Frame();
-        Console.WriteLine($"POINTER rect={control.GetGlobalRect()} viewport={GetViewport().GetVisibleRect()} visible={control.IsVisibleInTree()} disabled={control.Disabled}"); Console.Out.Flush();
         bool before = control.ButtonPressed;
-        var toggled = new TaskCompletionSource(); void Changed(bool _) => toggled.TrySetResult();
-        control.Toggled += Changed;
-        try {
-            var position = control.GetGlobalRect().GetCenter();
-            if(DisplayServer.GetName()!="headless")NativeClick(control.GetWindow(),position);
-            else {
-                var viewport=control.GetViewport();
+        if (DisplayServer.GetName() != "headless") await NativePress(control);
+        else {
+            for (Node? node = control.GetParent(); node != null; node = node.GetParent())
+                if (node is ScrollContainer scroll) scroll.EnsureControlVisible(control);
+            await Frame();
+            var toggled = new TaskCompletionSource(); void Changed(bool _) => toggled.TrySetResult();
+            control.Toggled += Changed;
+            try {
+                var position = control.GetGlobalRect().GetCenter(); var viewport = control.GetViewport();
                 viewport.PushInput(new InputEventMouseMotion { Position = position, GlobalPosition = position }, true);
                 viewport.PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = true }, true);
                 viewport.PushInput(new InputEventMouseButton { Position = position, GlobalPosition = position, ButtonIndex = MouseButton.Left, Pressed = false }, true);
-            }
-            await toggled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        } finally { control.Toggled -= Changed; }
+                await toggled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            } finally { control.Toggled -= Changed; }
+        }
         Check(control.ButtonPressed != before && operations.FormPanel.Draft[role] == (!before ? "true" : "false"), "native mouse click edits offered boolean");
         operations.Defaults();
     }

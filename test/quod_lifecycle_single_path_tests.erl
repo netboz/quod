@@ -605,6 +605,11 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     m2_edit(User,{retract,{space_source_digest,Digest}}),
     m2_failed_creation(C,User,Ns,Create,element(7,Create),[Ns,Foreign]),
     m2_edit(User,{assertz,{space_source_digest,Digest}}),
+    %% A destination that denies admission refuses the creation outright.
+    Deny={instance_permission,element(4,S0),space_admit,deny},
+    m2_edit(User,{assertz,Deny}),
+    m2_failed_creation(C,User,Ns,Create,element(7,Create),[Ns,Foreign]),
+    m2_edit(User,{retract,Deny}),
     %% Failure after the foreign scope acknowledged its whole construction
     %% rolls back the local marker, source object and receiver admission.
     Baseline=m2_state([Ns,Foreign]),
@@ -830,6 +835,9 @@ m2_foreign_policy(Other=#{reference:={agent_instance_ref,Ns,Anchor,me}},Owner,Ac
     Grants=[{can_invoke,{',',{current_ontology_identity,Ns,Anchor},G},Principal,{'_'},Ns}
         || {Principal,G}<-[{Owner,{gui_operation_classes,{'_'}}},
             {Owner,{gui_operations,Class,{'_'}}},
+            %% The class's representations and pie, and the pie recipe's callback.
+            {Owner,{entity_eidolons,space,{'_'}}},{Owner,{client_menu,space,{'_'}}},
+            {Owner,{gui_menu_source,space,{'_'}}},
             {Owner,{entity_scene,{'_'},{'_'},{'_'}}},{Owner,{eidolon,{'_'},{'_'},{'_'}}},
             {Actor,{gui_operation,Class,create,{'_'},space_create_submit,{'_'},{'_'}}},
             {Actor,{space_assignment,{'_'},{'_'},{'_'}}}]],

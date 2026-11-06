@@ -15,7 +15,7 @@ planStatus:
     - vr
     - design
   created: "2026-11-05"
-  updated: "2026-11-06T05:00:00.000Z"
+  updated: "2026-11-06T19:00:00.000Z"
   progress: 93
 ---
 
@@ -80,7 +80,7 @@ No deployment, refound or data wipe is authorized by this plan.
     `surface(Colour, Metal, Rough, Emission, Opacity, Textures)` everywhere: ontologies, Godot `Scene.cs`, browser `marks.js`/`render-resources.js`, legacy `scene.rs`, regenerated contract corpus. Matrix = translucent near-black box (opacity 220) plus emissive green wire box; no grid texture, because the Godot client still refuses textured primitives.
 - [ ] **Phase 7 — Acceptance**
   - [ ] Headless Godot checks, signed production-seam tests, then physical Vive session: open, nest, back, turbo-select, dismiss, HUD click, leave space.
-    Done here: EUnit (460-test neighbour run, then the two updated suites green), xref, browser tests (295), legacy Rust tests, `client/godot-tests` (206), offline Godot `controller-input` (84) and `workspace` (40) phases. **Not done:** the node-backed exported journeys (`journey.py`/`local.py`) and the physical Vive session; the `scene`/`presentation` phases need a real renderer.
+    Done here: EUnit (460-test neighbour run, then the two updated suites green), xref, browser tests (295), legacy Rust tests, `client/godot-tests` (206), offline Godot `controller-input` (84) and `workspace` (40) phases. Headless journeys against a local node (2026-11-06, commits `1dba5194` + bump 0.7.279): `gui` 99 checks, `spaces` 29, `navigation` 21, each stopping only at its first step that needs real desktop input; they found and fixed three defects (pie never redrew, an always-advertised offer action hid the human's panel, no way to choose a class's creation form). Desktop-input preparation (2026-11-06, uncommitted): native clicks now map surface points to window points (`SpatialGui.WindowPoint`); the class pie read is granted in the foreign-storage fixture policy; two exit-time leaks fixed (orphan status label, unattached HUD device button). Rerun after it: headless journeys unchanged at `gui` 99 / `spaces` 29 / `navigation` 21, `client/godot-tests` 209, offline `controller-input` 84, `workspace` 44, `startup-new` 6, neighbour EUnit 461/0. `--desktop` journeys (2026-11-06, real Wayland input): `gui` passes every check (`M1B_EXPORT_PASS`; its exit leak — a panel-created preview with no owner — is fixed, rerun pending), `navigation` 170 checks, `spaces` 153. They found and fixed: foreign-storage policy missing the GUI's reads (`entity_eidolons`, `client_menu`, recipe callback `gui_menu_source`), preview lifetime, and test steps that clicked through the deliberate sign-in barrier or assumed a pre-selected action. **Open:** in `spaces`, a creation refused by destination admission reaches the client after more than 60 s, although the node alone refuses in 726 ms (new EUnit case); tracked separately. **Not done:** the physical Vive session; the `scene`/`presentation`/`menu` phases need a real renderer or desktop input.
 
 ## Sources read and what they already decide
 

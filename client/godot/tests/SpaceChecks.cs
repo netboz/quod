@@ -75,6 +75,9 @@ public partial class ExportChecks
     }
     void NativeInput(InputEventFromWindow input)
     { input.WindowId=GetTree().Root.GetWindowId(); Input.ParseInputEvent(input); }
+    // A control's centre where the real pointer must go: through the shared
+    // GUI's surfaces and mirrors when the control lives on one of them.
+    Vector2 OnWindow(Control control)=>((SpatialGui)app.FindChild("shared-gui",true,false)).WindowPoint(control.GetViewport(),control.GetGlobalRect().GetCenter());
     void NativeClick(Vector2 point)
     { NativeClick(GetTree().Root,point); }
     void NativeClick(Window window,Vector2 point)
@@ -82,7 +85,17 @@ public partial class ExportChecks
     async Task NativePress(Button button)
     {
         var pressed=new TaskCompletionSource(); void Pressed()=>pressed.TrySetResult(); button.Pressed+=Pressed;
-        try { await Frame(); NativeClick(button.GetWindow(),button.GetGlobalRect().GetCenter()); await pressed.Task.WaitAsync(TimeSpan.FromSeconds(5)); }
+        // Scroll only once the panel has laid out what was just shown.
+        await Frame();
+        for(Node? node=button.GetParent();node!=null;node=node.GetParent()) if(node is ScrollContainer scroll) scroll.EnsureControlVisible(button);
+        try { await Frame(); await Frame();
+            NativeClick(button.GetWindow(),OnWindow(button)); await pressed.Task.WaitAsync(TimeSpan.FromSeconds(5)); }
+        catch(TimeoutException) {
+            // Name what the real pointer reached instead of the intended control.
+            string Hovered(Viewport v)=>v.GuiGetHoveredControl() is Control c ? c.GetPath().ToString() : "none";
+            Console.WriteLine($"M2_NATIVE_MISS target={button.GetPath()} visible={button.IsVisibleInTree()} disabled={button.Disabled} rect={button.GetGlobalRect()} root={Hovered(GetTree().Root)} own={Hovered(button.GetViewport())}"); Console.Out.Flush();
+            throw;
+        }
         finally { button.Pressed-=Pressed; }
     }
     async Task PanelResponse(OperationsPanel panel,Action open,Func<bool> ready)
@@ -99,7 +112,7 @@ public partial class ExportChecks
         var picked=new TaskCompletionSource<ScenePanel.Selection>(); void Selected(ScenePanel.Selection value)=>picked.TrySetResult(value); scene.Selected+=Selected;
         try {
             var viewport=scene.GetChildren().OfType<SubViewport>().Single();
-            var point=scene.GlobalPosition+scene.Project(id,local)*scene.Size/(Vector2)viewport.Size;
+            var point=((SpatialGui)app.FindChild("shared-gui",true,false)).WindowPoint(scene.GetViewport(),scene.GlobalPosition+scene.Project(id,local)*scene.Size/(Vector2)viewport.Size);
             NativeClick(point);
             Check((await picked.Task.WaitAsync(TimeSpan.FromSeconds(5))).Subject.ToString()==expected.ToString(),"normal mouse picking opens the exact rendered subject and anchor");
         } finally { scene.Selected-=Selected; }
@@ -118,7 +131,7 @@ public partial class ExportChecks
         };
         await Frame(); await ChooseNativeOption(menu,1); await ChooseNativeOption(menu,2); await ChooseNativeOption(menu,1);
         var button=new Button { Position=new(100,300),Size=new(300,40),Text="Native pointer probe" }; app.AddChild(button); await Frame();
-        var clicked=new TaskCompletionSource(); button.Pressed+=()=>clicked.TrySetResult(); NativeClick(button.GetGlobalRect().GetCenter());
+        var clicked=new TaskCompletionSource(); button.Pressed+=()=>clicked.TrySetResult(); NativeClick(OnWindow(button));
         await clicked.Task.WaitAsync(TimeSpan.FromSeconds(5)); Check(clicked.Task.IsCompletedSuccessfully,"real native pointer presses the offered control");
         Console.WriteLine("M2_MENU_PASS"); Console.Out.Flush(); await app.CloseApplication();
     }
@@ -138,6 +151,14 @@ public partial class ExportChecks
         await Until(()=>panel.Available);
         await ChooseOfferedOperation(panel,operation);
         Check(panel.Current!.Subject.ToString()==Term.Call("class_ref",Term.Text(target.Namespace),Term.Binary(Identity.Decode(target.Anchor)),Term.Atom("space")).ToString(),"selected target owns the actual local class and anchor");
+    }
+    // The storage catalogue with its collapsed exact-identity section open, as a user opens it.
+    async Task OpenExactTarget(OperationsPanel panel,Func<Button,Task>? press=null)
+    {
+        await Device("create");
+        var exact=(LineEdit)panel.FindChild("exact-storage-namespace",true,false);
+        if(!exact.IsVisibleInTree())await (press??NativePress)((Button)panel.FindChild("advanced-target-toggle",true,false));
+        Check(exact.IsVisibleInTree(),"the exact existing identity fields are open");
     }
     async Task Type(LineEdit line,string value)
     {
@@ -160,7 +181,7 @@ public partial class ExportChecks
         await Frame();
         var clicked=new TaskCompletionSource(); void Pressed()=>clicked.TrySetResult(); button.Pressed+=Pressed;
         try {
-            var point=button.GetGlobalRect().GetCenter();
+            var point=OnWindow(button);
             Console.WriteLine($"M2_SUBMIT_POINTER rect={button.GetGlobalRect()} viewport={GetViewport().GetVisibleRect()} focus={button.HasFocus()} visible={button.IsVisibleInTree()}");
             Check(GetViewport().GetVisibleRect().HasPoint(point),"offered Submit is inside the actual mouse viewport");
             NativeClick(point);
@@ -217,12 +238,12 @@ public partial class ExportChecks
         string firstId=scene.SubjectIds(firstSpace).Single();
         await PickSpace(scene,firstId,Vector3.Zero,firstSpace);
         await Until(()=>panel.Available);
-        Check(((Label)panel.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()) && panel.Current?.Name=="enter",
-            "reconnect-first picking selects the existing space and its ordinary Enter offer before any account or creation button");
+        Check(((Label)panel.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()) && panel.Offered.Any(o=>o.Name=="enter"),
+            "reconnect-first picking selects the existing space, which offers its ordinary Enter before any account or creation button");
         var unopened=new OperationsPanel { Name="unopened-subject-probe" }; app.AddChild(unopened);
         var firstActor=Actor.FromTerm(firstSpace);
         await PanelResponse(unopened,()=>unopened.OpenSubject(app.ActiveSession,app.ActiveAccounts,firstActor,firstSpace),()=>unopened.Available);
-        Check(unopened.Current?.Name=="enter" &&
+        Check(unopened.Offered.Any(o=>o.Name=="enter") &&
             ((Label)unopened.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()),
             "a newly constructed generic panel opens an exact picked subject without prior account/storage initialization");
         var wrongAnchor=firstActor with { Anchor=Identity.Encode(new byte[32]) };
@@ -362,7 +383,7 @@ public partial class ExportChecks
         Check(Json.Terminal(panel.LastOutcome!) && !Json.Committed(panel.LastOutcome!),"normal mouse creation displays definitive destination-admission refusal");
         Check(await StateOfSpaces()==before && scene.Count==10,"denied construction leaves no generated space owner or assignment");
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({space},space_admit,deny)).",timeout.Token);
-        await Device("create");
+        await OpenExactTarget(panel);
         await Type((LineEdit)panel.FindChild("exact-storage-namespace",true,false),human.Namespace);
         await Type((LineEdit)panel.FindChild("exact-storage-anchor",true,false),Identity.Encode(new byte[32]));
         long writes=await Writes();

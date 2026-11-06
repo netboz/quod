@@ -1,12 +1,14 @@
 %% Descriptor and binding helpers interpret data locally. A colon in an
 %% input value is never a request to follow that value into another ontology.
 no_follow(gui_component_schema/4).
+no_follow(gui_component_schema/5).
+no_follow(gui_class_chain/3).
+no_follow(gui_chain_property/3).
 no_follow(gui_tree_schema/3).
 no_follow(gui_children_schema/3).
 no_follow(gui_initial_projection/3).
 no_follow(gui_valid_values/1).
 no_follow(gui_properties/3).
-no_follow(gui_property/3).
 no_follow(gui_attribute/4).
 no_follow(gui_property_value/2).
 no_follow(gui_value/3).
@@ -174,24 +176,44 @@ gui_attribute(menu, back, menu_back, default(none)).
 %% learnable (Kurtenbach & Buxton). Recipes may declare another count per menu.
 gui_attribute(menu, wedges, positive_integer, default(8)).
 
+%% One walk up the class tree per component. This vocabulary is a tree, so a
+%% component's kind is the nearest declared kind above its classes, and each
+%% attribute comes from the nearest owner on that chain; no further class
+%% queries are needed once the chain is known.
 gui_component_schema(Classes, Attributes, Kind, Properties) :-
+    gui_component_schema(Classes, Attributes, Kind, Properties, _).
+gui_component_schema(Classes, Attributes, Kind, Properties, Chain) :-
     term_variables(Classes-Attributes, []),
-    findall(K, gui_kind(K), Kinds),
-    most_specific_classes(Classes, Kinds, [Kind]),
-    findall(property(Key, Default), gui_property(Kind, Key, Default), Contract),
+    gui_class_chain(Classes, Kind, Chain),
+    findall(property(Key, Default), gui_chain_property(Chain, Key, Default), Contract),
     gui_properties(Contract, Attributes, Properties),
-    gui_kind_properties(Kind, Properties).
+    gui_kind_properties(Kind, Chain, Properties).
 
-no_follow(gui_kind_properties/2).
-gui_kind_properties(image, Properties) :- !, member(property(image, asset(_, _)), Properties).
-gui_kind_properties(table, Properties) :- !,
+%% The selected kind with every class above it. Among the declared kinds the
+%% component's classes fall under, the most specific has no other below it;
+%% several classes still select one kind, and two unrelated kinds remain
+%% ambiguous, as before. The chain is a set: nothing depends on its order.
+gui_class_chain(Classes, Kind, [Kind | Above]) :-
+    findall(A, (member(Class, Classes), isa(Class, A)), Raw), sort(Raw, Reached),
+    findall(K, (member(K, Reached), gui_kind(K)), Applicable),
+    findall(K, (member(K, Applicable), \+ (member(Other, Applicable), Other \== K, isa(Other, K))), [Kind]),
+    findall(A, (member(A, Reached), A \== Kind, isa(Kind, A)), Above).
+
+%% An attribute applies from its nearest declaring owner on the chain.
+gui_chain_property(Chain, Key, Default) :-
+    gui_attribute(Owner, Key, _, Default), member_eq(Owner, Chain),
+    \+ (gui_attribute(Nearer, Key, _, _), Nearer \== Owner, member_eq(Nearer, Chain), isa(Nearer, Owner)).
+
+no_follow(gui_kind_properties/3).
+gui_kind_properties(image, _, Properties) :- !, member(property(image, asset(_, _)), Properties).
+gui_kind_properties(table, _, Properties) :- !,
     member(property(headings, Headings), Properties),
     member(property(options, Options), Properties),
     length(Headings, Count),
     \+ (member(option(_, Cells), Options),
         \+ (gui_texts(Cells), length(Cells, Count))).
-gui_kind_properties(Kind, Properties) :-
-    (once(isa(Kind, selection)) ->
+gui_kind_properties(_, Chain, Properties) :-
+    (member_eq(selection, Chain) ->
         member(property(options, Options), Properties),
         \+ (member(option(_, Label), Options), \+ gui_text(Label))
     ; true).
@@ -200,10 +222,10 @@ gui_kind_properties(Kind, Properties) :-
 %% submitted class/attribute values, never another ontology's clauses or KB.
 gui_tree_schema(component(Id, Classes, Attributes, RawChildren),
                 component(Id, Kind, Properties, Children), Inputs) :-
-    gui_component_schema(Classes, Attributes, Kind, Properties),
-    (once(isa(Kind, container)) -> true; RawChildren = []),
+    gui_component_schema(Classes, Attributes, Kind, Properties, Chain),
+    (member_eq(container, Chain) -> true; RawChildren = []),
     gui_children_schema(RawChildren, Children, DescendantInputs),
-    (once(isa(Kind, input)) -> Inputs = [Id | DescendantInputs]; Inputs = DescendantInputs).
+    (member_eq(input, Chain) -> Inputs = [Id | DescendantInputs]; Inputs = DescendantInputs).
 
 gui_children_schema([], [], []).
 gui_children_schema([Raw | Rest], [Child | Children], Inputs) :-
@@ -224,11 +246,6 @@ gui_initial_projection(Mode, [initial(Id, Kind, Properties, Declared) | Rest],
 gui_valid_values([]).
 gui_valid_values([value(Kind, Properties, Value) | Rest]) :-
     gui_value(Kind, Properties, Value), gui_valid_values(Rest).
-
-gui_property(Kind, Key, Default) :-
-    gui_attribute(Class, Key, _, Default), once(isa(Kind, Class)),
-    findall(Owner, gui_attribute(Owner, Key, _, _), Owners),
-    most_specific_classes([Kind], Owners, [Class]).
 
 gui_properties([], _, []).
 gui_properties([property(Key, optional) | Contract], Attributes, Properties) :-

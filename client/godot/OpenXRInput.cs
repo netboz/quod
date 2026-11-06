@@ -68,7 +68,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     readonly SubViewport pieViewport=new() { Name="pie-viewport",Size=new(800,800),TransparentBg=true,HandleInputLocally=true,Disable3D=true };
     readonly MeshInstance3D pieQuad=new() { Name="pie-surface",Mesh=new QuadMesh(),Visible=false };
     // The HUD strip: body-locked below the central view, tagging along.
-    readonly SubViewport hudViewport=new() { Name="hud-viewport",Size=new(1200,72),TransparentBg=true,HandleInputLocally=true,Disable3D=true };
+    readonly SubViewport hudViewport=new() { Name="hud-viewport",Size=new(1200,(int)HudBar.Height),TransparentBg=true,HandleInputLocally=true,Disable3D=true };
     readonly MeshInstance3D hudQuad=new() { Name="hud-surface",Mesh=new QuadMesh(),Visible=false };
     float? hudYaw;
     bool pointingHud;
@@ -139,7 +139,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     {
         if(disposed || shuttingDown || active)return active;
         xr=XRServer.FindInterface("OpenXR") as OpenXRInterface;
-        if(!Available || xr==null) { Status="OpenXR unavailable. Connect a supported headset and restart Quod.";Changed?.Invoke();return false; }
+        if(!Available || xr==null) { Status="No VR runtime or headset was found when Quod started. Start SteamVR with the headset on, then restart Quod.";Changed?.Invoke();return false; }
         xr.SessionFocussed+=Focused;xr.SessionVisible+=Unfocused;xr.SessionSynchronized+=Unfocused;xr.SessionStopping+=Stopping;
         xr.SessionLossPending+=Stopping;xr.InstanceExiting+=Stopping;xr.PoseRecentered+=Recentered;Subscriptions+=7;
         lifecycleSubscribed=true;xr.SetActionSetActive("quod_inputs",true);

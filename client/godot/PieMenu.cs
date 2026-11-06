@@ -11,8 +11,11 @@ public partial class PieMenu : Control
     // Interaction timing, not domain policy: how long a pointer rests on a
     // sub-pie before marking mode opens it (Kando: "when you stop moving").
     const double MarkingDwellMs=300;
-    static readonly Color Text=new(0xF5/255f,0xF1/255f,0xEB/255f),Panel=new(0x19/255f,0x2B/255f,0x32/255f,.94f),
-        Accent=new(0xF9/255f,0xC8/255f,0x0E/255f),Edge=new(0x84/255f,0x8F/255f,0xA5/255f);
+    // The sketch's tokens: glass discs over the world, gold for the chosen path,
+    // rose for a command that asks to be pressed again.
+    static readonly Color Text=new(0xF5/255f,0xF1/255f,0xEB/255f),Glass=new(0x19/255f,0x2B/255f,0x32/255f,.9f),
+        Accent=new(0xF9/255f,0xC8/255f,0x0E/255f),Edge=new(0x84/255f,0x8F/255f,0xA5/255f),
+        Danger=new(0xC1/255f,0x49/255f,0x53/255f),Teal=new(0x0B/255f,0x39/255f,0x54/255f);
     PieNavigator? navigator;
     string waiting="",presented="";
     readonly List<Vector2> centres=[];
@@ -118,52 +121,56 @@ public partial class PieMenu : Control
         caption.Position=Centre-new Vector2(side,side)/2;caption.Size=new(side,side);
         QueueRedraw();
     }
+    // The sketch: commands are glass discs on a ring, each with its label beneath,
+    // linked to a hub that names the level; the hovered command and its link turn
+    // gold, a sub-pie carries a small gold mark, the back disc is smaller.
     public override void _Draw()
     {
         if(!Visible)return;
         var font=GetThemeDefaultFont();int size=GetThemeDefaultFontSize();
+        float item=radius*.19f,ring=radius*.74f,hub=radius*.4f,back=radius*.11f;
         for(int i=0;i+1<centres.Count;i++) {
-            DrawLine(centres[i],centres[i+1],Edge,2);DrawCircle(centres[i],radius*.12f,Panel);
-            DrawArc(centres[i],radius*.12f,0,Mathf.Tau,32,Edge,2);
+            DrawLine(centres[i],centres[i+1],Edge with {A=.65f},2);DrawCircle(centres[i],back,Glass);DrawArc(centres[i],back,0,Mathf.Tau,32,Edge,1);
         }
-        var centre=Centre;float inner=radius*.32f;
-        DrawCircle(centre,radius*1.04f,Panel with {A=.55f});
+        var centre=Centre;
         if(navigator!=null) {
-            var level=navigator.Level;int wedges=level.Wedges;float half=Mathf.Pi/wedges;
+            var level=navigator.Level;int wedges=level.Wedges;
             for(int slot=1;slot<=wedges;slot++) {
-                var item=level.At(slot);bool back=slot==level.Back,hovered=slot==navigator.Hovered;
-                if(item==null&&!back)continue;
+                var node=level.At(slot);bool isBack=slot==level.Back,hovered=slot==navigator.Hovered;
+                if(node==null&&!isBack)continue;
                 float angle=Mathf.Tau*(slot-1)/wedges-Mathf.Pi/2;
-                var fill=back ? Panel with {A=.7f} : item!.Enabled ? Panel : Panel with {A=.45f};
-                if(hovered)fill=fill.Lerp(Accent,back||item!.Enabled ? .35f : .12f);
-                DrawPolygon(Wedge(centre,inner,radius,angle-half+.02f,angle+half-.02f),[fill]);
-                if(hovered)DrawArc(centre,radius,angle-half+.02f,angle+half-.02f,16,Accent,3);
-                var at=centre+new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*radius*.66f;
-                var colour=back||item!.Enabled ? Text : Text with {A=.5f};
-                if(!back) {
-                    DrawCircle(at-new Vector2(0,size*.9f),size*.75f,Edge with {A=.35f});
-                    Centred(font,item!.Initials,at-new Vector2(0,size*.6f),size,colour);
+                var direction=new Vector2(Mathf.Cos(angle),Mathf.Sin(angle));var at=centre+direction*ring;
+                DrawLine(centre+direction*hub,at-direction*(isBack ? back : item),hovered ? Accent with {A=.7f} : Edge with {A=.45f},hovered ? 3 : 2);
+                if(isBack) {
+                    DrawCircle(at,back,hovered ? Glass.Lerp(Accent,.25f) : Glass);DrawArc(at,back,0,Mathf.Tau,32,hovered ? Accent : Edge,hovered ? 2 : 1);
+                    Centred(font,"‹",at,size,Text);
+                    Centred(font,"Back",at+new Vector2(0,back+size*.7f),Math.Max(10,(int)(size*.75f)),Text with {A=.8f},radius*.8f,true);
+                    continue;
                 }
-                string text=back ? "‹ Back" : item!.Label+(item.Leaf ? "" : " ▸");
-                Centred(font,text,at+new Vector2(0,size*.8f),Math.Max(10,(int)(size*.8f)),colour,radius*.62f);
-                if(ShowDigits&&!back)Centred(font,slot.ToString(),centre+new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*radius*.92f,Math.Max(9,size/2),Text with {A=.35f});
+                bool armed=navigator.Armed?.ToString()==node!.Id.ToString();
+                var border=!node.Enabled ? Edge with {A=.5f} : armed||(node.Confirm&&hovered) ? Danger : hovered ? Accent : Edge;
+                if(hovered&&node.Enabled)DrawCircle(at,item+5,Accent with {A=.18f});
+                DrawCircle(at,item,!node.Enabled ? Glass with {A=.6f} : hovered ? Glass.Lerp(Accent,.18f) : Glass);
+                DrawArc(at,item,0,Mathf.Tau,48,border,hovered||armed ? 2 : 1);
+                var ink=node.Enabled ? Text : Text with {A=.55f};
+                Centred(font,node.Initials,at,Math.Max(10,(int)(item*.78f)),ink);
+                if(!node.Leaf) {
+                    var mark=at+new Vector2(item*.72f,item*.72f);DrawCircle(mark,item*.3f,Accent);
+                    Centred(font,"▸",mark,Math.Max(9,(int)(item*.4f)),Teal);
+                }
+                Centred(font,node.Label,at+new Vector2(0,item+size*.75f),Math.Max(10,(int)(size*.8f)),ink,radius*.95f,true);
+                if(ShowDigits)Centred(font,slot.ToString(),at+new Vector2(-item*.9f,-item*.9f),Math.Max(9,size/2),Edge);
             }
         }
-        DrawCircle(centre,inner*.96f,Panel);DrawArc(centre,inner*.96f,0,Mathf.Tau,48,Edge,2);
+        DrawCircle(centre,hub,Glass);DrawArc(centre,hub,0,Mathf.Tau,64,Accent,2);
     }
-    void Centred(Font font,string text,Vector2 at,int size,Color colour,float width=-1)
+    // Text centred on a point; labels over the world take the sketch's dark shadow.
+    void Centred(Font font,string text,Vector2 at,int size,Color colour,float width=-1,bool shadow=false)
     {
         var extent=font.GetStringSize(text,HorizontalAlignment.Center,width,size);
-        DrawString(font,new(at.X-(width>0 ? width : extent.X)/2,at.Y+extent.Y/4),text,HorizontalAlignment.Center,width,size,colour);
-    }
-    static Vector2[] Wedge(Vector2 centre,float inner,float outer,float from,float to)
-    {
-        const int steps=12;var points=new Vector2[(steps+1)*2];
-        for(int i=0;i<=steps;i++) {
-            float a=from+(to-from)*i/steps;var direction=new Vector2(Mathf.Cos(a),Mathf.Sin(a));
-            points[i]=centre+direction*outer;points[(steps+1)*2-1-i]=centre+direction*inner;
-        }
-        return points;
+        var origin=new Vector2(at.X-(width>0 ? width : extent.X)/2,at.Y+extent.Y/4);
+        if(shadow)DrawString(font,origin+new Vector2(0,1),text,HorizontalAlignment.Center,width,size,new Color(0,0,0,.75f));
+        DrawString(font,origin,text,HorizontalAlignment.Center,width,size,colour);
     }
     // Desktop: cursor direction, clicks, Backspace, Enter and digits 1–8.
     public override void _GuiInput(InputEvent input)

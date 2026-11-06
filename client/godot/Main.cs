@@ -51,6 +51,8 @@ public partial class Main : Control
     readonly HBoxContainer place=new() {Name="current-place",MouseFilter=MouseFilterEnum.Ignore};
     readonly Label placeTitle=new() {Name="current-place-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     bool home=true;
+    // How long the last pie took from opening to its authored contents; qualification telemetry.
+    long? pieReadyMs;
     readonly Label connectionTitle=new() {Name="connection-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     readonly Label connectionHelp=new() {Name="connection-help",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     bool showConnection;
@@ -82,7 +84,7 @@ public partial class Main : Control
     public Task ViewsDisposed { get; private set; } = Task.CompletedTask;
     QuestionHub? questions;
     readonly PieMenu pie=new();
-    readonly HudBar hud=new() {AnchorLeft=0,AnchorRight=1,AnchorTop=1,AnchorBottom=1,OffsetTop=-60,Visible=false};
+    readonly HudBar hud=new() {AnchorLeft=0,AnchorRight=1,AnchorTop=1,AnchorBottom=1,OffsetTop=-HudBar.Height,Visible=false};
     readonly Label pointerLabel=new() {Name="pointer-label",Visible=false,MouseFilter=MouseFilterEnum.Ignore};
     ScenePanel.Selection? hovered;
     Vector2? hoverPoint;
@@ -251,7 +253,7 @@ public partial class Main : Control
             case "text_larger": gui.TextSize(4);break;
             case "text_smaller": gui.TextSize(-4);break;
             case "opaque": gui.ToggleOpacity();break;
-            case "vr": if(xr.Running)xr.StopSession();else xr.Start();break;
+            case "vr": ToggleVr();break;
             case "workspace_show": representations?.PlacePersonal();xr.ShowWorkspace();break;
             case "workspace_move": representations?.PlacePersonal();xr.MoveWorkspace();break;
             case "workspace_hide": xr.HideWorkspace();break;
@@ -283,6 +285,7 @@ public partial class Main : Control
         pie.ShowDigits=!gui.Spatial;
         pie.Open(at??size/2,gui.Spatial ? 300 : Math.Clamp(Math.Min(size.X,size.Y)*.22f,130,240),"Reading "+name+"…");
         pieOccurrence=hit;pieAt=gui.Spatial ? null : at;long expected=++pieGeneration;
+        var opened=System.Diagnostics.Stopwatch.StartNew();
         // A HUD sub-pie or the device menu is already in hand; nothing to read.
         if(local!=null){if(gui.Spatial&&at is Vector2 origin)xr.PlacePieAtHud(origin);pie.Present(local,"");Notify();return true;}
         Subject exact;
@@ -291,7 +294,7 @@ public partial class Main : Control
         pieView=view;
         view.Projection+=message=>{
             if(expected!=pieGeneration)return;
-            try{pie.Present(MenuNode.Decode(Term.Parse(Json.S(message,"value"))),"Nothing is offered here.");}
+            try{pie.Present(MenuNode.Decode(Term.Parse(Json.S(message,"value"))),"Nothing is offered here.");pieReadyMs=opened.ElapsedMilliseconds;}
             catch(Exception error){ClosePie();statusText="This menu is unavailable: "+error.Message;}
             Notify();
         };
@@ -518,12 +521,12 @@ public partial class Main : Control
         if(hud.GetParent()!=strip){hud.GetParent()?.RemoveChild(hud);strip.AddChild(hud);}
         bool ready=accounts?.Setup!=null&&session is {IsExpired:false};
         loginView.Visible=showConnection || accounts?.Setup==null || accounts.Uncertain || session?.IsExpired==true;
-        loginBackdrop.BgColor=loginBackdrop.BgColor with {A=ready ? .94f : 1};
+        loginBackdrop.BgColor=loginBackdrop.BgColor with {A=ready ? .6f : 1};
         loginStatus.Text=statusText;loginStatus.Visible=statusText.Length>0;
         location.Visible=controllers.Visible=loginView.Visible;
         accountSetup.Visible=accounts!=null;
         // Status is one plain sentence in the HUD strip, never a permanent panel.
-        hud.Visible=ready&&!loginView.Visible;hud.Status=statusText;
+        hud.Visible=ready&&!loginView.Visible;hud.Status=statusText;hud.AutoDim=!gui.Spatial;
         hud.Attention=System.Text.RegularExpressions.Regex.Match(questions?.Caption??"",@"\d+").Value;
         bool attention=ready&&questions?.Expanded==true;
         bool form=!attention&&!home&&ready&&representations!=null;
@@ -549,7 +552,7 @@ public partial class Main : Control
     // its target; the attention list and local tools open on the left.
     void Layout()
     {
-        var size=workspaceShell.Size;const float edge=16,strip=72,corner=48;
+        var size=workspaceShell.Size;const float edge=16,strip=HudBar.Height,corner=48;
         place.Position=new(edge+4,edge);
         float width=Math.Min(size.X-2*edge,Math.Clamp(size.X*.42f,420,760));
         subjectPanel.Position=new(dockLeft ? edge : size.X-width-edge,edge);
@@ -641,18 +644,28 @@ public partial class Main : Control
     {
         action?.Cancel(); CloseSession(); state = "offline"; statusText = "Disconnected. Your key and unsent work stay on this device."; UpdateButtons(); Notify();
     }
+    // Entering or leaving VR always says what happened, in the HUD status.
+    void ToggleVr()
+    {
+        if (accounts?.Human == null) statusText = "Sign in before entering VR.";
+        else if (xr.Running) { xr.StopSession(); statusText = "Back in 3D."; }
+        else if (xr.Start()) statusText = "In VR. F9 or Escape returns to 3D.";
+        else statusText = xr.Status;
+        Notify();
+    }
     public override void _UnhandledKeyInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed:true, Echo:false, Keycode:Key.F9 } && accounts?.Human!=null && xr.Available && !xr.Running) {
-            xr.Start();GetViewport().SetInputAsHandled();Notify();return;
-        }
+        // F9 enters and leaves VR; Escape also leaves it once nothing else is open.
+        if (@event is InputEventKey { Pressed:true, Echo:false, Keycode:Key.F9 }) { ToggleVr();GetViewport().SetInputAsHandled();return; }
         // The Menu key opens the pointed target's pie where it is, or the space's at the centre.
         if (@event is InputEventKey { Pressed:true, Echo:false, Keycode:Key.Menu } && !pie.IsOpen) {
             if(OpenPie(hovered,hovered==null ? null : hoverPoint))GetViewport().SetInputAsHandled();return;
         }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { ClosePie();GetViewport().SetInputAsHandled();return; }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
-            if (representations?.Visible == true) { representations.Cancel();ShowHome(); } else action?.Cancel();
+            if (representations?.Visible == true) { representations.Cancel();ShowHome(); }
+            else if (xr.Running) { ToggleVr(); }
+            else action?.Cancel();
             GetViewport().SetInputAsHandled(); Notify();
         }
     }
@@ -712,7 +725,7 @@ public partial class Main : Control
         pending = store?.Snapshot?.Pending.Count, world_accepted = worldAccepted, live_sockets = SignedView.LiveSockets, ignored_projections = SignedView.IgnoredProjections, question_receiver_ready = questions?.Ready,
         current_location = navigationAvailable ? navigation?.Location.ToString() : null, assignment_revision = navigationAvailable ? navigation?.Revision.ToString() : null,
         physical_selection = projection?.Selection, physical_tick = projection?.Sample?.Tick, scene_count = scene?.Count,
-        operation_available = operations?.Available, operation_status = operations?.StatusText, status = statusText,
+        operation_available = operations?.Available, operation_status = operations?.StatusText, status = statusText, pie_ready_ms = pieReadyMs,
         controller_status=xr?.Router?.Status,controller_metrics=xr?.Metrics });
     internal LocalStore ActiveStore => store ?? throw new InvalidOperationException("No active store.");
     internal SignedSession ActiveSession => session ?? throw new InvalidOperationException("No active session.");

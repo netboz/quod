@@ -214,14 +214,18 @@ control. Physical WASD/QE positions move an observer camera; middle-drag changes
 An explicitly selected controlled body instead uses the signed native control
 lane and authoritative viewpoint. Focus loss releases local input. No collision
 or domain simulation runs in the client.
-The normal build starts in desktop 3D with the existing OpenGL renderer and
-OpenXR enabled. If no supported runtime or headset initializes, the desktop
-client continues without VR. After account sign-in with an initialized runtime,
-F9 or **This device ▸ Enter VR** enters VR while the client is focused;
-**This device ▸ Return to 3D** leaves it.
+The normal build renders with Vulkan (Godot's Mobile renderer) on desktop and
+in VR alike: SteamVR's OpenXR runtime on Linux accepts Vulkan or OpenGL 4.3+,
+and the engine's OpenGL path only offers 3.3. OpenXR is enabled at start; if no
+supported runtime or headset initializes, the desktop client continues without
+VR. After account sign-in, **F9** or **This device ▸ Enter VR** enters VR while
+the client is focused; **F9**, **Escape** (once nothing else is open) or
+**This device ▸ Return to 3D** leaves it. Each attempt reports its outcome in
+the HUD status, including why VR could not start.
 These actions change local presentation, not the current agent or space.
-The runtime and headset must be available when Quod opens. Without them, Godot
-may log an OpenXR initialization error while the desktop client continues.
+The runtime and headset must be available when Quod opens: on Linux,
+`~/.config/openxr/1/active_runtime.json` must point at SteamVR's
+`steamxr_linux64.json`.
 
 Launch the normal client:
 

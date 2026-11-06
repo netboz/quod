@@ -304,22 +304,32 @@ gui_operation_guard(Subject, Name, Revision, Control, Values, Goal, Results) :-
     variant_digest(binding(Goal, Results), Digest).
 
 %% A menu's raw material: this exact subject's offered choices as pie items.
-%% Operations carry their form's own label, help and advisory availability;
-%% an operation whose recipe offers no form here is not listed. Views and
-%% inspections leave their caption to the menu vocabulary. Menus never nest
-%% other menus as choices. Reading this executes and grants nothing.
+%% Operations carry their form's own label, help and advisory availability,
+%% read from the form's root alone; the complete offer with its compiled tree
+%% is read when the operation is chosen. An operation whose recipe offers no
+%% form here is not listed. Views and inspections leave their caption to the
+%% menu vocabulary. Menus never nest other menus as choices. Reading this
+%% executes and grants nothing.
 no_follow(gui_menu_source/2).
 no_follow(gui_menu_subject/2).
-no_follow(gui_menu_item/4).
+no_follow(gui_menu_item/3).
+no_follow(gui_operation_caption/5).
 gui_menu_source(Entity, menu_source(Name, Items)) :-
     term_variables(Entity, []),
     gui_menu_subject(Entity, Subject),
     client_subject_name(Entity, Name),
     entity_eidolons(Entity, Choices),
-    (Subject = ontology_ref(_, _) -> Operations = []
-    ; gui_operations(Subject, Operations)),
-    findall(Item, (member(Choice, Choices),
-                   gui_menu_item(Subject, Choice, Operations, Item)), Items).
+    findall(Item, (member(Choice, Choices), gui_menu_item(Subject, Choice, Item)), Items).
+
+gui_operation_caption(Subject, Name, Label, Help, Availability) :-
+    gui_operation_form(Subject, Name, Local, _, Form),
+    findall(ontology_ref(N, A), gui_vocabulary(N, A), [ontology_ref(Ns, Anchor)]),
+    gui_component_tree(Form, Ns, [], _, component(Form, Classes, Attributes, _)),
+    in_ontology(Ns, Anchor, gui_component_schema(Classes, Attributes, form, Properties)),
+    member(property(label, Label), Properties), member(property(help, Help), Properties),
+    findall(binding(F, S), gui_form(Form, F, S), [binding(_, Declaration)]),
+    gui_submission(Declaration, _, operation(Permission, _), _),
+    gui_operation_availability(Local, Permission, Availability).
 
 gui_menu_subject(ontology_ref(Ns, Anchor), ontology_ref(Ns, Anchor)) :- !,
     current_ontology_identity(Ns, Anchor).
@@ -328,11 +338,10 @@ gui_menu_subject(Entity, entity_ref(Ns, Anchor, Entity)) :-
 gui_menu_subject(Class, class_ref(Ns, Anchor, Class)) :-
     isa(Class, Class), current_ontology_identity(Ns, Anchor).
 
-gui_menu_item(Subject, Choice, Operations, item(choice(Subject, Choice), Label, Help, Availability, [])) :-
+gui_menu_item(Subject, Choice, item(choice(Subject, Choice), Label, Help, Availability, [])) :-
     Choice = eidolon(operation(_), Name, _), !,
-    member(operation_view(Name, _, _, component(_, form, Properties, _), _, _, _, _, Availability), Operations),
-    member(property(label, Label), Properties), member(property(help, Help), Properties).
-gui_menu_item(Subject, Choice, _, item(choice(Subject, Choice), none, <<"">>, available, [])) :-
+    gui_operation_caption(Subject, Name, Label, Help, Availability).
+gui_menu_item(Subject, Choice, item(choice(Subject, Choice), none, <<"">>, available, [])) :-
     Choice = eidolon(Purpose, _, _), Purpose \== menu.
 
 gui_operation_availability(Subject, Permission, Availability) :-

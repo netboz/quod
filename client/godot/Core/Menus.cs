@@ -15,7 +15,9 @@ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled, 
     public string Signature => string.Join("|", Id, Label, Help, Enabled, Slot, Wedges, Back, Confirm, Target?.Subject, Target?.Choice)
         + "[" + string.Join(",", Children.Select(c => c.Signature)) + "]";
     public MenuNode? At(int slot) => Children.FirstOrDefault(c => c.Slot == slot);
-    public string Initials => string.Concat(Label.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2)
+    public string Initials => InitialsOf(Label);
+    // The fallback mark of a command without an authored icon: the first letters of its label.
+    public static string InitialsOf(string label) => string.Concat(label.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2)
         .Select(w => char.ToUpperInvariant(w[0])));
 
     // The read answers menu(Tree), or none when the subject offers no menu.

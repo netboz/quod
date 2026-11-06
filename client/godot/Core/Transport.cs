@@ -41,34 +41,57 @@ public static class Json
     }
 }
 
+// A node serves HTTPS with its own self-signed certificate, re-signed in place
+// from one long-lived key. The client trusts that key on first use, like SSH:
+// an empty pin accepts and records the first key; a pin accepts only that key.
 public sealed class Transport : IDisposable
 {
     readonly HttpClient client;
     readonly Uri origin;
-    readonly X509Certificate2Collection roots = [];
+    readonly object keyLock = new();
+    string pinnedKey;
     public Uri Origin => origin;
-    public Transport(string endpoint, string caFile)
+    // The key this transport has accepted: the given pin, or the first key seen.
+    public string NodeKey { get { lock (keyLock) return pinnedKey; } }
+    public bool KeyChanged { get; private set; }
+    public Transport(string address, string pinnedKey)
     {
-        origin = new Uri(endpoint);
-        if (origin.Scheme != "https" || origin.AbsolutePath != "/" || origin.UserInfo.Length != 0 || origin.Query.Length != 0 || origin.Fragment.Length != 0)
-            throw new FormatException("Use an HTTPS node origin, without a path or credentials.");
-        if (caFile.Length != 0) roots.ImportFromPemFile(caFile);
-        var handler = new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false };
-        if (roots.Count > 0) handler.ServerCertificateCustomValidationCallback = (_, certificate, _, errors) => ValidateCertificate(certificate, errors);
+        origin = new Uri(NodeOrigin(address));
+        this.pinnedKey = pinnedKey;
+        var handler = new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false,
+            ServerCertificateCustomValidationCallback = (_, certificate, _, _) => Accept(certificate) };
         client = new HttpClient(handler) { BaseAddress = origin, Timeout = Timeout.InfiniteTimeSpan,
             DefaultRequestVersion = HttpVersion.Version11, DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact };
     }
-    bool ValidateCertificate(X509Certificate? certificate, SslPolicyErrors errors)
+    // `host`, `host:port` or `https://host:port` (port 443 by default), normalized to the HTTPS origin.
+    public static string NodeOrigin(string address)
     {
-        if (certificate == null || (errors & (SslPolicyErrors.RemoteCertificateNameMismatch | SslPolicyErrors.RemoteCertificateNotAvailable)) != 0) return false;
-        using var chain = new X509Chain(); chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        chain.ChainPolicy.CustomTrustStore.AddRange(roots); chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        using var leaf = new X509Certificate2(certificate); return chain.Build(leaf);
+        string text = address.Trim();
+        if (!text.Contains("://")) text = "https://" + text;
+        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.Host.Length == 0 ||
+            uri.AbsolutePath != "/" || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0)
+            throw new FormatException("Enter the node address, e.g. quod-0.service.consul or IP:port.");
+        return uri.GetLeftPart(UriPartial.Authority);
+    }
+    public static string KeyOf(X509Certificate certificate)
+    {
+        using var leaf = new X509Certificate2(certificate);
+        return Convert.ToHexStringLower(SHA256.HashData(leaf.PublicKey.ExportSubjectPublicKeyInfo()));
+    }
+    bool Accept(X509Certificate? certificate)
+    {
+        if (certificate == null) return false;
+        string key = KeyOf(certificate);
+        lock (keyLock) {
+            if (pinnedKey.Length == 0) pinnedKey = key;
+            if (pinnedKey == key) return true;
+        }
+        KeyChanged = true; return false;
     }
     public ClientWebSocket Socket()
     {
         var socket = new ClientWebSocket();
-        if (roots.Count > 0) socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, errors) => ValidateCertificate(certificate, errors);
+        socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, _) => Accept(certificate);
         return socket;
     }
     public Uri SocketUri => new UriBuilder(origin) { Scheme = "wss", Path = "/api/views" }.Uri;
@@ -94,7 +117,7 @@ public sealed class Transport : IDisposable
             value["submitted"]?.ToString() == "false" || (int)response.StatusCode is 400 or 401 or 403 or 410 or 413 or 429);
         return value;
     }
-    public void Dispose() { client.Dispose(); foreach (var root in roots) root.Dispose(); }
+    public void Dispose() => client.Dispose();
 }
 
 // One authenticated session. This is a protocol adapter; it stores no domain KB.

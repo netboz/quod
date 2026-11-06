@@ -19,7 +19,6 @@ p.add_argument('--evidence', type=Path, required=True)
 p.add_argument('--private', type=Path, required=True)
 p.add_argument('--journey-private', type=Path)
 p.add_argument('--node', default='https://localhost:14570')
-p.add_argument('--ca', default='')
 p.add_argument('--desktop', action='store_true')
 a = p.parse_args()
 a.evidence = a.evidence.resolve(); a.private = a.private.resolve()
@@ -37,7 +36,7 @@ def run(phase, profile, extra=None, kill=False, label=None):
         env.update(M1B_ACCOUNT_BACKUP=str(a.journey_private / 'account-backup.json'), M1B_ORIGINAL=str(a.journey_private / 'original.json'))
     env.update(extra or {})
     display = ['--display-driver', 'wayland'] if a.desktop else ['--headless']
-    command = [str(a.export)] + display + ['--', '--qualification', '--profile', str(profile), '--node', a.node, '--ca', a.ca]
+    command = [str(a.export)] + display + ['--', '--qualification', '--profile', str(profile), '--node', a.node]
     def allow_owned_trace():
         # Only this qualification process and its descendants may inspect the
         # owned child if the unchanged watchdog detects a real shutdown hang.

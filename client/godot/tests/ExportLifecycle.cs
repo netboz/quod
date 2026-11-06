@@ -25,14 +25,16 @@ public partial class ExportChecks
     {
         bool expected = Env("M1B_TLS_EXPECT") == "accept";
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        using var transport = new Transport(Env("M1B_TLS_URL"), Env("M1B_TLS_CA"));
+        using var transport = new Transport(Env("M1B_TLS_URL"), Env("M1B_TLS_PIN"));
         bool http = false, websocket = false;
         try { http = (await transport.Send("/", null, timeout.Token))["tls"]?.ToString() == "ok"; }
         catch (HttpRequestException) when (!expected) { }
         using var socket = transport.Socket();
         try { await socket.ConnectAsync(transport.SocketUri, timeout.Token); websocket = true; }
         catch (System.Net.WebSockets.WebSocketException) when (!expected) { }
-        Check(http == expected && websocket == expected, "actual exported HTTPS and WSS trust hostname and validity: " + Env("M1B_TLS_CASE"));
+        bool remembered = !expected || transport.NodeKey == Env("M1B_TLS_KEY");
+        Check(http == expected && websocket == expected && remembered,
+            "actual exported HTTPS and WSS accept only the first or remembered node key: " + Env("M1B_TLS_CASE"));
         Console.WriteLine("M1B_TLS_PASS"); Console.Out.Flush(); await app.CloseApplication();
     }
     async Task Mouse(OperationsPanel operations, Offer offered)
@@ -89,7 +91,7 @@ public partial class ExportChecks
         var saved = app.ActiveStore.Snapshot!;
         using var key = Identity.FromPayload(saved.Payload);
         using var store = new LocalStore(profile + "-completed-account-recovery"); store.Create(saved.Payload);
-        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.CaFile));
+        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.NodeKey(saved.Endpoint)));
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5)); await session.Authenticate(timeout.Token);
         var human = JsonSerializer.Deserialize<Actor>(original["human"]!.ToJsonString())!;
         using var socket = new TcpClient(); await socket.ConnectAsync("127.0.0.1", int.Parse(Env("M1B_CONTROL_PORT")), timeout.Token);
@@ -120,7 +122,7 @@ public partial class ExportChecks
         using var store = new LocalStore(profile + "-source-observer"); store.Create(saved.Payload);
         var human = JsonSerializer.Deserialize<Actor>(original["human"]!.ToJsonString())!;
         store.Update(s => s.Accounts[Env("M1B_NETWORK")] = new(human, original["setup"]!.ToString()));
-        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.CaFile));
+        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.NodeKey(saved.Endpoint)));
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         await session.Authenticate(timeout.Token);
         var accounts = new Accounts(session, store); await accounts.Discover(timeout.Token);
@@ -178,7 +180,7 @@ public partial class ExportChecks
         var saved = app.ActiveStore.Snapshot!;
         using var key = Identity.FromPayload(saved.Payload);
         using var store = new LocalStore(profile + "-question-author"); store.Create(saved.Payload);
-        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.CaFile));
+        using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.NodeKey(saved.Endpoint)));
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5)); await session.Authenticate(timeout.Token);
         var human = JsonSerializer.Deserialize<Actor>(original["human"]!.ToJsonString())!;
         var setup = Term.Parse(original["setup"]!.ToString()).Require("account", 6);

@@ -10,18 +10,21 @@ choose a separate profile. Without that argument the ordinary platform user
 data directory is used. Profiles, active keys and backups are private user data;
 they are never installed into or supplied by this package.
 
-Enter your HTTPS node origin and its explicitly trusted CA when required.
-The initial origin is https://localhost:14570; replace it with your intended
-node. No service, account, sign-in, keys or fixture is installed by this package.
+Enter your node's address (IP:port) on the opening screen.
+No service, account, sign-in, keys or fixture is installed by this package.
 It does not install a server or replace a network. Reconnect resolves original
 work; it never grants permission to repeat an uncertain operation.
 
 The normal app starts in desktop 3D. If a supported OpenXR runtime and headset
 initialize, Enter VR · F9 appears after account sign-in. Return to 3D is in
 the headset menu and on the desktop window. With no headset, VR controls stay
-hidden. Profile/node/CA arguments follow the -- separator, for example:
-./quod -- --profile "/absolute/private profile" --node https://your-node:14570 --ca /absolute/trusted-ca.pem
-Use your real node and trust paths; no example endpoint or CA is bundled.
+hidden. Enter the node address (a name or IP:port; port 443 by default) on
+the opening screen, or pass
+profile/node arguments after the -- separator, for example:
+./quod -- --profile "/absolute/private profile" --node quod-0.service.consul
+The first connection trusts and remembers that node's key, like SSH; later
+runs reconnect to the saved address and refuse a different key. No example
+node is bundled.
 The server must provide the matching qualified space/world-name view contract
 and GUI resources. Compatibility with an arbitrary older endpoint is not qualified.
 

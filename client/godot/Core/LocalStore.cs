@@ -18,8 +18,10 @@ public sealed class LocalState
     public Dictionary<string, Account> Accounts { get; set; } = [];
     public List<SignedWork> Pending { get; set; } = [];
     public Dictionary<string,SourceDraft> SourceDrafts { get; set; } = [];
-    public string Endpoint { get; set; } = "https://localhost:14570";
-    public string CaFile { get; set; } = "";
+    public string Endpoint { get; set; } = "";
+    // Node origin -> SHA-256 of the HTTPS key first accepted there.
+    public Dictionary<string, string> NodeKeys { get; set; } = [];
+    public string NodeKey(string origin) => NodeKeys.GetValueOrDefault(origin, "");
 }
 
 // Linux active plaintext-key storage, separate from passphrase-encrypted backups.
@@ -64,6 +66,8 @@ public sealed class LocalStore : IDisposable
         if (value.Version != 1) throw new IOException("Unsupported active identity version.");
         if(value.SourceDrafts==null || value.SourceDrafts.Any(d=>d.Key.Length==0 || d.Value==null || d.Value.Baseline==null || d.Value.Text==null))
             throw new IOException("Invalid saved source draft.");
+        if(value.NodeKeys==null || value.NodeKeys.Any(k=>!System.Text.RegularExpressions.Regex.IsMatch(k.Value,"^[0-9a-f]{64}$")))
+            throw new IOException("Invalid saved node key.");
         using var identity = Identity.FromPayload(value.Payload);
         foreach (var (network, account) in value.Accounts) {
             if (Identity.Decode(network).Length != 32 || Identity.Decode(account.Human.Anchor).Length != 32)

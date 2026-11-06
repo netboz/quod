@@ -52,7 +52,7 @@ public sealed class Accounts(SignedSession session, LocalStore store)
         if (preparation.Name == "complete") { RememberSetup(human, preparation.Require("complete", 1)[0]); return; }
         var args = preparation.Require("prepared", 3);
         if (args[0].ToString() != human.Ontology.ToString()) throw new FormatException("Setup selected unexpected account storage.");
-        StorageDescription = $"Account policy selected the existing account ontology {human.Namespace}, genesis {human.Anchor}, for S0. This selection applies to initial setup.";
+        StorageDescription = "Your starting space will be saved in your personal account.";
         Prepared = preparation;
     }
     public Term? Prepared { get; private set; }

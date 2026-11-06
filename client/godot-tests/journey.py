@@ -238,7 +238,7 @@ try:
         if a.journey=='navigation':
             env.update(M3_ROUTE=str(a.private/'route.json'),M3_SCENE_CAPTURE=str(a.evidence/'recursive-scene.png'),M1B_RESULT=str(a.evidence/(phase+'-result.json')))
         display = ['--display-driver', 'wayland'] if a.desktop else ['--headless']
-        command = [str(a.export.resolve())] + display + ['--', '--qualification', '--profile', str(a.private / 'identity'), '--node', origin, '--ca', str(ca)]
+        command = [str(a.export.resolve())] + display + ['--', '--qualification', '--profile', str(a.private / 'identity'), '--node', origin]
         start = time.monotonic()
         child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, text=True)
         output = queue.Queue()

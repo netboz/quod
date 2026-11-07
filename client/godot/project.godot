@@ -20,5 +20,6 @@ renderer/rendering_method="mobile"
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)
 [xr]
 openxr/enabled=true
+shaders/enabled=true
 openxr/startup_alert=false
 openxr/default_action_map="res://xr_actions.tres"

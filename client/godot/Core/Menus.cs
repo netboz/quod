@@ -8,11 +8,11 @@ namespace Quod.Client;
 public sealed record MenuTarget(Term Subject, Term Choice, string Label = "");
 
 public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled, int Slot, int Wedges, int Back,
-    MenuTarget? Target, bool Confirm, MenuNode[] Children)
+    MenuTarget? Target, bool Confirm, MenuNode[] Children, string? Image = null)
 {
     public bool Leaf => Target != null;
     // Everything a presentation depends on; an equal signature is the same pie.
-    public string Signature => string.Join("|", Id, Label, Help, Enabled, Slot, Wedges, Back, Confirm, Target?.Subject, Target?.Choice)
+    public string Signature => string.Join("|", Id, Label, Help, Enabled, Slot, Wedges, Back, Confirm, Target?.Subject, Target?.Choice, Image)
         + "[" + string.Join(",", Children.Select(c => c.Signature)) + "]";
     public MenuNode? At(int slot) => Children.FirstOrDefault(c => c.Slot == slot);
     public string Initials => InitialsOf(Label);
@@ -34,6 +34,7 @@ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled, 
             var p = a[2].Items.Select(x => x.Require("property", 2)).ToDictionary(x => x[0].Name, x => x[1]);
             string label = p["label"].TextValue, help = p["help"].TextValue;
             if (label.Length == 0) throw new FormatException("Unlabelled wedge.");
+            string? image = Image(p.GetValueOrDefault("image"));
             bool Flag(string key) => p[key].Kind == "atom" && p[key].Name is "true" or "false"
                 ? p[key].Name == "true" : throw new FormatException("Invalid menu flag.");
             int slot = p["slot"].Kind == "atom" && p["slot"].Name == "auto" ? 0 : (int)p["slot"].Integer;
@@ -42,7 +43,7 @@ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled, 
                 var t = p["target"].Require("choice", 2);
                 if (t[0].Name is not ("entity_ref" or "class_ref" or "ontology_ref")) throw new FormatException("Unsupported menu subject.");
                 t[1].Require("eidolon", 3)[2].Require("recipe", 3);
-                return new(a[0], label, help, Flag("enabled"), slot, wedges, 0, new(t[0], t[1], label), Flag("confirm"), []);
+                return new(a[0], label, help, Flag("enabled"), slot, wedges, 0, new(t[0], t[1], label), Flag("confirm"), [], image);
             }
             if (wedges != int.MaxValue && (slot < 1 || slot > wedges)) throw new FormatException("Invalid nested menu slot.");
             int own = (int)p["wedges"].Integer;
@@ -51,7 +52,16 @@ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled, 
             var children = a[3].Items.Select(c => Read(c, own)).ToArray();
             var slots = children.Select(c => c.Slot).ToArray();
             if (slots.Distinct().Count() != slots.Length || slots.Contains(back)) throw new FormatException("Overlapping wedges.");
-            return new(a[0], label, help, Flag("enabled"), slot, own, back, null, false, children);
+            return new(a[0], label, help, Flag("enabled"), slot, own, back, null, false, children, image);
+        }
+        // An authored image: the asset's digest with its file extension, as served.
+        static string? Image(Term? value)
+        {
+            if (value == null || value.Kind == "atom" && value.Name == "none") return null;
+            var asset = value.Require("asset", 2);
+            string digest = asset[0].TextValue, extension = asset[1].TextValue switch { "image/png" => "png", "image/jpeg" => "jpg", _ => throw new FormatException("Unsupported image type.") };
+            if (!System.Text.RegularExpressions.Regex.IsMatch(digest, "^[a-f0-9]{64}$")) throw new FormatException("Invalid image digest.");
+            return digest + "." + extension;
         }
         var root = Read(view.Require("menu", 1)[0], int.MaxValue);
         if (root.Leaf || root.Back != 0) throw new FormatException("A pie starts at a menu.");

@@ -561,7 +561,8 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     Create=hd(Offers),
     {Outcome,Bytes}=m2_create(C,Ns,Create,element(7,Create)),
     [{result,space,S1={entity_ref,Ns,Anchor,Id}},{result,location,{placed,S0,Near}},{result,owner,Owner}]=m1a_output(Outcome),
-    ?assertEqual({transform,1000,0,0,0,0,0},Near),
+    %% In front of the agent: 2 m clearance plus half the default 100 m depth.
+    ?assertEqual({transform,0,0,-52000,0,0,0},Near),
     ?assertEqual(Owner,m1a_read(User,{attribute,Id,owner,{0}})),
     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})),
     ?assertEqual({placed,S0,Near},m1a_read(User,{space_location,Id,{0}})),

@@ -49,10 +49,12 @@ public partial class Main : Control
     readonly VBoxContainer connectionDetails=new() { Visible=false };
     readonly VBoxContainer accountSetup=new();
     readonly HBoxContainer place=new() {Name="current-place",MouseFilter=MouseFilterEnum.Ignore};
-    readonly Label placeTitle=new() {Name="current-place-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.WordSmart};
+    readonly Label placeTitle=new() {Name="current-place-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.Off};
     bool home=true;
     // How long the last pie took from opening to its authored contents; qualification telemetry.
     long? pieReadyMs;
+    // A headset present at launch means VR after sign-in, until the user leaves it.
+    bool vrLeft;
     readonly Label connectionTitle=new() {Name="connection-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     readonly Label connectionHelp=new() {Name="connection-help",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     bool showConnection;
@@ -157,7 +159,7 @@ public partial class Main : Control
         xr=new() { Name="openxr-input" };scene.Viewport.AddChild(xr);
         xr.Configure(scene,gui,models,()=>controls,()=>GuiOpen || gui.NativePressed,pie,hit=>OpenPie(hit,null));
         pie.Selected+=chosen=>{var occurrence=pieOccurrence;var at=pieAt;ClosePie();Activate(chosen,occurrence,at);};
-        gui.Surface.AddChild(hud);hud.Theme=gui.Appearance;
+        gui.Surface.AddChild(hud);hud.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
         hud.Activated+=(command,control)=>{
             if(hud.Commands is not {} commands||!OpenPie(null,control.GetGlobalRect().GetCenter(),local:commands))return;
             if(pie.Choose(command.Slot))pie.Commit();
@@ -227,25 +229,26 @@ public partial class Main : Control
         if(session==null||accounts?.Human==null||store==null)return;
         var purpose=chosen.Choice.Require("eidolon",3)[0];
         if(purpose is {Kind:"atom",Name:"menu"}){OpenPie(null,at,chosen.Subject);return;}
-        if(purpose is {Kind:"atom",Name:"attention"}){if(questions!=null){OverlayChanging();questions.Show();Notify();}return;}
+        if(purpose is {Kind:"atom",Name:"attention"}){if(questions!=null){OverlayChanging();if(questions.Expanded)questions.Close();else questions.Show();Notify();}return;}
         if(at is Vector2 point)dockLeft=point.X>workspaceShell.Size.X/2;
         EnsureRepresentations().OpenChoice(session,accounts,store,chosen,occurrence);ShowInspector();
     }
     // "This device" is the one client-authored command (decision 3).
     MenuNode DeviceMenu()
     {
-        MenuNode Item(int slot,string id,string label,int wedges=8)=>new(Term.Atom("device_"+id),label,"",true,slot,wedges,0,
-            new MenuTarget(Term.Atom("this_device"),Term.Atom(id)),false,[]);
+        static string Bundled(string icon)=>"res://assets/icons/"+icon+".png";
+        MenuNode Item(int slot,string id,string label,string icon,int wedges=8)=>new(Term.Atom("device_"+id),label,"",true,slot,wedges,0,
+            new MenuTarget(Term.Atom("this_device"),Term.Atom(id)),false,[],Bundled(icon));
         var workspace=new MenuNode(Term.Atom("device_workspace"),"Workspace",gui.Spatial ? "" : "In VR only.",gui.Spatial,7,8,3,null,false,
-            [Item(1,"workspace_show","Recenter"),Item(2,"workspace_move",xr.MovingWorkspace ? "Place panel" : "Move panel"),
-             Item(5,"workspace_hide","Hide"),Item(7,"workspace_nearer","Nearer"),Item(8,"workspace_farther","Farther")]);
+            [Item(1,"workspace_show","Recenter","recenter"),Item(2,"workspace_move",xr.MovingWorkspace ? "Place panel" : "Move panel","move_panel"),
+             Item(5,"workspace_hide","Hide","hide"),Item(7,"workspace_nearer","Nearer","nearer"),Item(8,"workspace_farther","Farther","farther")],Bundled("move_panel"));
         var tools=new MenuNode(Term.Atom("device_tools"),"Tools","",true,6,8,2,null,false,
-            [Item(1,"create","Create in a storage"),Item(3,"account_source","My account's source"),
-             Item(4,"account_controls","Account controls"),Item(5,"controllers","Connected controllers")]);
+            [Item(1,"create","Create in a storage","create_storage"),Item(3,"account_source","My account's source","source"),
+             Item(4,"account_controls","Account controls","account_controls"),Item(5,"controllers","Connected controllers","controllers")],Bundled("account_controls"));
         return new(Term.Atom("device"),"This device","",true,0,8,0,null,false,
-            [Item(1,"text_larger","Larger text"),Item(2,"opaque",gui.OpaquePanels ? "Tinted panels" : "Opaque panels"),
-             Item(3,"vr",xr.Running ? "Return to 3D" : "Enter VR"),Item(4,"account","Account and keys"),
-             Item(5,"text_smaller","Smaller text"),tools,workspace]);
+            [Item(1,"text_larger","Larger text","text_larger"),Item(2,"opaque",gui.OpaquePanels ? "Tinted panels" : "Opaque panels","panels_opacity"),
+             Item(3,"vr",xr.Running ? "Return to 3D" : "Enter VR","vr"),Item(4,"account","Account and keys","account"),
+             Item(5,"text_smaller","Smaller text","text_smaller"),tools,workspace],Bundled("device"));
     }
     internal void DeviceAction(string action)
     {
@@ -452,7 +455,9 @@ public partial class Main : Control
         bool returnHome=home;
         if(representations?.Resume(consumer,accounts,store!)!=true)home=true;
         else home=returnHome;
-        UpdateWorkspace();await Task.CompletedTask;
+        UpdateWorkspace();
+        if(xr.Available&&!xr.Running&&!vrLeft)ToggleVr();
+        await Task.CompletedTask;
     }
     void RetireWorld()
     {
@@ -535,7 +540,7 @@ public partial class Main : Control
         bool previewNear=subjectOnly&&representations!.NearOccurrence&&ReferenceEquals(representations.Occurrence?.Owner,representations.Preview);
         loginView.Visible&=!subjectOnly;
         attentionPanel.Visible=attention;
-        place.Visible=ready&&!subjectOnly;
+        place.Visible=ready&&!gui.Spatial;
         placeTitle.Text=!navigationAvailable ? "Verifying where you are…" : navigation?.Space==null ? "You are nowhere yet"
             : projection?.Name is {Length:>0} placeName ? placeName : "Unnamed space";
         placeTitle.TooltipText=navigationAvailable ? navigation?.Location.ToString()??"" : "";
@@ -644,11 +649,36 @@ public partial class Main : Control
     {
         action?.Cancel(); CloseSession(); state = "offline"; statusText = "Disconnected. Your key and unsent work stay on this device."; UpdateButtons(); Notify();
     }
+    // Authored icons by served file; a fetch in flight or failed is a null entry.
+    readonly Dictionary<string,Texture2D?> icons=new();
+    // The texture for a node's authored image: bundled for the client's own
+    // commands, otherwise the ontology's content-addressed asset, fetched once.
+    Texture2D? Icon(MenuNode node)
+    {
+        if(node.Image is not string image)return null;
+        if(image.StartsWith("res://"))return GD.Load<Texture2D>(image);
+        if(icons.TryGetValue(image,out var texture))return texture;
+        icons[image]=null;
+        if(session is {IsExpired:false} consumer)_=FetchIcon(consumer,image);
+        return null;
+    }
+    async Task FetchIcon(SignedSession consumer,string image)
+    {
+        try {
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            // An icon is a small picture; the bound only stops a runaway transfer.
+            var bytes=await consumer.Transport.Icon(image,1<<20,deadline.Token);
+            var picture=new Image();
+            if((image.EndsWith(".png") ? picture.LoadPngFromBuffer(bytes) : picture.LoadJpgFromBuffer(bytes))!=Error.Ok)throw new FormatException("Unreadable icon.");
+            icons[image]=ImageTexture.CreateFromImage(picture);
+        } catch { return; }
+        if(!disposed){hud.RefreshIcons();pie.QueueRedraw();}
+    }
     // Entering or leaving VR always says what happened, in the HUD status.
     void ToggleVr()
     {
         if (accounts?.Human == null) statusText = "Sign in before entering VR.";
-        else if (xr.Running) { xr.StopSession(); statusText = "Back in 3D."; }
+        else if (xr.Running) { xr.StopSession(); vrLeft = true; statusText = "Back in 3D."; }
         else if (xr.Start()) statusText = "In VR. F9 or Escape returns to 3D.";
         else statusText = xr.Status;
         Notify();

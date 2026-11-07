@@ -95,17 +95,20 @@ public sealed class Transport : IDisposable
         return socket;
     }
     public Uri SocketUri => new UriBuilder(origin) { Scheme = "wss", Path = "/api/views" }.Uri;
-    public async Task<byte[]> Model(string digest,long allowance,CancellationToken cancellation)
+    public Task<byte[]> Model(string digest,long allowance,CancellationToken cancellation)=>Asset("/assets/models/"+digest+".glb",digest,allowance,cancellation);
+    public Task<byte[]> Icon(string file,long allowance,CancellationToken cancellation)=>Asset("/assets/icons/"+file,file.Split('.')[0],allowance,cancellation);
+    // A content-addressed asset: the bytes must hash to the digest the ontology named.
+    async Task<byte[]> Asset(string route,string digest,long allowance,CancellationToken cancellation)
     {
         if(!System.Text.RegularExpressions.Regex.IsMatch(digest,"^[a-f0-9]{64}$") || allowance<=0)throw new FormatException("Invalid asset request.");
-        using var response=await client.GetAsync("/assets/models/"+digest+".glb",HttpCompletionOption.ResponseHeadersRead,cancellation);
+        using var response=await client.GetAsync(route,HttpCompletionOption.ResponseHeadersRead,cancellation);
         response.EnsureSuccessStatusCode();
-        if(response.Content.Headers.ContentLength is long length && length>allowance)throw new FormatException("Model transfer bytes exceeded.");
+        if(response.Content.Headers.ContentLength is long length && length>allowance)throw new FormatException("Asset transfer bytes exceeded.");
         using var stream=await response.Content.ReadAsStreamAsync(cancellation);using var output=new MemoryStream();var buffer=new byte[16384];
         for(int count;(count=await stream.ReadAsync(buffer,cancellation))>0;) {
-            if(output.Length+count>allowance)throw new FormatException("Model transfer bytes exceeded.");output.Write(buffer,0,count);
+            if(output.Length+count>allowance)throw new FormatException("Asset transfer bytes exceeded.");output.Write(buffer,0,count);
         }
-        byte[] bytes=output.ToArray();if(Convert.ToHexStringLower(SHA256.HashData(bytes))!=digest)throw new FormatException("Model digest mismatch.");return bytes;
+        byte[] bytes=output.ToArray();if(Convert.ToHexStringLower(SHA256.HashData(bytes))!=digest)throw new FormatException("Asset digest mismatch.");return bytes;
     }
     public async Task<JsonNode> Send(string route, JsonObject? body, CancellationToken cancellation, HttpMethod? method = null)
     {

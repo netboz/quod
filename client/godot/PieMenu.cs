@@ -25,6 +25,8 @@ public partial class PieMenu : Control
     NumericsVector2 direction;
     NumericsVector2? axesSeen;
     public float Threshold { get; set; }=.3f;
+    // The texture for a node's authored image, when the host has it.
+    public Func<MenuNode,Texture2D?>? Icons { get; set; }
     public bool ShowDigits { get; set; }
     public bool IsOpen=>Visible;
     // Presentation work requested: unchanged input and projections add none.
@@ -153,7 +155,8 @@ public partial class PieMenu : Control
                 DrawCircle(at,item,!node.Enabled ? Glass with {A=.6f} : hovered ? Glass.Lerp(Accent,.18f) : Glass);
                 DrawArc(at,item,0,Mathf.Tau,48,border,hovered||armed ? 2 : 1);
                 var ink=node.Enabled ? Text : Text with {A=.55f};
-                Centred(font,node.Initials,at,Math.Max(10,(int)(item*.78f)),ink);
+                if(Icons?.Invoke(node) is Texture2D icon){float half=item*.62f;DrawTextureRect(icon,new Rect2(at-new Vector2(half,half),new Vector2(2*half,2*half)),false,node.Enabled ? Colors.White : new Color(1,1,1,.55f));}
+                else Centred(font,node.Initials,at,Math.Max(10,(int)(item*.78f)),ink);
                 if(!node.Leaf) {
                     var mark=at+new Vector2(item*.72f,item*.72f);DrawCircle(mark,item*.3f,Accent);
                     Centred(font,"▸",mark,Math.Max(9,(int)(item*.4f)),Teal);

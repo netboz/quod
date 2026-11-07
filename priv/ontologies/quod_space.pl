@@ -68,7 +68,7 @@ constructor(space, Space, Inputs) :-
     ; Requested = unplaced -> Placement = unplaced
     ; Requested = near_agent, current_principal(agent_instance_ref(Ns, Anchor, Agent)),
       in_ontology(Ns,Anchor, space_location(Agent, Location)),
-      space_near_location(Location, Placement)),
+      space_near_location(Location, Dimensions, Placement)),
     (Placement = unplaced -> Pose = transform(0,0,0,0,0,0)
     ; Placement = placed(Destination, Pose), space_place(Space, 0, Destination)),
     assertz(attribute(Space, transform, Pose)),
@@ -106,10 +106,20 @@ space_location(Entity, Location) :-
     (Destination == none -> Location = unplaced
     ; unique_solution(attribute(Entity,transform,Transform)),
       space_transform(Transform), Location = placed(Destination, Transform)).
-space_near_location(unplaced, unplaced).
-space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)),
-                   placed(Destination, transform(NearX,Y,Z,RX,RY,RZ))) :-
-    NearX is X + 1000.
+%% A new space appears in front of the agent (towards -Z, the agent's facing
+%% at rest), its near wall at arm's reach plus a step: 2 m from the agent's
+%% position (Yan's choice, 2026-11-07), so nothing opens onto the human's face.
+space_near_location(unplaced, _, unplaced).
+space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)), Dimensions,
+                   placed(Destination, transform(X,Y,NearZ,RX,RY,RZ))) :-
+    space_half_depth(Dimensions, HalfDepth),
+    NearZ is Z - 2000 - HalfDepth.
+space_half_depth(infinite, 0).
+space_half_depth(box(_, _, q(Value, Unit)), HalfDepth) :-
+    unique_solution(measure_vocabulary(Ns, Anchor)),
+    in_ontology(Ns, Anchor, convert(Value, Unit, <<"m">>, Metres)),
+    (integer(Metres) -> HalfDepth is Metres * 500
+    ; Metres = N / D, HalfDepth is (N * 500) // D).
 
 
 space_subject(Entity, Subject) :-
@@ -335,6 +345,11 @@ instance_of(quod:gui:button, space_create_submit).
 attribute(space_create(finite), label, <<"Create space">>).
 attribute(space_create(exact), label, <<"Create space with rational lengths">>).
 attribute(space_create(infinite), label, <<"Create infinite space">>).
+attribute(space_create(finite), image, Icon) :- space_icon(create_finite, Icon).
+attribute(space_create(exact), image, Icon) :- space_icon(create_exact, Icon).
+attribute(space_create(infinite), image, Icon) :- space_icon(create_infinite, Icon).
+%% The GUI vocabulary's icon catalogue, by name.
+space_icon(Name, Icon) :- menu_vocabulary(Gui, GuiAnchor), in_ontology(Gui, GuiAnchor, gui_icon(Name, Icon)).
 attribute(space_create(_), help, <<"The personal agent's human is the default owner, independently of the selected storage and placement. Creation does not enter the new space.">>).
 attribute(space_name, label, <<"Name">>).
 attribute(space_name, help, <<"The class default is supplied. Change it to use your own name.">>).
@@ -426,6 +441,8 @@ instance_of(quod:gui:form,space_travel_form(_,_,_,_)).
 instance_of(quod:gui:button,space_travel_submit).
 attribute(space_travel_form(_,_,_,placed(_,_)),label,<<"Enter space">>).
 attribute(space_travel_form(_,_,_,unplaced),label,<<"Leave space">>).
+attribute(space_travel_form(_,_,_,placed(_,_)),image,Icon) :- space_icon(enter,Icon).
+attribute(space_travel_form(_,_,_,unplaced),image,Icon) :- space_icon(leave,Icon).
 attribute(space_travel_form(_,_,_,_),help,
     <<"Move the same personal agent. Navigation follows the committed location. Leaving without a destination makes the agent unplaced.">>).
 attribute(space_travel_submit,label,<<"Move">>).
@@ -457,9 +474,10 @@ eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
     findall(Item,(member(Item,Own),space_menu_shows(Item)),Shows),
     findall(Item,(member(Offered,Own),\+ space_menu_shows(Offered),space_menu_action(Offered,Item)),Actions),
     findall(Item,space_menu_destination(Space,Ns,A,Item),Destinations),
-    append([group(<<"Create here">>,[slot(1)],[operation(class)],Class),
-            group(<<"Show as">>,[slot(2)],[operation(instance)],Shows),
-            group(<<"Inspect">>,[slot(3)],[prolog,inspection,workspace],Storage)|Actions],
+    space_icon(create_here,CreateIcon), space_icon(show_as,ShowIcon), space_icon(inspect,InspectIcon), space_icon(go_to,GoIcon),
+    append([group(<<"Create here">>,[slot(1),image(CreateIcon)],[operation(class)],Class),
+            group(<<"Show as">>,[slot(2),image(ShowIcon)],[operation(instance)],Shows),
+            group(<<"Inspect">>,[slot(3),image(InspectIcon)],[prolog,inspection,workspace],Storage)|Actions],
            [group(<<"Go to">>,[],[operation(instance)],Destinations)],Entries),
     (binary(Name), Name \== <<"">> -> Title = Name; Title = <<"Space">>),
     menu_vocabulary(Gui,GuiAnchor),
@@ -491,6 +509,9 @@ instance_of(quod:gui:button,space_show_submit).
 attribute(space_show_form(_,_,_,_,none),label,<<"No walls inside">>).
 attribute(space_show_form(_,_,_,_,wireframe),label,<<"Wire box walls">>).
 attribute(space_show_form(_,_,_,_,matrix),label,<<"Matrix walls">>).
+attribute(space_show_form(_,_,_,_,none),image,Icon) :- space_icon(show_none,Icon).
+attribute(space_show_form(_,_,_,_,wireframe),image,Icon) :- space_icon(wireframe,Icon).
+attribute(space_show_form(_,_,_,_,matrix),image,Icon) :- space_icon(matrix,Icon).
 attribute(space_show_form(_,_,_,_,_),help,<<"Changes how this space looks from inside. Nothing moves.">>).
 attribute(space_show_submit,label,<<"Show">>).
 gui_children(space_show_form(_,_,_,_,_),[space_show_submit]).

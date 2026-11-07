@@ -197,7 +197,7 @@ export function readImageAsset(asset) {
   const [hash, mime] = args(asset, 'asset', 2)
   const digest = binaryValue(hash, 'texture digest')
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid texture SHA-256')
-  oneOf(mime, ['image/jpeg'], 'texture media type')
+  oneOf(mime, ['image/png', 'image/jpeg'], 'image media type')
   return digest
 }
 

@@ -15,7 +15,7 @@ public sealed class QuestionHub : IDisposable
     readonly VBoxContainer choices=new() {SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};
     readonly ScrollContainer list=new() {Name="attention-list",HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,SizeFlagsVertical=Control.SizeFlags.ExpandFill};
     readonly Button attention=SpatialGui.ActionButton("Your attention · 0","attention");
-    readonly Button close=SpatialGui.ActionButton("Back","hide-attention");
+    readonly Button close=SpatialGui.ActionButton("Close","hide-attention");
     readonly Label notice=new() {Visible=false,AutowrapMode=TextServer.AutowrapMode.WordSmart};
     string? receiverError;
     string? active;

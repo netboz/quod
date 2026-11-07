@@ -432,12 +432,14 @@ hud_commands(hud(Tree)) :-
     menu_vocabulary(Gui, GuiAnchor),
     in_ontology(Gui, GuiAnchor, menu_tree(menu(<<"Commands">>, <<"">>, [wedges(Allowance)], Items), Tree)).
 
-hud_command(item(choice(Me, Choice), <<"Your attention">>, <<"Questions waiting for you">>, available, [])) :-
+hud_command(item(choice(Me, Choice), <<"Your attention">>, <<"Questions waiting for you">>, available, [image(Icon)])) :-
     current_ontology_identity(Ns, A), Me = entity_ref(Ns, A, me),
-    entity_eidolons(me, attention, _, [Choice]).
-hud_command(item(choice(Me, Choice), <<"Me">>, <<"Your settings, keys and account">>, available, [])) :-
+    entity_eidolons(me, attention, _, [Choice]), gui_icon(attention, Icon).
+hud_command(item(choice(Me, Choice), <<"Me">>, <<"Your settings, keys and account">>, available, [image(Icon)])) :-
     current_ontology_identity(Ns, A), Me = entity_ref(Ns, A, me),
-    entity_eidolons(me, menu, _, [Choice]).
+    entity_eidolons(me, menu, _, [Choice]), gui_icon(me, Icon).
+%% The vocabulary's icon catalogue, by name.
+gui_icon(Name, Icon) :- menu_vocabulary(Gui, GuiAnchor), in_ontology(Gui, GuiAnchor, gui_icon(Name, Icon)).
 hud_command(Item) :-
     space_location(personal, placed(entity_ref(Ns, A, Space), _)),
     in_ontology(Ns, A, (entity_eidolons(Space, hud, _, Choices), member(Choice, Choices),
@@ -518,6 +520,7 @@ instance_of(quod:gui:selection, hud_offer_choice).
 instance_of(quod:gui:selection, hud_offer_answer).
 instance_of(quod:gui:button, hud_offer_submit).
 attribute(hud_offers(_), label, <<"Offered commands">>).
+attribute(hud_offers(_), image, Icon) :- gui_icon(question, Icon).
 attribute(hud_offers(_), help, <<"Other agents asked to add these commands to your HUD. Nothing is added unless you accept.">>).
 attribute(hud_offer_choice, label, <<"Offer">>).
 attribute(hud_offer_choice, options, Options) :-
@@ -609,7 +612,9 @@ instance_of(quod:gui:slider,controller_teleport_fraction).
 instance_of(quod:gui:button,controller_save).
 controller_setting_id(Id) :- member(Id,[select,menu,drive,snap,teleport]).
 attribute(controller_settings(_,_,_),label,<<"VR controller settings">>).
+attribute(controller_settings(_,_,_),image,Icon) :- gui_icon(controllers,Icon).
 attribute(controller_reset_settings(_,_,_),label,<<"Repair VR controller settings">>).
+attribute(controller_reset_settings(_,_,_),image,Icon) :- gui_icon(controllers,Icon).
 attribute(controller_invalid_settings,label,<<"Saved bindings are no longer valid. Controller input is disabled. Reset explicitly to the current shared defaults.">>).
 attribute(controller_restore,label,<<"Reset to shared defaults">>).
 attribute(controller_hand(R),label,Label) :-

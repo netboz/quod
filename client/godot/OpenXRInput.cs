@@ -13,6 +13,8 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         public Node3D Aim { get; }=new() { Name="source-ray" };
         public Node3D Grip { get; }=new() { Name="source-grip" };
         public MeshInstance3D Pointer { get; }=new() { Visible=false };
+        // Where the finger rested on the pad last frame while pointing at a panel.
+        public Vector2? PadRest;
         bool Alive=>!disposed && IsInstanceValid(Tracker);
         public string Hand=>!Alive ? "none" : Tracker.Hand switch { XRPositionalTracker.TrackerHand.Left=>"left",XRPositionalTracker.TrackerHand.Right=>"right",_=>"none" };
         public string[] Profiles=>Alive && Tracker.Profile=="/interaction_profiles/htc/vive_controller" ? ["htc-vive"] : [];
@@ -128,10 +130,12 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.pie=pie;this.openPie=openPie;
         pie.Selected+=_=>MenuClosed();pie.Dismissed+=MenuClosed;
         AddChild(origin);origin.AddChild(camera);AddChild(panel);AddChild(pieViewport);AddChild(pieQuad);AddChild(hudViewport);AddChild(hudQuad);AddChild(rayLabel);
+        // The strip and the pie are the hand's own tools: they draw over any
+        // boundary or thing between the eye and them, never half behind it.
         hudQuad.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=hudViewport.GetTexture(),
-            Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled };
+            Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled,NoDepthTest=true,RenderPriority=120 };
         pieQuad.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=pieViewport.GetTexture(),
-            Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled };
+            Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled,NoDepthTest=true,RenderPriority=127 };
         panel.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=gui.Surface.GetTexture(),Transparency=BaseMaterial3D.TransparencyEnum.Alpha,CullMode=BaseMaterial3D.CullModeEnum.Disabled };
         panel.Visible=false;Router=new(this);Router.Changed+=()=>Changed?.Invoke();
     }
@@ -388,7 +392,26 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(pie.IsOpen){rayLabel.Visible=false;if((pieSource==null||input==pieSource)&&(pieQuad.Visible ? PieHit(input) : hit?.Point) is {} on)pie.PointerAt(on);return;}
         if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.Outline(null);return;}
         if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.Outline(null);}
-        if(hit is {} at)gui.Move(at.Point,gui.PresentationSurface);else if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();
+        if(hit is {} at){gui.Move(at.Point,gui.PresentationSurface);PadScroll(source,at.Point);}
+        else {source.PadRest=null;if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();}
+    }
+    // Sliding a finger on the pad while pointing at a panel scrolls it there,
+    // like a wheel: one step per fraction of the pad's travel. Pressing the
+    // pad keeps its authored binding; this reads the touch alone.
+    void PadScroll(Source source,Vector2 at)
+    {
+        var tracker=source.Tracker;
+        if(!IsInstanceValid(tracker)||tracker.GetInput("pad_touch").VariantType!=Variant.Type.Bool||!tracker.GetInput("pad_touch").AsBool()){source.PadRest=null;return;}
+        var axes=tracker.GetInput("pad_axes").AsVector2();
+        if(source.PadRest is not Vector2 rest){source.PadRest=axes;return;}
+        const float step=.12f;int steps=(int)((axes.Y-rest.Y)/step);
+        if(steps==0)return;
+        source.PadRest=new(axes.X,rest.Y+steps*step);
+        var button=steps>0 ? MouseButton.WheelUp : MouseButton.WheelDown;
+        for(int i=0;i<Math.Abs(steps);i++) {
+            gui.PresentationSurface.PushInput(new InputEventMouseButton { Position=at,GlobalPosition=at,ButtonIndex=button,Pressed=true,Factor=1 },true);
+            gui.PresentationSurface.PushInput(new InputEventMouseButton { Position=at,GlobalPosition=at,ButtonIndex=button,Pressed=false,Factor=1 },true);
+        }
     }
     public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.Outline(null);}
     // Feedback before the press: outline the pointed mark and name the target

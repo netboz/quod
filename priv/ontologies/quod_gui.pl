@@ -41,6 +41,8 @@ gui_query(instance_of(_, _)).
 gui_query(have_attribute(_, _, _)).
 gui_query(attribute(_, _, _)).
 gui_query(eidolon(_, _, _)).
+gui_query(gui_icon(_, _)).
+gui_query(gui_purpose_icon(_, _)).
 gui_query(class_eidolon(_, _, _, _)).
 gui_query(Goal) :- public_source_query(Goal).
 
@@ -110,6 +112,8 @@ gui_attribute(table, headings, text_list, required).
 gui_attribute(image, image, image_asset, required).
 gui_attribute(button, image, optional_image_asset, default(none)).
 gui_attribute(container, layout, layout, default(column)).
+%% A form's image is the icon of the operation it offers, in menus and strips.
+gui_attribute(form, image, optional_image_asset, default(none)).
 gui_attribute(container, appearance, gui_appearance, default(inherit)).
 gui_attribute(row, layout, layout, default(row)).
 gui_attribute(grid, layout, layout, default(grid)).
@@ -161,6 +165,56 @@ gui_kind(menu_item).
 %% one menu level whose wedges are the human's authored allowance, so commands
 %% past it nest under "More" like any pie. Commands are menu items.
 isa(hud, thing).
+
+%% The vocabulary's own icons: line glyphs in the house ink on transparent
+%% ground, published as content-addressed assets. Forms and menus refer to
+%% them by name; a client shows the image where the sketch shows one and
+%% falls back to the label's initials without.
+no_follow(gui_icon/2).
+no_follow(gui_purpose_icon/2).
+gui_icon(accept, asset(<<"7b243c704098440348152df08bb33d5ce3c2bdfe71e828db26b56f73455a1c85">>, <<"image/png">>)).
+gui_icon(account, asset(<<"c198ab56893753eb5b82ba1491940e8e44f35ca8f1f539710dfedd6f6e98c8dc">>, <<"image/png">>)).
+gui_icon(account_controls, asset(<<"6f4da85202f3a0c808df9981663341d40671ab17f133522a0669fdda1ac6cd83">>, <<"image/png">>)).
+gui_icon(attention, asset(<<"392f95140074b3e5162d8b2cc860a3ebe66c0bb20ca30deb4f4fe31949eab56a">>, <<"image/png">>)).
+gui_icon(back, asset(<<"e799c393a99d0d3628d05f4c39518c9211213979fd95ffd5204e54e3bf430a93">>, <<"image/png">>)).
+gui_icon(controllers, asset(<<"22874de5cdc094924b7b54ce5198dce0c0b07f23704ec31327212afc52671a03">>, <<"image/png">>)).
+gui_icon(create_exact, asset(<<"81551291fff5b3b6278d22f58083766e9d39a4f7323f1813da9dc326b786004e">>, <<"image/png">>)).
+gui_icon(create_finite, asset(<<"10cb7a60ee0d4b85f634b888d23c34384dcc2fd40bf27115aa6133e85d1751ed">>, <<"image/png">>)).
+gui_icon(create_here, asset(<<"1320941c3a3b79716403806ad34b19b39f10920e266b93d9e9783fb20d6abeef">>, <<"image/png">>)).
+gui_icon(create_infinite, asset(<<"6e838ec3e3cef10dffeb52c32e25f1e94be12b37216dc70fe7a4e38dbb451d1c">>, <<"image/png">>)).
+gui_icon(create_storage, asset(<<"ccb396c150eca6bd7dc6ad5decfb2d5ee5ea4216ced72e5881a320dec6df478b">>, <<"image/png">>)).
+gui_icon(decline, asset(<<"89595f66e3caaa073570349da4111a3c4818b8fea496c94465a7eca28dfe6a77">>, <<"image/png">>)).
+gui_icon(device, asset(<<"059015d96d31a1b494de7b7c8001f64b2946a66bc433198c09500cc16cfada32">>, <<"image/png">>)).
+gui_icon(enter, asset(<<"eaa918e337b050b95e91f2728b56d46b9a605cafb95ded4787a8111af33d3713">>, <<"image/png">>)).
+gui_icon(farther, asset(<<"56c975f652fb70f04975b2fc0f33d6b4878cc7c66be21da76358d21574f233fe">>, <<"image/png">>)).
+gui_icon(go_to, asset(<<"36652b712193cb0eb76fdac8319b2788cf2cbaae279cee7877f67d1427eaa183">>, <<"image/png">>)).
+gui_icon(hide, asset(<<"ca04f09de6eab99c94f999ed8086dac3b35992371e89f46de23ac58594fde191">>, <<"image/png">>)).
+gui_icon(inspect, asset(<<"8aa3240d88ef69fc14ab29514a4380d0b901f9f4aced431c393013a6b311237f">>, <<"image/png">>)).
+gui_icon(inspection, asset(<<"b2779413cf637752e512a046a515ec4d2a8af1752e5d87eba1aa516acd361f9f">>, <<"image/png">>)).
+gui_icon(leave, asset(<<"bb182c7fb117a1dc013d5eb9bb99f5605c9b2c46e4311669325b75a804e6c521">>, <<"image/png">>)).
+gui_icon(matrix, asset(<<"793cabf0c5cb2b0ef16e85c10b080130dab950ada00657b215550213c11f1300">>, <<"image/png">>)).
+gui_icon(me, asset(<<"a33fbc2379ea162f586a6e964e6765c9c7630d4729a823ecaf787cc0e22554d5">>, <<"image/png">>)).
+gui_icon(more, asset(<<"07f924613b4cc096db76d30d800ed1c32e5e5ff2bc8d7c25cebb29b20e1661d2">>, <<"image/png">>)).
+gui_icon(move_panel, asset(<<"0a9277d4a88bc694812ae5fba3480ac6c1ad297e3a9bb8c6d9a19ee63b51351a">>, <<"image/png">>)).
+gui_icon(nearer, asset(<<"3c502ab9596d9f693d23e2a335cc64ac40f1cec574db7a510b64bebe05df49ba">>, <<"image/png">>)).
+gui_icon(panels_opacity, asset(<<"147243a8fda4f33f8aa0d4ecd01b16e9857c9a180cba9516a1b46f221ef4c487">>, <<"image/png">>)).
+gui_icon(question, asset(<<"e4e8fb93e34d08ac72646a9eea4dc66109b810d056afdba90f38dfdc18884d48">>, <<"image/png">>)).
+gui_icon(recenter, asset(<<"f51e7c627d0f067505b52232f9cb787af5b9fcd37a05e5f243c829318e842727">>, <<"image/png">>)).
+gui_icon(show_as, asset(<<"443faa8df4937365e159ecd54a0c7b5b23539bf55141d5330912d2a0665c57c2">>, <<"image/png">>)).
+gui_icon(show_none, asset(<<"fe4318c1ff1e4fbb9be665ffc5ab08508084e6423e685af6f49a9bbe32ad8375">>, <<"image/png">>)).
+gui_icon(source, asset(<<"957dde426601d7cbf44db51a213e5a6f04a75e7b221a677ebc3804ccc46e5e2c">>, <<"image/png">>)).
+gui_icon(text_larger, asset(<<"3e382db372492f52ef2554c76136e05f03ed9757d549a9b26ca707b2f8f029ce">>, <<"image/png">>)).
+gui_icon(text_smaller, asset(<<"7a205675c04f6c46b85d107f264c4bd54eae68fb63e2802d492fb65dc613b88e">>, <<"image/png">>)).
+gui_icon(vr, asset(<<"c8b7ec10c76c9c2fffd890a8aef1480a1d3f69e501ec2c68a9ce17bf8e8b3ba5">>, <<"image/png">>)).
+gui_icon(wireframe, asset(<<"dd8cf8820abe42498cb57c0b0d0c479ceeb0dda28595b45821ba9700275f94e5">>, <<"image/png">>)).
+gui_icon(workspace, asset(<<"30eb5539c7181615c9fb9eed6f5b0e0418c0dcdfe1d3f81c72ef717979831489">>, <<"image/png">>)).
+%% The icon a menu shows for a view or an inspection of a given purpose.
+gui_purpose_icon(playing, show_as).
+gui_purpose_icon(edition, show_as).
+gui_purpose_icon(prolog, source).
+gui_purpose_icon(inspection, inspection).
+gui_purpose_icon(workspace, workspace).
+gui_purpose_icon(attention, attention).
 
 %% Pie menus. Each `menu` level offers its authored number of wedges; a wedge
 %% is a `menu_item` choosing one Eidolon of one exact subject, or a nested menu.
@@ -301,7 +355,8 @@ labelled_values(Options) :- Options = [_ | _], gui_options(Options, []).
 text_list(Headings) :- Headings = [_ | _], gui_texts(Headings).
 optional_image_asset(none).
 optional_image_asset(Value) :- image_asset(Value).
-image_asset(asset(Digest, <<"image/jpeg">>)) :-
+image_asset(asset(Digest, Mime)) :-
+    member(Mime, [<<"image/png">>, <<"image/jpeg">>]),
     binary(Digest), binary_codes(Digest, Bytes), length(Bytes, 64), gui_digest(Bytes).
 menu_slot(auto).
 menu_slot(Slot) :- integer(Slot), Slot > 0.
@@ -509,7 +564,8 @@ menu_fit(Entries, Capacity, Wedges, Fitted) :-
     (Keep >= 1 -> true; fail_with_reason(menu_wedges_too_few(Wedges))),
     menu_take(Keep, Free, Kept, Rest),
     append(Pinned, Kept, Placed),
-    append(Placed, [menu(<<"More">>, <<"">>, [], Rest)], Fitted).
+    gui_icon(more, More),
+    append(Placed, [menu(<<"More">>, <<"">>, [image(More)], Rest)], Fitted).
 
 menu_pinned([], [], []).
 menu_pinned([Entry | Rest], Pinned, Free) :-
@@ -594,8 +650,9 @@ gui_menu_default_spec(menu_source(Name, Items), menu(Title, <<"">>, [], Entries)
     menu_title(Name, Title),
     findall(Item, (member(Item, Items),
                    Item = item(choice(_, eidolon(operation(_), _, _)), _, _, _, _)), Actions),
-    append(Actions, [group(<<"Show as">>, [], [playing, edition], Items),
-                     group(<<"Inspect">>, [], [prolog, inspection, workspace], Items)], Entries).
+    gui_icon(show_as, Shows), gui_icon(inspect, Inspects),
+    append(Actions, [group(<<"Show as">>, [image(Shows)], [playing, edition], Items),
+                     group(<<"Inspect">>, [image(Inspects)], [prolog, inspection, workspace], Items)], Entries).
 
 %% Private native operations retain the original verified execute request.
 %% Their live results are consumed only by actual prepared presentation work.

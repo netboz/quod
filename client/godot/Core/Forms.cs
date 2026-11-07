@@ -51,7 +51,8 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
             if (kind == "grid") allowed.Add("columns");
             if (kind == "scroll") allowed.Add("visible_rows");
             if (kind == "progress") allowed.Add("percent");
-            if (kind == "button") allowed.Add("image");
+            // A form's image is the icon of the operation it offers.
+            if (kind is "button" or "form") allowed.Add("image");
             var props = new Dictionary<string, Term>();
             foreach (var p in args[2].Items) {
                 var a = p.Require("property", 2);
@@ -68,7 +69,12 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
                     case "max_bytes": if (a[1].Integer < 0) throw new FormatException("Invalid text bound."); break;
                     case "columns": case "visible_rows": if (a[1].Integer <= 0) throw new FormatException("Invalid layout extent."); break;
                     case "percent": if (a[1].Integer < 0 || a[1].Integer > 100) throw new FormatException("Invalid progress."); break;
-                    case "image": if (a[1].Kind != "atom" || a[1].Name != "none") throw new FormatException("Unsupported GUI image asset."); break;
+                    case "image":
+                        if (a[1].Kind == "atom" && a[1].Name == "none") break;
+                        var asset = a[1].Require("asset", 2);
+                        if (!System.Text.RegularExpressions.Regex.IsMatch(asset[0].TextValue, "^[a-f0-9]{64}$") || asset[1].TextValue is not ("image/png" or "image/jpeg"))
+                            throw new FormatException("Unsupported GUI image asset.");
+                        break;
                 }
             }
             if (!props.ContainsKey("label")) throw new FormatException("Missing GUI label.");

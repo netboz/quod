@@ -54,7 +54,7 @@ explicit_and_near_agent_placement_test_() ->
         {Bindings, _, _} = create(C, Target, []),
         [{_, Space = {entity_ref, Target, _, Id}}, _] = Bindings,
         holds(Target, {space_assignment, Id, 1, Room}),
-        holds(Target, {attribute, Id, transform, {transform, 1200,300,400,0,45,0}}),
+        holds(Target, {attribute, Id, transform, {transform, 200,300,-51600,0,45,0}}),
         holds(Dest, {space_placement, room, Space, 1}),
         {Explicit, _, _} = create(C, Target, [placement(Local)]),
         [{_, ExplicitRef = {entity_ref, Target, _, ExplicitId}}, _] = Explicit,
@@ -73,7 +73,7 @@ explicit_and_near_agent_placement_test_() ->
         end),
         %% Placement is one-time, not a subscription following A.
         edit(Ns, {retract, {attribute,personal,transform,{'_'}}}),
-        holds(Target, {attribute, Id, transform, {transform,1200,300,400,0,45,0}}),
+        holds(Target, {attribute, Id, transform, {transform,200,300,-51600,0,45,0}}),
         denied_creation(C, Target, []),
         create(C, Target, [placement(Local)])
     end) end}.

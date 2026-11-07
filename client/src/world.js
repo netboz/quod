@@ -135,7 +135,7 @@ export function readGuiView(binding) {
     for (const property of properties.items) {
       const [key, value] = args(property, 'property', 2)
       if (key.type !== 'atom' || seen.has(key.value)) throw new Error('invalid component property')
-      if (!['label', 'help', 'enabled', ...contracts[family ?? field.kind], ...({ selectable_list: ['multiple'], table: ['multiple', 'headings'], image: ['image'], grid: ['columns'], scroll: ['visible_rows'], progress: ['percent'] }[field.kind] ?? [])].includes(key.value)) throw new Error('unsupported GUI property for component kind')
+      if (!['label', 'help', 'enabled', ...contracts[family ?? field.kind], ...({ selectable_list: ['multiple'], table: ['multiple', 'headings'], image: ['image'], form: ['image'], grid: ['columns'], scroll: ['visible_rows'], progress: ['percent'] }[field.kind] ?? [])].includes(key.value)) throw new Error('unsupported GUI property for component kind')
       seen.add(key.value)
       switch (key.value) {
         case 'appearance':

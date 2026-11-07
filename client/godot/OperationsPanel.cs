@@ -245,12 +245,22 @@ public partial class OperationsPanel : VBoxContainer
             var reply = await consumer.Personal(owner, agent, key.Bytes, selectedTarget, goal, running.Token);
             if (disposed || expected != generation) return;
             ShowOutcome(reply);
+            if (Json.Terminal(reply)) Renew(offered, buffer);
         } catch (Exception error) { if (!disposed && expected == generation) status.Text = error.Message + (accounts.Uncertain ? " Original work retained; check its outcome." : ""); }
         finally { SetBusy(false); running.Dispose(); if (ReferenceEquals(work, running)) work = null;
             if (!disposed && Current != null) {
                 if (expected != generation) Select(Current);
                 else { FormPanel.Lock(!Available || accounts.Uncertain || Draft(Current).Settled || Draft(Current).Revision != Current.Revision.ToString()); Changed?.Invoke(); }
             } }
+    }
+    // A settled draft protects an unknown outcome from a blind resubmission.
+    // Once the outcome is known, the same fields stand ready for another
+    // operation; nobody has to hunt for a reset.
+    void Renew(Offer offer, Buffer settled)
+    {
+        var next = new Buffer(settled.Revision, settled.Form) { Draft = new(settled.Draft) };
+        drafts[DraftKey(offer)] = next;
+        if (Current != null && DraftKey(Current) == DraftKey(offer)) FormPanel.Present(next.Form, next.Draft);
     }
     void ShowOutcome(System.Text.Json.Nodes.JsonNode reply)
     {

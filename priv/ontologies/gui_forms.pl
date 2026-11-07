@@ -313,7 +313,7 @@ gui_operation_guard(Subject, Name, Revision, Control, Values, Goal, Results) :-
 no_follow(gui_menu_source/2).
 no_follow(gui_menu_subject/2).
 no_follow(gui_menu_item/3).
-no_follow(gui_operation_caption/5).
+no_follow(gui_operation_caption/6).
 gui_menu_source(Entity, menu_source(Name, Items)) :-
     term_variables(Entity, []),
     gui_menu_subject(Entity, Subject),
@@ -321,12 +321,13 @@ gui_menu_source(Entity, menu_source(Name, Items)) :-
     entity_eidolons(Entity, Choices),
     findall(Item, (member(Choice, Choices), gui_menu_item(Subject, Choice, Item)), Items).
 
-gui_operation_caption(Subject, Name, Label, Help, Availability) :-
+gui_operation_caption(Subject, Name, Label, Help, Image, Availability) :-
     gui_operation_form(Subject, Name, Local, _, Form),
     findall(ontology_ref(N, A), gui_vocabulary(N, A), [ontology_ref(Ns, Anchor)]),
     gui_component_tree(Form, Ns, [], _, component(Form, Classes, Attributes, _)),
     in_ontology(Ns, Anchor, gui_component_schema(Classes, Attributes, form, Properties)),
     member(property(label, Label), Properties), member(property(help, Help), Properties),
+    member(property(image, Image), Properties),
     findall(binding(F, S), gui_form(Form, F, S), [binding(_, Declaration)]),
     gui_submission(Declaration, _, operation(Permission, _), _),
     gui_operation_availability(Local, Permission, Availability).
@@ -338,11 +339,19 @@ gui_menu_subject(Entity, entity_ref(Ns, Anchor, Entity)) :-
 gui_menu_subject(Class, class_ref(Ns, Anchor, Class)) :-
     isa(Class, Class), current_ontology_identity(Ns, Anchor).
 
-gui_menu_item(Subject, Choice, item(choice(Subject, Choice), Label, Help, Availability, [])) :-
+gui_menu_item(Subject, Choice, item(choice(Subject, Choice), Label, Help, Availability, Options)) :-
     Choice = eidolon(operation(_), Name, _), !,
-    gui_operation_caption(Subject, Name, Label, Help, Availability).
-gui_menu_item(Subject, Choice, item(choice(Subject, Choice), none, <<"">>, available, [])) :-
-    Choice = eidolon(Purpose, _, _), Purpose \== menu.
+    gui_operation_caption(Subject, Name, Label, Help, Image, Availability),
+    gui_menu_image(Image, Options).
+gui_menu_item(Subject, Choice, item(choice(Subject, Choice), none, <<"">>, available, Options)) :-
+    Choice = eidolon(Purpose, _, _), Purpose \== menu,
+    findall(ontology_ref(N, A), gui_vocabulary(N, A), [ontology_ref(Ns, Anchor)]),
+    (in_ontology(Ns, Anchor, (gui_purpose_icon(Purpose, Icon), gui_icon(Icon, Image))) -> true; Image = none),
+    gui_menu_image(Image, Options).
+
+no_follow(gui_menu_image/2).
+gui_menu_image(none, []) :- !.
+gui_menu_image(Image, [image(Image)]).
 
 gui_operation_availability(Subject, Permission, Availability) :-
     (term_variables(Permission, []) ->

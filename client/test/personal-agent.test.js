@@ -26,7 +26,7 @@ test('human signs one exact instruction; a lost reply is only resolved', async (
   await assert.rejects(personalGoal(who, input, { journal, post: async (url, body) => {
     calls.push(url)
     assert.equal(url, '/api/agents/instructions')
-    assert.match(decoded(body), /personal_instruction_accept/)
+    assert.match(decoded(body), /'::'\(<<"quod:user">>,personal_instruction_accept\(/)
     const [saved] = await journal.list()
     assert.equal(saved.request, body.request)
     assert.equal(saved.signing_key, b64url(who.provider.publicKey))
@@ -36,7 +36,7 @@ test('human signs one exact instruction; a lost reply is only resolved', async (
   const result = await resolveSignedOperations(who, { journal, post: async (url, body) => {
     calls.push(url)
     assert.equal(url, '/api/agents/instructions/outcomes')
-    assert.match(decoded(body), /personal_instruction_lookup/)
+    assert.match(decoded(body), /'::'\(<<"quod:user">>,personal_instruction_lookup\(/)
     return terminal
   } })
   assert.deepEqual(result[0].reply.bindings, [{ Ref: 'original' }])

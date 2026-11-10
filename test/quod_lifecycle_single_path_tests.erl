@@ -1406,7 +1406,7 @@ m1a_drive_https(Port) ->
                 #{<<"phase">>:=<<"settle">>,<<"request">>:=Encoded} ->
                     Bytes = base64:decode(Encoded,#{mode=>urlsafe,padding=>false}),
                     {ok,#{goal_text:=Text,parser_version:=Parser}} = quod_client_goal:decode(Bytes),
-                    {ok,#{goal:={{'$quod_symbol',<<"personal_instruction_accept">>},TargetBytes,_}}} =
+                    {ok,#{goal:={'::',<<"quod:user">>,{{'$quod_symbol',<<"personal_instruction_accept">>},TargetBytes,_}}}} =
                         quod_client_goal_parser:parse(Text,Parser),
                     {ok,#{operation_ref:=Operation,request:=#{agent_namespace:=Ns}}} =
                         quod_client_goal:request_identity(TargetBytes),

@@ -1,0 +1,19 @@
+{
+  "base": "44fee1f59f735913d615f2f2129c38cd8fc8c6c0",
+  "files": [
+    {
+      "path": "client/src/signed-client.js",
+      "added": 3,
+      "removed": 3
+    }
+  ],
+  "added": 3,
+  "removed": 3,
+  "net": 0,
+  "exclusions": [
+    "tests",
+    "plan",
+    "documentation",
+    "evidence"
+  ]
+}

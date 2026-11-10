@@ -6,10 +6,10 @@ import { createInterface } from 'node:readline'
 import { authenticateKey, readSystemOntologies, signedGoal, personalGoal, resolvePersonalInstruction } from '../src/signed-client.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
 import { fromB64url } from '../src/key-provider.js'
-import { compound, variable, atom, renderTerm } from '../src/prolog-term.js'
-import { readTerm } from '../src/prolog-read.js'
+import { compound, variable, atom, list, renderTerm } from '../src/prolog-term.js'
+import { readList } from '../src/prolog-read.js'
 import { anchoredGoal, singleBinding } from '../src/world.js'
-import { operationSubject, readOperations, operationGoal } from '../src/gui-operation.js'
+import { operationSubject } from '../src/gui-operation.js'
 import { readCodeState } from '../src/prolog-edit.js'
 
 globalThis.crypto ??= webcrypto
@@ -49,7 +49,7 @@ assert.deepEqual(catalogue.map(row=>row.namespace).sort(),['quod:agent','quod:co
 const tools = {namespace:'quod:gui',anchor:fromB64url(config.gui)}
 const target = owner.reference
 const query = (who,ref,goal)=>signedGoal(who.identity,{mode:'read',agent:who.reference,goal:anchoredGoal(ref,goal)})
-const stateGoal = compound('account_setup_state',[variable('State')])
+const stateGoal = compound('::',[atom('quod:user'),compound('account_setup_state',[variable('State')])])
 const before = singleBinding(await query(owner,target,stateGoal),'State')
 assert.equal((await query(other,target,stateGoal)).result,'fail')
 const deniedSources = [target,{namespace:'quod:user',anchor:fromB64url(config.user_class)}]
@@ -61,7 +61,7 @@ const sourceHashes = []
 for (const namespace of ['quod:gui','quod:controllers','quod:space']) {
   const row = catalogue.find(row=>row.namespace===namespace)
   const source = await readCodeState(publicReader.identity,publicReader.reference,{tools,target:{namespace,anchor:fromB64url(row.anchor)}})
-  assert(!source.includes(target.namespace),'Public source enumerated private accounts')
+  assert(!source.includes(target.namespace),"Public source enumerated the user's ontology")
   assert(!source.includes(config.users[0].public_key))
   sourceHashes.push({namespace,sha256:createHash('sha256').update(source).digest('hex')})
 }
@@ -70,30 +70,43 @@ const key = fromB64url(config.personal_key)
 const subject = operationSubject(target,'entity',atom('me'))
 async function offered() {
   const reply = await query(owner,target,compound('gui_operations',[subject,variable('Offers')]))
-  return readOperations(singleBinding(reply,'Offers'),subject)[0]
+  const offers = readList(singleBinding(reply,'Offers'))
+  assert.equal(offers.length,1)
+  const offer = offers[0]
+  assert.equal(offer.functor,'operation_view'); assert.equal(offer.args.length,9)
+  const [name,exact,revision,,token,fields,control,,availability] = offer.args
+  assert.equal(renderTerm(exact),renderTerm(subject)); assert.equal(availability.value,'requires_input')
+  assert.equal(revision.value.length,32); assert.equal(token.value.length,32)
+  assert.equal(fields.type,'list'); assert.equal(fields.tail,null)
+  return {name,revision,fields,control}
 }
 const journal = memoryOperationJournal(), retained = []
 const durable = {list:()=>journal.list(),delete:id=>journal.delete(id),replace:(...args)=>journal.replace(...args),
   put:async row=>{retained.push(row);await journal.put(row)}}
-async function submit(form,draft) {
-  const reply = await personalGoal(owner.identity,{human:target,agent,key,target,goal:operationGoal(form,draft)},{journal:durable})
+async function submit(form,fields) {
+  const goal = renderTerm(compound('gui_operation',[subject,form.name,form.revision,form.control,fields,variable('Results')]))+'.'
+  const reply = await personalGoal(owner.identity,{human:target,agent,key,target,goal},{journal:durable})
   assert.equal(reply.result,'ok','An uncertain operation must be resolved, never resubmitted')
   await barrier('settle',{request:lastRequest})
   return reply
 }
 const form = await offered()
-assert.equal(form.name,'controller_settings'); assert.equal(form.values.controller_reset,'false')
-const save = await submit(form,form.values)
+assert.equal(form.name.value,'controller_settings')
+const resets = form.fields.items.filter(field=>field.args[0].value==='controller_reset')
+assert.equal(resets.length,1); assert.equal(resets[0].args[1].value,'false')
+const save = await submit(form,form.fields)
 const fresh = await offered()
-const reset = await submit(fresh,{...fresh.values,controller_reset:'true'})
+const reset = await submit(fresh,list(fresh.fields.items.map(field=>field.args[0].value==='controller_reset'
+  ? compound('field',[field.args[0],atom('true')]) : field)))
 assert.notDeepEqual(save.bindings,reset.bindings)
 // Reconnect from the same key, with no original device journal. Original
 // instruction associations and results are queried at their existing owner.
 const reconnected = {...owner,identity:await authenticateKey(owner.provider)}
 const mutationsBefore = writes
-for (const row of [retained[0],retained.at(-1)]) {
+for (const [row,original] of [[retained[0],save],[retained.at(-1),reset]]) {
   const recovered = await resolvePersonalInstruction(reconnected.identity,target,row.instruction)
   assert.equal(recovered.result,'operation_outcome'); assert.equal(recovered.status,'committed')
+  assert.deepEqual(recovered.bindings,original.bindings)
 }
 assert.equal(writes,mutationsBefore)
 assert.equal(singleBinding(await query(reconnected,target,stateGoal),'State'),before)

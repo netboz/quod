@@ -93,7 +93,7 @@ export async function personalGoal(identity, { human, agent, key, target, goal }
     agentAnchor: typeof agent.anchor === 'string' ? fromB64url(agent.anchor) : agent.anchor,
     agentInstanceText: agent.instanceText, mode: 'execute', notAfterMs: expires, goal: anchored })
   const request = goalRequestBytes(identity, { mode: 'read', agent: human,
-    goal: `${renderTerm(compound('personal_instruction_accept', [binary(targetBytes), variable('Signature')]))}.` })
+    goal: `${renderTerm(compound('::', [binary(encoder.encode('quod:user')), compound('personal_instruction_accept', [binary(targetBytes), variable('Signature')])]))}.` })
   const signature = new Uint8Array(await identity.provider.sign(request))
   options.signal?.throwIfAborted()
   const row = await operationRow(identity, request, signature)
@@ -107,9 +107,9 @@ export async function personalGoal(identity, { human, agent, key, target, goal }
 export async function resolvePersonalInstruction(identity, human, id, options = {}) {
   options.signal?.throwIfAborted()
   const request = goalRequestBytes(identity, { mode: 'read', agent: human,
-    goal: `${renderTerm(compound('personal_instruction_lookup', [
+    goal: `${renderTerm(compound('::', [binary(encoder.encode('quod:user')), compound('personal_instruction_lookup', [
       binary(typeof id === 'string' ? fromB64url(id) : id), variable('Bytes'), variable('Signature'),
-    ]))}.` })
+    ])]))}.` })
   const signature = new Uint8Array(await identity.provider.sign(request))
   options.signal?.throwIfAborted()
   return (options.post || postJson)('/api/agents/instructions/outcomes',

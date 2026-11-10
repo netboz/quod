@@ -127,7 +127,9 @@ public partial class ExportChecks
     async Task PickSpace(ScenePanel scene,string id,Vector3 local,Term expected)
     {
         for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent()) if(parent is ScrollContainer scroll) scroll.EnsureControlVisible(scene);
-        await Frame();
+        // Picking uses the camera installed by the already queued framing work.
+        var framed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Callable.From(()=>framed.TrySetResult()).CallDeferred();await framed.Task;
         var picked=new TaskCompletionSource<ScenePanel.Selection>(); void Selected(ScenePanel.Selection value)=>picked.TrySetResult(value); scene.Selected+=Selected;
         try {
             var viewport=scene.GetChildren().OfType<SubViewport>().Single();

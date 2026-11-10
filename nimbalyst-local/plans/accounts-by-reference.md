@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-accounts-by-reference
   title: Space class lives only in quod:space; user ontologies assert instances of it
-  status: in-development
+  status: in-review
   planType: system-design
   priority: high
   owner: Yan
@@ -15,8 +15,8 @@ planStatus:
     - signup
   created: "2026-11-08"
   startDate: "2026-11-09"
-  updated: "2026-11-10T00:52:00.171637+00:00"
-  progress: 72
+  updated: "2026-11-10T10:05:38.546261+00:00"
+  progress: 83
 ---
 
 # Space class lives only in quod:space; user ontologies assert instances of it
@@ -54,8 +54,8 @@ holding an instance's `instance_of` and slots. **Slot** means the pair
   - [x] Tests (§6, the agreed Godot scope) and docs (§2.5, §2.6).
   - [x] Yan-authorized Opus review corrections: signed-read cost, withdrawal reply lifetime, assignment check, refusal coverage and wire documentation; fresh phase gates.
 - [ ] **Phase 2 — icon bytes in quod:gui** (live transaction path)
-  - [ ] `gui_asset(Digest, Mime, Bytes)` facts in `quod:gui`, public read; 36 icons, 100,690 bytes today.
-  - [ ] Client fetches by signed read, verifies the digest, caches by digest; `/assets/icons/` leaves the node image.
+  - [x] `gui_asset(Digest, Mime, Bytes)` facts in `quod:gui`, public read; 36 icons, 100,690 bytes today.
+  - [x] Client fetches by signed read, verifies the digest, caches by digest; `/assets/icons/` leaves the node image.
 
 Activation clarification from Yan in this session (2026-11-09): backward
 compatibility is unnecessary; the ledgers will be refounded. Implementation
@@ -720,6 +720,54 @@ logs and failed attempts are retained in the
 The review item is checked; the phase remains unchecked because full EUnit is
 not clean. Work stops at the Phase 1 boundary. Phase 2, commit, version bump
 and all release actions await Yan’s go.
+
+**Phase 2 implementation:** 36 binary `gui_asset/3` facts (100,690 bytes) now
+live in `quod:gui`, with public signed reads. Godot fetches through its existing
+signed session, verifies SHA-256 and authored byte/pixel allowances, and retains
+textures by digest. The old static icon files and HTTP icon fetch are removed.
+The existing operator module has a `terms/3` step using the root authority,
+exact target and ordinary edit gate; its dry run performs no write. Focused
+validation passes eight server tests, 360 core checks, Godot export and the icon
+consumer checks (all exit 0). The server tests verify unchanged reads without
+storage I/O, mutation refusal and live-view invalidation on an icon change.
+Earlier compiler, fixture, binary-spelling and sandbox failures are retained in
+[Phase 2 evidence](../../doc/evidence/ontology-references-phase2-20261110/results.jsonl).
+Clean phase gates remain pending. No commit, version bump or release action has
+been performed for Phase 2.
+
+**Phase 2 client campaign 01:** server gates exit EUnit 1 (4,353 tests,
+one excluded browser failure), CT 0 (150 tests), xref 0 and Dialyzer 0.
+The client campaign passes JavaScript, core, clean/export, package contents and
+icons, then exits 1 at the source-view watchdog. All 1,074 frozen inputs remain
+unchanged through that failure; its stop marker and full logs are retained.
+Bounded diagnostics show the complete 495-kilobyte source reaching the editor
+at 8 pixels wide. Standalone control probes do not reproduce the stall; proxy
+thread stacks show no blocked bookkeeping lock, while Godot consumes a CPU core.
+The actual signed journey repeats the failure; disabling wrapping on that same
+editor makes the complete journey pass (exit 0), including unchanged renewal,
+revocation, reopening and a real source update. The existing shared structured-text
+editor now uses unwrapped lines with horizontal scrolling. No bytes are omitted
+and no deadline or watchdog is changed. Temporary test tracing and its override
+are removed. A new clean client campaign will verify the production setting;
+no complete client gate or Phase 2 completion is claimed yet.
+
+**Phase 2 boundary:** clean client campaign 02 passes every gate, including
+JavaScript (295 tests), C# core (360 checks), clean build/export, package contents,
+icons, exported GUI/controller, spaces, navigation and local backup (all exit 0).
+All 1,083 frozen final client/tooling input hashes remain unchanged. Only the
+client's shared structured-text wrapping setting differs from server campaign 01;
+server source, ontology, tests and policy inputs are unchanged. Server exits remain
+EUnit 1 (4,353 tests, solely the excluded browser setup query), CT 0 (150 tests),
+xref 0 and Dialyzer 0. Navigation's unchanged repeat records no reader/history,
+native-install or file write/sync work. Production source measures +65 / −9 = +56
+lines; the existing operator tool adds 12 net lines separately. The same 100,690
+payload bytes replace 36 removed static PNGs. Every changed normative sentence,
+full log, true exit, failed attempt, frozen scope and release preparation is
+recorded in the [Phase 2 report](../../doc/evidence/ontology-references-phase2-20261110/phase2-report.md).
+Implementation items are checked; the phase parents remain unchecked because
+full EUnit is not clean. The plan is ready for review at the Phase 2 boundary.
+No Phase 2 commit, version bump, deployment, refound or live edit has occurred.
+Work stops here for Yan's go.
 
 ## 1. Rulings
 

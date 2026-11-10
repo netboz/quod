@@ -96,7 +96,6 @@ public sealed class Transport : IDisposable
     }
     public Uri SocketUri => new UriBuilder(origin) { Scheme = "wss", Path = "/api/views" }.Uri;
     public Task<byte[]> Model(string digest,long allowance,CancellationToken cancellation)=>Asset("/assets/models/"+digest+".glb",digest,allowance,cancellation);
-    public Task<byte[]> Icon(string file,long allowance,CancellationToken cancellation)=>Asset("/assets/icons/"+file,file.Split('.')[0],allowance,cancellation);
     // A content-addressed asset: the bytes must hash to the digest the ontology named.
     async Task<byte[]> Asset(string route,string digest,long allowance,CancellationToken cancellation)
     {
@@ -175,6 +174,20 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
     public async Task<JsonNode> Read(Actor actor, string goal, CancellationToken cancellation)
     {
         var signed = Sign(actor, goal); return await SendAt("/api/goals/read", signed.Body, signed.Deadline, cancellation);
+    }
+    public async Task<byte[]> Icon(Actor actor,string file,long allowance,CancellationToken cancellation)
+    {
+        string digest=Path.GetFileNameWithoutExtension(file),mime=Path.GetExtension(file) switch {
+            ".png"=>"image/png", ".jpg"=>"image/jpeg", _=>throw new FormatException("Unsupported image type.") };
+        if(!System.Text.RegularExpressions.Regex.IsMatch(digest,"^[a-f0-9]{64}$") || allowance<=0)throw new FormatException("Invalid asset request.");
+        var reply=await Read(actor,Term.Call("::",Term.Text("quod:gui"),
+            Term.Call("gui_asset",Term.Text(digest),Term.Text(mime),Term.Variable("Bytes")))+".",cancellation);
+        var value=Json.Binding(reply,"Bytes");
+        if(value.Kind!="binary")throw new FormatException("Expected icon bytes.");
+        byte[] bytes=value.Bytes;
+        if(bytes.LongLength>allowance)throw new FormatException("Asset transfer bytes exceeded.");
+        if(Convert.ToHexStringLower(SHA256.HashData(bytes))!=digest)throw new FormatException("Asset digest mismatch.");
+        return bytes;
     }
     public Task<JsonNode> SendDeadline(string route, JsonObject body, CancellationToken cancellation) => SendAt(route, body, Deadline, cancellation);
     public async Task<JsonNode> SendAt(string route, JsonObject body, ulong deadline, CancellationToken cancellation)

@@ -652,7 +652,7 @@ public partial class Main : Control
     {
         action?.Cancel(); CloseSession(); state = "offline"; statusText = "Disconnected. Your key and unsent work stay on this device."; UpdateButtons(); Notify();
     }
-    // Authored icons by served file; a fetch in flight or failed is a null entry.
+    // Verified icons by digest; a fetch in flight or failed is a null entry.
     readonly Dictionary<string,(Texture2D Texture,long Transfer,long Pixels)?> icons=new();
     // The texture for a node's authored image: bundled for the client's own
     // commands, otherwise the ontology's content-addressed asset, fetched once.
@@ -660,22 +660,25 @@ public partial class Main : Control
     {
         if(node.Image is not string image)return null;
         if(image.StartsWith("res://"))return GD.Load<Texture2D>(image);
-        if(icons.TryGetValue(image,out var cached))return cached is {} verified && verified.Transfer<=node.Transfer && verified.Pixels<=node.Pixels ? verified.Texture : null;
-        icons[image]=null;
-        if(session is {IsExpired:false} consumer)_=FetchIcon(consumer,node);
+        string digest=System.IO.Path.GetFileNameWithoutExtension(image);
+        if(icons.TryGetValue(digest,out var cached))return cached is {} verified && verified.Transfer<=node.Transfer && verified.Pixels<=node.Pixels ? verified.Texture : null;
+        if(session is {IsExpired:false} consumer && accounts?.Human is Actor actor) {
+            icons[digest]=null;
+            _=FetchIcon(consumer,actor,node);
+        }
         return null;
     }
-    async Task FetchIcon(SignedSession consumer,MenuNode node)
+    async Task FetchIcon(SignedSession consumer,Actor actor,MenuNode node)
     {
         try {
             string image=node.Image!;
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var bytes=await consumer.Transport.Icon(image,node.Transfer,deadline.Token);
+            var bytes=await consumer.Icon(actor,image,node.Transfer,deadline.Token);
             long pixels=StaticGlb.ImagePixels(bytes,image.EndsWith(".png") ? "image/png" : "image/jpeg");
             if(pixels>node.Pixels)throw new FormatException("Icon image pixels exceeded.");
             var picture=new Image();
             if((image.EndsWith(".png") ? picture.LoadPngFromBuffer(bytes) : picture.LoadJpgFromBuffer(bytes))!=Error.Ok)throw new FormatException("Unreadable icon.");
-            icons[image]=(ImageTexture.CreateFromImage(picture),bytes.LongLength,pixels);
+            icons[System.IO.Path.GetFileNameWithoutExtension(image)]=(ImageTexture.CreateFromImage(picture),bytes.LongLength,pixels);
         } catch { return; }
         if(!disposed){hud.RefreshIcons();pie.QueueRedraw();}
     }

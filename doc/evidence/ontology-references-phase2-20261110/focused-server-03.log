@@ -1,0 +1,21 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_menu_tests:-menu_view_socket_projects_the_pie_test_/0-fun-7-/0
+[0;31m     Failure/Error: ?assertNotEqual(nomatch, binary : match ( Value , OldDigest ))
+       expected not: == nomatch
+                got:    nomatch[0m
+[0;36m     %% eunit_proc.erl:554:in `eunit_proc:run_test/1`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_CA89F0046136869E
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_CA89F0046136869E
+[0m
+
+Finished in 15.768 seconds
+[0;31m7 tests, 1 failures
+[0m===> Error running tests

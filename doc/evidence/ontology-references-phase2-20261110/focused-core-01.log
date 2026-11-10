@@ -1,0 +1,5 @@
+/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Quod.Client.Tests.csproj : warning NU1900: Error occurred while getting package vulnerability data: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Quod.Client.Tests.csproj : warning NU1900: Error occurred while getting package vulnerability data: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Program.cs(112,17): error CS0136: A local or parameter named 'asset' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Quod.Client.Tests.csproj]
+
+The build failed. Fix the build errors and run again.

@@ -4,6 +4,48 @@
 
 %% Pie menus are class-selected Eidolons read through the signed human path.
 
+icon_bytes_are_public_signed_facts_test_() ->
+    {timeout,90,fun() -> with_menus(fun(C) ->
+        Gui = <<"quod:gui">>,
+        Assets = [A || A={gui_asset,_,_,_} <- quod_ct:gui_terms()],
+        ?assertEqual(36,length(Assets)),
+        ?assertEqual(100690,lists:sum([byte_size(B) || {gui_asset,_,_,B} <- Assets])),
+        quod_lobby_tests:assert_read_has_no_io(fun() ->
+            lists:foreach(fun({gui_asset,Digest,Mime,Bytes}) ->
+                lists:foreach(fun(_) ->
+                    ?assertEqual(Bytes,read(C,{'::',Gui,{gui_asset,Digest,Mime,{'Bytes'}}}))
+                end,[first,unchanged]),
+                ?assertEqual(Digest,string:lowercase(binary:encode_hex(crypto:hash(sha256,Bytes))))
+            end,Assets)
+        end),
+        [Asset={gui_asset,Digest,_,_}|_] = Assets,
+        {Request,Signature} = quod_personal_agent_tests:request(C,execute,{'::',Gui,{assertz,Asset}}),
+        ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(Request,Signature)),
+        {BadRead,BadSignature} = quod_personal_agent_tests:request(C,read,
+            {'::',Gui,{gui_asset,Digest,<<"image/jpeg">>,{'Bytes'}}}),
+        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},quod_client_goal_ingress:submit(BadRead,BadSignature))
+    end) end}.
+
+release_terms_use_the_existing_signed_edit_gate_test_() ->
+    {timeout,90,fun() -> with_menus(fun(C=#{identity:=#{pubkey:=NodeKey}}) ->
+        Gui = <<"quod:gui">>, Root = quod_ontology:root_ns(),
+        File = "doc/evidence/live-ontology-release-0.7.282-20261108/quod_source_release.erl",
+        {ok,quod_source_release,Beam} = compile:file(File,[binary,return_errors]),
+        {module,quod_source_release} = code:load_binary(quod_source_release,File,Beam),
+        Asset = {gui_asset,<<"release-test">>,<<"application/octet-stream">>,<<0,34,92,137,255>>},
+        {planned,Goal} = quod_source_release:terms(Gui,[Asset],true),
+        ?assertMatch({'::',Gui,{',',{current_ontology_identity,Gui,_},
+            {',',system_prolog_edit,{transaction,{assertz,Asset}}}}},Goal),
+        fails(Gui,Asset),
+        ?assertNotMatch({ok,_,_},quod_source_release:terms(Gui,[Asset],false)),
+        fails(Gui,Asset),
+        edit(Root,{assertz,{':-',{system_source_access,
+            {ontology_ref,Gui,quod_simplex:genesis_hash(Gui)},editable},
+            {current_principal,{node,NodeKey}}}}),
+        ?assertMatch({ok,_,_},quod_source_release:terms(Gui,[Asset],false)),
+        ?assertEqual(element(4,Asset),read(C,{'::',Gui,{gui_asset,element(2,Asset),element(3,Asset),{'Bytes'}}}))
+    end) end}.
+
 default_pie_for_an_instance_test_() ->
     {timeout,90,fun() -> with_menus(fun(C=#{namespace:=Ns}) ->
         Anchor = quod_simplex:genesis_hash(Ns),
@@ -45,8 +87,7 @@ space_pie_overrides_the_default_test_() ->
         Create = wedge(Tree,1), ?assertEqual(<<"Create here">>,property(Create,label)),
         ?assertMatch({image,{asset,_,<<"image/png">>},{resources,_,_}},property(Create,image)),
         {image,{asset,Digest,_},{resources,Transfer,Pixels}} = property(Create,image),
-        {ok,IconBytes} = file:read_file(filename:join([code:priv_dir(quod),"explorer","assets","icons",
-                                                     binary_to_list(Digest)++".png"])),
+        IconBytes = read(C,{'::',<<"quod:gui">>,{gui_asset,Digest,<<"image/png">>,{0}}}),
         <<_:16/binary,Width:32,Height:32,_/binary>> = IconBytes,
         ?assertEqual({byte_size(IconBytes),Width*Height},{Transfer,Pixels}),
         ?assertEqual(5,property(Create,back)),
@@ -178,7 +219,20 @@ menu_view_socket_projects_the_pie_test_() ->
             Socket ! {client,quod_gui_question_tests:gui_open_message(Reader,maps:get(session,C),menu,Ns,
                 quod_simplex:genesis_hash(Ns),space_class(),0)},
             #{<<"value">>:=Value,<<"kind">>:=<<"menu">>} = quod_physics_tests:simulation_reply(Socket,<<"projection">>),
-            ?assertNotEqual(nomatch,binary:match(Value,<<"Create infinite space">>))
+            ?assertNotEqual(nomatch,binary:match(Value,<<"Create infinite space">>)),
+            Old = read(C,{'::',<<"quod:gui">>,{gui_icon,create_finite,{'Icon'}}}),
+            New = read(C,{'::',<<"quod:gui">>,{gui_icon,accept,{'Icon'}}}),
+            {image,{asset,OldDigest,_},_} = Old,
+            {image,{asset,NewDigest,_},_} = New,
+            ?assertNotEqual(nomatch,binary:match(Value,quod_client_goal_parser:value_text(OldDigest))),
+            edit(<<"quod:gui">>,{transaction,conj([{retract,{gui_icon,create_finite,Old}},
+                                                  {assertz,{gui_icon,create_finite,New}}])}),
+            ?assertMatch(#{<<"type">>:=<<"refresh">>},quod_physics_tests:simulation_reply(Socket,<<"refresh">>)),
+            Socket ! {client,quod_gui_question_tests:gui_open_message(Reader,maps:get(session,C),menu,Ns,
+                quod_simplex:genesis_hash(Ns),space_class(),0)},
+            #{<<"value">>:=Changed} = quod_physics_tests:simulation_reply(Socket,<<"projection">>),
+            ?assertEqual(nomatch,binary:match(Changed,quod_client_goal_parser:value_text(OldDigest))),
+            ?assertNotEqual(nomatch,binary:match(Changed,quod_client_goal_parser:value_text(NewDigest)))
         after Socket ! stop end
     end) end}.
 

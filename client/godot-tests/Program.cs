@@ -102,12 +102,17 @@ static class Tests
         var source = File.ReadAllText(Path.Combine(repo, "priv/ontologies/quod_gui.pl"));
         var icons = System.Text.RegularExpressions.Regex.Matches(source, @"gui_icon\(\w+, (image\(asset\(.*?\), resources\(\d+, \d+\)\))\)\.");
         Check(icons.Count == 36, "every authored icon declares its own resources");
+        var assets=source.Split('\n').Where(line=>line.StartsWith("gui_asset(")).Select(line=>Term.Parse(line.TrimEnd('.')).Require("gui_asset",3))
+            .ToDictionary(row=>row[0].TextValue,row=>(Mime:row[1].TextValue,Bytes:row[2].Bytes));
+        Check(assets.Count==36 && assets.Values.Sum(asset=>asset.Bytes.Length)==100690,"all icon bytes belong to the GUI ontology");
+        Check(!Directory.Exists(Path.Combine(repo,"priv/explorer/assets/icons")),"the node has no static icon directory");
         foreach (System.Text.RegularExpressions.Match row in icons) {
             var term = Term.Parse(row.Groups[1].Value);
             var image = Component.ImageAsset(term);
-            byte[] bytes = File.ReadAllBytes(Path.Combine(repo, "priv/explorer/assets/icons", image.File!));
+            var stored=assets[Path.GetFileNameWithoutExtension(image.File!)];
+            byte[] bytes=stored.Bytes;
             Check(Convert.ToHexStringLower(SHA256.HashData(bytes)) == image.File!.Split('.')[0] && bytes.LongLength == image.Transfer &&
-                StaticGlb.ImagePixels(bytes, "image/png") == image.Pixels, "authored icon digest, transfer and pixels match the served file");
+                StaticGlb.ImagePixels(bytes, stored.Mime) == image.Pixels, "authored icon digest, transfer and pixels match the stored bytes");
             string ComponentText(string value) => $"component(f,form,[property(label,f),property(image,{value})],[])";
             Check(Component.Decode(Term.Parse(ComponentText(term.ToString()))).Properties["image"].ToString() == term.ToString(), "form preserves the declared image allowance");
             var menu = Term.Parse($"menu(component(m,menu,[property(label,<<\"Menu\">>),property(help,<<\"\">>),property(enabled,true),property(image,{term}),property(slot,auto),property(wedges,8),property(back,none)],[]))");

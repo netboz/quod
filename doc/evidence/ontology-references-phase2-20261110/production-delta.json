@@ -1,0 +1,28 @@
+{
+  "files": [
+    {
+      "path": "client/godot/Core/Transport.cs",
+      "added": 14,
+      "removed": 1
+    },
+    {
+      "path": "client/godot/Main.cs",
+      "added": 10,
+      "removed": 7
+    },
+    {
+      "path": "priv/ontologies/quod_gui.pl",
+      "added": 40,
+      "removed": 0
+    }
+  ],
+  "added": 64,
+  "removed": 8,
+  "binary_icon_files_removed": 36,
+  "icon_payload_bytes_moved": 100690,
+  "net": 56,
+  "operator_tooling": {
+    "added": 13,
+    "removed": 1
+  }
+}

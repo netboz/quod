@@ -1,0 +1,25 @@
+diff --git a/doc/gui-examples.md b/doc/gui-examples.md
+index eece0afc..5d889233 100644
+--- a/doc/gui-examples.md
++++ b/doc/gui-examples.md
+@@ -185,12 +185,16 @@ integer `percent` from 0 to 100. Display properties are part of the projected
+ schema; changing them changes its revision under the same stale-form rules.
+ 
+ `image` and its `icon` subclass accept an `image` attribute containing
+-`asset(Digest, <<"image/jpeg">>)`: the same lowercase SHA-256 reference used by
+-existing scene textures. Supply a descriptive `label`. An `icon_button` is an
++`image(asset(Digest, Mime), resources(Transfer, Pixels))`, with PNG or JPEG
++bytes stored as `gui_asset(Digest, Mime, Bytes)` facts in `quod:gui`. The client
++reads each digest through the ordinary signed path, checks SHA-256 and the
++authored byte/pixel allowances, and reuses the verified texture by digest.
++Changing `gui_icon/2` refreshes dependent live views through their existing
++installed-change subscriptions. Supply a descriptive `label`. An `icon_button` is an
+ ordinary button with that image attribute and a verb label; it uses exactly the
+ same activation and submission path. There are no image URLs or client
+-callbacks in the ontology. Both adapters reuse verified asset bytes and show
+-loading/error feedback; resource leases end when their controls are retired.
++callbacks in the ontology. Godot reuses verified asset bytes; the existing
++browser adapters have not adopted this image shape.
+ 
+ ## Voxel world generation
+ 

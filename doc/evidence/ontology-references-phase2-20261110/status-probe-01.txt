@@ -1,0 +1,1 @@
+Read-only status-count command exited 1: SyntaxError: unmatched ')'. No test was restarted. The corrected read-only command exited 0.

@@ -174,7 +174,7 @@ public partial class FormPanel : VBoxContainer
         Control control;
         switch (field.Family) {
             case "editor": case "bindings":
-                var editor=new TextEdit { Editable=enabled && field.Family=="editor" && !field.Flag("readonly"),CustomMinimumSize=new(0,field.Family=="editor" ? 260 : 100),WrapMode=TextEdit.LineWrappingMode.Boundary };
+                var editor=new TextEdit { Editable=enabled && field.Family=="editor" && !field.Flag("readonly"),CustomMinimumSize=new(0,field.Family=="editor" ? 260 : 100),WrapMode=TextEdit.LineWrappingMode.None };
                 control=editor;break;
             case "catalogue":
                 control=Choice();break;

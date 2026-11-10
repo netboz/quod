@@ -1,5 +1,6 @@
 -module(quod_resource_lifecycle_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 -include("quod_ledger.hrl").
 
 unchanged_notices_and_unrelated_changes_do_no_resource_work_test_() ->
@@ -204,7 +205,7 @@ unreported_selector_death_keeps_a_repair_dependency_test_() ->
             Worker = receive
                 {Tag, {trace, Pid, call,
                        {quod_runtime, select_resource_description,
-                        [Ns, _, _, agent_hosts, _]}}} -> Pid
+                        [Ns, _, _, agent_hosts, _, _]}}} -> Pid
             after 10000 -> error(looping_selector_not_started) end,
             %% The interpreted loop cannot return its observations. Runtime
             %% completion below joins processing of the actual worker DOWN.
@@ -371,6 +372,43 @@ change_while_selected_result_waits_cannot_leave_obsolete_inventory_test_() ->
         end
     end) end}.
 
+identity_withdrawal_completes_pending_agent_retirement_test_() ->
+    {timeout,60,fun() -> with_owner(fun(F = #{namespace := Ns, node := Node,
+                                             reference := Ref}, Owner) ->
+        Child = host(F, Owner), Runtime = maps:get(runtime, Owner),
+        {ok, Principal} = quod_node_actor:principal(),
+        {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+        {ok, Key} = quod_agent_vault:prepare(Blob, 1),
+        Parent = self(), Token = make_ref(),
+        Observe = fun(State, {in, {'$gen_call', {Worker,_}, {project_agents,_,_}}}, _) ->
+                          Parent ! {retirement_wait,Token,Worker}, State;
+                     (State,_,_) -> State end,
+        ok = sys:install(Runtime,{Observe,none}),
+        ok = sys:suspend(Child),
+        try
+            commit(Ns,agent({goal,{agent_assignment,agent_ref(Ns,actor),Node,1,Node,2,Key}})),
+            Worker = receive {retirement_wait,Token,W} -> W
+                     after 5000 -> error(retirement_not_requested) end,
+            Monitor = monitor(process,Worker),
+            try
+                %% Join the handoff handler while the old child cannot stop.
+                ?assertMatch(#{runner_active := true},quod_runtime:stats(Ns)),
+                application:unset_env(quod,node_actor_principal),
+                quod_runtime:reconcile_now(Ns),
+                ?assertMatch(#{runner_active := true},quod_runtime:stats(Ns)),
+                ok = sys:resume(Child),
+                receive {'DOWN',Monitor,process,Worker,Reason} -> ?assertEqual(normal,Reason)
+                after 5000 -> error(retirement_reply_lost_on_withdrawal) end,
+                settled(Owner),
+                ?assertEqual({Runtime,[]},quod_agent_hosting_tests:domain_agents(Ns))
+            after demonitor(Monitor,[flush]) end
+        after
+            catch sys:resume(Child),
+            application:set_env(quod,node_actor_principal,Principal),
+            sys:remove(Runtime,Observe)
+        end
+    end) end}.
+
 resume_worker(Runtime, Worker) ->
     _ = sys:replace_state(Runtime, fun(State) ->
         true = erlang:resume_process(Worker), State
@@ -420,7 +458,7 @@ received_input(#{namespace := Ns, tag := Tag}, Height) ->
     after 10000 -> error(newer_committed_input_not_received) end.
 
 host(#{namespace := Ns, node := Node, key := Key, reference := Ref}, Owner) ->
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
     Pid = installed(Ref), settled(Owner), Pid.
 installed(Ref) ->
     receive {agent_installed, _, Pid, #{reference := Ref, epoch := 1}, _} -> Pid
@@ -444,8 +482,8 @@ remaining(Deadline) -> max(0, Deadline - erlang:monotonic_time(millisecond)).
 %% owners which must persist the real edits performed by these tests.
 start_trace(#{namespace := Ns, runtime := Runtime}) ->
     Trace = #{session := Session, io := IO} = new_trace(),
-    trace:function(Session, {quod_runtime, select_resource_description, 5},
-                   [{[Ns, '_', '_', agent_hosts, '_'], [], []}], [local]),
+    trace:function(Session, {quod_runtime, select_resource_description, 6},
+                   [{[Ns, '_', '_', agent_hosts, '_', '_'], [], []}], [local]),
     trace:function(Session, {quod_runtime, install_resource, 4},
                    [{[Ns, '_', agent_hosts, {agent_hosts, '_', '_'}], [], []}], [local]),
     [trace:function(Session, MFA, true, [local]) || MFA <- IO],

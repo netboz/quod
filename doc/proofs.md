@@ -131,7 +131,7 @@ OCC read set, including absent grants and failed checks. A staged ownership,
 class, requirement or grant edit cannot authorize itself or the next operation
 in that proof. Concurrent changes to those dependencies conflict normally.
 
-Classes author these local declarations:
+[Class owners author these declarations.]{decided by="yan.guiborat" on="2026-11-08"}
 
 ```prolog
 class_requirement(document, edit, document_edit_requirement).
@@ -150,20 +150,20 @@ edit_document(Document, Value) :-
 
 Declare the usual `isa/2` edges and `instance_of/2` memberships as well. Every
 applicable class's `class_requirement(Class, OperationName, Check)` is compulsory;
-`Check` names a local predicate receiving `(Actor, Subject, Operation)`. Checks
-must be pure committed Prolog: they cannot write, consult live services or open
-foreign scopes. Derived memberships and the entire ancestry consulted by the
-guard follow the same rule: a foreign-qualified parent is refused, not partially
-evaluated. Compose class policy into its target ontology, as for other local
-authorization. Missing or failing checks deny; attempted mutations or forbidden
-bridges raise `invalid_committed_policy`. Actual owner fences retain their typed
+[`Check` names a predicate at the declaring class owner receiving the original
+`(Actor, Subject, Operation)`. Checks must be pure committed Prolog: they cannot
+write or consult live services. The class tree, derived memberships and class ACL
+declarations follow a qualified class into its owner, as `isa/2` does; those reads
+enter the proof's dependencies. The class owner declares the class's ACL defaults
+and compulsory requirements; the storing ontology declares per-instance ACL
+facts. `can_invoke/4`, custody and committee verdicts cannot follow.]{decided by="yan.guiborat" on="2026-11-08"}
+Missing or failing checks deny; attempted mutations or forbidden bridges raise
+`invalid_committed_policy`. Actual owner fences retain their typed
 pending/rebuilding errors.
 
-The built-in ontology self-membership uses `current_ontology_identity/2`, which
-the strict policy context refuses. Consequently this guard does not yet support
-`instance(ontology_ref(Namespace, Anchor))`; ontology-operation integration must
-supply committed membership without weakening that boundary. Ordinary ontology
-membership queries and cross-ontology class queries keep their existing behavior.
+The ordinary operation guard can read `current_ontology_identity/2` for the
+built-in ontology self-membership. Strict local verdict contexts still refuse
+that bridge; the operation guard does not change their admissible predicates.
 
 `class_permission(Class, OperationName, Grant)` supplies a default: `allow`,
 `deny`, or `check(Predicate)` with the same three callback arguments. The most
@@ -194,17 +194,16 @@ and grants no authority to a later submission. Incomplete inputs fail without
 binding choices. Actual execution checks the exact actor, target and parameters
 again. Ontology `can_invoke/4` admission remains a separate prerequisite.
 
-The assertion hook uses this guard for creation; offered GUI operations use it
-at their own mutation boundary. During an active constructor, an operation on
-its new `instance(Id)` is checked as `construction(Class, Id, Inputs)`. The
-assertion hook alone supplies this scoped context; callers cannot supply that
-subject to the public guard or forge it with build inputs. Policy still runs
-over committed state, requires absence of that identity there, expands every
-parent of the original class, and uses class grants without staged instance
-overrides. Callbacks receive the original inputs, not staged attributes. This
-allows atomic initial placement before the membership commits. Nested parts
-have their own contexts; completion, rollback and errors restore the enclosing
-context. Existing-instance operations continue to use committed memberships.
+[The assertion hook uses this guard for creation; offered GUI operations use it
+at their own mutation boundary. An instance whose membership was asserted in the
+current transaction is checked as `construction(Class, Id, Inputs)` by its class
+policy, without staged instance overrides, until it commits. The assertion hook
+supplies that context; callers cannot supply it to the public guard or forge it
+with build inputs. Policy runs over committed state, requires absence of the new
+identity there, follows the original class's ancestry and receives the original
+inputs rather than staged slots. This permits atomic initial placement after the
+assertion. The context follows the transaction through foreign calls and is
+restored with rollback; existing instances use committed memberships.]{decided by="yan.guiborat" on="2026-11-08"}
 The reserved grant-edit operation still requires a committed instance.
 The authenticated-principal bridge is installed
 once by the common runtime vocabulary. Terrain/helper and placement
@@ -213,51 +212,43 @@ rewrites remain outside the narrower operation contract. There is no generic
 final-state validator. Packaged common rules do not rewrite founded ontologies;
 activation requires the existing authorized compatible-artifact/source procedure.
 
-## Constructor inputs, defaults and inheritance
+## Creation inputs, defaults and inheritance
 
-The shared [construction rules](../priv/ontologies/construction.pl) use
-`constructor(Class, Instance, BuildPlan)` for every class. Classes author their
-own bodies and required parts. Bare `assert(instance_of(Class, Id))`, `asserta`
-and `assertz` request creation with an output variable. The existing assertion
-hook runs the committed class guard, allocates and binds the ID, resolves inputs,
-stages membership and initial attributes, then calls constructors in the original
-proof under the shared savepoint. It does not call `goal/1` to test the newly
-staged membership: that already-true shortcut would skip construction.
-Calling the input wrapper alone does not create anything.
+[The shared [construction rules](../priv/ontologies/construction.pl) initialize
+slots when a bare `assert(instance_of(Class, Id))`, `asserta` or `assertz`
+requests creation with an output variable. The existing assertion hook checks
+committed class policy, allocates the ID, resolves inputs, and stages membership
+and initial slots under the shared savepoint. Constructors do not build instances
+or parts; a `constructor/3` body at a class owner refuses creation. Parts are
+asserted like any other instance.]{decided by="yan.guiborat" on="2026-11-08"}
+The hook does not call `goal/1` to test the newly staged membership: an
+already-true state would skip slot initialization. Calling the input wrapper
+alone creates nothing.
 
 The ID is a full 26-byte Crockford ULID: 48-bit Unix milliseconds plus 80 bits
-from `crypto:strong_rand_bytes/1`. Every creation, including each required part,
-draws independently; all inherited constructors share their instance's ID. A
-collision with a live direct or derived membership refuses the attempt before
-constructors or attributes can overwrite it. Normal creation accepts no
-caller-chosen new ID. There is no counter or deleted-instance catalogue.
-The exact reference is `entity_ref(Namespace, GenesisAnchor, Id)`; a named output
-in the signed goal is retained by the ordinary selected-result machinery.
+from `crypto:strong_rand_bytes/1`. Every creation draws independently; inherited
+slot declarations initialize the same instance. A collision with a live direct
+or derived membership refuses the attempt before slots can overwrite it. Normal
+creation accepts no caller-chosen new ID. There is no counter or deleted-instance
+catalogue. The exact reference is `entity_ref(Namespace, GenesisAnchor, Id)`; a
+named output in the signed goal is retained by the ordinary selected-result
+machinery.
 
-`with_build_plan(Inputs, Goal)` supplies temporary inputs during `Goal`. Inputs
-are a ground list of `attribute(Key, Value)` and `part(Role, PartInputs)` entries;
-keys and roles are atoms, unique within their respective categories. Nested
-wrappers replace the current inputs, restore the enclosing scope on exit and
-preserve ordinary Prolog alternatives and cut. Inputs are private proof bindings,
-never stored facts, authority or a second knowledge base. They do not implicitly
-cross ontology calls. Each constructor body receives its original BuildPlan,
-while the ambient inputs are empty: nested parts receive only what their owning
-class explicitly passes through a new wrapper. `build_plan_part/3` selects one
-role's overrides, returning `[]` when absent. Classes declare supported override
-roles with `have_part(Class, Role)`; preflight accepts roles declared anywhere in
-the constructor ancestry and refuses unknown roles before bodies run. Each part's
-own preflight validates its nested inputs. The declaration does not create a part:
-class code still constructs its required parts and explicitly passes overrides;
-the caller does not repeat the internal tree.
+[`with_build_plan(Inputs, Goal)` supplies a ground list of `attribute(Key, Value)`
+entries during `Goal`; keys are unique atoms. Nested wrappers replace the inputs,
+restore the enclosing scope on exit and preserve ordinary alternatives and cut.
+Inputs are private proof bindings, never stored facts or authority, and do not
+implicitly cross ontology calls. Part inputs and `have_part/2` declarations are
+removed. A goal that creates several instances supplies each instance's slots
+through its own wrapper.]{decided by="yan.guiborat" on="2026-11-08"}
 
-The internal `'$quod_constructor_plan'(Class, Instance, Inputs, Order, Attributes)`
+[The internal `'$quod_constructor_plan'(Class, Instance, Inputs, Order, Attributes)`
 requires a bound identity and performs read-only preflight through the existing
-state-check machinery. It validates the full constructor order and resolves all
-initial attributes before writes or bodies. It reuses `isa/2` declarations,
-most-specific selection and `have_attribute(Class, Key, Type[, Default])`.
-Class definitions and constructors are composed locally, like shared permission
-policy; a foreign-qualified parent is refused rather than silently skipped.
-Ordinary cross-ontology ancestry queries retain their existing behavior.
+state-check machinery. It validates the inheritance order and resolves all
+initial slots before writing. Class declarations follow a qualified class into
+its owner, including parents, `constructor_order/2`, slot declarations, selected
+default providers and type checks. It reuses `isa/2`, most-specific selection and
+`have_attribute(Class, Key, Type[, Default])`.]{decided by="yan.guiborat" on="2026-11-08"}
 
 A supplied value wins over class defaults. Otherwise most-specific default
 providers win over inherited providers; equal unrelated defaults agree, while
@@ -276,7 +267,7 @@ Type names must be atoms naming executable unary checks visible in the owning
 ontology. Descriptive metadata such as `quantity(Unit)` or an undefined `degrees`
 is not an executable validator; classes using it must supply validation when
 adopting construction. Such supplied/default values fail validation, not fall
-back to an unchecked value. Refusals identify unknown attributes/parts, missing
+back to an unchecked value. Refusals identify unknown attributes, missing
 required keys, invalid resolved values and failed default providers. Malformed
 input lists report `invalid_build_inputs`.
 GUI property validation uses these same declared types; GUI-specific selection
@@ -287,7 +278,6 @@ isa(chair, thing).
 class_permission(chair, create, allow).
 have_attribute(chair, name, binary, default(<<"Chair">>)).
 have_attribute(chair, legs, positive_integer, default(4)).
-constructor(chair, Chair, _Inputs) :- attribute(Chair, legs, _).
 
 isa(place, thing).
 have_attribute(place, name, binary, default_from(place_name)).
@@ -303,51 +293,49 @@ ordinary or computed default; no universal personal-name draw is installed.
 A supplied name bypasses the computed provider. A selected naming pool must
 support the requested kind; absence fails instead of drawing another kind.
 Resolved values are stored once by `'$quod_initial_attribute_writes'/2`, then
-read normally by every constructor and view. Changing defaults does not rewrite
+read normally by operations and views. Changing defaults does not rewrite
 instances. Names are mutable and nonunique; renaming changes neither identity
 nor other instance facts. Terrain's `display_name` migration remains stage 3.
 
 `constructor_order(Class, Parents)` lists every direct parent exactly once.
 Zero or one parent needs no declaration; multiple parents require one ground
 proper list. Duplicate, missing or extra parents, multiple declarations,
-inheritance cycles and contradictory order constraints fail before bodies run.
+inheritance cycles and contradictory order constraints fail before slot writes.
 The order combines all ancestor-before-descendant and declared parent constraints;
 a stable topological traversal uses the authored branch order for independent
-choices. Shared ancestors run once per attempt, on the same instance as their
+choices. Shared ancestors are selected once per attempt, for the same instance as their
 descendants. Constructor order never chooses attribute defaults or permissions.
 
-`'$quod_run_constructors'/3` invokes that prepared order. Declaration inspection
-is separate from execution: absent own code succeeds without skipping parents;
-declared code that fails, including an explicitly called required part, fails
-the construction. The assertion savepoint selects the first complete construction
-answer. Failed alternatives, required parts and caught constructor errors restore
-memberships, attributes, events, effects and bindings together; read dependencies
-remain monotonic. Commit intent is inherited. As with successful actions, a
-successful construction releases its own boundary before the caller continues.
-Use an enclosing `transaction/1` or action when later caller failure/backtracking
-must also discard that completed construction. Cuts and ordinary staging keep
-their existing meanings. There is no generic final-state validator.
+[The assertion savepoint selects the first complete initialization answer.
+Failed alternatives and caught errors restore membership, slots, events,
+effects, creation context and bindings together; read dependencies remain
+monotonic. Commit intent is inherited. Successful creation releases its own
+boundary before the caller continues. Use an enclosing `transaction/1` or action
+when later caller failure or backtracking must also discard the completed
+creation.]{decided by="yan.guiborat" on="2026-11-08"}
+Cuts and ordinary staging keep their existing meanings. There is no generic
+final-state validator.
 
 ## Membership source and recovery
 
 Membership queries and derived memberships create nothing. A bare ground
 assertion can repeat or add a classification to an existing identity without
-running constructors; it refuses a new caller-selected identity. This is not
+initializing slots; it refuses a new caller-selected identity. This is not
 live specialization and does not initialize the additional class's defaults.
 
 An explicit clause, including `instance_of(Class, Id) :- true`, authors source
-instead of requesting construction. It stores its variables as clause variables.
+instead of requesting creation. It stores its variables as clause variables.
 The guarded source editor already emits this form, so replacing/reordering a
 suffix preserves surviving identities and attributes without a temporary identity
 registry. Its exact source round-trip check remains unchanged. Authorized source
-addition/removal edits facts as written; it does not promise constructor validity
+addition/removal edits facts as written; it does not promise initialized slots
 or prevent deliberate identity reuse by an author with broad source authority.
 Strict read-only overlays still reject both facts and explicit clauses.
 
 Founding compilation and common loading compile clauses directly. Commit apply,
 restart and projection rebuild restore decided facts and results through the
 existing materializer. Validators consume the sealed IDs/names and existing
-read dependencies; they do not rerun constructors or draw replacements. Historical
+read dependencies; they do not initialize slots again or draw replacement identities. Historical
 reactions are not replayed. Ontology founding remains its own governed lifecycle,
 outside ordinary instance construction. Existing terrain actions store their
 decided terrain/sky memberships as explicit clauses. Their governed construction

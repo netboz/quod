@@ -7,7 +7,7 @@
 
 signed_read_dependencies_survive_answers_failure_and_errors_test() ->
     Evidence = maps:get(evidence,fixture()),
-    Deps = [{<<"a">>,<<1:256>>,7},{<<"b">>,<<2:256>>,9}],
+    Deps = [{<<"a">>,<<1:256>>,7,[{{policy,1},{present,3}}]},{<<"b">>,<<2:256>>,9,[]}],
     lists:foreach(fun(Raw) ->
         Outcome = quod_client_result:normalize(Evidence,Raw),
         Read = {read,Deps,Outcome},
@@ -16,13 +16,13 @@ signed_read_dependencies_survive_answers_failure_and_errors_test() ->
         ?assertEqual({ok,Read},quod_client_result:decode(Blob)),
         {_,Json} = quod_client_result:http_normalized(Evidence,Read),
         ?assertEqual([#{ns => N,genesis_anchor => b64url(A),height => integer_to_binary(H)}
-                      || {N,A,H} <- Deps],maps:get(dependencies,Json))
+                      || {N,A,H,_} <- Deps],maps:get(dependencies,Json))
     end,[{ok,[#{0 => bob}],7},fail,{fail,[denied]},{error,read_only}]),
-    ?assertMatch({ok, _}, quod_client_result:encode({read, [{binary:copy(<<"n">>,1025),<<1:256>>,0}], fail})),
-    BadDeps = [lists:reverse(Deps),Deps++Deps,[{<<"a">>,<<1:256>>,-1}],
-               [{<<"a">>,<<1:256>>,1 bsl 64}],[{<<"a">>,<<1>>,1}],
-               [{<<>>,<<1:256>>,0}],
-               [{<<"a">>,<<1:256>>,0},{<<"a">>,<<2:256>>,0}]],
+    ?assertMatch({ok, _}, quod_client_result:encode({read, [{binary:copy(<<"n">>,1025),<<1:256>>,0,[]}], fail})),
+    BadDeps = [[{<<"a">>,<<1:256>>,7,[{{policy,1},bad_token}]}],lists:reverse(Deps),Deps++Deps,[{<<"a">>,<<1:256>>,-1,[]}],
+               [{<<"a">>,<<1:256>>,1 bsl 64,[]}],[{<<"a">>,<<1>>,1,[]}],
+               [{<<>>,<<1:256>>,0,[]}],
+               [{<<"a">>,<<1:256>>,0,[]},{<<"a">>,<<2:256>>,0,[]}]],
     [?assertEqual({error,invalid_result},quod_client_result:encode({read,D,fail})) || D <- BadDeps],
     [?assertEqual({error,invalid_result},quod_client_result:encode({read,Deps,R})) || R <-
         [{read,Deps,fail},stopped,{pending,{transaction,<<"a">>,<<1:256>>,<<2:256>>}}]].
@@ -31,7 +31,7 @@ read_dependency_heights_are_lossless_json_test() ->
     Evidence = maps:get(evidence,fixture()),
     %% A browser Number cannot distinguish these last two uint64 values.
     lists:foreach(fun(Height) ->
-        Read = {read,[{<<"a">>,<<1:256>>,Height}],fail},
+        Read = {read,[{<<"a">>,<<1:256>>,Height,[]}],fail},
         {200,Body} = quod_client_result:http_normalized(Evidence,Read),
         #{<<"dependencies">> := [#{<<"height">> := Decimal}]} =
             json:decode(iolist_to_binary(json:encode(Body))),
@@ -42,7 +42,7 @@ read_dependency_heights_are_lossless_json_test() ->
 
 many_dependencies_and_answers_keep_their_exact_values_test() ->
     Evidence = maps:get(evidence, fixture()),
-    Deps = [{<<I:32>>, <<I:256>>, I} || I <- lists:seq(1, 32)],
+    Deps = [{<<I:32>>, <<I:256>>, I, []} || I <- lists:seq(1, 32)],
     Raw = {read, Deps, {ok, lists:duplicate(10001, #{}), 7}},
     Read = quod_client_result:normalize(Evidence, Raw),
     ?assertMatch({read, Deps, {answers, 7, _}}, Read),
@@ -200,7 +200,7 @@ signed_binding_preserves_binary_identity_and_numeric_values_test() ->
 complete_results_and_dependencies_have_no_second_allocation_test() ->
     Evidence=maps:get(evidence,fixture()),
     Value=binary:copy(<<$x>>,600000),
-    Deps=[{<<"a">>,<<1:256>>,7}],
+    Deps=[{<<"a">>,<<1:256>>,7,[]}],
     lists:foreach(fun(Raw) ->
         Result=quod_client_result:normalize(Evidence,{read,Deps,Raw}),
         ?assertMatch({read,Deps,{answers,7,_}},Result),
@@ -209,12 +209,12 @@ complete_results_and_dependencies_have_no_second_allocation_test() ->
     end,[{ok,[#{0=>Value}],7},{ok,lists:duplicate(50,#{0=>binary:part(Value,0,12000)}),7}]),
     ?assertEqual({read,Deps,{error,proof_unavailable}},
         quod_client_result:normalize(Evidence,{read,Deps,{ok,[#{0=>self()}],7}})),
-    LargeDependency = {read,[{Value,<<1:256>>,7}],fail},
+    LargeDependency = {read,[{Value,<<1:256>>,7,[]}],fail},
     ?assertEqual(LargeDependency, quod_client_result:normalize(Evidence,LargeDependency)),
     {ok, LargeBytes} = quod_client_result:encode(LargeDependency),
     ?assertEqual({ok,LargeDependency}, quod_client_result:decode(LargeBytes)),
     ?assertEqual({read,[],{error,proof_unavailable}},
-        quod_client_result:normalize(Evidence,{read,[{<<"a">>,bad_anchor,7}],fail})).
+        quod_client_result:normalize(Evidence,{read,[{<<"a">>,bad_anchor,7,[]}],fail})).
 
 transient_bindings_use_the_complete_reply_contract_test() ->
     Evidence = maps:get(evidence, fixture()),

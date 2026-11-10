@@ -57,25 +57,6 @@ missing_or_mismatched_scope_fails_closed_test() ->
                      catch erlog_int:prove_goal(Goal, Policy))
     end).
 
-resource_selection_identity_has_no_live_or_scope_authority_test() ->
-    with_state(fun(Est) -> quod_predicates:register(Est,{staged_probe,0},staging,?MODULE,probe) end,
-      fun(St0) ->
-        Ns = <<"receiver">>, Anchor = <<1:256>>,
-        Ctx = quod_predicates:resource_context({Ns,Anchor},1),
-        St = quod_predicates:set_context(St0,Ctx),
-        {succeed,Final} = erlog_int:prove_goal({current_ontology_identity,{'N'},{'A'}},St),
-        ?assertEqual(Ns,erlog_int:dderef({'N'},Final#est.bs)),
-        ?assertEqual(Anchor,erlog_int:dderef({'A'},Final#est.bs)),
-        ?assertEqual([],bridges(Final)),
-        ?assert(quod_predicates:local_only(St)),
-        ?assertMatch({erlog_error,{context_violation,_,query,resource_selection}},
-            catch erlog_int:prove_goal({'$quod_ontology_routes',{'Routes'}},St)),
-        ?assertMatch({erlog_error,{context_violation,_,reaction,resource_selection}},
-            catch erlog_int:prove_goal({limit_reaction_expiry,1000},St)),
-        ?assertMatch({erlog_error,{context_violation,_,staging,resource_selection}},
-            catch erlog_int:prove_goal(staged_probe,St))
-    end).
-
 signed_expiry_is_proof_bound_not_a_live_clock_test() ->
     with_state(fun(St0) ->
         St = context(St0, <<"receiver">>, [{<<"receiver">>, <<1:256>>}]),

@@ -1,0 +1,69 @@
+{
+  "phase1": {
+    "added": 250,
+    "removed": 112,
+    "net": 138
+  },
+  "cumulative": {
+    "added": 408,
+    "removed": 302,
+    "net": 106
+  },
+  "files": [
+    {
+      "path": "priv/ontologies/common_predicates.pl",
+      "added": 64,
+      "removed": 23
+    },
+    {
+      "path": "priv/ontologies/construction.pl",
+      "added": 42,
+      "removed": 41
+    },
+    {
+      "path": "src/predicates/quod_agent_predicates.erl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "src/predicates/quod_ask.erl",
+      "added": 12,
+      "removed": 2
+    },
+    {
+      "path": "src/predicates/quod_common_primitives.erl",
+      "added": 22,
+      "removed": 15
+    },
+    {
+      "path": "src/quod_erlog_db_local_prove.erl",
+      "added": 64,
+      "removed": 12
+    },
+    {
+      "path": "src/quod_predicates.erl",
+      "added": 12,
+      "removed": 2
+    },
+    {
+      "path": "src/quod_proof_context.erl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "src/quod_proof_session.erl",
+      "added": 12,
+      "removed": 2
+    },
+    {
+      "path": "src/quod_scope_wire.erl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "src/quod_transaction_scope.erl",
+      "added": 19,
+      "removed": 12
+    }
+  ]
+}

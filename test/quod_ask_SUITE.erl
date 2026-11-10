@@ -44,7 +44,7 @@
          remote_group_recovers_after_origin_crash/1,
          remote_four_scope_chain_recovers_empty_routes/1]).
 -export([run_scope_proofs/3]).
--export([hold_group_activation/3, agent_custody_snapshot/2]).
+-export([hold_group_activation/3, agent_custody_snapshot/2, committed_remote_read/1]).
 -export([remote_signed_transaction_savepoints/1]).
 -export([cut_findall_local_and_cohosted/1,
          cut_findall_remote_boundaries/1,
@@ -122,7 +122,7 @@ node_enrollment_remote_custodian(Config) ->
         [NodeNs, #{node_id => SourceKey, mode => create, data_dir => NodeDir,
                    seed_peers => [], genesis_file => NodeSource,
                    external_predicate_modules => [quod_ontology_predicates]}]),
-    ok = peer:call(Source, ?MODULE, enrollment_wait_ready, [NodeNs, {isa, node, agent}], 15000),
+    ok = peer:call(Source, ?MODULE, enrollment_wait_ready, [NodeNs, {isa, node, {':',quod,{':',agent,agent}}}], 15000),
     NodeAnchor = peer:call(Source, quod_simplex, genesis_hash, [NodeNs]),
     start_brahms(Source, NodeNs, SourceAddr, []),
     {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
@@ -771,6 +771,8 @@ remote_gui_opening_observer_receiver(Config) ->
     GuiNs = <<"quod:gui">>, NodeNs = <<"gui:remote-node">>, AppNs = <<"gui:remote-app">>,
     GuiAnchor = Start(GuiNs,quod_ct:gui_terms() ++ [{can_invoke,true,{'_'},{'_'},GuiNs}],
                       [quod_agent_predicates,quod_gui_predicates]),
+    AgentAnchor = Start(<<"quod:agent">>,Source("quod_agent.pl"),[quod_agent_predicates]),
+    UserAnchor = Start(<<"quod:user">>,Source("quod_user.pl"),[quod_agent_predicates]),
     start_brahms(Owner,GuiNs,OwnerAddr,[]),
     start_join_namespace(Receiver,ReceiverKey,GuiNs,GuiAnchor,[OwnerAddr],Config),
     start_brahms(Receiver,GuiNs,ReceiverAddr,[OwnerAddr]),
@@ -779,7 +781,7 @@ remote_gui_opening_observer_receiver(Config) ->
     HumanNs = <<"gui:remote-human">>, HumanInstance = {human_user,test_agent},
     HumanAnchor = Start(HumanNs,quod_gui_question_tests:user_source_with_allowance(HumanInstance,2) ++ [
         {agent_key,HumanInstance,?config(agent_pub,Config),active},
-        {instance_of,human_user,HumanInstance},
+        {instance_of,{':',quod,{':',user,human_user}},HumanInstance},
         {can_invoke,{'_'},{agent_instance_ref,HumanNs,{'_'},HumanInstance},{'_'},HumanNs}],
         [quod_agent_predicates]),
     Human = {agent_instance_ref,HumanNs,HumanAnchor,HumanInstance},
@@ -807,6 +809,8 @@ remote_gui_opening_observer_receiver(Config) ->
     AppAnchor = Start(AppNs,Source("agent_instance.pl") ++ Source("gui_instance.pl") ++
         quod_prolog:read_terms(filename:join([
             filename:dirname(code:which(?MODULE)),"fixtures","gui-components.pl"])) ++ [Admin,
+        {instance_of,{':',quod,{':',agent,agent}},actor},
+        {can_invoke,{'_'},{node,OwnerKey},{'_'},AppNs},
         {gui_vocabulary,GuiNs,GuiAnchor},{gui_pending_allowance,actor,2},{gui_completion_allowance,actor,30000},
         {can_assign_agent_host,Human,actor,none,0,Node,{'_'}},
         {':-',{settings_entered,{'N'},{'M'},{'L'},{'A'}},{assertz,{saved,{'N'},{'M'},{'L'},{'A'}}}}],
@@ -824,23 +828,24 @@ remote_gui_opening_observer_receiver(Config) ->
     ok = enrollment_route(Receiver,OwnerKey,OwnerAddr,
         [{?ASKER_NS,?config(asker_anchor,Config),validator},
          {HumanNs,HumanAnchor,validator},{GuiNs,GuiAnchor,validator},
-         {NodeNs,NodeAnchor,validator},{AppNs,AppAnchor,validator}]),
+         {NodeNs,NodeAnchor,validator},{AppNs,AppAnchor,validator},
+         {<<"quod:agent">>,AgentAnchor,validator},{<<"quod:user">>,UserAnchor,validator}]),
     ok = enrollment_route(Owner,ReceiverKey,ReceiverAddr,
         [{?THIRD_NS,?config(third_anchor,Config),validator},{?NS,?config(target_anchor,Config),observer},
          {GuiNs,GuiAnchor,observer}]),
     ?assertEqual(undefined,peer:call(Receiver,quod_reg,where,[{quod_prolog,HumanNs}])),
     ?assertEqual(undefined,peer:call(Receiver,quod_reg,where,[{quod_prolog,AppNs}])),
     ?assertMatch({ok,[#{<<"V0">> := []}],_},peer:call(Receiver,quod_lobby_tests,read,
-        [Ctx,Scope(HumanNs,HumanAnchor,{gui_pending_questions,{0}})],20000)),
+        [Ctx,Scope(HumanNs,HumanAnchor,gui({gui_pending_questions,{0}}))],20000)),
     Client = peer:call(Receiver,?MODULE,gui_receiver_start,[Ctx,HumanNs,HumanAnchor]),
     ReceiverCall = fun(Command) -> peer:call(Receiver,gen_server,call,[Client,Command,20000],25000) end,
     try
         #{<<"receiver">> := #{<<"token">> := TokenText}} = ReceiverCall(renew),
         Token = base64:decode(TokenText,#{mode => urlsafe,padding => false}),
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},
-            Submit({gui_select_receiver,HumanInstance,ReceiverKey,Token})),
+            Submit(gui({gui_select_receiver,Human,ReceiverKey,Token}))),
         _ = ReceiverCall(renew),
-        Opening = Submit(Scope(AppNs,AppAnchor,{gui_open,settings,{0}})),
+        Opening = Submit(gui({gui_open,Ref,{0}})),
         case Opening of
             {ok,_,{normalized,{committed,_,_}}} -> ok;
             {ok,_,Outcome} -> error({remote_gui_open_failed,Outcome});
@@ -848,21 +853,21 @@ remote_gui_opening_observer_receiver(Config) ->
         end,
         ok = ReceiverCall(activated),
         {ok,[#{<<"V0">> := [{question_ref,AppNs,AppAnchor,Q}]}],_} =
-            peer:call(Owner,quod_lobby_tests,read,[Ctx,{gui_pending_questions,{0}}]),
+            peer:call(Owner,quod_lobby_tests,read,[Ctx,gui({gui_pending_questions,{0}})]),
         {ok,[#{<<"V0">> := Revision}],_} = peer:call(Owner,quod_lobby_tests,read,
             [Ctx,Scope(AppNs,AppAnchor,{gui_schema,settings,{0},{'_'}})]),
         Fields = [{field,name,<<"Remote">>},{field,mode,square},{field,level,75},{field,angle,180}],
         ok = peer:call(Owner,?MODULE,gui_complete_answer,
-            [Ctx,Actor,Q,Scope(AppNs,AppAnchor,{gui_submit,Q,Revision,apply,Fields})],30000),
+            [Ctx,Actor,Q,gui({gui_submit,{question_ref,AppNs,AppAnchor,Q},Revision,apply,Fields})],30000),
         ?assertMatch({ok,[_],_},peer:call(Owner,quod_lobby_tests,read,
             [Ctx,Scope(AppNs,AppAnchor,{saved,<<"Remote">>,square,75,180})])),
         #{<<"value">> := <<"[]">>} = ReceiverCall(renew),
         ok = ReceiverCall(stop),
         %% The signed route remains, but the authoritative remote receiver is
         %% absent. Public opening fails and creates no question or HUD row.
-        ?assertMatch({ok,_,{normalized,{failed,_}}},Submit(Scope(AppNs,AppAnchor,{gui_open,settings,{0}}))),
+        ?assertMatch({ok,_,{normalized,{failed,_}}},Submit(gui({gui_open,Ref,{0}}))),
         ?assertMatch({ok,[#{<<"V0">> := []}],_},peer:call(Owner,quod_lobby_tests,read,
-            [Ctx,{gui_pending_questions,{0}}]))
+            [Ctx,gui({gui_pending_questions,{0}})]))
     after
         _ = catch ReceiverCall(stop)
     end.
@@ -932,23 +937,23 @@ gui_receiver_projection(Hud,Message,Deadline) ->
         after 1000 -> error(remote_gui_socket_unresponsive) end
     end.
 
-gui_host_actor(Ctx,Actor = {agent_instance_ref,Ns,_,Instance},Node,Key) ->
+gui_host_actor(Ctx,Actor = {agent_instance_ref,Ns,_,_},Node,Key) ->
     true = quod_reg:subscribe({agent_hosting,Ns}),
     try
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},quod_lobby_tests:submit(Ctx,execute,
-            {'::',Ns,{goal,{agent_hosted,Instance,Node,1,Key}}})),
+            {'::',<<"quod:agent">>,{goal,{agent_hosted,Actor,Node,1,Key}}})),
         receive {agent_installed,_,_,#{reference := Actor},_} -> ok
         after 10000 -> error(remote_gui_actor_not_installed) end
     after quod_reg:unsubscribe({agent_hosting,Ns}) end.
 
-gui_complete_answer(Ctx,Actor,Q,Goal) ->
+gui_complete_answer(Ctx,Actor = {agent_instance_ref,Ns,Anchor,_},Q,Goal) ->
     true = quod_reg:subscribe({agent,Actor}),
     try
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},quod_lobby_tests:submit(Ctx,execute,Goal)),
         receive {agent_request_finished,_,_,#{reference := Actor},_,Result} ->
             {ok,#{request_bytes := Bytes},{normalized,{committed,_,_}}} = Result,
             {ok,#{goal_text := Text}} = quod_client_goal:decode(Bytes),
-            {ok,Expected} = quod_client_goal_parser:format({gui_complete,Q}),
+            {ok,Expected} = quod_client_goal_parser:format(gui({gui_complete,{question_ref,Ns,Anchor,Q}})),
             ?assertEqual(quod_client_goal_parser:parse(Expected,3),quod_client_goal_parser:parse(Text,3)),ok
         after 10000 -> error(remote_gui_completion_missing) end
     after quod_reg:unsubscribe({agent,Actor}) end.
@@ -1357,6 +1362,17 @@ remote_scope_transport_reuse(Config) ->
     run_scope_wave(Asker, Goal, second),
     wait_scope_workers(Target, 0, 200).
 
+%% The selector owns this empty origin fixture snapshot on the originating peer;
+%% its signed foreign scope reads the real target under that target's ACL.
+committed_remote_read(Evidence = #{request := #{agent_namespace := Ns,
+        agent_genesis_anchor := Anchor,not_after_ms := Expiry},goal := Frozen}) ->
+    {ok,Goal} = quod_wire_term:materialize_symbols(Frozen),
+    Est = quod_predicates:set_context(quod_ct:committed_kb([]),
+                                     quod_predicates:proof_context(Ns,1,[])),
+    quod_prolog:prove_est(Goal,Est,#{identity => {Ns,Anchor},height => 1,
+        deadline_ms => quod_time:mono_ms() + max(0,Expiry-quod_time:now_ms()),
+        evidence => Evidence}).
+
 %% The browser is logged into A as an agent stored in A. Exact selectors reach
 %% B through the ordinary scope path. A has no ACL clause for these goals, so
 %% success proves that A authenticates identity while B alone authorizes B's
@@ -1383,10 +1399,19 @@ remote_signed_gateway_read_execute_cursor(Config) ->
           [read, maps:get(session_id, Session), ReadBytes, ReadSignature, Peer],
           60000),
     ?assertEqual({?ASKER_NS,AgentAnchor,ReadHeight},
-        lists:keyfind(?ASKER_NS,1,ReadDependencies)),
+        lists:keyfind(?ASKER_NS,1,[{N,A,H} || {N,A,H,_} <- ReadDependencies])),
     ?assertEqual({?NS,?config(target_anchor,Config),
                   peer:call(?config(target,Config),quod_prolog,applied,[?NS])},
-        lists:keyfind(?NS,1,ReadDependencies)),
+        lists:keyfind(?NS,1,[{N,A,H} || {N,A,H,_} <- ReadDependencies])),
+    ?assert(lists:all(fun({_,_,_,Reads}) -> Reads =:= [] end,ReadDependencies)),
+    {read,SelectorDependencies,{ok,_,_,_}} =
+        peer:call(Asker,?MODULE,committed_remote_read,[ReadEvidence],60000),
+    {?NS,_,_,RemoteReads} = lists:keyfind(?NS,1,SelectorDependencies),
+    ?assert(quod_read_set:valid_pairs(RemoteReads)),
+    ?assert(lists:any(fun
+        ({{Symbol,2},_}) -> quod_wire_term:symbol_names(Symbol) =:= {ok,[<<"diet">>]};
+        (_) -> false
+    end,RemoteReads)),
     ?assertEqual(ReadBytes, maps:get(request_bytes, ReadEvidence)),
     ?assertEqual(ReadSignature, maps:get(signature, ReadEvidence)),
     ?assertEqual(
@@ -3344,3 +3369,5 @@ deep_failure_rules() ->
      "deep_reason_value(0, Acc, Acc).\n"
      "deep_reason_value(N, Acc, Out) :- N > 0, Next is N - 1, "
      "deep_reason_value(Next, [Acc], Out).\n"].
+
+gui(Goal) -> {'::',<<"quod:gui">>,Goal}.

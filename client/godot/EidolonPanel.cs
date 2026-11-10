@@ -118,19 +118,21 @@ public partial class EidolonPanel : VBoxContainer
     public void PlaceNear(){if(Occurrence?.Pose==null||NearOccurrence)return;NearOccurrence=true;RefreshPlacement();Changed?.Invoke();}
     // A pie leaf is exactly one of this subject's offered choices. An action
     // without input fields runs on selection; one with fields opens its form.
-    public void OpenChoice(SignedSession session,Accounts accounts,LocalStore store,MenuTarget chosen,ScenePanel.Selection? occurrence)
+    public void OpenChoice(SignedSession session,Accounts accounts,LocalStore store,MenuTarget chosen,ScenePanel.Selection? occurrence,Actor? source=null)
     {
         if(Operations.IsWorking)return;
         if(occurrence?.Pose!=null&&occurrence.Subject.ToString()==chosen.Subject.ToString())SetOccurrence(occurrence);
         else if(Occurrence?.Subject.ToString()!=chosen.Subject.ToString())SetOccurrence(null);
         var asked=new Request(chosen.Subject.ToString(),chosen.Choice.ToString(),Execute:true);
+        var storing=chosen.Subject.Name=="class_ref" ? source : null;
         if(chosen.Label.Length>0)labels[asked.Choice]=chosen.Label;
-        if(Current?.Exact.ToString()==asked.Subject&&Available&&ReferenceEquals(this.session,session)) {
+        if(Current?.Exact.ToString()==asked.Subject&&Available&&ReferenceEquals(this.session,session)&&
+            (storing==null||Operations.SelectedStorage?.Ontology.ToString()==storing.Ontology.ToString())) {
             request=null;var offered=Offered.FirstOrDefault(e=>e.Exact.ToString()==asked.Choice);
             if(offered!=null)Choose(offered,reveal:true,execute:true);else status.Text="That choice is no longer offered.";
             RefreshPlacement();Changed?.Invoke();return;
         }
-        request=asked;Open(session,accounts,store,chosen.Subject);RefreshPlacement();Changed?.Invoke();
+        request=asked;Open(session,accounts,store,chosen.Subject,storing);RefreshPlacement();Changed?.Invoke();
     }
     public void OpenOccurrence(SignedSession session,Accounts accounts,LocalStore store,ScenePanel.Selection selected)
     {
@@ -149,17 +151,18 @@ public partial class EidolonPanel : VBoxContainer
     {
         bool same=this.session?.Network==session.Network && this.accounts?.Human==accounts.Human && this.session?.Key.PublicText==session.Key.PublicText;
         if(!same || Current==null)return false;
-        Open(session,accounts,store,Current.Exact);return true;
+        Open(session,accounts,store,Current.Exact,Operations.SelectedStorage);return true;
     }
     public void Disconnect()=>Operations.Cancel();
-    public void Open(SignedSession session,Accounts accounts,LocalStore store,Term exact)
+    public void Open(SignedSession session,Accounts accounts,LocalStore store,Term exact,Actor? storing=null)
     {
         if(Operations.IsWorking)return;
         if(Occurrence?.Subject.ToString()!=exact.ToString())SetOccurrence(null);
         Configure(session,accounts,store);var subject=Subject.Decode(exact);
-        if(Current?.Exact.ToString()==exact.ToString() && Available)return;
+        if(Current?.Exact.ToString()==exact.ToString() && Available&&
+            (storing==null||Operations.SelectedStorage?.Ontology.ToString()==storing.Ontology.ToString()))return;
         if(exact.Name=="ontology_ref"){Operations.Suspend();SubjectOpened(subject.Target,exact);}
-        else Operations.OpenSubject(session,accounts,subject.Target,exact);
+        else Operations.OpenSubject(session,accounts,storing??subject.Target,exact);
     }
     public void OpenStorage(SignedSession session,Accounts accounts,LocalStore store,Actor? location)
     {SetOccurrence(null);Configure(session,accounts,store);Retire();Current=null;preferred=null;source.Hide();preview.Hide();Operations.Show();Operations.OpenStorage(session,accounts,location);}
@@ -170,9 +173,8 @@ public partial class EidolonPanel : VBoxContainer
         if(request!=null)preferred=request.Choice;
         Retire(KeepVisual);Current=Subject.Decode(exactSubject);long expected=generation;
         Operations.Hide();
-        if(Current.Target.Namespace!=target.Namespace || Current.Target.Anchor!=target.Anchor)throw new FormatException("Subject names another storage identity.");
         exact.Text=exactSubject.ToString();status.Text="Reading this subject's authored representations…";
-        discovery=new(session,accounts.Human!,target,"eidolons",SignedSession.ViewGoal(target,Term.Call("entity_eidolons",Current.Local,Term.Variable("View"))));
+        discovery=new(session,accounts.Human!,Current.Target,"eidolons",SignedSession.ViewGoal(Current.Target,Term.Call("entity_eidolons",Current.Local,Term.Variable("View"))));
         discovery.Projection+=message=>{
             if(disposed||expected!=generation)return;
             var next=Eidolon.Decode(Json.S(message,"value"));

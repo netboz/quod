@@ -18,9 +18,10 @@ Its advice is consultative and must be checked against the production owners.
 `isa(agent, thing)`; [the human vocabulary](../priv/ontologies/quod_user.pl)
 defines `isa(human_user, agent)`. The shared vocabulary is not a global table
 of humans. [Signup](../priv/ontologies/quod_user.pl) creates a concrete
-human instance and active key in its own ontology; the
-[instance template](../priv/ontologies/user_instance.pl) provides ownership and
-personal-agent behavior. Its setup constructs ordinary nonphysical S0; optional
+human instance and active key in the user's ontology;
+[quod:user](../priv/ontologies/quod_user.pl) owns personal-agent behavior and
+reads ownership through the storing ontology's ACL. Setup asserts ordinary
+nonphysical S0 and places A in the same transaction; optional
 physical presets and later recursive entry/physics delivery retain their own scope.
 
 [Agent identity](../src/quod_agent_ref.erl) is the exact

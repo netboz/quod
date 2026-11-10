@@ -1,0 +1,115 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1545 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2173 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2173 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_physics_tests:-m3a_shared_component_test_/0-fun-49-/0
+[0;31m     Failure/Error: ?assert(lists : any ( fun ( { A , _ , B , _ } ) -> lists : sort ( [ A , B ] ) =:= [ 1 , 4 ] end , maps : get ( contacts , Contact ) ))
+       expected: true
+            got: false[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_5D1025A960DF8DB1
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_5D1025A960DF8DB1
+[0m
+  2) quod_physics_tests:-opening_worker_cancellation_test_/0-fun-10-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , _ , _ }, quod_ct : rp ( Ns , Goal ))
+       expected: = { ok , _ , _ }
+            got: fail[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_81B7AAB53437E347
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_81B7AAB53437E347
+[0m
+  3) quod_physics_tests:-signed_client_view_lifecycle_test_/0-fun-32-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , _ , _ }, quod_ct : rp ( Ns , Goal ))
+       expected: = { ok , _ , _ }
+            got: fail[0m
+[0;36m     %% eunit_proc.erl:554:in `eunit_proc:run_test/1`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_3510D7B777E230B3
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_3510D7B777E230B3
+[0m
+  4) quod_physics_tests:-unobstructed_door_signed_transition_test_/0-fun-3-/0
+[0;31m     Failure/Error: {error,
+                     {observation_failed,held,
+                      {normalized,
+                       {committed,
+                        [<<131,104,1,97,5>>],
+                        {transaction,<<"m3a-shared">>,
+                         <<123,245,62,37,189,214,52,41,240,119,62,174,140,122,
+                           75,99,236,112,52,245,141,146,58,15,64,103,40,177,
+                           150,104,125,209>>,
+                         <<183,21,220,203,108,85,109,167,158,223,238,221,
+                           108,15,69,34,248,108,93,253,238,72,81,133,113,
+                           26,194,172,170,42,102,5>>}}}},
+                     [{quod_physics_tests,await_door,3,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,4412}]},
+                      {quod_physics_tests,
+                       '-unobstructed_door_signed_transition_test_/0-fun-2-',
+                       1,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,4356}]},
+                      {quod_physics_tests,'-with_door/3-fun-3-',2,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,4380}]},
+                      {quod_physics_tests,'-with_world/3-fun-0-',3,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,3290}]},
+                      {quod_agent_hosting_tests,with_host,4,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                        {line,1809}]},
+                      {quod_physics_tests,with_world,3,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,3294}]},
+                      {eunit_test,run_testfun,1,
+                       [{file,"eunit_test.erl"},{line,83}]},
+                      {eunit_proc,run_test,1,
+                       [{file,"eunit_proc.erl"},{line,554}]}]}
+[0m[0;36m     Output: physics_match_result={error,
+                         {reaction_guard,
+                             {ask_requires_anchored_proof,{bytes,10}}}}
+Failed hosted-agent fixture retained at /tmp/quod_hosted_58A4F63D4061297F
+[0m
+  5) quod_physics_tests:-signed_mixed_view_uses_rendering_policy_test_/0-fun-6-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , _ , _ }, quod_ct : rp ( Ns , Goal ))
+       expected: = { ok , _ , _ }
+            got: fail[0m
+[0;36m     %% eunit_proc.erl:554:in `eunit_proc:run_test/1`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_44AB7A4DEF30F741
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_44AB7A4DEF30F741
+[0m
+
+Finished in 6.648 seconds
+[0;31m7 tests, 5 failures
+[0m===> Error running tests

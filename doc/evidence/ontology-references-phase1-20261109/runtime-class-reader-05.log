@@ -1,0 +1,129 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_physics_tests:-class_owner_rules_drive_physics_selection_test_/0-fun-6-/0
+[0;31m     Failure/Error: {error,
+                     {physics_not_installed,any,
+                      #{{world_ref,<<"host-test-agent">>,
+                         <<253,53,146,9,105,212,213,134,220,89,222,234,192,14,
+                           114,154,231,29,33,58,97,248,233,59,169,149,34,173,
+                           129,141,199,145>>,
+                         room} =>
+                         #{monitor => #Ref<0.79797166.1055129601.168415>,
+                           pid => <0.820.0>,
+                           status => {unavailable,activation_not_sent},
+                           stopping => false,
+                           spec =>
+                            #{key =>
+                               <<18,57,48,69,179,121,21,15,123,71,161,236,255,
+                                 226,243,94,154,92,133,28,180,133,218,152,12,
+                                 159,14,11,211,147,131,59>>,
+                              voxel_resources => #{},terrain_demand => none,
+                              world =>
+                               {world_ref,<<"host-test-agent">>,
+                                <<253,53,146,9,105,212,213,134,220,89,222,234,
+                                  192,14,114,154,231,29,33,58,97,248,233,59,
+                                  169,149,34,173,129,141,199,145>>,
+                                room},
+                              epoch => 1,activities => #{},custody => none,
+                              run_token => none,structure => 1,
+                              navigation_guard =>
+                               {#Ref<0.79797166.1055260673.168408>,0},
+                              authority =>
+                               {agent_instance_ref,<<"host-test-agent">>,
+                                <<253,53,146,9,105,212,213,134,220,89,222,234,
+                                  192,14,114,154,231,29,33,58,97,248,233,59,
+                                  169,149,34,173,129,141,199,145>>,
+                                actor},
+                              limits => {64,64,256,1.0e3,256,4096,4096},
+                              dt => 0.016667,gravity => -9.81,
+                              bodies =>
+                               [{1,1,fixed,
+                                 {world_mm,{0,-500,0},{0.0,0.0,0.0}},
+                                 {solid,{box,10.0,0.5,10.0}},
+                                 1.0},
+                                {2,1,dynamic,
+                                 {world_mm,{0,3000,0},{0.0,0.0,0.0}},
+                                 {solid,{box,0.5,0.5,0.5}},
+                                 1.0}],
+                              budget => 10000,generation => 0,restores => [],
+                              agent_bindings => [],agent_controls => [],
+                              hinges => []},
+                           token =>
+                            <<217,160,120,188,15,57,5,184,113,22,245,76,19,34,
+                              208,207,34,76,217,152,82,26,56,46,112,201,143,69,
+                              161,1,108,104>>,
+                           selection => none,capacity_wait => false,
+                           needs_reconciliation => true}},
+                      #{reconciles => 1,agent_observation_refusals_total => 0,
+                        e_frontier => 4,events_seen => 3,physics_worlds => 1,
+                        source_targets_active => 0,
+                        source_views_unreachable => 0,
+                        subscriptions_active => 0,rejected_subscriptions => 0,
+                        source_views_active => 2,height => 4,
+                        reaction_matches => 0,runner_active => false,
+                        hosted_agent_instances => 1,reconcile_failures => 0,
+                        source_interests_active => 0,queue_len => 0,
+                        agent_work_blocked => 0,
+                        agent_capacity_refusals_total => 0,mode => live,
+                        agent_capacity_status => ready,p_height => 4,
+                        source_views_building => 0,source_attempts => 3,
+                        source_views_ready => 2,
+                        agent_observation_capacity => ready,
+                        agent_observation_bytes => 0,resource_failures => #{},
+                        reaction_failures => 0,hosted_agents => 1,
+                        reactions_active => 6,dropped_events => 0,
+                        collapses => 0,reaction_candidates => 5,
+                        observed_agent_instances => 0,
+                        agent_pending_bytes => 0,source_attach_queued => 0,
+                        agent_work_idle => 1,reactions_executed => 0,
+                        resource_dependencies => 6}},
+                     [{quod_physics_tests,installed,4,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,3361}]},
+                      {quod_physics_tests,
+                       '-class_owner_rules_drive_physics_selection_test_/0-fun-5-',
+                       1,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,1492}]},
+                      {quod_physics_tests,'-with_world/3-fun-0-',3,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,3290}]},
+                      {quod_agent_hosting_tests,with_host,4,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                        {line,1654}]},
+                      {quod_physics_tests,with_world,3,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,3293}]},
+                      {eunit_test,run_testfun,1,
+                       [{file,"eunit_test.erl"},{line,83}]},
+                      {eunit_proc,run_test,1,
+                       [{file,"eunit_proc.erl"},{line,554}]},
+                      {eunit_proc,with_timeout,3,
+                       [{file,"eunit_proc.erl"},{line,379}]}]}
+[0m[0;36m     Output: reader wait <0.665.0> {current_stacktrace,
+                          [{gen_server,loop,5,
+                               [{file,"gen_server.erl"},{line,2311}]},
+                           {proc_lib,init_p_do_apply,3,
+                               [{file,"proc_lib.erl"},{line,333}]}]}
+reader wait <0.646.0> {current_stacktrace,
+                          [{gen_server,loop_hibernate,4,
+                               [{file,"gen_server.erl"},{line,2338}]},
+                           {proc_lib,init_p_do_apply,3,
+                               [{file,"proc_lib.erl"},{line,333}]}]}
+Failed hosted-agent fixture retained at /tmp/quod_hosted_0F6D6532EFAE77E0
+[0m
+
+Finished in 15.607 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

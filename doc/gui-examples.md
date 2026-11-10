@@ -66,9 +66,9 @@ space, physics process or accumulating answer history.
 
 ## Shared lifecycle and presentation
 
-The responsible actor's ontology composes
-[gui_instance.pl](../priv/ontologies/gui_instance.pl); the human's ontology
-composes [user_instance.pl](../priv/ontologies/user_instance.pl). The application grants its
+[quod_gui.pl](../priv/ontologies/quod_gui.pl) owns question transitions, HUD
+behavior and their recipes. The responsible actor's and human's storing
+ontologies hold the rows, ACLs and completion reaction. The application grants its
 normal domain authority through `gui_question_policy/3`. The shared committed
 assertion reaction correlates accepted fields to the retained completion request;
 neither example declares `react_on` or sends a client-provided executable goal.
@@ -76,8 +76,10 @@ neither example declares `react_on` or sends a client-provided executable goal.
 Open either form from its application ontology:
 
 ```prolog
-gui_open(atmosphere(personal_sky), Question).
-gui_open(instrument_settings(analyzer_a), Question).
+current_ontology_identity(Ns, Anchor),
+quod:gui::gui_open(form_ref(Ns, Anchor, atmosphere(personal_sky)), Question).
+current_ontology_identity(Ns, Anchor),
+quod:gui::gui_open(form_ref(Ns, Anchor, instrument_settings(analyzer_a)), Question).
 ```
 
 Each call returns an anchored `question_ref(ResponderNamespace, ResponderAnchor,
@@ -251,18 +253,14 @@ authored rendering allowance reports the resource, required amount and limit;
 the user can return to the lobby and choose a smaller distance without changing
 the saved terrain or disabling its physics owner.
 
-Fresh human creation uses the ordered hash-guarded composition of
-[user_instance.pl](../priv/ontologies/user_instance.pl),
-[agent_instance.pl](../priv/ontologies/agent_instance.pl),
-[quod_space.pl](../priv/ontologies/quod_space.pl) and
-[gui_instance.pl](../priv/ontologies/gui_instance.pl) authored by
-[quod_user.pl](../priv/ontologies/quod_user.pl). The ordinary creation owner
-checks each source hash and freezes the parsed contents into one genesis.
-The private user behavior owns the HUD allowance, receiving and pending
-references. The personal actor uses
-its own vault key and the existing hosting lifecycle, independently of U's
-browser key. Signup's subsequent authorized setup creates ordinary parentless
-S0 in the explicitly selected account storage and places that same A there;
-it does not commission the optional physical lobby preset. Existing human and lobby
-ontologies need explicit authorized source composition; opening the workspace
-never installs or repairs source.
+Fresh human creation uses the exact terms authored by
+[quod_user.pl](../priv/ontologies/quod_user.pl): qualified memberships, slots,
+seven vocabulary pins, ACL clauses, a completion reaction and the two hosting
+derivations. The existing creation owner freezes those terms into one genesis.
+Shared behavior stays at the class owners; HUD allowances, pending references,
+keys and hosting facts remain in the user's ontology. The personal actor uses
+its own vault key independently of U's browser key. Setup asserts ordinary
+parentless S0 in the selected storing ontology and places the same A there in
+one transaction. It does not commission the optional physical lobby preset.
+Existing human and lobby ontologies require authorized edits; opening the
+workspace never installs or repairs source.

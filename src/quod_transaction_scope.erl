@@ -14,7 +14,8 @@ inside an independent wrapper. No knowledge-base state crosses this boundary.
 
 -include("quod_proof_limits.hrl").
 
--export([empty_selection/0, valid_selection/1, selection_lineage/1, selection_mode/1,
+-export([empty_selection/0, empty_selection/1, valid_selection/1, selection_lineage/1, selection_mode/1,
+         selection_read_mode/1,
          checkpoint_depth/1, with_invocation/4,
          current_actor/0, current_selection/1,
          enter/1, finish/1, discard/1, activate/1,
@@ -23,7 +24,8 @@ inside an independent wrapper. No knowledge-base state crosses this boundary.
 
 -type opaque_id() :: <<_:128>>.
 -type lineage() :: none | opaque_id().
--type selection() :: {tx_selection, lineage(), [opaque_id()], ordinary | atomic | independent}.
+-type selection() :: {tx_selection, lineage(), [opaque_id()], ordinary | atomic | independent,
+                      read_write | read_only | committed_read}.
 -type actor() :: {opaque_id(), opaque_id()}.
 -type distributed_token() :: {batch, opaque_id()} | {pending, opaque_id()}.
 
@@ -49,10 +51,15 @@ valid_lineage(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>) -> true;
 valid_lineage(_) -> false.
 
 -spec empty_selection() -> selection().
-empty_selection() -> {tx_selection, none, [], ordinary}.
+empty_selection() -> empty_selection(read_write).
+
+-spec empty_selection(read_write | read_only | committed_read) -> selection().
+empty_selection(Mode) when Mode =:= read_write; Mode =:= read_only; Mode =:= committed_read ->
+    {tx_selection, none, [], ordinary, Mode}.
 
 -spec valid_selection(term()) -> boolean().
-valid_selection({tx_selection, Lineage, BatchIds, Mode}) ->
+valid_selection({tx_selection, Lineage, BatchIds, Mode, ReadMode}) ->
+    (ReadMode =:= read_write orelse ReadMode =:= read_only orelse ReadMode =:= committed_read) andalso
     (Mode =:= ordinary orelse Mode =:= atomic orelse Mode =:= independent) andalso
     valid_lineage(Lineage) andalso
         valid_sorted_ids(BatchIds, none) andalso
@@ -60,22 +67,25 @@ valid_selection({tx_selection, Lineage, BatchIds, Mode}) ->
 valid_selection(_) -> false.
 
 -spec selection_lineage(selection()) -> lineage().
-selection_lineage({tx_selection, Lineage, _BatchIds, _Mode}) -> Lineage.
+selection_lineage({tx_selection, Lineage, _BatchIds, _Mode, _}) -> Lineage.
 
 -spec selection_mode(selection()) -> ordinary | atomic | independent.
-selection_mode({tx_selection, _Lineage, _BatchIds, Mode}) -> Mode.
+selection_mode({tx_selection, _Lineage, _BatchIds, Mode, _}) -> Mode.
+
+-spec selection_read_mode(selection()) -> read_write | read_only | committed_read.
+selection_read_mode({tx_selection, _, _, _, ReadMode}) -> ReadMode.
 
 -spec checkpoint_depth(selection()) -> 0 | 1.
-checkpoint_depth({tx_selection, none, [], _Mode}) -> 0;
+checkpoint_depth({tx_selection, none, [], _Mode, _}) -> 0;
 checkpoint_depth({tx_selection, <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>,
-                  BatchIds, _Mode}) when is_list(BatchIds) -> 1.
+                  BatchIds, _Mode, _}) when is_list(BatchIds) -> 1.
 
 -doc "Run one proof step with an exact actor and inherited live transaction selection.".
 -spec with_invocation(actor(), selection(), term(), fun(() -> Result)) ->
           {Result, selection()} when Result :: term().
 with_invocation({<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>,
                  <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>} = Actor,
-                {tx_selection, Lineage, BaseBatches, _Mode} = Selection,
+                {tx_selection, Lineage, BaseBatches, _Mode, _} = Selection,
                 Metadata, Fun)
   when is_function(Fun, 0) ->
     true = valid_selection(Selection),
@@ -120,7 +130,8 @@ current_selection(St) ->
                               TxId =/= none, BatchId =/= none],
             selection(Lineage,
                       lists:append([BaseBatches, TokenBatches, EntryBatches]),
-                      quod_erlog_db_local_prove:write_intent(St));
+                      quod_erlog_db_local_prove:write_intent(St),
+                      quod_erlog_db_local_prove:read_mode(St));
         undefined ->
             empty_selection()
     end.
@@ -327,12 +338,12 @@ result_selection({error, _Reason, Scope, _RevisionPolicy}) ->
     current_selection(quod_proof_scope:state(Scope));
 result_selection(_Result) ->
     #state{current_lineage = Lineage, base_batches = BaseBatches} = state(),
-    selection(Lineage, BaseBatches, ordinary).
+    selection(Lineage, BaseBatches, ordinary, read_write).
 
-selection(Lineage, BatchIds0, Mode) ->
+selection(Lineage, BatchIds0, Mode, ReadMode) ->
     BatchIds = lists:usort(BatchIds0),
     case Lineage =/= none orelse BatchIds =:= [] of
-        true -> {tx_selection, Lineage, BatchIds, Mode};
+        true -> {tx_selection, Lineage, BatchIds, Mode, ReadMode};
         false ->
             throw(
               {quod_ask_error,

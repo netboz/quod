@@ -1,0 +1,21 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_personal_agent_tests:-immediate_instruction_uses_distinct_actor_test_/0-fun-0-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , _ , { normalized , { committed , _ , _ } } }, Reply)
+       expected: = { ok , _ , { normalized , { committed , _ , _ } } }
+            got: {error,invalid_instruction}[0m
+[0;36m     %% eunit_proc.erl:479:in `eunit_proc:tests_inorder/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_70221D2D9BCEC4B2
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_70221D2D9BCEC4B2
+[0m
+
+Finished in 0.511 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

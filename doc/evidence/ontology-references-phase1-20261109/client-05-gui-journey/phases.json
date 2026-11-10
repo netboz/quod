@@ -1,0 +1,83 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-_uade6z0/client/identity",
+      "--node",
+      "https://127.0.0.1:33575"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 7.305000011998345,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "reset",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-_uade6z0/client/identity",
+      "--node",
+      "https://127.0.0.1:33575"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 4.995861723997223,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m4-live",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-_uade6z0/client/identity",
+      "--node",
+      "https://127.0.0.1:33575"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 4.909582031003083,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "final",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-_uade6z0/client/identity",
+      "--node",
+      "https://127.0.0.1:33575"
+    ],
+    "child_exit": -9,
+    "passed": false,
+    "native_activation_failed": true
+  }
+]

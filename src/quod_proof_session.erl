@@ -204,12 +204,22 @@ open_checked(Handle, InvocationId, RequestedGoal, Verdict,
             case record_invocation(State, InvocationId, RequestedGoal,
                                    Verdict, Context) of
                 {ok, State1} ->
-                    InvocationState = quod_erlog_db_local_prove:set_write_intent(
+                    InvocationState0 = quod_erlog_db_local_prove:set_write_intent(
                                         State1#session_state.current,
                                         quod_transaction_scope:selection_mode(Selection)),
+                    {InvocationState, InvocationContext} =
+                        case quod_transaction_scope:selection_read_mode(Selection) of
+                            committed_read ->
+                                {quod_erlog_db_local_prove:committed_read_state(InvocationState0),
+                                 quod_predicates:operation_guard_context(Context)};
+                            read_only ->
+                                {_, ReadOnly} = quod_erlog_db_local_prove:enter_read_only(InvocationState0),
+                                {ReadOnly, Context};
+                            read_write -> {InvocationState0, Context}
+                        end,
                     Scope = quod_proof_scope:open_invocation(
                               ExecutionGoal, InvocationState,
-                              Context,
+                              InvocationContext,
                               quod_transaction_scope:checkpoint_depth(
                                 Selection)),
                     put_session(

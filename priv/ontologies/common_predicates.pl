@@ -37,8 +37,8 @@ client_world_view(Space, Mode, Dependencies,
     client_view_dependencies(Dependencies),
     current_ontology_identity(Ns, Anchor),
     client_subject_name(Space,Name),
-    (space_instance(Space, space),
-     findall(Scene, world_view(Space, Mode, Scene), [Marks]),
+    (quod:space::space_instance(entity_ref(Ns,Anchor,Space), space),
+     findall(Scene, quod:space::world_view(entity_ref(Ns,Anchor,Space), Mode, Scene), [Marks]),
      term_variables(Marks, []),
      findall(ontology_ref(R, A), rendering_vocabulary(R, A),
              [ontology_ref(Rendering, RenderingAnchor)]),
@@ -65,12 +65,13 @@ client_view_dependencies([dependency(Ns, Anchor, _) | Rest]) :-
     client_view_dependencies(Rest).
 
 client_space_selection(Space, Marks, Selection) :-
-    (space_simulation_domain(Space,world_ref(Ns,A,W),_,Path) ->
+    current_ontology_identity(Store,Anchor), Subject = entity_ref(Store,Anchor,Space),
+    (quod:space::space_simulation_domain(Subject,world_ref(Ns,A,W),_,Path) ->
         (Ns::(current_ontology_identity(Ns,A),physics_client_view(W,Marks,Physical),
                physics_view_frames(W,Path,Frames),physics_scene_frames(W,Marks,BodyFrames)),
          client_simulation_frame(Space,Frames,BodyFrames,Physical,Selection) -> true
         ; Selection = unavailable)
-    ; space_instance(Space, physical_space) ->
+    ; quod:space::space_instance(Subject, physical_space) ->
         (findall(S, physics_client_view(Space, Marks, S), [Physical]),
          physics_scene_frames(Space,Marks,BodyFrames),
          client_simulation_frame(Space,[],BodyFrames,Physical,Selection) -> true
@@ -92,8 +93,7 @@ client_simulation_frame(_,_,_,Selection,Selection) :-
 %% The thing class supplies the inherited source Eidolon. The root catalogue supplies the exact
 %% recipe identity; an absent editing ontology simply offers no such recipe.
 %% This is a recipe association, never permission to change the target.
-isa(space, thing).
-isa(ontology, space).
+isa(ontology, quod:space:space).
 instance_of(ontology, ontology_ref(Namespace, Anchor)) :-
     current_ontology_identity(Namespace, Anchor).
 
@@ -153,8 +153,9 @@ class_eidolon(ontology, workspace, workbench, recipe(Namespace, Anchor, workbenc
 
 class_eidolon(ontology,Mode,contents,recipe(Ns,A,ontology_contents)) :-
     member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
-eidolon(ontology_contents,Space,contents(Exposure)) :-
-    ontology_inspect(predicates(_),_), space_contents_projection(Space,Exposure).
+eidolon(ontology_contents,subject(ontology_ref(Ns,A),Space),contents(Exposure)) :-
+    current_ontology_identity(Ns,A), ontology_inspect(predicates(_),_),
+    quod:space::space_contents_projection(entity_ref(Ns,A,Space),Exposure).
 
 %% Menus are class-selected Eidolons like views. The pinned GUI vocabulary
 %% supplies every thing's default pie; a class overrides it with its own
@@ -169,9 +170,15 @@ menu_vocabulary(Ns, Anchor) :-
     (Pins = [] -> Ns = <<"quod:gui">>, quod:root::system_ontology(Ns, Anchor)
     ; Pins = [ontology_ref(Ns, Anchor)]).
 
+no_follow(menu_icon/2).
+menu_icon(Name, Icon) :-
+    menu_vocabulary(Gui, Anchor), in_ontology(Gui, Anchor, gui_icon(Name, Icon)).
+
 %% One signed read per pie: the subject's single selected menu recipe.
-client_menu(Entity, View) :-
-    term_variables(Entity, []),
+client_menu(Subject, View) :-
+    term_variables(Subject, []),
+    (Subject = class_ref(_,_,_) -> gui_operation_subject(Subject,class(Entity),_,class)
+    ; Entity = Subject),
     entity_eidolons(Entity, menu, _, Choices),
     (Choices = [Choice] -> client_eidolon(Entity, Choice, View)
     ; Choices = [] -> View = none
@@ -188,6 +195,26 @@ entity_eidolon_mode(Entity,operation(class)) :- !, once(isa(Entity,Entity)).
 entity_eidolon_mode(Entity,operation(instance)) :- !, once(instance_of(_,Entity)).
 entity_eidolon_mode(_,_).
 
+%% Authored instance scenes override inherited class behavior. Each class
+%% owner is read once with the exact storing subject; the selected recipe may
+%% belong to another ontology. Conflicting inherited answers remain visible.
+no_follow(client_entity_scene/3).
+client_entity_scene(Entity, Mode, Scene) :-
+    findall(S, entity_scene(Entity, Mode, S), Local),
+    (Local \== [] -> member(Scene, Local)
+    ; current_ontology_identity(Here, History),
+      entity_classes(Entity, Classes),
+      findall(owner(Class, Ns), (member(Class, Classes),
+          '$quod_owner_name'(Class, Name, _), ontology_name(Name, Ns)), Owners),
+      findall(Ns, member(owner(_, Ns), Owners), Names), sort(Names, Unique),
+      findall(candidate(Class, S), (member(Ns, Unique),
+          Ns::entity_scene(subject(ontology_ref(Here, History), Entity), Mode, S),
+          member(owner(Class, Ns), Owners)), Candidates),
+      findall(Class, member(candidate(Class, _), Candidates), Declaring),
+      findall(S, (member(candidate(Class, S), Candidates),
+          \+ '$quod_stricter_class'(Class, Declaring)), Raw),
+      sort(Raw, Scenes), member(Scene, Scenes)).
+
 %% A choice is data from this exact subject's authored associations, not an
 %% executable client continuation. The recipe and its reads retain their own
 %% anchored authorization and dependency tracking.
@@ -197,7 +224,7 @@ client_eidolon(Entity,Choice,View) :-
     entity_eidolons(Entity,Purpose,Style,Choices), member_eq(Choice,Choices),
     current_ontology_identity(Here,History), Target = ontology_ref(Here,History),
     (member(Purpose,[playing,edition]) ->
-        entity_scene(Entity,Purpose,appearance(_,_,Context,Layout,_)),
+        client_entity_scene(Entity,Purpose,appearance(_,_,Context,Layout,_)),
         in_ontology(Ns,A,eidolon(Recipe,Context,Model)),
         client_eidolon_scene(Entity,Purpose,Style,Layout,Model,View)
     ; in_ontology(Ns,A,eidolon(Recipe,subject(Target,Entity),View))).
@@ -206,7 +233,7 @@ client_eidolon_scene(Entity,Mode,_,_,contents(Exposure),
         eidolon_scene(Subject,Marks,Selection,Exposures)) :- !,
     current_ontology_identity(Ns,A), Subject = entity_ref(Ns,A,Entity),
     Exposure = exposure(Subject,_,_),
-    space_exposure_projection(Exposure,Mode,Marks,Exposures),
+    quod:space::space_exposure_projection(Exposure,Mode,Marks,Exposures),
     client_space_selection(Entity,Marks,Selection).
 client_eidolon_scene(Entity,_,_,Layout,Model,
         eidolon_scene(entity_ref(Ns,A,Entity),Marks,nonphysical,[])) :-
@@ -245,7 +272,8 @@ entity_classes(Entity, Classes) :-
 operation_authorized(Requested, Operation) :-
     term_variables(Requested-Operation, []),
     (Requested = class(_); Requested = instance(_)),
-    (Requested = instance(Instance), '$quod_construction'(Instance, Class, Inputs) ->
+    (Requested = instance(Instance), '$quod_construction'(Instance, Class, Inputs),
+     instance_of(Class, Instance) ->
         Subject = construction(Class, Instance, Inputs)
     ; Subject = Requested),
     current_principal(Actor),
@@ -255,7 +283,7 @@ operation_policy(Actor, Subject, Operation) :-
     term_variables(Actor-Subject-Operation, []),
     functor(Operation, Name, _), atom(Name),
     operation_classes(Subject, Classes), Classes \== [], term_variables(Classes, []),
-    findall(Check, (member(Class, Classes),
+    findall(requirement(Class, Check), (member(Class, Classes),
                    class_requirement(Class, Name, Check)), Checks),
     operation_requirements(Checks, Actor, Subject, Operation),
     operation_grant(Actor, Subject, Operation, Name, Classes).
@@ -269,14 +297,20 @@ operation_classes(instance(Instance), Classes) :-
     sort(Raw, Classes).
 
 operation_requirements([], _, _, _).
-operation_requirements([Check | Rest], Actor, Subject, Operation) :-
-    operation_check(Check, Actor, Subject, Operation),
+operation_requirements([requirement(Class, Check) | Rest], Actor, Subject, Operation) :-
+    atom(Check), '$quod_class_predicate'(Class, Check, Owned),
+    operation_check(Owned, Actor, Subject, Operation),
     operation_requirements(Rest, Actor, Subject, Operation).
 
 %% Checks are named Prolog predicates of arity three, receiving the exact
 %% actor, subject and operation (including parameters). Missing checks fail.
 operation_check(Check, Actor, Subject, Operation) :-
-    atom(Check), Goal =.. [Check, Actor, Subject, Operation], call(Goal).
+    ('$quod_owner_name'(Check, Ns, Name) ->
+        Goal =.. [Name, Actor, Subject, Operation], Ns::Goal
+    ; atom(Check), Goal =.. [Check, Actor, Subject, Operation], call(Goal)).
+
+'$quod_class_predicate'(Class, Check, Owned) :-
+    ('$quod_owner_name'(Class, Ns, _) -> Owned = Ns:Check; Owned = Check).
 
 %% Editing grants is an owner/administrator operation, never a grant that can
 %% delegate itself. Requirements for set_permission still apply above.
@@ -293,11 +327,22 @@ operation_grant(Actor, Subject, Operation, Name, Classes) :-
         findall(candidate(Class, Grant),
                 (member(Class, Classes), class_permission(Class, Name, Grant)), Candidates),
         findall(Class, member(candidate(Class, _), Candidates), Declaring),
-        findall(Grant, (member(candidate(Class, Grant), Candidates),
-                       \+ '$quod_stricter_class'(Class, Declaring)), Grants)
-    ; Grants = Overrides),
-    term_variables(Grants, []), sort(Grants, [Grant]), permission_grant(Grant),
+        findall(candidate(Class, Grant), (member(candidate(Class, Grant), Candidates),
+                       \+ '$quod_stricter_class'(Class, Declaring)), Selected)
+    ; findall(candidate(local, Grant), member(Grant, Overrides), Selected)),
+    term_variables(Selected, []), operation_grants(Selected, Grants),
+    sort(Grants, [Grant]),
     permission_allows(Grant, Actor, Subject, Operation).
+
+%% Validate authored grants before attaching the class owner's check identity.
+%% Equal check names at different owners are different defaults.
+operation_grants([], []).
+operation_grants([candidate(Class, Grant) | Rest], [Owned | Grants]) :-
+    permission_grant(Grant),
+    (Grant = check(Check) ->
+        '$quod_class_predicate'(Class, Check, Predicate), Owned = check(Predicate)
+    ; Owned = Grant),
+    operation_grants(Rest, Grants).
 
 operation_override(class(_), _, []).
 operation_override(construction(_, _, _), _, []).
@@ -316,20 +361,20 @@ set_instance_permission(Instance, Name, Grant) :-
     findall(Previous, retract(instance_permission(Instance, Name, Previous)), _),
     (Grant == inherit -> true; assertz(instance_permission(Instance, Name, Grant))).
 
-%% Policy data is local to the target. Argument-following must not turn a
-%% denied/missing local grant into a foreign alternative.
+%% Instance policy stays in the storing ontology. Qualified class declarations
+%% follow their owner; an unqualified local class never selects another owner.
 no_follow(operation_authorized/2).
 no_follow(operation_policy/3).
 no_follow(operation_classes/2).
 no_follow(operation_requirements/4).
 no_follow(operation_check/4).
+no_follow('$quod_class_predicate'/3).
 no_follow(operation_grant/5).
+no_follow(operation_grants/2).
 no_follow(operation_override/3).
 no_follow(permission_grant/1).
 no_follow(permission_allows/4).
 no_follow(set_instance_permission/3).
-no_follow(class_requirement/3).
-no_follow(class_permission/3).
 no_follow(instance_permission/3).
 no_follow(permission_administrator/2).
 
@@ -344,6 +389,7 @@ public_source_query(class_eidolons(_, _, _, _)).
 public_source_query(entity_eidolons(_, _, _, _)).
 public_source_query(client_eidolon(_, _, _)).
 public_source_query(entity_scene(_, _, _)).
+public_source_query(client_entity_scene(_, _, _)).
 public_source_query(client_menu(_, _)).
 public_source_query(gui_menu_source(_, _)).
 
@@ -426,6 +472,9 @@ system_prolog_edit :-
 %% declarations rather than recursively asking the derived relation. The
 %% private semantic rules are filtered out, cycles terminate, and multiple
 %% inheritance remains ordinary Prolog backtracking.
+%% Class traversal qualifies owner answers itself, including the starting
+%% class; generic argument following would lose the parents' owner.
+no_follow(isa/2).
 isa(Class, Class) :-
     '$quod_known_class'(Class).
 isa(Subclass, Superclass) :-
@@ -462,10 +511,12 @@ most_specific_classes(Subjects, Candidates, Selected) :-
 '$quod_declared_class'(Class) :- '$quod_direct_isa'(_, Class).
 
 '$quod_transitive_isa'(Subclass, Superclass) :-
-    '$quod_isa_requires_closure'(Subclass, Superclass),
-    '$quod_direct_isa'(Subclass, Parent),
-    \+ member_eq(Parent, [Subclass]),
-    '$quod_isa_path'(Parent, Superclass, [Parent, Subclass]).
+    ('$quod_owner_name'(Subclass, _, _) ->
+        '$quod_isa_path'(Subclass, Superclass, [])
+    ; '$quod_isa_requires_closure'(Subclass, Superclass),
+      '$quod_direct_isa'(Subclass, Parent),
+      \+ member_eq(Parent, [Subclass]),
+      '$quod_isa_path'(Parent, Superclass, [Parent, Subclass])).
 
 %% A fully-ground direct query should reach its authored clause without first
 %% walking the rest of the hierarchy. Open queries still enumerate closure
@@ -477,9 +528,7 @@ most_specific_classes(Subjects, Candidates, Selected) :-
 
 %% Once a path reaches a foreign class, ask its owning ontology for the rest
 %% of the public `isa/2` relation and qualify every answer back into the
-%% caller's graph. Generated argument-following clauses are routing machinery,
-%% not authored immediate class declarations, so '$quod_direct_isa'/2 excludes
-%% them below.
+%% caller's graph. '$quod_direct_isa'/2 selects only authored immediate edges.
 '$quod_isa_path'(Class, Superclass, _) :-
     %% A directly declared qualified parent may use the other parenthesis
     %% grouping. It is already the requested endpoint, not another graph edge.
@@ -507,7 +556,6 @@ most_specific_classes(Subjects, Candidates, Selected) :-
 
 '$quod_isa_semantics'('$quod_transitive_isa'(_, _)).
 '$quod_isa_semantics'('$quod_known_class'(_)).
-'$quod_isa_semantics'((nonvar(_), (_, (_, '$quod_follow_unique'(_))))).
 
 %% A qualified name's final segment is local to its owner. Parentheses change
 %% Prolog's term grouping, not that ownership: a:b:c and (a:b):c both select
@@ -645,164 +693,6 @@ member_eq(X, [_ | Rest]) :-
 %% the proof it is asked; a retried request is a new proof and draws afresh.
 %% Fails plainly outside a proof. Deterministic selection, not randomness.
 proof_draw(Salt, N, I) :- '$quod_draw'(Salt, N, I).
-
-space_instance(Space, Class) :-
-    %% Bind the more selective side of this join first. Open catalogues start
-    %% at the requested ancestry; exact subjects need only their own classes.
-    findall(instance(Space,Class),
-        (nonvar(Space) -> instance_of(Direct,Space),isa(Direct,Class)
-        ; isa(Direct,Class),instance_of(Direct,Space)),Raw),
-    sort(Raw,Distinct),member(instance(Space,Class),Distinct).
-
-
-space_contains(Space, Subject) :- space_member(Space, Subject).
-space_contains(Space, Subject) :- space_placement(Space, Subject, _).
-
-space_simulation_domain(_,_,_,_) :- fail.
-%% Composition supplies the space's own boundary seen from inside, if any.
-space_interior_boundary(_,_) :- fail.
-
-%% Contents is a recipe result, not a substitute mesh. The source owns the
-%% complete permitted subject set and physical bindings in its own frame.
-eidolon(space_contents, Space, contents(Exposure)) :-
-    space_contents_projection(Space,Exposure).
-
-space_contents_projection(Space,exposure(Frame,Revision,Subjects)) :-
-    space_instance(Space,space), current_ontology_identity(Ns,A),
-    Frame = entity_ref(Ns,A,Space),
-    findall(Subject,space_contains(Space,Subject),Raw), sort(Raw,Unique),
-    space_exposed_subjects(Unique,Space,Subjects),
-    variant_digest(contents(Frame,Subjects),Revision).
-space_exposed_subjects([],_,[]).
-space_exposed_subjects([Subject|Rest],Space,[exposed(Subject,Relation,Binding)|Subjects]) :-
-    Subject = entity_ref(_,_,_), term_variables(Subject,[]),
-    findall(R,space_placement(Space,Subject,R),Assignments),
-    (Assignments = [] -> Relation = display
-    ; Assignments = [Assignment], Relation = placement(Assignment)),
-    space_subject_binding(Space,Subject,Selected),
-    (Selected = body_pose(_,_), space_simulation_domain(Space,World,_,_) ->
-        Binding = in_frame(World,Selected)
-    ; Binding = Selected),
-    space_exposed_subjects(Rest,Space,Subjects).
-
-world_view(Space, Mode, Marks) :-
-    space_projection(Space,Mode,Marks,_).
-
-%% The ordinary view and portable exposure receipt use one projection.
-%% Exact ancestry detects cycles; the proof owner admits resource use.
-space_projection(Space,Mode,scene(Marks,Exposures)) :-
-    space_projection(Space,Mode,Marks,Exposures).
-space_projection(Space,Mode,Marks,Exposures) :-
-    space_instance(Space,space), current_ontology_identity(Ns,A),
-    entity_eidolons(Space,Mode,contents,Eidolons),
-    findall(Recipe,member(eidolon(Mode,contents,Recipe),Eidolons),Recipes),
-    space_entity_model(Recipes,Space,contents(Exposure)),
-    Exposure = exposure(entity_ref(Ns,A,Space),_,_),
-    space_exposure_projection(Exposure,Mode,Marks,Exposures).
-
-%% Selected contents and the ordinary interior share exactly one recursive
-%% projection. A selected recipe's permitted subjects are never replaced by
-%% a client inventory or by another read of the default exterior.
-space_exposure_projection(exposure(Frame,_,Subjects),Mode,Marks,Exposures) :-
-    member(Mode,[playing,edition]),
-    Frame = entity_ref(Here,History,Space), current_ontology_identity(Here,History),
-    unique_solution(scene_vocabulary(Ns,A)),
-    (space_simulation_domain(Space,World,_,_) -> true; World = none),
-    space_scene_parts(Subjects,Mode,[interior(Frame)],
-        [representation(Frame,contents(Mode))],none,role(physical,World),Contents,Exposures),
-    space_boundary_parts(Frame,Ns,A,Contents,Parts),
-    in_ontology(Ns,A,model(Parts,Marks)).
-
-%% The viewed space's own boundary sits at its interior origin, after its
-%% contents, depicting the space itself. It is not a contained subject.
-space_boundary_parts(Frame,MNs,MA,Contents,Parts) :-
-    Frame = entity_ref(Here,History,Space),
-    (space_interior_boundary(Space,Recipe) ->
-        space_entity_model([recipe(Here,History,Recipe)],Space,Model),
-        term_hex_digest([interior(Frame),boundary],Occurrence),
-        in_ontology(MNs,MA,place_model(Occurrence,transform(0,0,0,0,0,0),depicts(Here,History,Space),Model,Boundary)),
-        append(Contents,Boundary,Parts)
-    ; Parts = Contents).
-
-space_scene_parts([],_,_,_,_,_,[],[]).
-space_scene_parts([exposed(Subject,Relation,Binding)|Rest],Mode,Path,Seen,Parent,Role,
-                  Parts,Exposures) :-
-    Subject = entity_ref(Ns,A,Entity),
-    in_ontology(Ns,A,entity_scene(Entity,Mode,Scene)),
-    (Scene = hidden -> Placed = [], Current = []
-    ; Scene = appearance(Id,Style,Context,Layout,Eidolons),
-      append(Path,[edge(Subject,Id)],OccurrencePath),
-      term_hex_digest(OccurrencePath,Occurrence),
-      findall(Recipe,member(eidolon(Mode,Style,Recipe),Eidolons),Recipes),
-      (Style == contents ->
-          (Recipes = [Selected],
-           space_entity_model([Selected],Context,contents(exposure(Subject,ContentRevision,Subjects))) ->
-              Model = contents(exposure(Subject,ContentRevision,Subjects))
-          ; fail_with_reason(space_contents_unavailable(Subject)))
-      ; space_entity_model(Recipes,Context,Model)),
-      variant_digest(selected(Recipes,Context,Model),Revision),
-      Role = role(ParentUse,World),
-      (ParentUse == physical, Relation = placement(_) -> Use = physical; Use = display),
-      space_scene_pose(Use,World,Subject,Binding,Layout,Pose), NextRole = role(Use,World),
-      space_parent_pose(Parent,Pose,At),
-      space_occurrence_model(Model,Mode,OccurrencePath,Seen,Occurrence,NextRole,
-                             Local,Children,Descendants,Frame,Allowed,Status),
-      scene_vocabulary(MNs,MA),
-      in_ontology(MNs,MA,
-            place_model(Occurrence,At,depicts(Ns,A,Entity),Local,Here)),
-      append(Here,Children,Placed),
-      Current = [exposure(Occurrence,OccurrencePath,Subject,selected(Recipes,Revision,Use),
-                          Frame,Allowed,Pose,Status)|Descendants]),
-    space_scene_parts(Rest,Mode,Path,Seen,Parent,Role,Tail,Others),
-    append(Placed,Tail,Parts), append(Current,Others,Exposures).
-
-space_scene_pose(Use,World,_,in_frame(Selected,body_pose(B,R)),_,Pose) :-
-    (Selected == World -> true; fail_with_reason(incompatible_physics_view(Selected,World))),
-    (Use == physical -> Pose = body_pose(B,R)
-    ; Use == display, Pose = body_frame_pose(B,R)).
-space_scene_pose(physical,_,_,body_pose(B,R),_,body_pose(B,R)).
-space_scene_pose(physical,_,_,source_layout,Layout,Layout).
-space_scene_pose(display,World,Subject,source_layout,Layout,Pose) :-
-    (World = world_ref(Ns,A,W) ->
-        in_ontology(Ns,A,physics_appearance_binding(W,Subject,Binding)),
-        (Binding = none -> Pose = Layout; Binding = body_pose(B,R),Pose = body_frame_pose(B,R))
-    ; Pose = Layout).
-
-space_occurrence_model(contents(exposure(Frame,_,Subjects)),Mode,Path,Seen,Occurrence,Role,
-                       Local,Children,Exposures,Frame,Subjects,Status) :-
-    Key = representation(Frame,contents(Mode)),
-    (member_eq(Key,Seen) ->
-        Status = cycle, Children = [], Exposures = [],
-        space_eidolon_status(<<"Contents cycle">>,Local)
-    ; Status = contents, Local = [],
-      space_scene_parts(Subjects,Mode,Path,[Key|Seen],Occurrence,Role,Children,Exposures)).
-space_occurrence_model(Model,_,_,_,_,_,Model,[],[],none,[],model) :-
-    Model \= contents(_).
-
-space_parent_pose(none,Pose,Pose).
-space_parent_pose(Parent,Pose,relative(Parent,Pose)) :- Parent \== none.
-
-space_subject_binding(Space,Subject,Binding) :-
-    (space_placement(Space,Subject,Assignment), space_simulation_domain(Space,World,_,Path) ->
-        World = world_ref(Ns,A,W),
-        in_ontology(Ns,A,physics_scene_binding(W,Path,Subject,Assignment,Binding))
-    ; space_placement(Space,Subject,Assignment), space_instance(Space,physical_space) ->
-        findall(binding(B,R),physics_body_definition(Space,B,R,_,_,live(Subject,Assignment,_,_)),
-                [binding(Body,Revision)]), Binding = body_pose(Body,Revision)
-    ; Binding = source_layout).
-
-space_entity_model([recipe(Ns,A,Recipe)],Context,Model) :-
-    in_ontology(Ns,A,eidolon(Recipe,Context,Model)).
-space_entity_model([],_,Parts) :- space_eidolon_status(<<"No matching eidolon">>,Parts).
-space_entity_model([_,_|_],_,Parts) :- space_eidolon_status(<<"Choose an eidolon">>,Parts).
-space_eidolon_status(Text,
-    [part(<<"eidolon-status">>,group,transform(0,0,0,0,0,0),
-          no_surface,label(Text,<<"above">>),depicts_nothing)]).
-
-entity_scene(Space, Mode, appearance(Space, Style, Space, Transform, Eidolons)) :-
-    space_instance(Space, space), attribute(Space, transform, Transform),
-    attribute(Space, exterior, Style),
-    member(Mode, [playing, edition]), entity_eidolons(Space, Mode, Style, Eidolons).
 
 %% A composed vocabulary is an explicit owner pin. Otherwise the installed
 %% system GUI vocabulary supplies the common presentation policy and geometry.

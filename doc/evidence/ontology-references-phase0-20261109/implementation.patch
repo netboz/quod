@@ -1,0 +1,469 @@
+diff --git a/client/godot-tests/Program.cs b/client/godot-tests/Program.cs
+index 268aa67a..972d0399 100644
+--- a/client/godot-tests/Program.cs
++++ b/client/godot-tests/Program.cs
+@@ -55,7 +55,7 @@ static class Tests
+                 }
+             }
+             Check(verified == 100, "all 100 real production fixtures including Reset");
+-            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo); Menus();
++            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo); Menus(); Icons(repo);
+             Console.WriteLine("CORE_PASS checks=" + checks); return 0;
+         } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+     }
+@@ -97,6 +97,28 @@ static class Tests
+         nav.Move(new(-.7f, .7f), 420); Check(nav.HoveringBack && nav.Caption == "Back · Workshop" && nav.Commit() == PieOutcome.Open && nav.Level == root, "the reserved back wedge returns to the parent");
+         Check(nav.Choose(2) && nav.Commit() == PieOutcome.Open && nav.Choose(1) && nav.Commit() == PieOutcome.Selected && nav.Selection!.Choice.ToString().Contains("solid"), "click and keyboard choice open sub-pies and select a leaf");
+     }
++    static void Icons(string repo)
++    {
++        var source = File.ReadAllText(Path.Combine(repo, "priv/ontologies/quod_gui.pl"));
++        var icons = System.Text.RegularExpressions.Regex.Matches(source, @"gui_icon\(\w+, (image\(asset\(.*?\), resources\(\d+, \d+\)\))\)\.");
++        Check(icons.Count == 36, "every authored icon declares its own resources");
++        foreach (System.Text.RegularExpressions.Match row in icons) {
++            var term = Term.Parse(row.Groups[1].Value);
++            var image = Component.ImageAsset(term);
++            byte[] bytes = File.ReadAllBytes(Path.Combine(repo, "priv/explorer/assets/icons", image.File!));
++            Check(Convert.ToHexStringLower(SHA256.HashData(bytes)) == image.File!.Split('.')[0] && bytes.LongLength == image.Transfer &&
++                StaticGlb.ImagePixels(bytes, "image/png") == image.Pixels, "authored icon digest, transfer and pixels match the served file");
++            string ComponentText(string value) => $"component(f,form,[property(label,f),property(image,{value})],[])";
++            Check(Component.Decode(Term.Parse(ComponentText(term.ToString()))).Properties["image"].ToString() == term.ToString(), "form preserves the declared image allowance");
++            var menu = Term.Parse($"menu(component(m,menu,[property(label,<<\"Menu\">>),property(help,<<\"\">>),property(enabled,true),property(image,{term}),property(slot,auto),property(wedges,8),property(back,none)],[]))");
++            var decoded = MenuNode.Decode(menu)!;
++            Check((decoded.Image, decoded.Transfer, decoded.Pixels) == image, "menu carries the declared image allowance to its consumer");
++            Check(decoded.Signature != (decoded with { Transfer = decoded.Transfer + 1 }).Signature, "changed icon allowance invalidates the menu signature");
++        }
++        string asset = "asset(<<\"" + new string('a', 64) + "\">>,<<\"image/png\">>)";
++        foreach (string invalid in new[] { asset, $"image({asset},resources(0,1))", $"image({asset},resources(1,-1))", $"image({asset},resources(1.5,1))" })
++            Reject(() => Component.ImageAsset(Term.Parse(invalid)), "missing or invalid authored icon allowance refuses");
++    }
+     static void Scenes()
+     {
+         string anchor = Term.Binary(new byte[32]).ToString();
+diff --git a/client/godot/Core/Forms.cs b/client/godot/Core/Forms.cs
+index af7eab86..390296d0 100644
+--- a/client/godot/Core/Forms.cs
++++ b/client/godot/Core/Forms.cs
+@@ -70,10 +70,7 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
+                     case "columns": case "visible_rows": if (a[1].Integer <= 0) throw new FormatException("Invalid layout extent."); break;
+                     case "percent": if (a[1].Integer < 0 || a[1].Integer > 100) throw new FormatException("Invalid progress."); break;
+                     case "image":
+-                        if (a[1].Kind == "atom" && a[1].Name == "none") break;
+-                        var asset = a[1].Require("asset", 2);
+-                        if (!System.Text.RegularExpressions.Regex.IsMatch(asset[0].TextValue, "^[a-f0-9]{64}$") || asset[1].TextValue is not ("image/png" or "image/jpeg"))
+-                            throw new FormatException("Unsupported GUI image asset.");
++                        _ = ImageAsset(a[1]);
+                         break;
+                 }
+             }
+@@ -97,6 +94,19 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
+         }
+         return Read(value);
+     }
++    public static (string? File, long Transfer, long Pixels) ImageAsset(Term? value)
++    {
++        if (value == null || value.Kind == "atom" && value.Name == "none") return (null, 0, 0);
++        var image = value.Require("image", 2);
++        var asset = image[0].Require("asset", 2);
++        string digest = asset[0].TextValue, extension = asset[1].TextValue switch {
++            "image/png" => "png", "image/jpeg" => "jpg", _ => throw new FormatException("Unsupported image type.") };
++        var resources = image[1].Require("resources", 2);
++        long transfer = checked((long)resources[0].Integer), pixels = checked((long)resources[1].Integer);
++        if (!System.Text.RegularExpressions.Regex.IsMatch(digest, "^[a-f0-9]{64}$") || transfer <= 0 || pixels <= 0)
++            throw new FormatException("Invalid image admission.");
++        return (digest + "." + extension, transfer, pixels);
++    }
+     public static Dictionary<string,Term> AppearanceTokens(Term value)
+     {
+         value.Ground();var tokens=new Dictionary<string,Term>();
+diff --git a/client/godot/Core/Menus.cs b/client/godot/Core/Menus.cs
+index 30d62d1d..69fd9a02 100644
+--- a/client/godot/Core/Menus.cs
++++ b/client/godot/Core/Menus.cs
+@@ -8,11 +8,11 @@ namespace Quod.Client;
+ public sealed record MenuTarget(Term Subject, Term Choice, string Label = "");
+ 
+ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled, int Slot, int Wedges, int Back,
+-    MenuTarget? Target, bool Confirm, MenuNode[] Children, string? Image = null)
++    MenuTarget? Target, bool Confirm, MenuNode[] Children, string? Image = null, long Transfer = 0, long Pixels = 0)
+ {
+     public bool Leaf => Target != null;
+     // Everything a presentation depends on; an equal signature is the same pie.
+-    public string Signature => string.Join("|", Id, Label, Help, Enabled, Slot, Wedges, Back, Confirm, Target?.Subject, Target?.Choice, Image)
++    public string Signature => string.Join("|", Id, Label, Help, Enabled, Slot, Wedges, Back, Confirm, Target?.Subject, Target?.Choice, Image, Transfer, Pixels)
+         + "[" + string.Join(",", Children.Select(c => c.Signature)) + "]";
+     public MenuNode? At(int slot) => Children.FirstOrDefault(c => c.Slot == slot);
+     public string Initials => InitialsOf(Label);
+@@ -34,7 +34,7 @@ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled,
+             var p = a[2].Items.Select(x => x.Require("property", 2)).ToDictionary(x => x[0].Name, x => x[1]);
+             string label = p["label"].TextValue, help = p["help"].TextValue;
+             if (label.Length == 0) throw new FormatException("Unlabelled wedge.");
+-            string? image = Image(p.GetValueOrDefault("image"));
++            var image = Component.ImageAsset(p.GetValueOrDefault("image"));
+             bool Flag(string key) => p[key].Kind == "atom" && p[key].Name is "true" or "false"
+                 ? p[key].Name == "true" : throw new FormatException("Invalid menu flag.");
+             int slot = p["slot"].Kind == "atom" && p["slot"].Name == "auto" ? 0 : (int)p["slot"].Integer;
+@@ -43,7 +43,7 @@ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled,
+                 var t = p["target"].Require("choice", 2);
+                 if (t[0].Name is not ("entity_ref" or "class_ref" or "ontology_ref")) throw new FormatException("Unsupported menu subject.");
+                 t[1].Require("eidolon", 3)[2].Require("recipe", 3);
+-                return new(a[0], label, help, Flag("enabled"), slot, wedges, 0, new(t[0], t[1], label), Flag("confirm"), [], image);
++                return new(a[0], label, help, Flag("enabled"), slot, wedges, 0, new(t[0], t[1], label), Flag("confirm"), [], image.File, image.Transfer, image.Pixels);
+             }
+             if (wedges != int.MaxValue && (slot < 1 || slot > wedges)) throw new FormatException("Invalid nested menu slot.");
+             int own = (int)p["wedges"].Integer;
+@@ -52,16 +52,7 @@ public sealed record MenuNode(Term Id, string Label, string Help, bool Enabled,
+             var children = a[3].Items.Select(c => Read(c, own)).ToArray();
+             var slots = children.Select(c => c.Slot).ToArray();
+             if (slots.Distinct().Count() != slots.Length || slots.Contains(back)) throw new FormatException("Overlapping wedges.");
+-            return new(a[0], label, help, Flag("enabled"), slot, own, back, null, false, children, image);
+-        }
+-        // An authored image: the asset's digest with its file extension, as served.
+-        static string? Image(Term? value)
+-        {
+-            if (value == null || value.Kind == "atom" && value.Name == "none") return null;
+-            var asset = value.Require("asset", 2);
+-            string digest = asset[0].TextValue, extension = asset[1].TextValue switch { "image/png" => "png", "image/jpeg" => "jpg", _ => throw new FormatException("Unsupported image type.") };
+-            if (!System.Text.RegularExpressions.Regex.IsMatch(digest, "^[a-f0-9]{64}$")) throw new FormatException("Invalid image digest.");
+-            return digest + "." + extension;
++            return new(a[0], label, help, Flag("enabled"), slot, own, back, null, false, children, image.File, image.Transfer, image.Pixels);
+         }
+         var root = Read(view.Require("menu", 1)[0], int.MaxValue);
+         if (root.Leaf || root.Back != 0) throw new FormatException("A pie starts at a menu.");
+diff --git a/client/godot/Core/StaticGlb.cs b/client/godot/Core/StaticGlb.cs
+index df59aafd..da149d66 100644
+--- a/client/godot/Core/StaticGlb.cs
++++ b/client/godot/Core/StaticGlb.cs
+@@ -149,7 +149,7 @@ public sealed record StaticGlb(long[] Costs,long[] Bounds)
+         for(int axis=0;axis<3;axis++)if(bounds[axis]==bounds[axis+3]){bounds[axis]--;bounds[axis+3]++;}
+         return new([bytes.Length,geometry,vertexTotal,triangleTotal,nodes.Count,materials.Count,pixels],bounds);
+     }
+-    static long ImagePixels(ReadOnlySpan<byte> bytes,string mime)
++    public static long ImagePixels(ReadOnlySpan<byte> bytes,string mime)
+     {
+         if(mime=="image/png") {
+             Require(bytes.Length>=24 && BinaryPrimitives.ReadUInt64BigEndian(bytes)==0x89504e470d0a1a0a && BinaryPrimitives.ReadUInt32BigEndian(bytes[12..])==0x49484452,"invalid PNG");
+diff --git a/client/godot/Main.cs b/client/godot/Main.cs
+index f2347701..e0fd6f6f 100644
+--- a/client/godot/Main.cs
++++ b/client/godot/Main.cs
+@@ -650,27 +650,29 @@ public partial class Main : Control
+         action?.Cancel(); CloseSession(); state = "offline"; statusText = "Disconnected. Your key and unsent work stay on this device."; UpdateButtons(); Notify();
+     }
+     // Authored icons by served file; a fetch in flight or failed is a null entry.
+-    readonly Dictionary<string,Texture2D?> icons=new();
++    readonly Dictionary<string,(Texture2D Texture,long Transfer,long Pixels)?> icons=new();
+     // The texture for a node's authored image: bundled for the client's own
+     // commands, otherwise the ontology's content-addressed asset, fetched once.
+     Texture2D? Icon(MenuNode node)
+     {
+         if(node.Image is not string image)return null;
+         if(image.StartsWith("res://"))return GD.Load<Texture2D>(image);
+-        if(icons.TryGetValue(image,out var texture))return texture;
++        if(icons.TryGetValue(image,out var cached))return cached is {} verified && verified.Transfer<=node.Transfer && verified.Pixels<=node.Pixels ? verified.Texture : null;
+         icons[image]=null;
+-        if(session is {IsExpired:false} consumer)_=FetchIcon(consumer,image);
++        if(session is {IsExpired:false} consumer)_=FetchIcon(consumer,node);
+         return null;
+     }
+-    async Task FetchIcon(SignedSession consumer,string image)
++    async Task FetchIcon(SignedSession consumer,MenuNode node)
+     {
+         try {
++            string image=node.Image!;
+             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+-            // An icon is a small picture; the bound only stops a runaway transfer.
+-            var bytes=await consumer.Transport.Icon(image,1<<20,deadline.Token);
++            var bytes=await consumer.Transport.Icon(image,node.Transfer,deadline.Token);
++            long pixels=StaticGlb.ImagePixels(bytes,image.EndsWith(".png") ? "image/png" : "image/jpeg");
++            if(pixels>node.Pixels)throw new FormatException("Icon image pixels exceeded.");
+             var picture=new Image();
+             if((image.EndsWith(".png") ? picture.LoadPngFromBuffer(bytes) : picture.LoadJpgFromBuffer(bytes))!=Error.Ok)throw new FormatException("Unreadable icon.");
+-            icons[image]=ImageTexture.CreateFromImage(picture);
++            icons[image]=(ImageTexture.CreateFromImage(picture),bytes.LongLength,pixels);
+         } catch { return; }
+         if(!disposed){hud.RefreshIcons();pie.QueueRedraw();}
+     }
+diff --git a/client/godot/tests/ExportChecks.cs b/client/godot/tests/ExportChecks.cs
+index 802bc963..8cbf7e91 100644
+--- a/client/godot/tests/ExportChecks.cs
++++ b/client/godot/tests/ExportChecks.cs
+@@ -56,6 +56,7 @@ public partial class ExportChecks : Node
+             string phase = Env("M1B_PHASE");
+             if (phase is "startup-new" or "startup-saved") { await Startup(phase); return; }
+             if (phase == "menu") { await NativeMenu(); return; }
++            if (phase == "icons") { await IconAllowances(); return; }
+             if (phase == "scene") { await SceneAdapter(); return; }
+             if (phase == "controller-input") { await ControllerAdapter(); return; }
+             if (phase == "presentation") { await PresentationAdapter(); return; }
+diff --git a/doc/spaces.md b/doc/spaces.md
+index cceb0f46..ecebef69 100644
+--- a/doc/spaces.md
++++ b/doc/spaces.md
+@@ -159,7 +159,9 @@ chooses an exact destination and exterior transform, using existing integer
+ millimetres/degrees. The constructor consumes this input; it stores no second
+ location record. Omission or explicit `near_agent` reads A's `space_location/2`. A successful
+ `unplaced` result creates an unplaced space; `placed(Destination, Transform)`
+-places it one metre along that frame's X axis from A. This is one-time placement,
++places it in front of A along that frame's −Z axis: 2 m from A's position plus
++half the new space's depth, so its near wall opens at arm's reach plus a step
++(Yan, 2026-11-07); an infinite space uses half-depth zero. This is one-time placement,
+ not following A. A denied, unavailable, ambiguous or incomplete location read
+ fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
+ Transform)`; missing pose does not prove absence. Physical-pilot entry and live
+diff --git a/priv/ontologies/common_predicates.pl b/priv/ontologies/common_predicates.pl
+index b4693e3e..060b0402 100644
+--- a/priv/ontologies/common_predicates.pl
++++ b/priv/ontologies/common_predicates.pl
+@@ -169,6 +169,10 @@ menu_vocabulary(Ns, Anchor) :-
+     (Pins = [] -> Ns = <<"quod:gui">>, quod:root::system_ontology(Ns, Anchor)
+     ; Pins = [ontology_ref(Ns, Anchor)]).
+ 
++no_follow(menu_icon/2).
++menu_icon(Name, Icon) :-
++    menu_vocabulary(Gui, Anchor), in_ontology(Gui, Anchor, gui_icon(Name, Icon)).
++
+ %% One signed read per pie: the subject's single selected menu recipe.
+ client_menu(Entity, View) :-
+     term_variables(Entity, []),
+diff --git a/priv/ontologies/quod_gui.pl b/priv/ontologies/quod_gui.pl
+index c99cf263..c25b02af 100644
+--- a/priv/ontologies/quod_gui.pl
++++ b/priv/ontologies/quod_gui.pl
+@@ -172,42 +172,42 @@ isa(hud, thing).
+ %% falls back to the label's initials without.
+ no_follow(gui_icon/2).
+ no_follow(gui_purpose_icon/2).
+-gui_icon(accept, asset(<<"7b243c704098440348152df08bb33d5ce3c2bdfe71e828db26b56f73455a1c85">>, <<"image/png">>)).
+-gui_icon(account, asset(<<"c198ab56893753eb5b82ba1491940e8e44f35ca8f1f539710dfedd6f6e98c8dc">>, <<"image/png">>)).
+-gui_icon(account_controls, asset(<<"6f4da85202f3a0c808df9981663341d40671ab17f133522a0669fdda1ac6cd83">>, <<"image/png">>)).
+-gui_icon(attention, asset(<<"392f95140074b3e5162d8b2cc860a3ebe66c0bb20ca30deb4f4fe31949eab56a">>, <<"image/png">>)).
+-gui_icon(back, asset(<<"e799c393a99d0d3628d05f4c39518c9211213979fd95ffd5204e54e3bf430a93">>, <<"image/png">>)).
+-gui_icon(controllers, asset(<<"22874de5cdc094924b7b54ce5198dce0c0b07f23704ec31327212afc52671a03">>, <<"image/png">>)).
+-gui_icon(create_exact, asset(<<"81551291fff5b3b6278d22f58083766e9d39a4f7323f1813da9dc326b786004e">>, <<"image/png">>)).
+-gui_icon(create_finite, asset(<<"10cb7a60ee0d4b85f634b888d23c34384dcc2fd40bf27115aa6133e85d1751ed">>, <<"image/png">>)).
+-gui_icon(create_here, asset(<<"1320941c3a3b79716403806ad34b19b39f10920e266b93d9e9783fb20d6abeef">>, <<"image/png">>)).
+-gui_icon(create_infinite, asset(<<"6e838ec3e3cef10dffeb52c32e25f1e94be12b37216dc70fe7a4e38dbb451d1c">>, <<"image/png">>)).
+-gui_icon(create_storage, asset(<<"ccb396c150eca6bd7dc6ad5decfb2d5ee5ea4216ced72e5881a320dec6df478b">>, <<"image/png">>)).
+-gui_icon(decline, asset(<<"89595f66e3caaa073570349da4111a3c4818b8fea496c94465a7eca28dfe6a77">>, <<"image/png">>)).
+-gui_icon(device, asset(<<"059015d96d31a1b494de7b7c8001f64b2946a66bc433198c09500cc16cfada32">>, <<"image/png">>)).
+-gui_icon(enter, asset(<<"eaa918e337b050b95e91f2728b56d46b9a605cafb95ded4787a8111af33d3713">>, <<"image/png">>)).
+-gui_icon(farther, asset(<<"56c975f652fb70f04975b2fc0f33d6b4878cc7c66be21da76358d21574f233fe">>, <<"image/png">>)).
+-gui_icon(go_to, asset(<<"36652b712193cb0eb76fdac8319b2788cf2cbaae279cee7877f67d1427eaa183">>, <<"image/png">>)).
+-gui_icon(hide, asset(<<"ca04f09de6eab99c94f999ed8086dac3b35992371e89f46de23ac58594fde191">>, <<"image/png">>)).
+-gui_icon(inspect, asset(<<"8aa3240d88ef69fc14ab29514a4380d0b901f9f4aced431c393013a6b311237f">>, <<"image/png">>)).
+-gui_icon(inspection, asset(<<"b2779413cf637752e512a046a515ec4d2a8af1752e5d87eba1aa516acd361f9f">>, <<"image/png">>)).
+-gui_icon(leave, asset(<<"bb182c7fb117a1dc013d5eb9bb99f5605c9b2c46e4311669325b75a804e6c521">>, <<"image/png">>)).
+-gui_icon(matrix, asset(<<"793cabf0c5cb2b0ef16e85c10b080130dab950ada00657b215550213c11f1300">>, <<"image/png">>)).
+-gui_icon(me, asset(<<"a33fbc2379ea162f586a6e964e6765c9c7630d4729a823ecaf787cc0e22554d5">>, <<"image/png">>)).
+-gui_icon(more, asset(<<"07f924613b4cc096db76d30d800ed1c32e5e5ff2bc8d7c25cebb29b20e1661d2">>, <<"image/png">>)).
+-gui_icon(move_panel, asset(<<"0a9277d4a88bc694812ae5fba3480ac6c1ad297e3a9bb8c6d9a19ee63b51351a">>, <<"image/png">>)).
+-gui_icon(nearer, asset(<<"3c502ab9596d9f693d23e2a335cc64ac40f1cec574db7a510b64bebe05df49ba">>, <<"image/png">>)).
+-gui_icon(panels_opacity, asset(<<"147243a8fda4f33f8aa0d4ecd01b16e9857c9a180cba9516a1b46f221ef4c487">>, <<"image/png">>)).
+-gui_icon(question, asset(<<"e4e8fb93e34d08ac72646a9eea4dc66109b810d056afdba90f38dfdc18884d48">>, <<"image/png">>)).
+-gui_icon(recenter, asset(<<"f51e7c627d0f067505b52232f9cb787af5b9fcd37a05e5f243c829318e842727">>, <<"image/png">>)).
+-gui_icon(show_as, asset(<<"443faa8df4937365e159ecd54a0c7b5b23539bf55141d5330912d2a0665c57c2">>, <<"image/png">>)).
+-gui_icon(show_none, asset(<<"fe4318c1ff1e4fbb9be665ffc5ab08508084e6423e685af6f49a9bbe32ad8375">>, <<"image/png">>)).
+-gui_icon(source, asset(<<"957dde426601d7cbf44db51a213e5a6f04a75e7b221a677ebc3804ccc46e5e2c">>, <<"image/png">>)).
+-gui_icon(text_larger, asset(<<"3e382db372492f52ef2554c76136e05f03ed9757d549a9b26ca707b2f8f029ce">>, <<"image/png">>)).
+-gui_icon(text_smaller, asset(<<"7a205675c04f6c46b85d107f264c4bd54eae68fb63e2802d492fb65dc613b88e">>, <<"image/png">>)).
+-gui_icon(vr, asset(<<"c8b7ec10c76c9c2fffd890a8aef1480a1d3f69e501ec2c68a9ce17bf8e8b3ba5">>, <<"image/png">>)).
+-gui_icon(wireframe, asset(<<"dd8cf8820abe42498cb57c0b0d0c479ceeb0dda28595b45821ba9700275f94e5">>, <<"image/png">>)).
+-gui_icon(workspace, asset(<<"30eb5539c7181615c9fb9eed6f5b0e0418c0dcdfe1d3f81c72ef717979831489">>, <<"image/png">>)).
++gui_icon(accept, image(asset(<<"7b243c704098440348152df08bb33d5ce3c2bdfe71e828db26b56f73455a1c85">>, <<"image/png">>), resources(1860, 16384))).
++gui_icon(account, image(asset(<<"c198ab56893753eb5b82ba1491940e8e44f35ca8f1f539710dfedd6f6e98c8dc">>, <<"image/png">>), resources(2766, 16384))).
++gui_icon(account_controls, image(asset(<<"6f4da85202f3a0c808df9981663341d40671ab17f133522a0669fdda1ac6cd83">>, <<"image/png">>), resources(1632, 16384))).
++gui_icon(attention, image(asset(<<"392f95140074b3e5162d8b2cc860a3ebe66c0bb20ca30deb4f4fe31949eab56a">>, <<"image/png">>), resources(4379, 16384))).
++gui_icon(back, image(asset(<<"e799c393a99d0d3628d05f4c39518c9211213979fd95ffd5204e54e3bf430a93">>, <<"image/png">>), resources(955, 16384))).
++gui_icon(controllers, image(asset(<<"22874de5cdc094924b7b54ce5198dce0c0b07f23704ec31327212afc52671a03">>, <<"image/png">>), resources(4893, 16384))).
++gui_icon(create_exact, image(asset(<<"81551291fff5b3b6278d22f58083766e9d39a4f7323f1813da9dc326b786004e">>, <<"image/png">>), resources(3206, 16384))).
++gui_icon(create_finite, image(asset(<<"10cb7a60ee0d4b85f634b888d23c34384dcc2fd40bf27115aa6133e85d1751ed">>, <<"image/png">>), resources(2785, 16384))).
++gui_icon(create_here, image(asset(<<"1320941c3a3b79716403806ad34b19b39f10920e266b93d9e9783fb20d6abeef">>, <<"image/png">>), resources(4641, 16384))).
++gui_icon(create_infinite, image(asset(<<"6e838ec3e3cef10dffeb52c32e25f1e94be12b37216dc70fe7a4e38dbb451d1c">>, <<"image/png">>), resources(2841, 16384))).
++gui_icon(create_storage, image(asset(<<"ccb396c150eca6bd7dc6ad5decfb2d5ee5ea4216ced72e5881a320dec6df478b">>, <<"image/png">>), resources(4523, 16384))).
++gui_icon(decline, image(asset(<<"89595f66e3caaa073570349da4111a3c4818b8fea496c94465a7eca28dfe6a77">>, <<"image/png">>), resources(1292, 16384))).
++gui_icon(device, image(asset(<<"059015d96d31a1b494de7b7c8001f64b2946a66bc433198c09500cc16cfada32">>, <<"image/png">>), resources(1970, 16384))).
++gui_icon(enter, image(asset(<<"eaa918e337b050b95e91f2728b56d46b9a605cafb95ded4787a8111af33d3713">>, <<"image/png">>), resources(1567, 16384))).
++gui_icon(farther, image(asset(<<"56c975f652fb70f04975b2fc0f33d6b4878cc7c66be21da76358d21574f233fe">>, <<"image/png">>), resources(1837, 16384))).
++gui_icon(go_to, image(asset(<<"36652b712193cb0eb76fdac8319b2788cf2cbaae279cee7877f67d1427eaa183">>, <<"image/png">>), resources(3837, 16384))).
++gui_icon(hide, image(asset(<<"ca04f09de6eab99c94f999ed8086dac3b35992371e89f46de23ac58594fde191">>, <<"image/png">>), resources(3870, 16384))).
++gui_icon(inspect, image(asset(<<"8aa3240d88ef69fc14ab29514a4380d0b901f9f4aced431c393013a6b311237f">>, <<"image/png">>), resources(3410, 16384))).
++gui_icon(inspection, image(asset(<<"b2779413cf637752e512a046a515ec4d2a8af1752e5d87eba1aa516acd361f9f">>, <<"image/png">>), resources(1629, 16384))).
++gui_icon(leave, image(asset(<<"bb182c7fb117a1dc013d5eb9bb99f5605c9b2c46e4311669325b75a804e6c521">>, <<"image/png">>), resources(1605, 16384))).
++gui_icon(matrix, image(asset(<<"793cabf0c5cb2b0ef16e85c10b080130dab950ada00657b215550213c11f1300">>, <<"image/png">>), resources(2500, 16384))).
++gui_icon(me, image(asset(<<"a33fbc2379ea162f586a6e964e6765c9c7630d4729a823ecaf787cc0e22554d5">>, <<"image/png">>), resources(3555, 16384))).
++gui_icon(more, image(asset(<<"07f924613b4cc096db76d30d800ed1c32e5e5ff2bc8d7c25cebb29b20e1661d2">>, <<"image/png">>), resources(609, 16384))).
++gui_icon(move_panel, image(asset(<<"0a9277d4a88bc694812ae5fba3480ac6c1ad297e3a9bb8c6d9a19ee63b51351a">>, <<"image/png">>), resources(2296, 16384))).
++gui_icon(nearer, image(asset(<<"3c502ab9596d9f693d23e2a335cc64ac40f1cec574db7a510b64bebe05df49ba">>, <<"image/png">>), resources(1672, 16384))).
++gui_icon(panels_opacity, image(asset(<<"147243a8fda4f33f8aa0d4ecd01b16e9857c9a180cba9516a1b46f221ef4c487">>, <<"image/png">>), resources(2234, 16384))).
++gui_icon(question, image(asset(<<"e4e8fb93e34d08ac72646a9eea4dc66109b810d056afdba90f38dfdc18884d48">>, <<"image/png">>), resources(5336, 16384))).
++gui_icon(recenter, image(asset(<<"f51e7c627d0f067505b52232f9cb787af5b9fcd37a05e5f243c829318e842727">>, <<"image/png">>), resources(4455, 16384))).
++gui_icon(show_as, image(asset(<<"443faa8df4937365e159ecd54a0c7b5b23539bf55141d5330912d2a0665c57c2">>, <<"image/png">>), resources(4311, 16384))).
++gui_icon(show_none, image(asset(<<"fe4318c1ff1e4fbb9be665ffc5ab08508084e6423e685af6f49a9bbe32ad8375">>, <<"image/png">>), resources(3489, 16384))).
++gui_icon(source, image(asset(<<"957dde426601d7cbf44db51a213e5a6f04a75e7b221a677ebc3804ccc46e5e2c">>, <<"image/png">>), resources(2418, 16384))).
++gui_icon(text_larger, image(asset(<<"3e382db372492f52ef2554c76136e05f03ed9757d549a9b26ca707b2f8f029ce">>, <<"image/png">>), resources(2118, 16384))).
++gui_icon(text_smaller, image(asset(<<"7a205675c04f6c46b85d107f264c4bd54eae68fb63e2802d492fb65dc613b88e">>, <<"image/png">>), resources(2027, 16384))).
++gui_icon(vr, image(asset(<<"c8b7ec10c76c9c2fffd890a8aef1480a1d3f69e501ec2c68a9ce17bf8e8b3ba5">>, <<"image/png">>), resources(2175, 16384))).
++gui_icon(wireframe, image(asset(<<"dd8cf8820abe42498cb57c0b0d0c479ceeb0dda28595b45821ba9700275f94e5">>, <<"image/png">>), resources(4531, 16384))).
++gui_icon(workspace, image(asset(<<"30eb5539c7181615c9fb9eed6f5b0e0418c0dcdfe1d3f81c72ef717979831489">>, <<"image/png">>), resources(1466, 16384))).
+ %% The icon a menu shows for a view or an inspection of a given purpose.
+ gui_purpose_icon(playing, show_as).
+ gui_purpose_icon(edition, show_as).
+@@ -259,7 +259,7 @@ gui_chain_property(Chain, Key, Default) :-
+     \+ (gui_attribute(Nearer, Key, _, _), Nearer \== Owner, member_eq(Nearer, Chain), isa(Nearer, Owner)).
+ 
+ no_follow(gui_kind_properties/3).
+-gui_kind_properties(image, _, Properties) :- !, member(property(image, asset(_, _)), Properties).
++gui_kind_properties(image, _, Properties) :- !, member(property(image, image(_, _)), Properties).
+ gui_kind_properties(table, _, Properties) :- !,
+     member(property(headings, Headings), Properties),
+     member(property(options, Options), Properties),
+@@ -355,7 +355,8 @@ labelled_values(Options) :- Options = [_ | _], gui_options(Options, []).
+ text_list(Headings) :- Headings = [_ | _], gui_texts(Headings).
+ optional_image_asset(none).
+ optional_image_asset(Value) :- image_asset(Value).
+-image_asset(asset(Digest, Mime)) :-
++image_asset(image(asset(Digest, Mime), resources(Transfer, Pixels))) :-
++    integer(Transfer), Transfer > 0, integer(Pixels), Pixels > 0,
+     member(Mime, [<<"image/png">>, <<"image/jpeg">>]),
+     binary(Digest), binary_codes(Digest, Bytes), length(Bytes, 64), gui_digest(Bytes).
+ menu_slot(auto).
+diff --git a/priv/ontologies/quod_space.pl b/priv/ontologies/quod_space.pl
+index 60f189dc..52ebe9d2 100644
+--- a/priv/ontologies/quod_space.pl
++++ b/priv/ontologies/quod_space.pl
+@@ -345,11 +345,9 @@ instance_of(quod:gui:button, space_create_submit).
+ attribute(space_create(finite), label, <<"Create space">>).
+ attribute(space_create(exact), label, <<"Create space with rational lengths">>).
+ attribute(space_create(infinite), label, <<"Create infinite space">>).
+-attribute(space_create(finite), image, Icon) :- space_icon(create_finite, Icon).
+-attribute(space_create(exact), image, Icon) :- space_icon(create_exact, Icon).
+-attribute(space_create(infinite), image, Icon) :- space_icon(create_infinite, Icon).
+-%% The GUI vocabulary's icon catalogue, by name.
+-space_icon(Name, Icon) :- menu_vocabulary(Gui, GuiAnchor), in_ontology(Gui, GuiAnchor, gui_icon(Name, Icon)).
++attribute(space_create(finite), image, Icon) :- menu_icon(create_finite, Icon).
++attribute(space_create(exact), image, Icon) :- menu_icon(create_exact, Icon).
++attribute(space_create(infinite), image, Icon) :- menu_icon(create_infinite, Icon).
+ attribute(space_create(_), help, <<"The personal agent's human is the default owner, independently of the selected storage and placement. Creation does not enter the new space.">>).
+ attribute(space_name, label, <<"Name">>).
+ attribute(space_name, help, <<"The class default is supplied. Change it to use your own name.">>).
+@@ -441,8 +439,8 @@ instance_of(quod:gui:form,space_travel_form(_,_,_,_)).
+ instance_of(quod:gui:button,space_travel_submit).
+ attribute(space_travel_form(_,_,_,placed(_,_)),label,<<"Enter space">>).
+ attribute(space_travel_form(_,_,_,unplaced),label,<<"Leave space">>).
+-attribute(space_travel_form(_,_,_,placed(_,_)),image,Icon) :- space_icon(enter,Icon).
+-attribute(space_travel_form(_,_,_,unplaced),image,Icon) :- space_icon(leave,Icon).
++attribute(space_travel_form(_,_,_,placed(_,_)),image,Icon) :- menu_icon(enter,Icon).
++attribute(space_travel_form(_,_,_,unplaced),image,Icon) :- menu_icon(leave,Icon).
+ attribute(space_travel_form(_,_,_,_),help,
+     <<"Move the same personal agent. Navigation follows the committed location. Leaving without a destination makes the agent unplaced.">>).
+ attribute(space_travel_submit,label,<<"Move">>).
+@@ -474,7 +472,7 @@ eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
+     findall(Item,(member(Item,Own),space_menu_shows(Item)),Shows),
+     findall(Item,(member(Offered,Own),\+ space_menu_shows(Offered),space_menu_action(Offered,Item)),Actions),
+     findall(Item,space_menu_destination(Space,Ns,A,Item),Destinations),
+-    space_icon(create_here,CreateIcon), space_icon(show_as,ShowIcon), space_icon(inspect,InspectIcon), space_icon(go_to,GoIcon),
++    menu_icon(create_here,CreateIcon), menu_icon(show_as,ShowIcon), menu_icon(inspect,InspectIcon), menu_icon(go_to,GoIcon),
+     append([group(<<"Create here">>,[slot(1),image(CreateIcon)],[operation(class)],Class),
+             group(<<"Show as">>,[slot(2),image(ShowIcon)],[operation(instance)],Shows),
+             group(<<"Inspect">>,[slot(3),image(InspectIcon)],[prolog,inspection,workspace],Storage)|Actions],
+@@ -509,9 +507,9 @@ instance_of(quod:gui:button,space_show_submit).
+ attribute(space_show_form(_,_,_,_,none),label,<<"No walls inside">>).
+ attribute(space_show_form(_,_,_,_,wireframe),label,<<"Wire box walls">>).
+ attribute(space_show_form(_,_,_,_,matrix),label,<<"Matrix walls">>).
+-attribute(space_show_form(_,_,_,_,none),image,Icon) :- space_icon(show_none,Icon).
+-attribute(space_show_form(_,_,_,_,wireframe),image,Icon) :- space_icon(wireframe,Icon).
+-attribute(space_show_form(_,_,_,_,matrix),image,Icon) :- space_icon(matrix,Icon).
++attribute(space_show_form(_,_,_,_,none),image,Icon) :- menu_icon(show_none,Icon).
++attribute(space_show_form(_,_,_,_,wireframe),image,Icon) :- menu_icon(wireframe,Icon).
++attribute(space_show_form(_,_,_,_,matrix),image,Icon) :- menu_icon(matrix,Icon).
+ attribute(space_show_form(_,_,_,_,_),help,<<"Changes how this space looks from inside. Nothing moves.">>).
+ attribute(space_show_submit,label,<<"Show">>).
+ gui_children(space_show_form(_,_,_,_,_),[space_show_submit]).
+diff --git a/priv/ontologies/user_instance.pl b/priv/ontologies/user_instance.pl
+index 62b2b0ac..32432476 100644
+--- a/priv/ontologies/user_instance.pl
++++ b/priv/ontologies/user_instance.pl
+@@ -434,12 +434,10 @@ hud_commands(hud(Tree)) :-
+ 
+ hud_command(item(choice(Me, Choice), <<"Your attention">>, <<"Questions waiting for you">>, available, [image(Icon)])) :-
+     current_ontology_identity(Ns, A), Me = entity_ref(Ns, A, me),
+-    entity_eidolons(me, attention, _, [Choice]), gui_icon(attention, Icon).
++    entity_eidolons(me, attention, _, [Choice]), menu_icon(attention, Icon).
+ hud_command(item(choice(Me, Choice), <<"Me">>, <<"Your settings, keys and account">>, available, [image(Icon)])) :-
+     current_ontology_identity(Ns, A), Me = entity_ref(Ns, A, me),
+-    entity_eidolons(me, menu, _, [Choice]), gui_icon(me, Icon).
+-%% The vocabulary's icon catalogue, by name.
+-gui_icon(Name, Icon) :- menu_vocabulary(Gui, GuiAnchor), in_ontology(Gui, GuiAnchor, gui_icon(Name, Icon)).
++    entity_eidolons(me, menu, _, [Choice]), menu_icon(me, Icon).
+ hud_command(Item) :-
+     space_location(personal, placed(entity_ref(Ns, A, Space), _)),
+     in_ontology(Ns, A, (entity_eidolons(Space, hud, _, Choices), member(Choice, Choices),
+@@ -520,7 +518,7 @@ instance_of(quod:gui:selection, hud_offer_choice).
+ instance_of(quod:gui:selection, hud_offer_answer).
+ instance_of(quod:gui:button, hud_offer_submit).
+ attribute(hud_offers(_), label, <<"Offered commands">>).
+-attribute(hud_offers(_), image, Icon) :- gui_icon(question, Icon).
++attribute(hud_offers(_), image, Icon) :- menu_icon(question, Icon).
+ attribute(hud_offers(_), help, <<"Other agents asked to add these commands to your HUD. Nothing is added unless you accept.">>).
+ attribute(hud_offer_choice, label, <<"Offer">>).
+ attribute(hud_offer_choice, options, Options) :-
+@@ -612,9 +610,9 @@ instance_of(quod:gui:slider,controller_teleport_fraction).
+ instance_of(quod:gui:button,controller_save).
+ controller_setting_id(Id) :- member(Id,[select,menu,drive,snap,teleport]).
+ attribute(controller_settings(_,_,_),label,<<"VR controller settings">>).
+-attribute(controller_settings(_,_,_),image,Icon) :- gui_icon(controllers,Icon).
++attribute(controller_settings(_,_,_),image,Icon) :- menu_icon(controllers,Icon).
+ attribute(controller_reset_settings(_,_,_),label,<<"Repair VR controller settings">>).
+-attribute(controller_reset_settings(_,_,_),image,Icon) :- gui_icon(controllers,Icon).
++attribute(controller_reset_settings(_,_,_),image,Icon) :- menu_icon(controllers,Icon).
+ attribute(controller_invalid_settings,label,<<"Saved bindings are no longer valid. Controller input is disabled. Reset explicitly to the current shared defaults.">>).
+ attribute(controller_restore,label,<<"Reset to shared defaults">>).
+ attribute(controller_hand(R),label,Label) :-
+diff --git a/test/fixtures/gui-remaining.pl b/test/fixtures/gui-remaining.pl
+index 76caf204..d24c9e18 100644
+--- a/test/fixtures/gui-remaining.pl
++++ b/test/fixtures/gui-remaining.pl
+@@ -20,6 +20,6 @@ attribute(apply, label, <<"Apply">>).
+ attribute(rows, headings, [<<"Channel">>, <<"Value">>]).
+ attribute(rows, multiple, true).
+ attribute(rows, options, [option(row(a), [<<"Alpha">>, <<"10">>]), option(row(b), [<<"Beta">>, <<"20">>])]).
+-attribute(picture, image, asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>)).
+-attribute(apply, image, asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>)).
++attribute(picture, image, image(asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>), resources(1024, 4096))).
++attribute(apply, image, image(asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>), resources(1024, 4096))).
+ gui_form(extra, [field(rows, Rows), field(note, Note), field(flag, Flag)], submit(apply, entered(Rows, Note, Flag))).
+diff --git a/test/quod_gui_components_tests.erl b/test/quod_gui_components_tests.erl
+index aceb405d..daa6e1fb 100644
+--- a/test/quod_gui_components_tests.erl
++++ b/test/quod_gui_components_tests.erl
+@@ -12,6 +12,12 @@ remaining_controls_preserve_binding_and_atomic_refusal_test_() ->
+             {Result, 1} = vocabulary_calls(fun() -> read(Ctx, Ns, {gui_schema, extra, {0}, {1}}) end),
+             {ok, [#{<<"V0">> := Revision, <<"V1">> := Tree}], _} = Result,
+             ?assertEqual([form,image,table,dialog,text_area,menu,checkbox,button], kinds(Tree)),
++            {ok, [#{<<"V0">> := Picture}], _} = read(Ctx, Ns, {attribute,picture,image,{0}}),
++            commit(Ctx,Ns,{transaction,{',',{retract,{attribute,picture,image,Picture}},
++                                          {assertz,{attribute,picture,image,none}}}}),
++            ?assertMatch({fail,_},read(Ctx,Ns,{gui_schema,extra,{0},{1}})),
++            commit(Ctx,Ns,{transaction,{',',{retract,{attribute,picture,image,none}},
++                                          {assertz,{attribute,picture,image,Picture}}}}),
+             Values = [{field,rows,[{row,b},{row,a}]},{field,note,<<"two\nlines">>},{field,flag,true}],
+             Bind = fun(Fields) -> {gui_bind,extra,Revision,apply,Fields,{0}} end,
+             quod_lobby_tests:assert_read_has_no_io(fun() ->
+diff --git a/test/quod_gui_menu_tests.erl b/test/quod_gui_menu_tests.erl
+index c9daca3c..8b5aabec 100644
+--- a/test/quod_gui_menu_tests.erl
++++ b/test/quod_gui_menu_tests.erl
+@@ -42,6 +42,12 @@ space_pie_overrides_the_default_test_() ->
+         ?assertEqual(<<"Workshop">>,property(Tree,label)),
+         plain_labels(Tree),
+         Create = wedge(Tree,1), ?assertEqual(<<"Create here">>,property(Create,label)),
++        ?assertMatch({image,{asset,_,<<"image/png">>},{resources,_,_}},property(Create,image)),
++        {image,{asset,Digest,_},{resources,Transfer,Pixels}} = property(Create,image),
++        {ok,IconBytes} = file:read_file(filename:join([code:priv_dir(quod),"explorer","assets","icons",
++                                                     binary_to_list(Digest)++".png"])),
++        <<_:16/binary,Width:32,Height:32,_/binary>> = IconBytes,
++        ?assertEqual({byte_size(IconBytes),Width*Height},{Transfer,Pixels}),
+         ?assertEqual(5,property(Create,back)),
+         ?assertEqual(lists:sort([<<"Create space">>,<<"Create space with rational lengths">>,
+                                  <<"Create infinite space">>]),

@@ -70,10 +70,7 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
                     case "columns": case "visible_rows": if (a[1].Integer <= 0) throw new FormatException("Invalid layout extent."); break;
                     case "percent": if (a[1].Integer < 0 || a[1].Integer > 100) throw new FormatException("Invalid progress."); break;
                     case "image":
-                        if (a[1].Kind == "atom" && a[1].Name == "none") break;
-                        var asset = a[1].Require("asset", 2);
-                        if (!System.Text.RegularExpressions.Regex.IsMatch(asset[0].TextValue, "^[a-f0-9]{64}$") || asset[1].TextValue is not ("image/png" or "image/jpeg"))
-                            throw new FormatException("Unsupported GUI image asset.");
+                        _ = ImageAsset(a[1]);
                         break;
                 }
             }
@@ -96,6 +93,19 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
             return result;
         }
         return Read(value);
+    }
+    public static (string? File, long Transfer, long Pixels) ImageAsset(Term? value)
+    {
+        if (value == null || value.Kind == "atom" && value.Name == "none") return (null, 0, 0);
+        var image = value.Require("image", 2);
+        var asset = image[0].Require("asset", 2);
+        string digest = asset[0].TextValue, extension = asset[1].TextValue switch {
+            "image/png" => "png", "image/jpeg" => "jpg", _ => throw new FormatException("Unsupported image type.") };
+        var resources = image[1].Require("resources", 2);
+        long transfer = checked((long)resources[0].Integer), pixels = checked((long)resources[1].Integer);
+        if (!System.Text.RegularExpressions.Regex.IsMatch(digest, "^[a-f0-9]{64}$") || transfer <= 0 || pixels <= 0)
+            throw new FormatException("Invalid image admission.");
+        return (digest + "." + extension, transfer, pixels);
     }
     public static Dictionary<string,Term> AppearanceTokens(Term value)
     {

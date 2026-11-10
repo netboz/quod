@@ -4,9 +4,8 @@
 -include_lib("erlog/src/erlog_int.hrl").
 
 ontology_self_membership_does_not_run_a_bridge_during_user_admission_test() ->
-    Terms = quod_committed_projection:read_terms(filename:join(
-        code:priv_dir(quod), "ontologies/user_instance.pl")),
-    with_classes(Terms ++ [{instance_of, human_user, me}], fun(St) ->
+    Terms = quod_personal_agent_tests:user_terms(),
+    with_classes(Terms ++ [{instance_of, {':',quod,{':',user,human_user}}, me}], fun(St) ->
         Ns = <<"private:user">>,
         Verdict = quod_predicates:set_context(St,
             quod_predicates:policy_verdict_context(Ns, 1)),

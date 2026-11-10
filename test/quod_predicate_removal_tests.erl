@@ -89,7 +89,7 @@ conflict(Ns) ->
         Parent ! {removal_result, self(), quod_client_goal_ingress:submit(Bytes, Sig)}
     end),
     try
-        Worker = receive {local_proof_waiting, Pid} -> Pid
+        Worker = receive {local_proof_waiting, Pid, _} -> Pid
                  after 10000 -> error(removal_not_prepared) end,
         committed(Ns, {assertz, {racing, concurrent}}),
         Worker ! release,

@@ -6,7 +6,7 @@ public partial class OperationsPanel : VBoxContainer
 {
     public FormPanel FormPanel { get; private set; } = null!;
     public Offer? Current { get; private set; }
-    public Actor? SelectedStorage { get; private set; }
+    public Actor? SelectedStorage => target;
     public bool Available { get; private set; }
     public bool IsWorking => busy;
     public IReadOnlyList<Offer> Offered=>offers;
@@ -56,7 +56,7 @@ public partial class OperationsPanel : VBoxContainer
     bool disposed, busy;
     string? requested;
     bool revealPending,submitPending;
-    string DraftKey(Offer offer) => string.Join("\n",session.Network,session.Key.PublicText,human.Entity,offer.Subject,offer.Name);
+    string DraftKey(Offer offer) => string.Join("\n",session.Network,session.Key.PublicText,human.Entity,target.Ontology,offer.Subject,offer.Name);
     Buffer Draft(Offer offer) => drafts[DraftKey(offer)];
     public override void _Ready()
     {
@@ -90,7 +90,7 @@ public partial class OperationsPanel : VBoxContainer
         storage.ItemSelected += index => { if (index > 0) _ = ChooseStorage(targets[(int)index - 1]); };
         classSelector.ItemSelected += index => {
             if (index <= 0) return;
-            var chosen = Term.Call("class_ref", Term.Text(target.Namespace), Term.Binary(Identity.Decode(target.Anchor)), classes[(int)index - 1]);
+            var chosen = classes[(int)index - 1];
             PresentSubject(target, chosen, true); ClassChosen?.Invoke(chosen);
         };
         AddChild(status);AddChild(results);
@@ -129,7 +129,7 @@ public partial class OperationsPanel : VBoxContainer
     public void OpenStorage(SignedSession session, Accounts accounts,Actor? currentSpace=null)
     {
         if (busy || disposed) return;
-        Initialize(session, accounts); Invalidate(); SelectedStorage=null;targeting.Show(); targets.Clear(); storage.Clear(); storage.AddItem("Choose storage ontology");
+        Initialize(session, accounts); Invalidate(); target=null!;targeting.Show(); targets.Clear(); storage.Clear(); storage.AddItem("Choose storage ontology");
         foreach (var choice in accounts.Catalogue.Append(human)) AddTarget(choice with { InstanceText = "me." });
         if (accounts.Setup is Term setup) AddTarget(Actor.FromTerm(setup.Require("account", 6)[2]) with { InstanceText = "me." });
         if (currentSpace != null) AddTarget(currentSpace with { InstanceText="me." });
@@ -146,7 +146,7 @@ public partial class OperationsPanel : VBoxContainer
     async Task ChooseStorage(Actor chosen)
     {
         if (busy || disposed) return;
-        Invalidate(); target = chosen; SelectedStorage=chosen;long expected = generation; SetBusy(true); work = new(); var running = work;
+        Invalidate(); target = chosen;long expected = generation; SetBusy(true); work = new(); var running = work;
         scope.Text = "Storage: " + chosen.Ontology; status.Text = "Reading this exact target's offered classes…";
         context.Text = StorageTitle(chosen);
         classSelector.Clear(); classSelector.AddItem("Choose a class"); Changed?.Invoke();
@@ -158,7 +158,11 @@ public partial class OperationsPanel : VBoxContainer
                 if (disposed || expected != generation) return;
                 classes = next.Items;
                 if (classes.Select(c => c.ToString()).Distinct().Count() != classes.Length) throw new FormatException("Duplicate offered class.");
-                foreach (var item in classes) classSelector.AddItem(item.ToString());
+                foreach (var item in classes) {
+                    var reference=item.Require("class_ref",3);
+                    _=Subject.Decode(item);
+                    classSelector.AddItem((reference[0].TextValue==chosen.Namespace ? "" : reference[0].TextValue+" : ")+reference[2]);
+                }
                 status.Text = classes.Length == 0 ? "This storage offers no class operations." : "Choose a kind of thing to see its available actions.";
             } catch (Exception error) { if (!disposed && expected == generation) status.Text = "Target unavailable: " + error.Message; }
             finally { SetBusy(false); running.Dispose(); if (ReferenceEquals(work, running)) work = null; Changed?.Invoke(); }
@@ -239,7 +243,7 @@ public partial class OperationsPanel : VBoxContainer
         var consumer = session; var owner = human; var selectedTarget = target;
         SetBusy(true); work = new(); var running = work; FormPanel.Lock(true); status.Text = "Checking the governed personal agent…"; Changed?.Invoke();
         try {
-            var personal = await consumer.Read(owner, "personal_agent(Agent,Key).", running.Token);
+            var personal = await consumer.Read(owner, "<<\"quod:user\">>::personal_agent(Agent,Key).", running.Token);
             var agent = Actor.FromTerm(Json.Binding(personal, "Agent")); var key = Json.Binding(personal, "Key");
             running.Token.ThrowIfCancellationRequested(); buffer.Settled = true;
             var reply = await consumer.Personal(owner, agent, key.Bytes, selectedTarget, goal, running.Token);
@@ -270,7 +274,10 @@ public partial class OperationsPanel : VBoxContainer
             : "Outcome unknown. Check the original operation; do not resubmit.";
         var outcome=new Label { Text="Received outcome · "+status.Text,Name="operation-outcome",AutowrapMode=TextServer.AutowrapMode.WordSmart };
         results.AddChild(outcome);results.MoveChild(outcome,0);
-        detailContents.AddChild(new Label { Text = reply.ToJsonString(), AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        // Exact proof failures can be large. Keep them selectable and scrollable
+        // without laying out the whole response as one wrapped label.
+        detailContents.AddChild(new TextEdit { Text = reply.ToJsonString(new() { WriteIndented=true }),
+            Editable=false, CustomMinimumSize=new(0,220), Name="operation-outcome-details" });
         if (!Json.Committed(reply)) { Reveal(outcome);return; }
         foreach (var bindings in reply["bindings"]!.AsArray()) {
             if (bindings?["Results"] is not System.Text.Json.Nodes.JsonValue value) continue;

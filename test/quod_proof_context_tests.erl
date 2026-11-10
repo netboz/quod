@@ -49,19 +49,25 @@ reuses_exact_identity(#{proof_id := ProofId, handle := Handle}) ->
 
 retains_exact_read_heights(_Ctx) ->
     A = {<<"a">>, <<11:256>>}, B = {<<"b">>, <<12:256>>},
-    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
-        fun(_) -> {ok,self(),b,42} end),
-    {ok, _, a} = quod_proof_context:get_or_open_scope(A,
-        fun(_) -> {ok,self(),a,17} end),
-    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
-        fun(_) -> error(must_reuse_pinned_height) end),
-    Dependencies = [{<<"a">>,<<11:256>>,17},{<<"b">>,<<12:256>>,42}],
-    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()),
-    ?assertEqual({error,{protocol_error,proof_engine}},
-        quod_proof_context:get_or_open_scope({<<"missing">>,<<13:256>>},
-            fun(_) -> {ok,self(),missing,-1} end)),
-    ?assertEqual(ok,quod_proof_context:finalize(abort)),
-    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()).
+    SA = quod_proof_session:start(quod_ct:committed_kb([]), #{read_set => true}),
+    SB = quod_proof_session:start(quod_ct:committed_kb([]), #{read_set => true}),
+    try
+        {ok, _, HandleB} = quod_proof_context:get_or_open_scope(B,
+            fun(Id) -> {ok,self(),{local_scope,Id,<<"b">>,<<12:256>>,42,SB},42} end),
+        {ok, _, _} = quod_proof_context:get_or_open_scope(A,
+            fun(Id) -> {ok,self(),{local_scope,Id,<<"a">>,<<11:256>>,17,SA},17} end),
+        {ok, _, HandleB} = quod_proof_context:get_or_open_scope(B,
+            fun(_) -> error(must_reuse_pinned_height) end),
+        Dependencies = {ok,[{<<"a">>,<<11:256>>,17,[]},{<<"b">>,<<12:256>>,42,[]}]},
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(read_write)),
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(committed_read)),
+        ?assertEqual({error,{protocol_error,proof_engine}},
+            quod_proof_context:get_or_open_scope({<<"missing">>,<<13:256>>},
+                fun(_) -> {ok,self(),missing,-1} end)),
+        ?assertEqual(ok,quod_proof_context:finalize(abort)),
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(read_write)),
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(committed_read))
+    after quod_proof_session:stop(SA), quod_proof_session:stop(SB) end.
 
 rejects_anchor_conflict(_Ctx) ->
     ScopePid = spawn(fun wait/0),

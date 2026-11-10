@@ -181,10 +181,13 @@ QUIC reports progress. If the transport remains silent for its configured
 connection-idle bound, the link exits so every queued successor is discarded
 and its owner can reconnect and reconstruct the ordered prefix from retained
 state. The timer detects terminal silence; it never discovers normal progress.
+An unrepresentable payload takes the same terminal link-failure path before
+allocating its frame; the caller observes the failure through its link monitor.
 """.
--spec send_ordered(pid(), iodata()) -> ok | {error, frame_unrepresentable}.
+-spec send_ordered(pid(), iodata()) -> ok.
 send_ordered(LinkPid, Payload) ->
-    queue_payload(send_ordered, LinkPid, Payload).
+    LinkPid ! {send_ordered, Payload},
+    ok.
 
 queue_payload(Kind, LinkPid, Payload) ->
     case prepare_payload(Payload) of
@@ -356,7 +359,10 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
             loop(enqueue_send({best_effort, frame(Payload)}, S));
         {send_ordered, Payload} ->
             require_generic_channel(S),
-            loop(enqueue_send({ordered, frame(Payload)}, S));
+            case prepare_payload(Payload) of
+                {ok, Binary} -> loop(enqueue_send({ordered, frame(Binary)}, S));
+                {error, Reason} -> ordered_send_failed(Reason, S)
+            end;
         {send_reliable, From, Ref, Payload, Deadline} ->
             require_generic_channel(S),
             loop(enqueue_send(

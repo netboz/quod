@@ -1,0 +1,3 @@
+priv/ontologies/quod_space.pl: 222 clauses
+priv/ontologies/common_predicates.pl: 185 clauses
+priv/ontologies/gui_forms.pl: 96 clauses

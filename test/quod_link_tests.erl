@@ -114,12 +114,36 @@ unrepresentable_iodata_refuses_before_allocation_or_enqueue_test() ->
     %% a 4 GiB allocation, starting a link, or changing transport authority.
     Payload = lists:duplicate(4096, binary:copy(<<0>>, 1024 * 1024)),
     ?assertEqual({error, frame_unrepresentable}, quod_link:send(self(), Payload)),
-    ?assertEqual({error, frame_unrepresentable}, quod_link:send_ordered(self(), Payload)),
     ?assertEqual({error, frame_unrepresentable}, quod_link:send_reliable(self(), Payload, 1000)),
     receive {send, _} -> error(unrepresentable_frame_enqueued);
             {send_ordered, _} -> error(unrepresentable_frame_enqueued);
             {send_reliable, _, _, _, _} -> error(unrepresentable_frame_enqueued)
     after 0 -> ok end.
+
+unrepresentable_ordered_payload_retires_link_before_successors_test() ->
+    with_credit_connection([], fun(Conn, Tag, _Ns, _Channel) ->
+        Channel = <<"ordered-capacity">>,
+        Peer = {<<1:256>>, {"127.0.0.1", 1}},
+        Link = quod_link:start_outbound(Conn, 0, Peer, Channel, Peer, self(), no_learn),
+        try
+            _Header = credit_wire(Tag),
+            Link ! {data, frame(<<>>), false},
+            receive {link_up, Channel, _, Link, out} -> ok
+            after 1000 -> error(no_link_up) end,
+            MRef = monitor(process, Link),
+            %% Measure 4 GiB of shared iodata without allocating that frame.
+            Payload = lists:duplicate(4096, binary:copy(<<0>>, 1024 * 1024)),
+            ok = quod_link:send_ordered(Link, Payload),
+            ok = quod_link:send_ordered(Link, <<"successor">>),
+            receive
+                {'DOWN', MRef, process, Link,
+                 {ordered_send_failed, frame_unrepresentable}} -> ok
+            after 1000 -> error(unrepresentable_link_not_retired) end,
+            receive {credit_wire, Tag, _} -> error(successor_passed_refused_frame)
+            after 0 -> ok end,
+            ?assert(is_process_alive(Conn))
+        after stop_credit_link(Link) end
+    end).
 
 %% Exercise real link processes and the real catch-up codec. Only the QUIC
 %% connection acceptance boundary is substituted, with its actual call shape.
@@ -397,7 +421,8 @@ with_credit_connection(Results, Fun) ->
 
 credit_connection(Parent, Tag, Results) ->
     receive
-        {'$gen_call', From, {set_stream_priority, 0, 1, true}} ->
+        {'$gen_call', From, {set_stream_priority, 0, Urgency, true}}
+          when Urgency =:= 1; Urgency =:= 6 ->
             gen_server:reply(From, ok),
             credit_connection(Parent, Tag, Results);
         {'$gen_call', From, {send_data, 0, Data, false}} ->

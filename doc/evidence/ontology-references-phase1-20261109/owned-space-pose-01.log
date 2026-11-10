@@ -1,0 +1,25 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_space_tests:-class_owner_creation_and_action_chain_test_/0-fun-5-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , [ # { 'Poses' := [ Pose ] } ] , _ }, quod_prolog : prove_ro ( Store , { findall , { 'P' } , { attribute , Id , transform , { 'P' } } , { 'Poses' } } ))
+       expected: = { ok , [ # { 'Poses' := [ Pose ] } ] , _ }
+            got: {ok,[#{'P' => {0},
+                        'Poses' =>
+                            [{transform,0,0,0,0,0,0},
+                             {transform,10,20,30,0,0,0}]}],
+                     3}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_A20C2469409895B7
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_A20C2469409895B7
+[0m
+
+Finished in 0.488 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

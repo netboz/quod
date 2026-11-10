@@ -112,13 +112,27 @@ validate_action(Action) ->
         false -> {error, invalid_action}
     end.
 
+validate_typed_action({create_ontology, Name, Options} = Action) ->
+    case quod_wire_term:is_ground(Name) andalso creation_options_bound(Options) of
+        true -> validate_fixed_action(Action);
+        false -> {error, invalid_arguments}
+    end;
 validate_typed_action(Action) ->
     case quod_wire_term:is_ground(Action) of
-        true -> validate_ground_action(Action);
+        true -> validate_fixed_action(Action);
         false -> {error, invalid_arguments}
     end.
 
-validate_ground_action({create_ontology, Name, Options}) ->
+%% The terms list is decided source, like parsed source text. Variables inside
+%% its clauses are data; the list and all other request fields must be fixed.
+%% Compilation and reserved-head validation still run after policy admission.
+creation_options_bound([{terms, Terms} | Rest]) ->
+    proper_list(Terms) andalso creation_options_bound(Rest);
+creation_options_bound([Option | Rest]) ->
+    quod_wire_term:is_ground(Option) andalso creation_options_bound(Rest);
+creation_options_bound(Tail) -> quod_wire_term:is_ground(Tail).
+
+validate_fixed_action({create_ontology, Name, Options}) ->
     case canonical_name(Name) of
         {error, _} = Error ->
             Error;
@@ -133,7 +147,7 @@ validate_ground_action({create_ontology, Name, Options}) ->
                     Error
             end
     end;
-validate_ground_action(
+validate_fixed_action(
   {join_ontology, Name, GenesisHash, Seeds}) ->
     case canonical_name(Name) of
         {error, _} = Error ->

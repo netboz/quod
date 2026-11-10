@@ -180,8 +180,9 @@ frame edits and branch removal. A source representation change and dependent
 body/structure revisions commit atomically; body IDs remain stable on updates.
 
 Geometry, frame and delegation dependencies share the same resource selector
-and retained foreign readers. The selector can inspect owner-bound immutable
-identity metadata but cannot perform live queries, scope calls or writes.
+and retained foreign readers. The selector reads committed snapshots and can
+call class owners through ordinary signed scopes with their ACLs; live queries
+and writes remain forbidden.
 Revocation or missing verified input parks only consuming simulations. Unrelated
 changes retain native resources and controls. Required geometry, delegation and
 frame-membership/export failures are explicit results for the consuming world;

@@ -190,7 +190,7 @@ local_process_uses_signed_ingress_without_a_session(
     application:set_env(quod, node_pubkey, <<16#73:256>>),
     try
         {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
-        ?assertMatch({ok, _, {normalized, {read, _, {answers, 1, [_]}}}},
+        ?assertMatch({ok, _, {normalized, {read, [{Ns,?ANCHOR,1,[]}], {answers, 1, [_]}}}},
                      quod_client_goal_ingress:submit(Bytes, Signature)),
         ?assertEqual({error, invalid_signature},
                      quod_client_goal_ingress:submit(Bytes, <<0:512>>)),
@@ -745,7 +745,7 @@ unique_symbol(Prefix) ->
 is_anchored_public_cast(
   {'$gen_cast', {public_proof, _Caller, _CallRef, prove_ro, _Goal,
                  {proof_request, _TraceCtx, {agent, _AgentRef},
-                  ?ANCHOR, _RequestAuth, _Deadline, _StartedNative}}}) ->
+                  ?ANCHOR, _RequestAuth, read_write, _Deadline, _StartedNative}}}) ->
     true;
 is_anchored_public_cast(_) ->
     false.

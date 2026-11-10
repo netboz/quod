@@ -43,7 +43,8 @@ physics_frame_path([]).
 physics_frame_path([frame(entity_ref(Ns,A,E),Assignment,Revision)|Rest]) :-
     binary(Ns), binary(A), term_variables(E,[]), integer(Assignment), Assignment > 0,
     binary_codes(Revision,Bytes), length(Bytes,32), physics_frame_path(Rest).
-physics_local_pose(transform(X,Y,Z,RX,RY,RZ)) :- space_transform(transform(X,Y,Z,RX,RY,RZ)).
+physics_local_pose(transform(X,Y,Z,RX,RY,RZ)) :-
+    physics_world_position(vector(X,Y,Z)), physics_world_position(vector(RX,RY,RZ)).
 physics_local_pose(Pose) :- Pose \= framed(_,_), physics_world_pose(Pose).
 physics_valid_pose(vector(X,Y,Z), Coordinate) :-
     physics_body_vector(vector(X,Y,Z), Coordinate).

@@ -101,9 +101,11 @@ class Proxy(BaseHTTPRequestHandler):
         connection = http.client.HTTPSConnection('127.0.0.1', a.backend_port, context=trust, timeout=300)
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ('host', 'connection')}
         try:
+            started = time.monotonic()
             connection.request(self.command, self.path, body, headers)
             response = connection.getresponse()
             content = response.read()
+            received = time.monotonic()
             flow = None
             digest = None
             if self.path in ('/api/goals/execute', '/api/agents/instructions'):
@@ -112,7 +114,7 @@ class Proxy(BaseHTTPRequestHandler):
                 digest = hashlib.sha256(request).hexdigest()
                 if self.path == '/api/agents/instructions':
                     flow = 'instruction'
-                elif b'setup_account(' in request:
+                elif b'gui_operation(' in request and b'result(setup,' in request:
                     flow = 'setup'
                 elif b'signup(' in request:
                     flow = 'signup'
@@ -131,9 +133,11 @@ class Proxy(BaseHTTPRequestHandler):
                     faults['question_reply_lost'] += 1; lose = True
                 asset=self.path.startswith('/assets/')
                 reply = {} if asset else json.loads(content)
-                records.append({'method': self.command, 'route': self.path, 'status': response.status, 'flow': flow, 'request_sha256': digest, 'reply_lost': lose,
+                record = {'method': self.command, 'route': self.path, 'status': response.status, 'flow': flow, 'request_sha256': digest, 'reply_lost': lose,
                     'result': reply.get('result'), 'outcome_status': reply.get('status'), 'aggregate': reply.get('aggregate'),
-                    **({'asset_bytes':len(content),'asset_sha256':hashlib.sha256(content).hexdigest()} if asset else {})})
+                    'upstream_seconds': received-started, 'response_bytes': len(content),
+                    **({'asset_bytes':len(content),'asset_sha256':hashlib.sha256(content).hexdigest()} if asset else {})}
+                records.append(record)
             if lose:
                 with socket.create_connection(('127.0.0.1', a.control_port), timeout=10) as owner:
                     owner.sendall(json.dumps({'request': encoded}).encode() + b'\n')
@@ -150,6 +154,8 @@ class Proxy(BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(content)))
             self.end_headers()
             self.wfile.write(content)
+            with record_lock:
+                record['forward_seconds'] = time.monotonic()-received
         finally:
             connection.close()
     def json_reply(self, status, value):

@@ -178,6 +178,7 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
         _ = traces(),
         flush_fetches(),
         quod_foreign_log_tests:stop_owner(maps:get(foreign, C)),
+        stop_trace(),
         Parent = self(),
         %% Trace the launcher before it starts the real owner. Inheritance
         %% covers initialization from its first instruction, not after init/1.
@@ -210,8 +211,7 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
             ?assertEqual(1, calls(T, quod_ledger_store, read_at, 3)),
             assert_no_fetch()
         after
-            stop_trace(Launcher),
-            stop_trace(New),
+            stop_trace(),
             quod_foreign_log_tests:stop_owner(New),
             Launcher ! stop
         end
@@ -813,7 +813,7 @@ with_case(F, Mode, Fun) ->
         start_trace(Owner),
         Fun(C)
     after
-        stop_trace(Owner),
+        stop_trace(),
         stop_source(Source),
         quod_foreign_log_tests:stop_owner(Owner),
         _ = file:del_dir_r(SourceDir),
@@ -961,7 +961,8 @@ traced_async(Fun) ->
             Parent ! {resolver_exception, self(), Class, Reason, Stack}
         end
     end),
-    1 = erlang:trace(Caller, true, [call, set_on_spawn, {tracer, self()}]),
+    1 = trace:process(get({?MODULE, trace_session}), Caller, true,
+                      [call, set_on_spawn]),
     Caller ! go,
     Caller.
 
@@ -1019,20 +1020,28 @@ trace_patterns() ->
      {quod_transaction, verify_submission, 1}].
 
 start_trace(Owner) ->
+    undefined = get({?MODULE, trace_session}),
+    Session = trace:session_create(?MODULE, self(), []),
+    put({?MODULE, trace_session}, Session),
     lists:foreach(fun({M, _, _} = MFA) ->
         {module, M} = code:ensure_loaded(M),
-        1 = erlang:trace_pattern(MFA, true, [local])
+        1 = trace:function(Session, MFA, true, [local])
     end, trace_patterns()),
-    1 = erlang:trace(Owner, true, [call, set_on_spawn, {tracer, self()}]).
+    1 = trace:process(Session, Owner, true, [call, set_on_spawn]).
 
-stop_trace(Owner) ->
-    _ = catch erlang:trace(Owner, false, [call, set_on_spawn]),
-    lists:foreach(fun(MFA) -> erlang:trace_pattern(MFA, false, [local]) end, trace_patterns()),
-    _ = traces(),
-    ok.
+stop_trace() ->
+    case get({?MODULE, trace_session}) of
+        undefined -> ok;
+        Session ->
+            _ = trace:process(Session, all, false, [call, set_on_spawn]),
+            _ = traces(),
+            trace:session_destroy(Session),
+            erase({?MODULE, trace_session}),
+            ok
+    end.
 
 traces() ->
-    Barrier = erlang:trace_delivered(all),
+    Barrier = trace:delivered(get({?MODULE, trace_session}), all),
     receive {trace_delivered, all, Barrier} -> ok
     after 2000 -> error(trace_barrier_timeout)
     end,

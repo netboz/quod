@@ -248,7 +248,8 @@ current_node(NodeRef, Key) ->
 invoke_live(_Slot, _Binding, {resolve, {Bytes, Signature}, _Expires}, _Operation) ->
     quod_client_goal_ingress:resolve_operation(Bytes, Signature);
 invoke_live(Slot, Binding, {{instruction, _, UBytes, USig, Bytes, Signature}, _, Expires}, Operation) ->
-    Store = {retain_personal_instruction, UBytes, USig, {'Signature'}},
+    Store = {'::', <<"quod:user">>,
+             {retain_personal_instruction, UBytes, USig, {'Signature'}}},
     Result = establish_custody(Slot, Binding, none, {'Bytes'}, {'Signature'}, Store,
                                {exact_request, Bytes, Signature}, Expires, Operation),
     instruction_result(Result, Binding, Bytes, Expires);
@@ -276,9 +277,8 @@ invoke_live(Slot, Binding, Request, Operation) ->
 %% A refusal describes this attempt only. Before declaring the original
 %% operation unsent, consult its existing committed association under node ACL.
 instruction_result({error, {request_not_submitted, _}} = Refused,
-                   #{reference := {agent_instance_ref, Ns, Anchor, _}}, Bytes, Expires) ->
-    Goal = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
-                      {personal_instruction_retained, Bytes, false}}},
+                   #{reference := {agent_instance_ref, _, _, _}}, Bytes, Expires) ->
+    Goal = {'::', <<"quod:user">>, {personal_instruction_retained, Bytes, false}},
     case quod_node_actor:signed_goal(read, Goal, crypto:strong_rand_bytes(32), Expires) of
         {ok, B, S} ->
             case quod_client_goal_ingress:submit(B, S) of

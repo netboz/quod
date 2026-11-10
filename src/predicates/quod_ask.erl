@@ -27,7 +27,8 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -export([load/1, ask_2/3, follow_unique_2/3,
          authorize_scope/6, open_authorized_scope/8, authenticate_agent/5,
          validate_authorization_transcript/6, validate_agent_key/5,
-         close_stream/1, authorization_result/2, committed_authorization_result/2, native_read/5]).
+         close_stream/1, authorization_result/2, committed_authorization_result/2,
+         local_authorization_result/2, native_read/5]).
 -ifdef(TEST).
 -export([checked_completion/1]).
 -export([test_serve_nested/1, test_await_scope_reply/2,
@@ -1068,6 +1069,8 @@ await_nested_reply(Origin, ProofId, RequestRef) ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_savepoint, _, _, _, _, _, _} ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
+        Message = {scope_read_set, _, _, _, _} ->
+            dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_seal, _, _, _, _, _} ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_close, _, _, _} ->
@@ -1630,8 +1633,8 @@ authenticate_agent(_Principal, _SigningKey, _Identity, _Height, _Session) ->
     false.
 
 authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session) ->
-    Ctx = quod_predicates:proof_context(
-            Ns, Height, undefined, [{Ns, Anchor} | Chain]),
+    Ctx = quod_predicates:with_chain(
+            quod_predicates:policy_verdict_context(Ns, Height), [{Ns, Anchor} | Chain]),
     Committed = quod_predicates:set_context(
                   quod_proof_session:committed_state(Session), Ctx),
     Wrapped = quod_erlog_db_local_prove:wrap_state(
@@ -1872,9 +1875,18 @@ prove_bool(Goal, W) ->
         invalid -> false
     end.
 
--doc "Evaluate local policy on the pinned committed base and retain its OCC dependencies.".
+-doc "Evaluate the operation guard on committed views through the existing signed proof scopes.".
 -spec committed_authorization_result(term(), tuple()) -> allowed | denied | invalid.
 committed_authorization_result(Policy, St) ->
+    %% Preserve the caller's staged work before a guard can re-enter its owner.
+    Published = publish_session(St),
+    Guard = quod_predicates:operation_guard_context(quod_predicates:context(St)),
+    ReadOnly = quod_erlog_db_local_prove:committed_read_state(Published),
+    authorization_result({once, Policy}, quod_predicates:set_context(ReadOnly, Guard)).
+
+-doc "Evaluate strictly local policy on the committed base and retain its OCC dependencies.".
+-spec local_authorization_result(term(), tuple()) -> allowed | denied | invalid.
+local_authorization_result(Policy, St) ->
     Context = quod_predicates:context(St),
     Strict = quod_predicates:with_chain(quod_predicates:policy_verdict_context(
         quod_predicates:ctx_ns(Context), quod_predicates:ctx_height(Context)),

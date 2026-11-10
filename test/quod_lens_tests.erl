@@ -288,8 +288,7 @@ ontology_marks_keep_the_exact_owner_and_reflected_space_role_test() ->
         Target = {ontology_ref, <<"private:ontology">>, <<91:256>>},
         ?assertEqual([{depicts, <<"private:ontology">>, <<91:256>>, Target}],
             solutions({'D'}, {subject, <<"view:owner">>, Target, {'D'}}, St)),
-        holds({isa, ontology, thing}, St),
-        holds({isa, ontology, space}, St)
+        holds({clause, {isa, ontology, {':',quod,{':',space,space}}}, true}, St)
     end).
 
 vocabulary_fits_the_genesis_budget_test() ->

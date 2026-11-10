@@ -713,8 +713,6 @@ bind_group_row(
                             {error, invalid_group_effect};
                         {_, _, {error, _} = Error, _} ->
                             Error;
-                        {_, _, _, {error, _}} ->
-                            {error, invalid_group_effect};
                         _ ->
                             {error, invalid_group_effect}
                     end

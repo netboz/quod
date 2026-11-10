@@ -1326,6 +1326,7 @@ with_resource_fixture(Fun) -> with_resource_fixture(Fun, #{}).
 with_resource_fixture(Fun, Config) -> with_resource_fixture(Fun, Config, []).
 
 with_resource_fixture(Fun, Config, ExtraTerms) ->
+    quod_agent_hosting_tests:with_host(fun(_) ->
     {ok, _} = application:ensure_all_started(gproc),
     true = quod_reg:reg({runtime_test, resource_reader}),
     BeamPath = filename:join(filename:dirname(code:which(quod_predicates)),
@@ -1348,7 +1349,8 @@ with_resource_fixture(Fun, Config, ExtraTerms) ->
         cleanup_founded(F),
         gproc:unreg(quod_reg:name({runtime_test, resource_reader})),
         file:delete(BeamPath)
-    end.
+    end
+    end).
 
 resource_request(Ns, Height, Scope) ->
     Parent = self(),

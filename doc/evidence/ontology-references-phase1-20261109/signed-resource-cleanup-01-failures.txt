@@ -1,0 +1,102 @@
+1) quod_agent_hosting_tests:-hosted_agents_exchange_committed_events_test_/0-fun-0-/0
+Failure/Error: {error,source_view_not_ready, [{quod_agent_hosting_tests, await_source_ready_snapshot,2, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"}, {line,1484}]}, {quod_agent_hosting_tests,await_source_ready,1, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_ag
+
+2) quod_agent_hosting_tests:-physical_loss_drives_signed_policy_and_host_activation_test_/0-fun-3-/0: graceful
+Failure/Error: {error, {badmatch,{error,eperm}}, [{quod_agent_hosting_tests,physical_recovery,2, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"}, {line,823}]}, {quod_agent_hosting_tests,with_host,4, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"
+
+3) quod_agent_hosting_tests:-physical_loss_drives_signed_policy_and_host_activation_test_/0-fun-3-/0: abrupt
+Failure/Error: {error, {badmatch,{error,eperm}}, [{quod_agent_hosting_tests,physical_recovery,2, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"}, {line,823}]}, {quod_agent_hosting_tests,with_host,4, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"
+
+4) quod_agent_hosting_tests:-hosting_refresh_survives_boot_and_uses_declared_owner_test_/0-fun-0-/0
+Failure/Error: {error, {agent_install_timeout, {agent_instance_ref,<<"host-test-lifecycle">>, <<81,69,87,215,37,66,194,226,89,68,100,245,162, 106,102,141,41,180,13,150,182,19,153,107,107, 92,38,187,51,39,247,79>>, local}, 1}, [{quod_agent_hosting_tests,installed,2, [{file, 
+
+5) quod_physics_tests:-m3a_shared_component_test_/0-fun-49-/0
+Failure/Error: ?assert(lists : any ( fun ( { A , _ , B , _ } ) -> lists : sort ( [ A , B ] ) =:= [ 1 , 4 ] end , maps : get ( contacts , Contact ) )) expected: true got: false %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3` Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_7B48E96168464C29 Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_7B48E96168464C29 
+
+6) quod_physics_tests:-m3a_shared_projection_test_/0-fun-25-/0
+Failure/Error: ?assertEqual(<<97,99,116,105,118,101>>, maps : get ( << "selection" >> , Projection )) expected: <<"active">> got: <<"unavailable">> %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3` Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_825B77A9C2B65B26 Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_825B77A9C2B65B26 
+
+7) quod_physics_tests:-live_source_control_continuity_test_/0-fun-10-/0
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesi
+
+8) quod_physics_tests:-live_source_signed_view_test_/0-fun-11-/0
+Failure/Error: ?assertMatch(# { pid := Pid , ref := Ref , view := View , installed := true }, simulation_state ( Socket )) expected: = # { pid := Pid , ref := Ref , view := View , installed := true } got: #{peer => {127,0,0,1}} %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3` Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_98533EF14495C311 Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_98533EF14495C311 
+
+9) quod_physics_tests:-m3a_frame_failure_isolates_world_test_/0-fun-26-/0: export
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesi
+
+10) quod_physics_tests:-m3a_frame_failure_isolates_world_test_/0-fun-26-/0: member
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesi
+
+11) quod_physics_tests:-live_source_busy_owner_coalesces_test_/0-fun-5-/0
+Failure/Error: ?assert(Queued =< 2) expected: true got: false %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3` Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_1369EB1309A97DB4 Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_1369EB1309A97DB4 
+
+12) quod_physics_tests:-signed_live_body_predicate_test_/0-fun-13-/0
+Failure/Error: ?assertMatch({ ok , _ , { 0 , 0 , 0 } , { 1 , 1 , world , _ , _ , _ } }, quod_physics : body_state ( Pid , Expected , { 1 , 1 } , 1000 )) expected: = { ok , _ , { 0 , 0 , 0 } , { 1 , 1 , world , _ , _ , _ } } got: {error,unavailable} %% eunit_proc.erl:537:in `eunit_proc:handle_test/2` Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_46E2A433ADC17D23 Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_46E2A433ADC17D23 
+
+13) quod_physics_tests:-hot_control_policy_reasons_test_/0-fun-12-/0
+Failure/Error: {error, {badmatch, {ok, #{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesis_anchor => <<192,91,91,38,244,176,236,246,202,153,62,58,31, 
+
+14) quod_physics_tests:-hot_control_error_and_owner_results_test_/0-fun-18-/0
+Failure/Error: {error,function_clause, [{quod_physics_tests,assert_reason, [{physics_world_unavailable,room}, {ok, #{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, 
+
+15) quod_physics_tests:-signed_motion_query_owner_test_/0-fun-18-/0
+Failure/Error: {error, {badmatch,{error,unavailable}}, [{quod_physics_tests, '-signed_motion_query_owner_test_/0-fun-17-',1, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"}, {line,1847}]}, {quod_physics_tests,'-with_world/3-fun-0-',3, [{file, "/home/yan/src/qu
+
+16) quod_physics_tests:-signed_control_releases_only_successful_proof_test_/0-fun-25-/0
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { failed , _ } } }, control_goal ( { '::' , Ns , { ',' , Go , fail } } )) expected: = { ok , _ , { normalized , { failed , _ } } } got: {ok, #{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesis_
+
+17) quod_physics_tests:-grounded_jump_and_ceiling_test_/0-fun-16-/0: floor
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { failed , _ } } }, Command ( 0 , { jump , 4001 } )) expected: = { ok , _ , { normalized , { failed , _ } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesi
+
+18) quod_physics_tests:-grounded_jump_and_ceiling_test_/0-fun-16-/0: ceiling
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { failed , _ } } }, Command ( 0 , { jump , 4001 } )) expected: = { ok , _ , { normalized , { failed , _ } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesi
+
+19) quod_physics_tests:-grounded_jump_and_ceiling_test_/0-fun-16-/0: air
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { failed , _ } } }, Command ( 0 , { jump , 4001 } )) expected: = { ok , _ , { normalized , { failed , _ } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesi
+
+20) quod_physics_tests:-lobby_rim_jump_test_/0-fun-14-/0: 0-approaching
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 , { jump , Launch } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, 
+
+21) quod_physics_tests:-lobby_rim_jump_test_/0-fun-14-/0: 0-touching
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 , { jump , Launch } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, 
+
+22) quod_physics_tests:-lobby_rim_jump_test_/0-fun-14-/0: 7-approaching
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 , { jump , Launch } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, 
+
+23) quod_physics_tests:-lobby_rim_jump_test_/0-fun-14-/0: 7-touching
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 , { jump , Launch } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, 
+
+24) quod_physics_tests:-lobby_rim_jump_test_/0-fun-14-/0: 15-approaching
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 , { jump , Launch } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, 
+
+25) quod_physics_tests:-lobby_rim_jump_test_/0-fun-14-/0: 15-touching
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, Command ( 1 , { jump , Launch } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, 
+
+26) quod_physics_tests:-grounded_reinstall_and_wedge_settling_test_/0-fun-11-/0: floor
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, control_goal ( { '::' , Ns , { physics_control_input , room , Frame , 1 , 1 , { drive , { vector , 0 , 0 , 0 } , { angular , 0 , 0 , 0 } } , { 0 } } } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 
+
+27) quod_physics_tests:-grounded_reinstall_and_wedge_settling_test_/0-fun-11-/0: wedge
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, control_goal ( { '::' , Ns , { physics_control_input , room , Frame , 1 , 1 , { drive , { vector , 0 , 0 , 0 } , { angular , 0 , 0 , 0 } } , { 0 } } } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 
+
+28) quod_physics_tests:-signed_landing_reposition_and_feedback_test_/0-fun-15-/0
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { failed , _ } } }, Command ( 0 , { snap , 2000 } )) expected: = { ok , _ , { normalized , { failed , _ } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>, agent_genesi
+
+29) quod_physics_tests:-changed_control_view_retains_sequence_test_/0-fun-7-/0
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, control_goal ( { '::' , Ns , { physics_control_input , room , OldFrame , 1 , 7 , { drive , { vector , 0 , 0 , 0 } , { angular , 0 , 0 , 0 } } , { 0 } } } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 
+
+30) quod_physics_tests:-renewed_control_preserves_input_and_fences_registration_test_/0-fun-22-/0
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { answers , _ , [ _ ] } } }, control_goal ( { '::' , Ns , { physics_control_input , room , OldFrame , 1 , 7 , Input , { 0 } } } )) expected: = { ok , _ , { normalized , { answers , _ , [ _ ] } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, 
+
+31) quod_physics_tests:-interrupted_initial_physics_selector_reselects_test_/0-fun-5-/0
+Failure/Error: {error,selector_not_retired, [{quod_physics_tests, '-interrupted_initial_physics_selector_reselects_test_/0-fun-4-', 1, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"}, {line,4235}]}, {quod_physics_tests,'-with_world/3-fun-0-',3, [{file, "/
+
+32) quod_physics_tests:-full_event_queue_keeps_wake_after_hinge_sleeps_test_/0-fun-7-/0
+Failure/Error: {exit, {noproc, {sys,remove, [<0.72368.0>, #Fun<quod_physics_tests.211.7770172>]}}, [{sys,send_system_msg,2,[{file,"sys.erl"},{line,755}]}, {quod_physics_tests, '-full_event_queue_keeps_wake_after_hinge_sleeps_test_/0-fun-6-', 2, [{file, "/home/yan
+
+33) quod_physics_tests:-signed_chair_push_checkpoint_and_recovery_test_/0-fun-36-/0
+Failure/Error: ?assertMatch({ ok , _ , { normalized , { failed , _ } } }, OldCommand ( 0 , { push , { body , 3 , 0 } , { vector , 1000 , 0 , 0 } } )) expected: = { ok , _ , { normalized , { failed , _ } } } got: {ok,#{request => #{mode => control, network_identity => <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,42>>, agent_namespace => <<"host-test-node">>
+
+34) quod_physics_tests:-generic_hinged_signed_view_recovery_test_/0-fun-2-/0
+Failure/Error: {error, {unexpected_simulation_reply,<<"projection">>, #{<<"reason">> => <<"waiting_for_installation">>, <<"type">> => <<"unavailable">>}}, [{quod_physics_tests,simulation_reply,2, [{file, "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"}, {line,3001}]}, {quod_physics_tests,verify_hinged_
+

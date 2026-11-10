@@ -52,7 +52,7 @@ browser(Port,C) ->
             true = port_command(Port,<<"ok\n">>), browser(Port,C);
         {Port,{data,{eol,Line}}} -> io:format("~s~n",[Line]), browser(Port,C);
         {Port,{data,{noeol,Line}}} -> io:format("~s",[Line]), browser(Port,C);
-        {local_proof_waiting,Proof} ->
+        {local_proof_waiting, Proof, _} ->
             case erase(conflict_edit) of undefined -> ok; {Owner,Goal} -> edit(Owner,Goal) end,
             Proof ! release, browser(Port,C);
         {Port,{exit_status,0}} -> ok;

@@ -1,5 +1,6 @@
 -module(quod_agent_custody_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 -include_lib("erlog/src/erlog_int.hrl").
 
 prepared_observation_commits_custody_report_and_assignment_once_test_() ->
@@ -12,7 +13,7 @@ unavailable_custody_still_records_the_observation_test_() ->
         quod_agent_hosting_tests:with_host(fun(Ctx) -> exercise_preparation(Ctx, unavailable) end)
     end}.
 
-recovery_acl_external_query_is_rejected_at_commit_test_() ->
+recovery_acl_external_query_is_rejected_test_() ->
     {timeout, 60, fun() ->
         quod_agent_hosting_tests:with_host(fun(Ctx) -> exercise_preparation(Ctx, invalid_acl) end)
     end}.
@@ -105,30 +106,30 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
                        key := OldKey, identity := #{pubkey := NodeKey}}, Kind) ->
     Old = setelement(2, Node, <<"remote-node">>),
     Anchor = element(3, AgentRef),
-    commit(Ns, {goal, {agent_hosted, actor, Old, 1, OldKey}}),
+    commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Old, 1, OldKey}})),
     Rules = [
         {can_report_agent_failure, Node, actor, Old, {'_'}},
         {can_prepare_agent_key, Node, actor, Old, 1, Node},
         {can_assign_agent_host, Node, actor, Old, 1, Node, {'_'}},
         {':-', {agent_recovery_candidate, Node, actor, Old, 1, {'Round'}, Node, 1},
-         {agent_failure_support, actor, Old, 1, {'Round'}, Node, suspected_unreachable}}],
+         agent({agent_failure_support, AgentRef, Old, 1, {'Round'}, Node, suspected_unreachable})}],
     lists:foreach(fun(Fact) -> commit(Ns, {assertz, Fact}) end, Rules),
-    Entry = {report_agent_observation_with_custody, actor, Old, 1, none,
-             {'_'}, {'_'}, suspected_unreachable, {'_'}},
+    Entry = agent({report_agent_observation_with_custody, AgentRef, Old, 1, none,
+             {'_'}, {'_'}, suspected_unreachable, {'_'}}),
     %% Exercise the real foreign-entry ACL, without the fixture's broad node
-    %% grant masking an invalid commit-time authorization rule. The anchored
+    %% grant masking an invalid authorization rule. The anchored
     %% guard is part of the admitted goal; the policy body stays pure Prolog.
     Guarded = {',', {current_ontology_identity, Ns, Anchor}, {call, Entry}},
     Policy = case Kind of
         invalid_acl -> {current_ontology_identity, Ns, Anchor};
         _ -> {can_report_agent_failure, Node, actor, Old, suspected_unreachable}
     end,
+    Callback = {':-', {can_invoke, {'_'}, Node, [<<"quod:agent">>|{'_'}], Ns}, Policy},
     commit(Ns, {',', {abolish, {'/', can_invoke, 4}},
                 {',', {assertz, {':-', {can_invoke, Guarded, Node, {'_'}, Ns}, Policy}},
-                      {assertz, {can_invoke, {'_'}, {node, NodeKey}, [], Ns}}}}),
-    Grant = {can_execute_for, Ns, Anchor,
-             {report_agent_observation_with_custody, actor, Old, 1, none,
-              {'_'}, {'_'}, suspected_unreachable, {'_'}}},
+                 {',', {assertz, Callback},
+                       {assertz, {can_invoke, {'_'}, {node, NodeKey}, [], Ns}}}}}),
+    Grant = {can_execute_for, Ns, Anchor, Entry},
     commit(element(2, Node), {assertz, Grant}),
     true = quod_reg:subscribe({agent, Node}),
     NodeNs = element(2, Node), NodeAnchor = element(3, Node),
@@ -139,12 +140,12 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
         Before = quod_prolog:applied(Ns),
         Episode = crypto:strong_rand_bytes(32),
         Expiry = quod_time:now_ms() + 10000,
-        Template = {report_agent_observation_with_custody, actor, Old, 1, none,
+        Template = {report_agent_observation_with_custody, AgentRef, Old, 1, none,
                     Episode, {observation, 1, Episode, Expiry}, suspected_unreachable, {0}},
         Work = case Kind of
             unavailable -> {node_authorized_goal, Ns, Anchor,
-                             setelement(9, Template, {unavailable, vault_unavailable})};
-            _ -> {custody, AgentRef, 1, {0}, {node_authorized_goal, Ns, Anchor, Template}}
+                             agent(setelement(9, Template, {unavailable, vault_unavailable}))};
+            _ -> {custody, AgentRef, 1, {0}, {node_authorized_goal, Ns, Anchor, agent(Template)}}
         end,
         Token = make_ref(),
         %% The real queue consumes the same private request description that
@@ -156,7 +157,11 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
         receive
             {agent_request_finished, _, Child, #{source := {NodeNs, NodeAnchor}}, Token, Result} ->
                 case Kind of
-                    invalid_acl -> ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}}, Result);
+                    invalid_acl ->
+                        ?assertMatch({ok, _, {normalized, {failed, _}}}, Result),
+                        {ok, _, {normalized, {failed, Encoded}}} = Result,
+                        {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+                        ?assert(lists:member({not_allowed,Ns},Reasons));
                     _ -> ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Result)
                 end,
                 {ok, #{request := Request}, _} = Result,

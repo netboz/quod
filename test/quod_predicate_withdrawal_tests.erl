@@ -13,12 +13,11 @@ signed_contents_and_selected_editor_withdraw_test_() ->
         Ns = <<"predicate-withdrawal">>,
         {Sup, _} = quod_lobby_tests:start_namespace(Ns, Base#{
             data_dir => filename:join(Dir, "subject"),
-            genesis_diff => quod_prolog:terms_to_diff(
-                quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++ [
+            genesis_diff => quod_prolog:terms_to_diff([
                 {can_invoke, {'_'}, Actor, {'_'}, {'_'}},
                 {ontology_source_mode, editable},
                 {rendering_vocabulary, <<"quod:gui">>, quod_simplex:genesis_hash(<<"quod:gui">>)},
-                {instance_of, space, gallery},
+                {instance_of, {':',quod,{':',space,space}}, gallery},
                 {likes, alice, bob}, {unaffected, kept}, {empty_defined, last}] ++
                 [gallery_member(I) || I <- [{'/',likes,2}, {'/',unaffected,1}, {'/',empty_defined,1}]] )}),
         Anchor = quod_simplex:genesis_hash(Ns),

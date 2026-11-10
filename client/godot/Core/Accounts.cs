@@ -27,7 +27,7 @@ public sealed class Accounts(SignedSession session, LocalStore store)
             } else if (allocation["result"]?.ToString() != "fail") throw new InvalidOperationException("Original account allocation is unavailable.");
         }
         if (Human is Actor human) {
-            var result = Json.Binding(await session.Read(human, "account_setup_state(State).", cancellation), "State");
+            var result = Json.Binding(await session.Read(human, "<<\"quod:user\">>::account_setup_state(State).", cancellation), "State");
             if (result.Name == "account") RememberSetup(human, result);
             else if (result.Name != "pending") throw new FormatException("Unknown account setup state.");
         }
@@ -48,20 +48,29 @@ public sealed class Accounts(SignedSession session, LocalStore store)
     {
         if (Pending().Any()) throw new InvalidOperationException("Original work is unresolved; check its outcome.");
         var human = Human ?? throw new InvalidOperationException("No account reference is saved.");
-        var preparation = Json.Binding(await session.Read(human, "account_setup_preparation(Preparation).", cancellation), "Preparation");
+        var preparation = Json.Binding(await session.Read(human, "<<\"quod:user\">>::account_setup_preparation(Preparation).", cancellation), "Preparation");
         if (preparation.Name == "complete") { RememberSetup(human, preparation.Require("complete", 1)[0]); return; }
         var args = preparation.Require("prepared", 3);
         if (args[0].ToString() != human.Ontology.ToString()) throw new FormatException("Setup selected unexpected account storage.");
-        StorageDescription = "Your starting space will be saved in your personal account.";
+        var offers = Json.Binding(await session.Read(human,
+            Term.Call("gui_operations", human.Entity, Term.Variable("Offers")) + ".", cancellation), "Offers");
+        setupOffer = Offer.Decode(offers.ToString(), human.Entity).Single(x => x.Name == "setup");
+        StorageDescription = "Your starting space will be saved in your ontology.";
         Prepared = preparation;
     }
     public Term? Prepared { get; private set; }
+    Offer? setupOffer;
     public async Task FinishSetup(CancellationToken cancellation)
     {
         if (Pending().Any()) throw new InvalidOperationException("Original work is unresolved.");
         var human = Human ?? throw new InvalidOperationException("No account.");
         var args = (Prepared ?? throw new InvalidOperationException("Prepare account storage first.")).Require("prepared", 3);
-        var goal = Term.Call("setup_account", args[0], args[1], args[2], Term.Variable("Setup")) + ".";
+        var offer = setupOffer ?? throw new InvalidOperationException("Prepare the setup form first.");
+        var custody = args[2].Require("prepared_key", 2);
+        var fields = Term.List(Term.Call("field", Term.Atom("setup_key"), custody[0]),
+            Term.Call("field", Term.Atom("setup_receipt"), custody[1]));
+        var goal = Term.Call("gui_operation", human.Entity, Term.Atom(offer.Name), offer.Revision,
+            offer.Form.Submit, fields, Term.Variable("Results")) + ",member(result(setup,Setup),Results).";
         var reply = await session.Execute(human, goal, "setup", cancellation);
         Apply(reply, Pending().Single(x => x.Flow == "setup")); Prepared = null;
     }
@@ -93,7 +102,7 @@ public sealed class Accounts(SignedSession session, LocalStore store)
         var previous = store.Snapshot!.Accounts.GetValueOrDefault(session.Network);
         if (previous?.Setup != null && previous.Setup != setup.ToString()) throw new FormatException("Original setup references changed.");
         store.Update(s => { s.Accounts[session.Network] = new(human, setup.ToString()); if (originalId != null) s.Pending.RemoveAll(w => w.Id == originalId); });
-        Prepared = null; StorageDescription = "";
+        Prepared = null; setupOffer = null; StorageDescription = "";
     }
     public List<JsonNode> Outcomes { get; } = [];
     public async Task Resolve(CancellationToken cancellation)
@@ -103,7 +112,7 @@ public sealed class Accounts(SignedSession session, LocalStore store)
         }
         if (Human is not Actor human) return;
         // Authoritative instruction associations survive loss of this device's journal.
-        var rows = Json.Binding(await session.Read(human, "personal_instructions(Instructions).", cancellation), "Instructions").Items;
+        var rows = Json.Binding(await session.Read(human, "<<\"quod:user\">>::personal_instructions(Instructions).", cancellation), "Instructions").Items;
         foreach (var row in rows) {
             string id = Identity.Encode(row.Require("instruction", 3)[0].Bytes);
             if (terminalInstructions.Contains(id)) continue;

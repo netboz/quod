@@ -114,7 +114,7 @@ interrupted_committed_limits_withdraw_until_a_real_change_test_() ->
                   {',', {assertz, Loop}, {assertz, Selector}}})),
             Worker = receive
                 {Tag, {trace, Pid, call, {quod_runtime, select_resource_description,
-                                         [?ROOT, _, _, effect_custody, _]}}} -> Pid
+                                         [?ROOT, _, _, effect_custody, _, _]}}} -> Pid
             after 10000 -> error(custody_selector_not_started) end,
             exit(Worker, kill),
             ?assertEqual({error, {resource_worker_down, killed}},
@@ -252,8 +252,8 @@ settled(Observer = {_, Tag, _}, Height, Deadline) ->
 
 start_trace(Runtime, Journal) ->
     Trace = #{session := Session, io := IO} = new_trace(),
-    trace:function(Session, {quod_runtime, select_resource_description, 5},
-                   [{[?ROOT, '_', '_', effect_custody, '_'], [], []}], [local]),
+    trace:function(Session, {quod_runtime, select_resource_description, 6},
+                   [{[?ROOT, '_', '_', effect_custody, '_', '_'], [], []}], [local]),
     trace:function(Session, {quod_effect_journal, configure_limits, 2},
                    [{'_', [], [{return_trace}]}], [local]),
     [trace:function(Session, MFA, true, [local]) || MFA <- IO],

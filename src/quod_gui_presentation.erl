@@ -77,14 +77,14 @@ expire({quod_prepared_presentation,1,_,_,_,_,_,Expiry,_}) ->
 %% Main-proof Prolog has selected and authorized these exact references. Live
 %% feasibility is consumed only while allocating this real native resource.
 prepare({gui_opening,{ontology_ref,GuiNs,GuiAnchor},Question,Source,Human,
-         {agent_instance_ref,ActorNs,ActorAnchor,Actor} = Responsible,
+         {agent_instance_ref,ActorNs,ActorAnchor,_} = Responsible,
          {form_view,Revision,_,_,_,_} = View,{receiver,ReceiverNode,Connection} = Receiver,
          {hosted,Host,_,_} = Hosting,Capacity},Auth,Deadline) ->
     case physical_host(Host) of
         {ok,Node} ->
-            Handler = {gui_native_handler,Actor,Source,Human,Hosting,{0}},
+            Handler = {'::',GuiNs,{gui_native_handler,Responsible,Source,Human,Hosting,{0}}},
             case quod_ask:native_read(Node,{ActorNs,ActorAnchor},Handler,Auth,Deadline) of
-                {ok,{gui_native_handler,Actor,Source,Human,Hosting,<<_:256>>}} ->
+                {ok,{'::',GuiNs,{gui_native_handler,Responsible,Source,Human,Hosting,<<_:256>>}}} ->
                     Descriptor = {question_form,Source,Responsible,Revision,awaiting,View},
                     Goal = {gui_native_prepare,Human,Receiver,Question,Descriptor,Capacity,{0}},
                     case quod_ask:native_read(ReceiverNode,{GuiNs,GuiAnchor},Goal,Auth,Deadline) of

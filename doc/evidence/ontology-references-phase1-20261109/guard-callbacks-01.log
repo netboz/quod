@@ -1,0 +1,42 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 9-Nov-2026::15:31:05.817929 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.2853.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,role => member,
+                                       data_dir =>
+                                           "/tmp/quod_ask_086753FB69764CC6",
+                                       seed_peers => [],
+                                       node_id =>
+                                           <<212,68,95,91,93,42,24,57,249,211,
+                                             252,227,20,40,191,44,132,39,173,
+                                             97,78,168,118,128,239,50,146,1,
+                                             231,137,121,134>>,
+                                       max_proof_workers => unlimited,
+                                       max_scope_workers => 64,
+                                       transaction_ttl_ms => 30000,
+                                       proof_timeout_ms => 300000,
+                                       scope_timeout_ms => 300000,
+                                       scope_step_timeout_ms => 30000,
+                                       external_predicate_modules => [],
+                                       genesis_file =>
+                                           "/tmp/quod_ask_086753FB69764CC6/slow.pl",
+                                       batch_window_ms => 25,
+                                       detailed_consensus_metrics => false}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 7.003 seconds
+[0;32m83 tests, 0 failures
+[0m

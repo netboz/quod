@@ -2,7 +2,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
-assertion_spellings_bind_full_ulids_before_constructors_test_() ->
+assertion_spellings_bind_full_ulids_and_initialize_slots_test_() ->
     [?_test(with_state([{instance_of, amphibious, old}], fun(St) ->
         Before = quod_time:now_ms(),
         S = prove({Method, {instance_of, amphibious, {'Id'}}}, St),
@@ -11,30 +11,34 @@ assertion_spellings_bind_full_ulids_before_constructors_test_() ->
         holds({instance_of, amphibious, Id}, S),
         Ids = case Method of asserta -> [Id, old]; _ -> [old, Id] end,
         holds({findall, {'I'}, {instance_of, amphibious, {'I'}}, Ids}, S),
-        holds({findall, {'C'}, {ran, {'C'}, Id, 4, []},
-               [vehicle, car, boat, amphibious]}, S),
+        holds({attribute, Id, wheels, 4}, S),
         holds({attribute, Id, name, <<"Vehicle">>}, S)
     end)) || Method <- [assert, asserta, assertz]].
 
 parts_have_independent_ids_and_scoped_inputs_test() ->
     with_state([], fun(St) ->
-        Inputs = [{attribute, name, <<"Outer">>},
-                  {part, eye, [{attribute, name, <<"Inner">>}]}],
-        S = prove({with_build_plan, Inputs, {assert, {instance_of, assembly, {'Id'}}}}, St),
+        S = prove({transaction, conj([
+            {with_build_plan, [{attribute, name, <<"Outer">>}],
+             {assert, {instance_of, assembly, {'Id'}}}},
+            {with_build_plan, [{attribute, name, <<"Inner">>}],
+             {assert, {instance_of, eye, {'Left'}}}},
+            {assert, {instance_of, eye, {'Right'}}}])}, St),
         Parent = binding('Id', S),
-        R = prove({parts, Parent, {'Left'}, {'Right'}}, S),
-        Left = binding('Left', R), Right = binding('Right', R),
+        Left = binding('Left', S), Right = binding('Right', S),
         ?assertEqual(3, length(lists:usort([Parent, Left, Right]))),
-        holds({attribute, Parent, name, <<"Outer">>}, R),
-        holds({attribute, Left, name, <<"Inner">>}, R),
-        holds({attribute, Right, name, <<"Eye">>}, R),
-        holds({'$quod_build_plan', []}, R)
+        holds({attribute, Parent, name, <<"Outer">>}, S),
+        holds({attribute, Left, name, <<"Inner">>}, S),
+        holds({attribute, Right, name, <<"Eye">>}, S),
+        holds({'$quod_build_plan', []}, S)
     end).
 
-constructors_do_not_use_already_true_goal_shortcut_test() ->
+each_assertion_creates_a_fresh_instance_test() ->
     with_state([], fun(St) ->
-        S = prove({assert, {instance_of, checked, {'Id'}}}, St),
-        holds({checked, binding('Id', S)}, S)
+        S = prove(conj([{assert, {instance_of, checked, {'First'}}},
+                        {assert, {instance_of, checked, {'Second'}}}]), St),
+        ?assertNotEqual(binding('First', S), binding('Second', S)),
+        holds({instance_of, checked, binding('First', S)}, S),
+        holds({instance_of, checked, binding('Second', S)}, S)
     end).
 
 queries_rules_and_additional_classifications_are_inert_test() ->
@@ -68,11 +72,11 @@ live_collision_refuses_without_overwriting_test() ->
 
 failure_and_exception_restore_effects_events_and_bindings_test_() ->
     [?_test(with_state([], fun(St) ->
-        Goal = {assert, {instance_of, Class, {'Id'}}},
-        F = case Class of
-            exceptional ->
+        Goal = {transaction, conj([{assert, {instance_of, car, {'Id'}}},
+                    stage_fixture_effect, {trigger_event, discarded}, Ending])},
+        F = case Ending of
+            stateful_fixture_error ->
                 {erlog_error, pinned_stateful_error, Clean} = catch erlog_int:prove_goal(Goal, St),
-                %% Resume from the actual caught error state, as the owner does.
                 Clean;
             _ -> refused(Goal, St)
         end,
@@ -80,11 +84,15 @@ failure_and_exception_restore_effects_events_and_bindings_test_() ->
         ?assertEqual([], quod_erlog_db_local_prove:get_effects(ref(F))),
         ?assertMatch({_}, binding('Id', F)),
         holds({'$quod_build_plan', []}, F)
-    end)) || Class <- [failing_child, parent_failure_child, bad_assembly, exceptional]].
+    end)) || Ending <- [fail, {assert, {instance_of, failing_child, {'_'}}},
+                        stateful_fixture_error]].
 
-constructor_alternatives_rollback_before_selecting_answer_test() ->
+caller_alternatives_rollback_before_selecting_answer_test() ->
     with_state([], fun(St) ->
-        S = prove({assert, {instance_of, alternatives, {'Id'}}}, St),
+        S = prove({transaction, {';',
+            conj([{assert, {instance_of, car, {'Id'}}}, {assertz, leaked},
+                  stage_fixture_effect, {trigger_event, discarded}, fail]),
+            conj([{assert, {instance_of, car, {'Id'}}}, {assertz, {kept, {'Id'}}}])}}, St),
         holds({kept, binding('Id', S)}, S),
         fails(leaked, S),
         ?assertEqual([], quod_erlog_db_local_prove:get_effects(ref(S))),
@@ -132,37 +140,37 @@ authorization_uses_committed_requirements_and_inputs_test() ->
         ?assertEqual(changes(S), changes(F))
     end).
 
-construction_operations_use_committed_class_policy_and_scoped_inputs_test() ->
+construction_operations_use_committed_class_policy_and_original_inputs_test() ->
     {ok, Terms} = erlog_io:read_string_terms(
       "isa(guarded,car). class_permission(vehicle,inspect,check(construction_check)). "
       "class_requirement(vehicle,inspect,construction_required). required_enabled. "
       "construction_required(_,_,_) :- required_enabled. "
       "construction_check(_,construction(guarded,I,Inputs),inspect(I)) :- "
-      "member(attribute(name,<<\"Chosen\">>),Inputs). "
-      "constructor(guarded,I,Inputs) :- "
-      "operation_authorized(instance(I),inspect(I)), "
-      "assert(instance_of(eye,Part)), "
-      "'$quod_construction'(I,guarded,Inputs), "
-      "\\+ '$quod_construction'(Part,_,_), assertz(guarded(I))."),
+      "member(attribute(name,<<\"Chosen\">>),Inputs)."),
+    Inputs = [{attribute,name,<<"Chosen">>}],
+    Create = {with_build_plan,Inputs,{assert,{instance_of,guarded,{'Id'}}}},
+    Inspect = {operation_authorized,{instance,{'Id'}},{inspect,{'Id'}}},
     with_state(Terms, fun(St) ->
-        Inputs = [{attribute,name,<<"Chosen">>}],
-        Goal = {with_build_plan,Inputs,{assert,{instance_of,guarded,{'Id'}}}},
-        S = prove(Goal,St), Id = binding('Id',S),
-        holds({guarded,Id},S),
-        fails({'$quod_construction',Id,{'_'},{'_'}},S),
-        fails({operation_authorized,{instance,Id},{inspect,Id}},S),
+        S = prove(conj([Create, Inspect, {assert,{instance_of,eye,{'Part'}}}]),St),
+        Id = binding('Id',S), Part = binding('Part',S),
+        holds({'$quod_construction',Id,guarded,Inputs},S),
+        holds({'$quod_construction',Part,eye,[]},S),
+        holds({operation_authorized,{instance,Id},{inspect,Id}},S),
         fails({operation_authorized,{construction,guarded,Id,Inputs},{inspect,Id}},S),
-        %% The public input scope cannot forge the hook's construction context.
-        fails({'$quod_with_build_plan',{construction,guarded,Id,Inputs},
-               {'$quod_construction',Id,{'_'},{'_'}}},S),
-        F = refused({assert,{instance_of,guarded,{'Other'}}},St),
+        %% A later wrapper cannot replace original inputs or invent context.
+        holds({with_build_plan,[],{'$quod_construction',Id,guarded,Inputs}},S),
+        fails({'$quod_with_build_plan',{construction,guarded,other,Inputs},
+               {'$quod_construction',other,{'_'},{'_'}}},S),
+        F = refused({transaction,conj([
+            {assert,{instance_of,guarded,{'Id'}}},Inspect])},St),
         ?assertEqual([],changes(F)),
-        fails({'$quod_construction',Id,{'_'},{'_'}},F)
+        fails({'$quod_construction',Id,{'_'},{'_'}},F),
+        Removed = prove({retract,{instance_of,guarded,Id}},S),
+        fails({operation_authorized,{instance,Id},{inspect,Id}},Removed)
     end),
     with_state(Terms -- [required_enabled], fun(St) ->
         Staged = prove({assertz,required_enabled},St),
-        F = refused({with_build_plan,[{attribute,name,<<"Chosen">>}],
-                     {assert,{instance_of,guarded,{'Id'}}}},Staged),
+        F = refused({transaction,conj([Create,Inspect])},Staged),
         ?assertEqual(changes(Staged),changes(F))
     end).
 
@@ -233,19 +241,7 @@ fixture() ->
       "class_permission(alternatives, create, allow). "
       "class_permission(checked, create, allow). "
       "class_permission(failing_parent, create, allow). "
-      "have_part(assembly, eye). "
-      "constructor(assembly, I, Inputs) :- "
-      "build_plan_part(Inputs, eye, Eye), "
-      "with_build_plan(Eye, assert(instance_of(eye, L))), "
-      "assertz(instance_of(eye, R)), assertz(parts(I,L,R)). "
-      "isa(bad_assembly, assembly). "
-      "constructor(bad_assembly, _, _) :- "
-      "stage_fixture_effect, trigger_event(discarded), assert(instance_of(failing_child, _)). "
-      "constructor(exceptional, I, _) :- "
-      "assertz(leaked(I)), stage_fixture_effect, trigger_event(discarded), stateful_fixture_error. "
-      "constructor(alternatives, I, _) :- "
-      "(assertz(leaked), stage_fixture_effect, trigger_event(discarded), fail; assertz(kept(I))). "
-      "constructor(checked, I, _) :- instance_of(checked,I), assertz(checked(I))."),
+      "isa(assembly,thing). isa(checked,thing)."),
     Terms ++ [{action, {assert, {instance_of, assembly, {'_'}}}, [], finished},
               {action, {assertz, finished}, [], finished}].
 

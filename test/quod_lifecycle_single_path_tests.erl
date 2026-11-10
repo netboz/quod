@@ -8,6 +8,59 @@
 
 -export([preview_worlds/1]).
 
+terms_creation_preserves_clauses_test_() ->
+    {timeout, 60, fun() ->
+        F = setup(genesis),
+        #{actor_keypair := {NodeKey, _}} = F,
+        {ok, Network} = quod_ontology:network_identity(),
+        {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+        unlink(Auth),
+        try
+            {Key, _} = Pair = quod_identity:generate(),
+            Agent = provision_agent(Key, true),
+            Client = Agent#{keypair => Pair, network => Network, parser_version => 3},
+            Ns = unique_ns(<<"terms-clauses">>),
+            Terms = [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}},
+                {':-', {same_value, {'X'}, {'Y'}}, {'=', {'X'}, {'Y'}}}],
+            {Goal, _, _} = erlog_int:term_instance(
+                {',', {'::', ?ROOT_NS, create_goal(Ns, [{terms, Terms}])}, {'=', {'X'}, later_binding}}, 0),
+            true = quod_reg:subscribe({runtime, Ns}),
+            try
+                {ok, Evidence, {normalized, {committed, _, _}}} = submit_lobby(Client, execute, Goal),
+                m1a_complete(Evidence),
+                [Anchor] = [A || #{target := {N, A}} <- quod_effect_journal:rows(), N =:= Ns],
+                ok = await_enrolled_identity({Ns, Anchor}, quod_time:mono_ms() + 10000),
+                %% Binding a caller variable after preparation cannot specialize
+                %% the immutable clause that was already prepared and admitted.
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {same_value, first, first})),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {same_value, second, second})),
+                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {same_value, first, second})),
+                ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns))
+            after quod_reg:unsubscribe({runtime, Ns}) end,
+            %% A bound name and list are still required; rule data cannot make
+            %% other creation options or a join request accept missing inputs.
+            [ ?assertEqual({error, invalid_arguments}, quod_ontology:validate_action(Action)) || Action <-
+                [{create_ontology, {'Name'}, [{terms, Terms}]},
+                 {create_ontology, Ns, [{terms, {'Terms'}}]},
+                 {create_ontology, Ns, [{terms, Terms}, {external_predicate_modules, {'Modules'}}]},
+                 {create_ontology, Ns, [{terms, Terms}, {source_file, {'Path'}}]},
+                 {join_ontology, Ns, {'Anchor'}, []}]],
+            internal_staging_continuation_cannot_be_forged(F),
+            reserved_initial_terms_never_reach_hosting(F),
+            structural_validation_is_total(F)
+        after stop_process(Auth), cleanup(F) end
+    end}.
+
+creation_clauses_regression_test_() ->
+    [{Name, {timeout, 60, fun() ->
+        F = setup(genesis),
+        try Test(F) after cleanup(F) end
+    end}} || {Name, Test} <- [
+        {"prepared clauses survive journal restart", fun prepared_genesis_survives_journal_restart/1},
+        {"root entry ACL remains required", fun signed_root_create_obeys_entry_acl/1},
+        {"failed policy prepares nothing", fun failed_root_policy_does_not_read_or_stage/1},
+        {"false postcondition refuses", fun false_postcondition_is_reported/1}]].
+
 material_admission_uses_committed_root_policy_test_() ->
     {timeout,60,fun() ->
         F = setup(),
@@ -449,10 +502,10 @@ m1a_guarded_source_test_() ->
         after cleanup(F) end
     end}.
 
-m1a_seven_foundations_test_() ->
+m1a_signup_terms_test_() ->
     {timeout, 300, fun() ->
         F = setup(genesis),
-        #{dir := Dir, manager := Manager, actor_keypair := {Key, _}} = F,
+        #{dir := Dir, actor_keypair := {Key, _}} = F,
         {ok, Network} = quod_ontology:network_identity(),
         {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => Key}),
         unlink(Auth),
@@ -461,60 +514,49 @@ m1a_seven_foundations_test_() ->
         {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "vault"), unlock_file => Unlock}),
         unlink(Vault),
         try
-            NodeAnchor = m1a_found(?NODE_NS, ["quod_node.pl"],
-                [{node_identity_template, m1a_source("node_instance.pl")}], [quod_agent_predicates]),
-            observe_enrollment_completion(Manager),
-            m1a_register(?NODE_NS, NodeAnchor, true),
-            ok = quod_namespace_manager:enroll_node(),
-            await_enrollment_completion(Manager),
-            {ok, Blob} = quod_identity:load_node_actor_pointer(Dir),
-            {ok, #{reference := Node = {agent_instance_ref, NodeNs, NodeHistory, me}}} = quod_agent_ref:decode(Blob),
-            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(NodeNs,
-                {hosts_ontology, Node, NodeNs, NodeHistory, discoverable})),
-            Agent = m1a_found(<<"quod:agent">>, ["quod_agent.pl"], [], [quod_agent_predicates]),
-            m1a_register(<<"quod:agent">>, Agent, false),
-            GuiFiles = ["quod_gui.pl", "gui_measure.pl", "gui_scene.pl", "gui_tools.pl"],
-            Gui = m1a_found(<<"quod:gui">>, GuiFiles, [], [quod_agent_predicates, quod_gui_predicates]),
-            m1a_register(<<"quod:gui">>, Gui, false),
-            GuiPins = [{gui_vocabulary, <<"quod:gui">>, Gui}, {measure_vocabulary, <<"quod:gui">>, Gui},
-                {rendering_vocabulary, <<"quod:gui">>, Gui}, {modelling_vocabulary, <<"quod:gui">>, Gui}],
-            Controllers = m1a_found(<<"quod:controllers">>, ["quod_controllers.pl"],
-                [{gui_vocabulary, <<"quod:gui">>, Gui}], [quod_agent_predicates]),
-            m1a_register(<<"quod:controllers">>, Controllers, false),
-            SpaceSource = m1a_source("quod_space.pl"),
-            Digest = crypto:hash(sha256, SpaceSource),
-            Space = m1a_found(<<"quod:space">>, ["quod_space.pl"], GuiPins ++
-                [space_foundation, {acl_sovereign, {':', quod, space}}, {space_template_hash, Digest}],
-                [quod_agent_predicates]),
-            m1a_register(<<"quod:space">>, Space, false),
-            Components = ["user_instance.pl", "agent_instance.pl", "quod_space.pl", "gui_instance.pl"],
-            Frozen = [{user_source_component, list_to_binary(File), crypto:hash(sha256, m1a_source(File))} || File <- Components],
-            Pins = GuiPins ++ [{agent_vocabulary, <<"quod:agent">>, Agent},
-                {controllers_vocabulary, <<"quod:controllers">>, Controllers},
-                {space_vocabulary, <<"quod:space">>, Space}, {space_source_digest, Digest}],
-            UserClass = m1a_found(<<"quod:user">>, ["quod_user.pl"], Pins ++ Frozen ++
-                [{user_source_directory, list_to_binary(filename:join(code:priv_dir(quod), "ontologies"))},
-                 {signup_host, Node}], [quod_agent_predicates]),
-            commit_root({assertz, {root_administrator_agent, Node}}),
-            NodeClient = #{reference => Node, keypair => maps:get(actor_keypair, F), network => Network, parser_version => 3},
-            {ok, RegEvidence, {normalized, {committed, _, _}}} = submit_lobby(NodeClient, execute,
-                {transaction, m1a_conj([
-                    {'::', ?ROOT_NS, {transaction, m1a_conj([
-                        {assertz, {system_ontology, <<"quod:user">>, UserClass}},
-                        {assertz, {ontology_creation_policy, <<"quod:user">>, UserClass}}])}},
-                    {assertz, {ontology_hosting_policy, <<"quod:user">>, UserClass}}])}),
-            m1a_complete(RegEvidence),
-            {ok, [#{'Rows' := Catalogue}], _} = quod_prolog:prove_ro(?ROOT_NS,
-                {findall, {ontology_ref, {'N'}, {'A'}}, {system_ontology, {'N'}, {'A'}}, {'Rows'}}),
-            ?assertEqual(6, length(Catalogue)),
-            ?assertEqual(6, length(lists:usort([A || {ontology_ref, _, A} <- Catalogue]))),
-            ?assertEqual(lists:sort([?NODE_NS, <<"quod:agent">>, <<"quod:gui">>,
-                <<"quod:controllers">>, <<"quod:space">>, <<"quod:user">>]),
-                lists:sort([N || {ontology_ref, N, _} <- Catalogue])),
+            #{node := Node, user := UserClass, node_client := NodeClient} = m1a_foundations(F),
+            m1a_signup_denials(Network, UserClass, NodeClient),
+            User = m1a_signup(Network, UserClass, Node),
+            #{reference := {agent_instance_ref, Ns, _, me}} = User,
+            ?assertEqual({pending, account}, m1a_read(User, {account_setup, me, {0}})),
+            ?assertEqual([me], m1a_read(User, {findall, me,
+                {instance_of, {':',quod,{':',user,human_user}}, me}, {0}})),
+            ?assertEqual(8, m1a_read(User, {gui_pending_allowance, me, {0}})),
+            ?assertEqual(12, m1a_read(User, {hud_allowance, my_hud, {0}})),
+            ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}}, submit_lobby(User, read,
+                {can_invoke, arbitrary, maps:get(reference, User), [], Ns})),
+            [?assertEqual([], m1a_read(User, {findall, true, {current_predicate, {'/', Fun, Arity}}, {0}}))
+                || {Fun, Arity} <- [{space_template_hash,1}, {space_source_digest,1},
+                    {space_place,3}, {gui_open,2}, {personal_instruction_accept,2},
+                    {account_space_create,3}, {setup_account,4}]],
+            m1a_setup_failures(User),
+            First = m1a_setup(User),
+            Second = m1a_setup(m1a_signup(Network, UserClass, Node)),
+            Space = m2_spaces(First, Second),
+            Recover = m3a_travel(First, Second, Space),
+            m1a_restart_accounts([First, Second],Vault,Dir,Unlock),
+            Recover()
+        after stop_process(Auth), cleanup(F), stop_process(Vault) end
+    end}.
+
+m1a_seven_foundations_test_() ->
+    {timeout, 300, fun() ->
+        F = setup(genesis),
+        #{dir := Dir, actor_keypair := {Key, _}} = F,
+        {ok, Network} = quod_ontology:network_identity(),
+        {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => Key}),
+        unlink(Auth),
+        Unlock = filename:join(Dir, "m1a-vault-unlock"),
+        ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
+        {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "vault"), unlock_file => Unlock}),
+        unlink(Vault),
+        try
+            #{node := Node, agent := Agent, gui := Gui, user := UserClass,
+              node_client := NodeClient, catalogue := Catalogue, gui_files := GuiFiles} = m1a_foundations(F),
             {UnrelatedPublic,_}=UnrelatedPair=quod_identity:generate(),
             UnrelatedNs = <<"m1a:unrelated-agent">>,
             UnrelatedAnchor=m1a_found(UnrelatedNs,["agent_instance.pl"],
-                [{instance_of,agent,outsider},{agent_key,outsider,UnrelatedPublic,active},
+                [{instance_of,{':',quod,{':',agent,agent}},outsider},{agent_key,outsider,UnrelatedPublic,active},
                  {agent_vocabulary,<<"quod:agent">>,Agent}],
                 [quod_agent_predicates]),
             Unrelated=#{reference=>{agent_instance_ref,UnrelatedNs,UnrelatedAnchor,outsider},
@@ -531,7 +573,7 @@ m1a_seven_foundations_test_() ->
             io:format(standard_error,"M1a privacy~n",[]),
             m1a_private(First, Second, UserClass, Catalogue, Unrelated),
             io:format(standard_error,"M1a controller_views~n",[]),
-            m1a_controller(First),
+            m1a_controller(First,Second),
             io:format(standard_error,"M1a https~n",[]),
             m1a_https(Dir, Network, Users, Gui, UserClass, Unrelated),
             io:format(standard_error,"M1a receipts~n",[]),
@@ -543,19 +585,68 @@ m1a_seven_foundations_test_() ->
             RecoverTravel=m3a_travel(First,Second,S1),
             m1a_restart_accounts(Users,Vault,Dir,Unlock),
             RecoverTravel(),
-            m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, Components, Unrelated)
+            m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, Unrelated)
         after stop_process(Auth), cleanup(F), stop_process(Vault) end
     end}.
+
+m1a_foundations(F = #{dir := Dir, manager := Manager}) ->
+    {ok, Network} = quod_ontology:network_identity(),
+    NodeAnchor = m1a_found(?NODE_NS, ["quod_node.pl"],
+        [{node_identity_template, m1a_source("node_instance.pl")}], [quod_agent_predicates]),
+    observe_enrollment_completion(Manager),
+    m1a_register(?NODE_NS, NodeAnchor, true),
+    ok = quod_namespace_manager:enroll_node(),
+    await_enrollment_completion(Manager),
+    {ok, Blob} = quod_identity:load_node_actor_pointer(Dir),
+    {ok, #{reference := Node = {agent_instance_ref, NodeNs, NodeHistory, me}}} = quod_agent_ref:decode(Blob),
+    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(NodeNs,
+        {hosts_ontology, Node, NodeNs, NodeHistory, discoverable})),
+    Agent = m1a_found(<<"quod:agent">>, ["quod_agent.pl"], [], [quod_agent_predicates]),
+    m1a_register(<<"quod:agent">>, Agent, false),
+    GuiFiles = ["quod_gui.pl", "gui_measure.pl", "gui_scene.pl", "gui_tools.pl"],
+    Gui = m1a_found(<<"quod:gui">>, GuiFiles, [], [quod_agent_predicates, quod_gui_predicates]),
+    m1a_register(<<"quod:gui">>, Gui, false),
+    GuiPins = [{gui_vocabulary, <<"quod:gui">>, Gui}, {measure_vocabulary, <<"quod:gui">>, Gui},
+        {rendering_vocabulary, <<"quod:gui">>, Gui}, {modelling_vocabulary, <<"quod:gui">>, Gui}],
+    Controllers = m1a_found(<<"quod:controllers">>, ["quod_controllers.pl"],
+        [{gui_vocabulary, <<"quod:gui">>, Gui}], [quod_agent_predicates]),
+    m1a_register(<<"quod:controllers">>, Controllers, false),
+    Space = m1a_found(<<"quod:space">>, ["quod_space.pl"], GuiPins,
+        [quod_agent_predicates]),
+    m1a_register(<<"quod:space">>, Space, false),
+    Pins = GuiPins ++ [{agent_vocabulary, <<"quod:agent">>, Agent},
+        {controllers_vocabulary, <<"quod:controllers">>, Controllers},
+        {space_vocabulary, <<"quod:space">>, Space}],
+    UserClass = m1a_found(<<"quod:user">>, ["quod_user.pl"], Pins ++
+        [{signup_host, Node}], [quod_agent_predicates]),
+    commit_root({assertz, {root_administrator_agent, Node}}),
+    NodeClient = #{reference => Node, keypair => maps:get(actor_keypair, F), network => Network, parser_version => 3},
+    {ok, RegEvidence, {normalized, {committed, _, _}}} = submit_lobby(NodeClient, execute,
+        {transaction, m1a_conj([
+            {'::', ?ROOT_NS, {transaction, m1a_conj([
+                {assertz, {system_ontology, <<"quod:user">>, UserClass}},
+                {assertz, {ontology_creation_policy, <<"quod:user">>, UserClass}}])}},
+            {assertz, {ontology_hosting_policy, <<"quod:user">>, UserClass}}])}),
+    m1a_complete(RegEvidence),
+    {ok, [#{'Rows' := Catalogue}], _} = quod_prolog:prove_ro(?ROOT_NS,
+        {findall, {ontology_ref, {'N'}, {'A'}}, {system_ontology, {'N'}, {'A'}}, {'Rows'}}),
+    ?assertEqual(6, length(Catalogue)),
+    ?assertEqual(6, length(lists:usort([A || {ontology_ref, _, A} <- Catalogue]))),
+    ?assertEqual(lists:sort([?NODE_NS, <<"quod:agent">>, <<"quod:gui">>,
+        <<"quod:controllers">>, <<"quod:space">>, <<"quod:user">>]),
+        lists:sort([N || {ontology_ref, N, _} <- Catalogue])),
+    #{node => Node, agent => Agent, gui => Gui, user => UserClass,
+      node_client => NodeClient, catalogue => Catalogue, gui_files => GuiFiles}.
 
 m1a_source(File) ->
     {ok, Bytes} = file:read_file(filename:join([code:priv_dir(quod), "ontologies", File])), Bytes.
 
 %% Extend the real founding journey after all original M1 assertions. Storage
-%% is another existing account, with narrowly authored owner consent below.
+%% is another user's ontology, with narrowly authored owner consent below.
 m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     C=m1a_actor_context(User), Actor=maps:get(agent,C),
     {account,_,Actor,S0,_,_,_}=maps:get(setup_result,User),
-    Class={class_ref,Ns,Anchor,space},
+    Class=m2_space_class(),
     Offers=m1a_read(User,{gui_operations,Class,{0}}),
     ?assertEqual([create,create_exact,create_infinite],[element(2,O)||O<-Offers]),
     Create=hd(Offers),
@@ -564,14 +655,17 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     %% In front of the agent: 2 m clearance plus half the default 100 m depth.
     ?assertEqual({transform,0,0,-52000,0,0,0},Near),
     ?assertEqual(Owner,m1a_read(User,{attribute,Id,owner,{0}})),
-    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})),
-    ?assertEqual({placed,S0,Near},m1a_read(User,{space_location,Id,{0}})),
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
+    ?assertEqual({placed,S0,Near},m1a_read(User,m2_space({space_location,m2_entity(User,Id),{0}}))),
     ok=m2_assert_scene(User,S0,S1,<<"box">>),
-    %% A completed S0 grants no later A travel; new-space source entry is only
-    %% the live assertion's construction context, not staged membership.
-    m1a_failed_personal(C,{space_place,personal,1,S1}),
+    %% A committed per-instance ACL can refuse later entry independently of
+    %% the class default used for initial placement.
+    NoEntry={instance_permission,personal,space_enter,deny},
+    m2_edit(User,{assertz,NoEntry}),
+    m1a_failed_personal(C,m2_space({goal,{inside,S1,setelement(1,Actor,entity_ref),{transform,0,0,0,0,0,0}}})),
+    m2_edit(User,{retract,NoEntry}),
     {agent_instance_ref,Foreign,ForeignAnchor,me}=maps:get(reference,Other),
-    ForeignClass={class_ref,Foreign,ForeignAnchor,space},
+    ForeignClass=m2_space_class(),
     ForeignGoal={'::',Foreign,{',',{current_ontology_identity,Foreign,ForeignAnchor},
         {gui_operation,ForeignClass,create,element(4,Create),space_create_submit,element(7,Create),{0}}}},
     Before=m2_state([Ns,Foreign]), m1a_failed_personal(C,ForeignGoal),
@@ -583,8 +677,8 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     [{result,space,ForeignSpace={entity_ref,Foreign,ForeignAnchor,ForeignId}},
      {result,location,{placed,S0,Near}},{result,owner,Owner}]=m1a_output(ForeignOutcome),
     ?assertEqual(Owner,m1a_read(Other,{attribute,ForeignId,owner,{0}})),
-    ?assertEqual({placed,S0,Near},m1a_read(Other,{space_location,ForeignId,{0}})),
-    Contents=m2_rows(Ns,{'E'},{space_contains,element(4,S0),{'E'}}),
+    ?assertEqual({placed,S0,Near},m1a_read(Other,m2_space({space_location,m2_entity(Other,ForeignId),{0}}))),
+    Contents=m1a_read(User,{findall,{'E'},m2_space({space_contains,S0,{'E'}}),{0}}),
     ?assertEqual(lists:sort([S1,ForeignSpace]),lists:sort(Contents -- [setelement(1,Actor,entity_ref)])),
     ok=m2_assert_scene(User,S0,ForeignSpace,<<"box">>),
     %% Original returned values remain available to an authorized new device,
@@ -600,12 +694,8 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     Resolve(), quod_outcome_result_tests:assert_unchanged_reads([Ns,Foreign],Resolve,3),
     %% Source/anchor and destination policy failures cannot become unplaced
     %% success. The same signed operation/form path remains authoritative.
-    m2_failed_creation(C,User,Ns,Create,m1a_field(element(7,Create),space_placement,
+    m2_failed_creation(C,User,Ns,Create,m1a_field(element(7,Create),{space_placement,{ontology_ref,Ns,quod_simplex:genesis_hash(Ns)}},
         {at,setelement(3,S0,<<0:256>>),{transform,0,0,0,0,0,0}}),[Ns,Foreign]),
-    Digest=m1a_read(User,{space_source_digest,{0}}),
-    m2_edit(User,{retract,{space_source_digest,Digest}}),
-    m2_failed_creation(C,User,Ns,Create,element(7,Create),[Ns,Foreign]),
-    m2_edit(User,{assertz,{space_source_digest,Digest}}),
     %% A destination that denies admission refuses the creation outright.
     Deny={instance_permission,element(4,S0),space_admit,deny},
     m2_edit(User,{assertz,Deny}),
@@ -631,18 +721,18 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
 m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
     C=m1a_actor_context(User), Actor=maps:get(agent,C),
     {account,_,Actor,S0,_,_,_}=maps:get(setup_result,User),
-    [Enter]=[O||O<-m1a_read(User,{gui_operations,S1,{0}}),element(2,O)=:=enter],
+    Enter=m3a_offer(User,S1,enter),
     {EnterResult,EnterBytes}=m2_create(C,Ns,Enter,[]),
     m3a_committed(EnterResult),
     ?assertEqual([{result,agent,Actor},{result,location,{placed,S1,{transform,0,0,0,0,0,0}}},
                   {result,revision,3}],m1a_output(EnterResult)),
-    ?assertEqual(S1,m1a_read(User,{account_navigation,{0},[playing,edition]})),
+    ?assertEqual(S1,m1a_read(User,{'::',<<"quod:user">>,{account_navigation,{0},[playing,edition]}})),
     ?assertEqual({navigation,3,{placed,S1,{transform,0,0,0,0,0,0}},[playing,edition]},
-        m1a_read(User,{account_navigation,{0}})),
+        m1a_read(User,{'::',<<"quod:user">>,{account_navigation,{0}}})),
     %% An old offer names the original slot, rather than rebasing itself.
     Before=m2_state([Ns]), {{failed,_},_}=m2_create(C,Ns,Enter,[]),
     ?assertEqual(Before,m2_state([Ns])),
-    Class=setelement(1,setelement(4,S1,space),class_ref),
+    Class=m2_space_class(),
     [Create|_]=m1a_read(User,{gui_operations,Class,{0}}),
     {Created,_}=m2_create(C,Ns,Create,element(7,Create)),
     [{result,space,S2},{result,location,{placed,S1,_}},{result,owner,_}]=m1a_output(Created),
@@ -650,16 +740,16 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
     %% A foreign owner's destination remains independently denied.
     {account,_,_,ForeignS0,_,_,_}=maps:get(setup_result,Other),
     Unchanged=m2_state([Ns,element(2,ForeignS0)]),
-    m1a_failed_personal(C,{space_travel,personal,9,S0,
-        {placed,ForeignS0,{transform,0,0,0,0,0,0}},{0}}),
+    m1a_failed_personal(C,m2_space({goal,{inside,ForeignS0,setelement(1,Actor,entity_ref),
+        {transform,0,0,0,0,0,0}}})),
     ?assertEqual(Unchanged,m2_state([Ns,element(2,ForeignS0)])),
-    [Leave]=[O||O<-m1a_read(User,{gui_operations,S0,{0}}),element(2,O)=:=leave],
+    Leave=m3a_offer(User,S0,leave),
     {Left,_}=m2_create(C,Ns,Leave,[]),m3a_committed(Left),
     ?assertEqual([{result,agent,Actor},{result,location,unplaced},{result,revision,10}],m1a_output(Left)),
-    ?assertEqual(unplaced,m1a_read(User,{space_location,personal,{0}})),
-    ?assertEqual({navigation,10,unplaced,[playing,edition]},m1a_read(User,{account_navigation,{0}})),
+    ?assertEqual(unplaced,m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
+    ?assertEqual({navigation,10,unplaced,[playing,edition]},m1a_read(User,{'::',<<"quod:user">>,{account_navigation,{0}}})),
     ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},submit_lobby(Other,read,
-        {'::',Ns,{',',{current_ontology_identity,Ns,element(3,S0)},{account_navigation,{0}}}})),
+        {'::',Ns,{',',{current_ontology_identity,Ns,element(3,S0)},{'::',<<"quod:user">>,{account_navigation,{0}}}}})),
     m3a_enter(User,C,S0,11),
     m3a_entry_conflict(User,C,S0,S1),
     Fresh=C#{session=>quod_personal_agent_tests:session(maps:get(human_pair,C),maps:get(network,C))},
@@ -668,7 +758,7 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
         ?assertEqual(m1a_output(EnterResult),proplists:get_value(<<"V0">>,maps:get(bindings,Recovered)))
     end,
     Resolve(), quod_outcome_result_tests:assert_unchanged_reads([Ns],Resolve,3),
-    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})),
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
     m3a_recursive(User,C,S0,S1,S2),
     FinalState=m2_state([Ns]),
     io:format("M3a signed same-agent route: ~p -> ~p -> ~p -> ~p -> ~p~n",[S0,S1,S2,S1,S0]),
@@ -676,9 +766,9 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
     %% The same vault keys and the original signed request resolve after the
     %% runtime and outcome owners restart, without another travel submission.
     ?assertEqual(FinalState,m2_state([Ns])),
-    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})),
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
     {agent_instance_ref,_,_,Personal}=Actor,
-    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment,Personal,11,S0})),
+    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment_state,Personal,11,S0})),
     Resolve(),
     ok=quod_ct:write_evidence_json("QUOD_M3A_EVIDENCE","same-agent-route",
         #{schema => <<"m3a-same-agent-v1">>,
@@ -694,15 +784,15 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
 m3a_entry_conflict(User,C,S0,S1) ->
     Ns=element(2,S0),Actor=maps:get(agent,C),
     {ok,ActorBlob}=quod_wire_term:encode_canonical(Actor),Principal={agent,ActorBlob},
-    Permission={class_permission,agent,space_leave,{check,account_agent_leave}},
-    [Enter]=[O||O<-m1a_read(User,{gui_operations,S1,{0}}),element(2,O)=:=enter],
+    Permission={instance_permission,personal,space_leave,deny},
+    Enter=m3a_offer(User,S1,enter),
     {Numbered,_,_}=erlog_int:term_instance(m2_create_goal(C,Ns,Enter,[]),0),
     {ok,TravelGoal}=quod_wire_term:encode_canonical(Numbered),
     Engine=quod_reg:where({quod_prolog,Ns}),Parent=self(),Token=make_ref(),
     %% Pause only the proof worker at the existing sealed-plan checkpoint.
     %% The ontology owner stays responsive and commits the competing grant edit.
     Observe=fun(armed,{in,{'$gen_cast',{public_proof,_,_,execute,Goal,Request}}},_)
-                  when is_tuple(Request),tuple_size(Request)=:=7,
+                  when is_tuple(Request),tuple_size(Request)=:=8,
                        element(1,Request)=:=proof_request,element(3,Request)=:=Principal ->
                    case quod_wire_term:encode_canonical(Goal) of
                        {ok,TravelGoal}->checkpoint;
@@ -720,7 +810,7 @@ m3a_entry_conflict(User,C,S0,S1) ->
                       {entry_conflict,Token,{Early,_}}->error({entry_not_checkpointed,Early})
         after 5000 -> error(entry_proof_not_prepared) end,
         try
-            Before=m2_state([Ns]),m2_edit(User,{retract,Permission}),
+            Before=m2_state([Ns]),m2_edit(User,{assertz,Permission}),
             _=sys:replace_state(Engine,fun(State)->true=erlang:resume_process(Proof),State end),
             {Outcome,_}=receive {entry_conflict,Token,R}->R
             after 10000 -> error(entry_conflict_not_resolved) end,
@@ -732,15 +822,14 @@ m3a_entry_conflict(User,C,S0,S1) ->
                 Other -> error({entry_conflict_accepted,Other})
             end,
             ?assertEqual(Before,m2_state([Ns])),
-            ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}}))
+            ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}})))
         after catch sys:replace_state(Engine,
             fun(State)->catch erlang:resume_process(Proof),State end) end
     after
         exit(Caller,kill),
         receive {'DOWN',Monitor,process,Caller,_}->ok after 1000 -> error(entry_caller_alive) end,
         ok=sys:remove(Engine,Observe),
-        m2_edit(User,{transaction,m1a_conj([
-            {findall,{'_'},{retract,Permission},{'_'}},{assertz,Permission}])})
+        m2_edit(User,{retract,Permission})
     end.
 
 m3a_recursive(User,C,S0,S1,S2) ->
@@ -749,17 +838,17 @@ m3a_recursive(User,C,S0,S1,S2) ->
     Old1=m1a_read(User,{attribute,I1,transform,{0}}),
     Old2=m1a_read(User,{attribute,I2,transform,{0}}),
     m2_edit(User,{transaction,m1a_conj([
-        {space_represent,I1,solid,Old1,none,contents,T1,none},
-        {space_represent,I2,solid,Old2,none,contents,T2,none}])}),
-    Class=setelement(1,setelement(4,S0,space),class_ref),
+        m2_space({space_represent,S1,solid,Old1,none,contents,T1,none}),
+        m2_space({space_represent,S2,solid,Old2,none,contents,T2,none})])}),
+    Class=m2_space_class(),
     [Create|_]=m1a_read(User,{gui_operations,Class,{0}}),
-    Fields=m1a_field(element(7,Create),space_placement,{at,S2,{transform,0,0,0,0,0,0}}),
+    Fields=m1a_field(element(7,Create),{space_placement,{ontology_ref,Ns,quod_simplex:genesis_hash(Ns)}},{at,S2,{transform,0,0,0,0,0,0}}),
     {LeafResult,_}=m2_create(C,Ns,Create,Fields),
     m3a_committed(LeafResult),
     [{result,space,Leaf}|_]=m1a_output(LeafResult),
     m2_edit(User,{transaction,{',',{retract,{attribute,element(4,Leaf),transform,{'_'}}},
         {assertz,{attribute,element(4,Leaf),transform,{transform,300,500,-900,23,47,71}}}}}),
-    Read=fun() -> m1a_read(User,{space_projection,I0,playing,{0}}) end,
+    Read=fun() -> m1a_read(User,m2_space({space_projection,S0,playing,{0}})) end,
     {scene,Marks,Exposure}=Read(),
     [E1]=[E||E={exposure,_,_,S,_,_,_,_,contents}<-Exposure,S=:=S1],
     [E2]=[E||E={exposure,_,_,S,_,_,_,_,contents}<-Exposure,S=:=S2],
@@ -781,18 +870,25 @@ m3a_recursive(User,C,S0,S1,S2) ->
     m2_edit(User,{retract,{space_member,I2,S1}}),
     [ContentsRecipe]=[R||R={':-',{class_eidolon,space,_,contents,_},_}<-
         quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
-    m2_edit(User,{retract,ContentsRecipe}),
+    ?assertMatch({ok,_,_},quod_prolog:execute(<<"quod:space">>,{retract,ContentsRecipe})),
     ?assertMatch({world_view,S0,_,[],unavailable},
         m1a_read(User,{client_world_view,I0,playing,[],{0}})),
-    m2_edit(User,{assertz,ContentsRecipe}),
+    ?assertMatch({ok,_,_},quod_prolog:execute(<<"quod:space">>,{assertz,ContentsRecipe})),
     {scene,_,Independent}=Read(),
     %% Ordinary scene reads need no ledger evidence read. The helper's last
     %% argument is the expected read count across its three repetitions.
     quod_outcome_result_tests:assert_unchanged_reads([Ns],Read,0),
-    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,{space_location,personal,{0}})).
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))).
+
+m3a_offer(User,Space,Name) ->
+    Offers = m1a_read(User,{gui_operations,Space,{0}}),
+    case [O || O <- Offers, element(2,O) =:= Name] of
+        [Offer] -> Offer;
+        _ -> error({missing_space_operation,Name,Space,[element(2,O) || O <- Offers]})
+    end.
 
 m3a_enter(User,C,Space,Revision) ->
-    [Enter]=[O||O<-m1a_read(User,{gui_operations,Space,{0}}),element(2,O)=:=enter],
+    Enter=m3a_offer(User,Space,enter),
     {Result,_}=m2_create(C,element(2,Space),Enter,[]),
     m3a_committed(Result),
     ?assertEqual([{result,agent,maps:get(agent,C)},
@@ -807,8 +903,8 @@ m2_edit(User,Goal) ->
     {Numbered,_,_}=erlog_int:term_instance(Goal,0),
     {ok,Evidence,{normalized,{committed,_,_}}}=submit_lobby(User,execute,Numbered),m1a_complete(Evidence).
 m2_state(Namespaces) ->
-    [{N,m2_rows(N,{'I'},{instance_of,space,{'I'}}),
-        m2_rows(N,{attribute,{'I'},{'K'},{'V'}},{',',{instance_of,space,{'I'}},{attribute,{'I'},{'K'},{'V'}}}),
+    [{N,m2_rows(N,{'I'},{instance_of,{':',quod,{':',space,space}},{'I'}}),
+        m2_rows(N,{attribute,{'I'},{'K'},{'V'}},{',',{instance_of,{':',quod,{':',space,space}},{'I'}},{attribute,{'I'},{'K'},{'V'}}}),
         m2_rows(N,{assignment,{'I'},{'R'},{'D'}},{space_assignment_state,{'I'},{'R'},{'D'}}),
         m2_rows(N,{admission,{'S'},{'I'},{'R'}},{space_placement,{'S'},{'I'},{'R'}})} || N<-Namespaces].
 m2_rows(Ns,Template,Goal) ->
@@ -817,7 +913,7 @@ m2_create(C,Ns,Offer,Fields) ->
     m1a_personal(C,m2_create_goal(C,Ns,Offer,Fields)).
 m2_create_goal(C,Ns,{operation_view,Name,Subject,Revision,_,_,_,Control,_,_},Fields) ->
     Goal={gui_operation,Subject,Name,Revision,Control,Fields,{0}},
-    Anchor=element(3,Subject),Exact={',',{current_ontology_identity,Ns,Anchor},Goal},
+    Anchor=quod_simplex:genesis_hash(Ns),Exact={',',{current_ontology_identity,Ns,Anchor},Goal},
     case maps:get(namespace,C) of Ns->Exact; _->{'::',Ns,Exact} end.
 m2_failed_creation(C,_User,Ns,Offer,Fields,Owners) ->
     Before=m2_state(Owners),{{failed,_},_}=m2_create(C,Ns,Offer,Fields),?assertEqual(Before,m2_state(Owners)).
@@ -828,21 +924,23 @@ m2_assert_scene(User,Space,Subject,Kind) ->
         {Ns0,A0,E0}=:={Ns,Anchor,Entity}],
     ?assert(lists:any(fun({mark,_,K,_,{relative,P,_},_,_,_})->K=:=Kind andalso P=:=Root;(_)->false end,Marks)),ok.
 m2_foreign_policy(Other=#{reference:={agent_instance_ref,Ns,Anchor,me}},Owner,Actor) ->
-    Class={class_ref,Ns,Anchor,space},
-    Rule={':-',{account_space_create,Actor,{class,space},{create,{'Inputs'}}},
-        {',',{'\\+',{member,{part,initial_occupants,{'_'}},{'Inputs'}}},
-          {';',{'->',{member,{attribute,owner,{'Supplied'}},{'Inputs'}},{'=',{'Supplied'},Owner}},true}}},
-    %% Source and exact callback shapes only. No blanket A invocation grant.
+    Class=m2_space_class(),
+    {account,_,_,PrivateSpace,_,_,_}=maps:get(setup_result,Other),
+    %% Only creation discovery, its request and owner callbacks are delegated.
     Grants=[{can_invoke,{',',{current_ontology_identity,Ns,Anchor},G},Principal,{'_'},Ns}
-        || {Principal,G}<-[{Owner,{gui_operation_classes,{'_'}}},
-            {Owner,{gui_operations,Class,{'_'}}},
-            %% The class's representations and pie, and the pie recipe's callback.
-            {Owner,{entity_eidolons,space,{'_'}}},{Owner,{client_menu,space,{'_'}}},
-            {Owner,{gui_menu_source,space,{'_'}}},
-            {Owner,{entity_scene,{'_'},{'_'},{'_'}}},{Owner,{eidolon,{'_'},{'_'},{'_'}}},
-            {Actor,{gui_operation,Class,create,{'_'},space_create_submit,{'_'},{'_'}}},
-            {Actor,{space_assignment,{'_'},{'_'},{'_'}}}]],
-    m2_edit(Other,{transaction,m1a_conj([{assertz,Rule}|[{assertz,G}||G<-Grants]])}).
+        || {Principal,G}<-[{Owner,{gui_operations,Class,{'_'}}},
+            {Owner,{gui_operation_classes,{'_'}}},
+            {Owner,{client_menu,Class,{'_'}}},
+            {Owner,{gui_menu_source,{':',<<"quod:space">>,space},{'_'}}},
+            {Actor,{gui_operation,Class,create,{'_'},space_create_submit,{'_'},{'_'}}}]] ++
+        [{can_invoke,{'_'},Principal,[<<"quod:space">>|{'_'}],Ns} || Principal <- [Owner,Actor]],
+    m2_edit(Other,{transaction,m1a_conj([
+        {assertz,{instance_permission,element(4,PrivateSpace),space_admit,deny}}|
+        [{assertz,G}||G<-Grants]])}).
+
+m2_space_class() -> {class_ref,<<"quod:space">>,quod_simplex:genesis_hash(<<"quod:space">>),space}.
+m2_space(Goal) -> {'::',<<"quod:space">>,Goal}.
+m2_entity(#{reference:={agent_instance_ref,Ns,Anchor,_}},Id) -> {entity_ref,Ns,Anchor,Id}.
 
 m1a_complete_source(Ns) ->
     {ok,[#{'Chunks':=Chunks}],_}=quod_prolog:prove_ro(Ns,
@@ -907,27 +1005,46 @@ m1a_signup(Network, UserClass, Node) ->
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name, {signup_origin, <<"quod:user">>, UserClass, Token})),
         ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}},
             resolve_lobby_request(element(1, Request), element(2, Request))),
-        User = Applicant#{reference => Owner, signup_request => Request, hosting_node => Node},
-        ?assertEqual(unplaced, m1a_read(User, {space_location, personal, {0}})), User
+        User = Applicant#{reference => Owner, signup_request => Request, signup_token => Token, signup_principal => maps:get(reference, Applicant), hosting_node => Node},
+        ?assertEqual(unplaced, m1a_read(User, {'::', <<"quod:space">>,
+            {space_location, {entity_ref, Name, Anchor, personal}, {0}}})), User
     after quod_reg:unsubscribe({runtime, Name}) end.
 
 m1a_setup(User = #{reference := Owner = {agent_instance_ref, Ns, Anchor, me}}) ->
-    {prepared, Storage, Node, Custody = {prepared_key,Key,_}} = m1a_read(User, {account_setup_preparation, {0}}),
+    {prepared, Storage, _Node, Custody = {prepared_key,Key,_}} = m1a_read(User, {'::', <<"quod:user">>, {account_setup_preparation, {0}}}),
     ?assertEqual({ontology_ref, Ns, Anchor}, Storage),
+    Subject = {entity_ref, Ns, Anchor, me},
+    {operation_view, setup, Subject, Revision, _, _, _, Button, _, _} =
+        m1a_read(User, {gui_operation_view, Subject, setup, {0}}),
+    {prepared_key, Key, Receipt} = Custody,
+    Fields = [{field, setup_key, Key}, {field, setup_receipt, Receipt}],
     ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute,
-        {setup_account, {ontology_ref, Ns, <<0:256>>}, Node, Custody, {0}})),
-    Request = lobby_user_request(User, execute, {setup_account, Storage, Node, Custody, {0}}),
+        {gui_operation, setelement(3, Subject, <<0:256>>), setup, Revision, Button, Fields, {0}})),
+    Request = lobby_user_request(User, execute,
+        {gui_operation, Subject, setup, Revision, Button, Fields, {0}}),
     {ok, Evidence, {normalized, {committed, [Binding], _}}} = m1a_submit(Request),
     m1a_complete(Evidence),
-    {ok, [{_, Result = {account, Owner, Agent, Room = {entity_ref, Ns, Anchor, Space}, Storage, Key, _}}]} =
+    {ok, [{_, [{result, setup, Result = {account, Owner, Agent, Room = {entity_ref, Ns, Anchor, Space}, Storage, Key, _}}]}]} =
         quod_client_result:decode_binding(Binding),
     ?assertNotEqual(Owner, Agent),
-    ?assertEqual(Result, m1a_read(User, {account_setup_state, {0}})),
-    ?assertEqual(unplaced, m1a_read(User, {space_location, Space, {0}})),
-    ?assertMatch({placed, Room, {transform, 0,0,0,0,0,0}}, m1a_read(User, {space_location, personal, {0}})),
+    ?assertEqual(Result, m1a_read(User, {'::', <<"quod:user">>, {account_setup_state, {0}}})),
+    ?assertEqual(unplaced, m1a_read(User, {'::', <<"quod:space">>, {space_location, {entity_ref, Ns, Anchor, Space}, {0}}})),
+    ?assertMatch({placed, Room, {transform, 0,0,0,0,0,0}}, m1a_read(User, {'::', <<"quod:space">>, {space_location, {entity_ref, Ns, Anchor, personal}, {0}}})),
     ?assertEqual(Owner, m1a_read(User, {attribute, Space, owner, {0}})),
-    ?assertMatch({world_view,Room,_,[],nonphysical}, m1a_read(User,{client_world_view,Space,playing,[],{0}})),
-    ?assertEqual(Room,m1a_read(User,{account_navigation,{0},[playing,edition]})),
+    QualifiedClass = {class_ref,Ns,Anchor,{':',quod,{':',space,space}}},
+    ?assertEqual([create,create_exact,create_infinite],
+        [element(2,Offer) || Offer <- m1a_read(User,{gui_operations,QualifiedClass,{0}})]),
+    Class = m2_space_class(),
+    ?assert(lists:member(Class,m1a_read(User,{gui_operation_classes,{0}}))),
+    ?assertMatch({menu,_},m1a_read(User,{client_menu,Class,{0}})),
+    ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},submit_lobby(User,read,
+        {client_menu,setelement(3,Class,<<0:256>>),{0}})),
+    {ok,_,{normalized,{read,NavigationReads,{answers,_,[_]}}}} =
+        submit_lobby(User,read,{'::',<<"quod:user">>,{account_navigation,{0}}}),
+    Dependencies = [{dependency,N,A,H} || {N,A,H,_} <- NavigationReads],
+    ?assertMatch({world_view,Room,_,[],nonphysical},
+        m1a_read(User,{client_world_view,Space,playing,Dependencies,{0}})),
+    ?assertEqual(Room,m1a_read(User,{'::', <<"quod:user">>, {account_navigation,{0},[playing,edition]}})),
     {ok,[#{'G':=GuiPin}],_}=quod_prolog:prove_ro(Ns,{rendering_vocabulary,<<"quod:gui">>,{'G'}}),
     {ok,ChangedPin,{normalized,{committed,_,_}}}=submit_lobby(User,execute,
         {transaction,{',',{retract,{rendering_vocabulary,<<"quod:gui">>,GuiPin}},
@@ -938,16 +1055,16 @@ m1a_setup(User = #{reference := Owner = {agent_instance_ref, Ns, Anchor, me}}) -
         {transaction,{',',{retract,{rendering_vocabulary,<<"quod:gui">>,<<0:256>>}},
                          {assertz,{rendering_vocabulary,<<"quod:gui">>,GuiPin}}}}),
     m1a_complete(RestoredPin),
-    ?assertEqual([], m1a_read(User, {gui_pending_questions, {0}})),
-    ?assertEqual({complete, Result}, m1a_read(User, {account_setup_preparation, {0}})),
+    ?assertEqual([], m1a_read(User, {'::', <<"quod:gui">>, {gui_pending_questions, {0}}})),
+    ?assertEqual({complete, Result}, m1a_read(User, {'::', <<"quod:user">>, {account_setup_preparation, {0}}})),
     Resolve = fun() ->
-        ?assertEqual(Result, m1a_read(User, {account_setup_state, {0}})),
+        ?assertEqual(Result, m1a_read(User, {'::', <<"quod:user">>, {account_setup_state, {0}}})),
         ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}},
             resolve_lobby_request(element(1, Request), element(2, Request)))
     end,
     quod_outcome_result_tests:assert_unchanged_reads([Ns], Resolve, 0),
     ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {signup_origin, {'_'}, {'_'}, {'_'}})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {instance_of, physical_space, Space})),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {instance_of, {':',quod,{':',space,physical_space}}, Space})),
     User#{setup_request=>Request,setup_result=>Result,setup_custody=>Custody}.
 
 m1a_private(First, Second, UserClass, Catalogue, PublicReader) ->
@@ -956,9 +1073,10 @@ m1a_private(First, Second, UserClass, Catalogue, PublicReader) ->
     ?assertEqual({error,wrong_target},submit_lobby(WrongHistory,read,{account_setup_state,{0}})),
     ?assertEqual({error,wrong_target},submit_lobby(WrongHistory,execute,{assertz,forbidden_history_write})),
     ?assert(byte_size(m1a_read(First,{prolog_introspection,{source,{'/',account_setup,2}},{0}}))>0),
-    Goals = [{account_setup_state, {0}}, {personal_instructions, {0}},
-        {personal_agent, {0}, {1}}, {agent_hosted,personal,{0},{1},{2}},
-        {gui_pending_questions, {0}}, {controller_preferences_view, me, {0}},
+    Goals = [{account_setup,me,{0}},
+        {personal_instruction,{'_'},{'_'},{'_'},{'_'},{'_'},{0},{1}},
+        {agent_hosted,personal,{0},{1},{2}}, {agent_key,personal,{0},active},
+        {gui_pending,me,{0}}, {attribute,me,controller_preferences,{0}},
         {prolog_introspection, {chunks, 16384}, {0}}],
     [begin
         Result = submit_lobby(Second, read, {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, G}}),
@@ -997,87 +1115,82 @@ m1a_private(First, Second, UserClass, Catalogue, PublicReader) ->
 m1a_actor_context(User = #{reference:={agent_instance_ref,Ns,Anchor,me},keypair:=Pair,network:=Network}) ->
     Agent = {agent_instance_ref,Ns,Anchor,personal},
     #{namespace=>Ns,human=>maps:get(reference,User),human_pair=>Pair,agent=>Agent,
-      key=>m1a_read(User,{personal_agent,Agent,{0}}),network=>Network,
+      key=>m1a_read(User,{'::',<<"quod:user">>,{personal_agent,Agent,{0}}}),network=>Network,
       session=>quod_personal_agent_tests:session(Pair,Network)}.
 
-m1a_setup_failures(User = #{reference := {agent_instance_ref, Ns, Anchor, me}}) ->
-    {prepared, Storage, Node, Custody = {prepared_key,Key,Receipt}} = Prepared = m1a_read(User, {account_setup_preparation, {0}}),
-    %% Custody preparation is reused; it has not assigned a host or made S0.
-    ?assertEqual(Prepared, m1a_read(User, {account_setup_preparation, {0}})),
-    Pending = m1a_read(User, {account_setup_state, {0}}),
-    WrongKey=crypto:strong_rand_bytes(32), ?assertNotEqual(Key,WrongKey),
-    [?assertMatch({ok,_,{normalized,{failed,_}}},
-        submit_lobby(User,execute,{setup_account,Storage,Node,Bad,{0}})) || Bad <-
-        [WrongKey,{prepared_key,WrongKey,Receipt},
-         {prepared_key,Key,crypto:strong_rand_bytes(64)}]],
+m1a_setup_failures(User = #{reference := Owner = {agent_instance_ref, Ns, Anchor, me}}) ->
+    Preparation = {'::', <<"quod:user">>, {account_setup_preparation, {0}}},
+    State = {'::', <<"quod:user">>, {account_setup_state, {0}}},
+    {prepared, {ontology_ref, Ns, Anchor}, _, {prepared_key, Key, Receipt}} = Prepared = m1a_read(User, Preparation),
+    ?assertEqual(Prepared, m1a_read(User, Preparation)),
+    Pending = m1a_read(User, State), Subject = {entity_ref, Ns, Anchor, me},
+    {operation_view, setup, Subject, Revision, _, _, _, Button, _, _} =
+        m1a_read(User, {gui_operation_view, Subject, setup, {0}}),
+    Setup = fun(K, R) -> {gui_operation, Subject, setup, Revision, Button,
+        [{field, setup_key, K}, {field, setup_receipt, R}], {0}} end,
+    Goal = Setup(Key, Receipt),
     NoChanges = fun() ->
-        ?assertEqual(Pending, m1a_read(User, {account_setup_state, {0}})),
-        ?assertEqual(unplaced, m1a_read(User, {space_location, personal, {0}})),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{attribute,personal,transform,{'_'}})),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_hosted, personal, {'_'}, {'_'}, {'_'}})),
-        ?assertMatch({ok, [#{'Spaces' := []}], _}, quod_prolog:prove_ro(Ns,
-            {findall, {'S'}, {instance_of, space, {'S'}}, {'Spaces'}})),
-        ?assertMatch({ok,[#{'Rows':=[]}],_},quod_prolog:prove_ro(Ns,
-            {findall,{'S'},{space_placement,{'S'},{entity_ref,Ns,Anchor,personal},{'_'}},{'Rows'}})),
-        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {signup_origin, {'_'}, {'_'}, {'_'}}))
+        ?assertEqual(Pending, m1a_read(User, State)),
+        ?assertEqual(unplaced, m1a_read(User, {'::', <<"quod:space">>,
+            {space_location, {entity_ref, Ns, Anchor, personal}, {0}}})),
+        [?assertEqual([], m1a_read(User, {findall, true, Query, {0}})) || Query <-
+            [{attribute, personal, transform, {'_'}},
+             {agent_hosted, personal, {'_'}, {'_'}, {'_'}},
+             {instance_of, {':',quod,{':',space,space}}, {'_'}},
+             {space_placement, {'_'}, {entity_ref, Ns, Anchor, personal}, {'_'}}]],
+        ?assertEqual([true], m1a_read(User, {findall, true, {signup_origin, {'_'}, {'_'}, {'_'}}, {0}}))
     end,
-    %% Refuse the final foreign acknowledgement after host assignment and
-    %% initial placement have been staged. All local consequences unwind and
-    %% the original allocation receipt remains available for explicit setup.
-    {ok,[#{'Service':=Signup,'Token':=Token}],_}=quod_prolog:prove_ro(Ns,
-        {signup_origin,{'Service'},{'_'},{'Token'}}),
-    Owner=maps:get(reference,User),
-    {ok,[#{'Key':=SignupKey}],_}=quod_prolog:prove_ro(Signup,{enrollment_receipt,{'Key'},Token,Owner}),
-    [Ack]=[Clause || Clause={':-',{acknowledge_signup,_,_},_} <-
-        quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/quod_user.pl"))],
-    Refusal={':-',{acknowledge_signup,{'_'},{'_'}},{fail_with_reason,injected_signup_ack_failure}},
-    {ok,_,_}=quod_prolog:execute(Signup,{transaction,{',',{retract,Ack},{assertz,Refusal}}}),
+    [begin
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Setup(K, R))),
+        NoChanges()
+    end || {K, R} <- [{crypto:strong_rand_bytes(32), Receipt}, {Key, crypto:strong_rand_bytes(64)}]],
+    %% Refuse the final acknowledgement after hosting and placement have been
+    %% staged; the same atomic transaction must unwind all participants.
+    [Ack] = [Clause || Clause = {':-', {acknowledge_signup, _, _}, _} <-
+        quod_prolog:read_terms("priv/ontologies/quod_user.pl")],
+    Refusal = {':-', {acknowledge_signup, {'_'}, {'_'}}, {fail_with_reason, injected_signup_ack_failure}},
+    {ok, _, _} = quod_prolog:execute(<<"quod:user">>, {transaction, {',', {retract, Ack}, {assertz, Refusal}}}),
     try
-        {ok,_,{normalized,{failed,AckReasons}}}=submit_lobby(User,execute,
-            {setup_account,Storage,Node,Custody,{0}}),
-        {ok,DecodedAck}=quod_wire_term:decode_failure_reasons(AckReasons),
-        ?assertMatch({true,_},{lists:member(injected_signup_ack_failure,DecodedAck),DecodedAck}),
+        {ok, _, {normalized, {failed, Reasons}}} = submit_lobby(User, execute, Goal),
+        {ok, Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+        ?assert(lists:member(injected_signup_ack_failure, Decoded)),
         NoChanges(),
-        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Signup,{enrollment_receipt,SignupKey,Token,Owner}))
+        ?assertEqual(Owner, m1a_read(User#{reference => maps:get(signup_principal, User)},
+            {signup_status, maps:get(signup_token, User), {0}}))
     after
-        {ok,_,_}=quod_prolog:execute(Signup,{transaction,{',',{retract,Refusal},{assertz,Ack}}})
+        {ok, _, _} = quod_prolog:execute(<<"quod:user">>, {transaction, {',', {retract, Refusal}, {assertz, Ack}}})
     end,
-    %% Pre-existing policy is withdrawn independently. Setup cannot grant its
-    %% own construction, source entry or destination admission in staged state.
-    lists:foreach(fun(Policy) ->
-        {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute, {retract, Policy}),
-        ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute,
-            {setup_account, Storage, Node, Custody, {0}})),
-        NoChanges(),
-        {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute, {assertz, Policy})
-    end, [{class_permission, space, create, {check, account_space_create}},
-          {class_permission, agent, space_enter, {check, account_agent_entry}},
-          {class_permission, space, space_admit, {check, account_space_admit}}]),
-    %% The shared-template pin is evidence, never a remote class alias.
-    {ok, [#{'Pin' := Pin}], _} = quod_prolog:prove_ro(Ns, {space_vocabulary, <<"quod:space">>, {'Pin'}}),
-    {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute,
-        {retract, {space_vocabulary, <<"quod:space">>, Pin}}),
-    ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}}, submit_lobby(User, read, {account_setup_preparation, {0}})),
-    NoChanges(),
-    {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute,
-        {assertz, {space_vocabulary, <<"quod:space">>, <<0:256>>}}),
-    ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute,
-        {setup_account, Storage, Node, Custody, {0}})),
-    NoChanges(),
-    {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute,
-        {transaction, {',', {retract, {space_vocabulary, <<"quod:space">>, <<0:256>>}},
-                            {assertz, {space_vocabulary, <<"quod:space">>, Pin}}}}),
-    {ok,[#{'G':=GuiPin}],_}=quod_prolog:prove_ro(Ns,{gui_vocabulary,<<"quod:gui">>,{'G'}}),
-    {ok,_,{normalized,{committed,_,_}}}=submit_lobby(User,execute,{retract,{gui_vocabulary,<<"quod:gui">>,GuiPin}}),
-    ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},submit_lobby(User,read,{account_setup_preparation,{0}})),
-    NoChanges(),
-    {ok,_,{normalized,{committed,_,_}}}=submit_lobby(User,execute,{assertz,{gui_vocabulary,<<"quod:gui">>,GuiPin}}),
-    ?assertEqual({ontology_ref, Ns, Anchor}, Storage).
+    %% The committed class owner's create/admit defaults govern the new S0.
+    [Default = {':-', Head = {class_permission, space, Operation, allow}, Body}] =
+        [Clause || Clause = {':-', {class_permission, space, _, allow}, _} <-
+            quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
+    [begin
+        Withheld = {':-', Head, {',', Body, {'\\=', Operation, Missing}}},
+        {ok, _, _} = quod_prolog:execute(<<"quod:space">>, {transaction, {',', {retract, Default}, {assertz, Withheld}}}),
+        try
+            ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Goal)),
+            NoChanges()
+        after
+            {ok, _, _} = quod_prolog:execute(<<"quod:space">>, {transaction, {',', {retract, Withheld}, {assertz, Default}}})
+        end
+    end || Missing <- [create, space_admit]],
+    %% Personal is already committed: its storing ACL override applies, and a
+    %% staged removal of that denial cannot authorize the same setup request.
+    Deny = {instance_permission, personal, space_enter, deny},
+    {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute, {assertz, Deny}),
+    try
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Goal)),
+        ?assertMatch({ok, _, {normalized, {failed, _}}},
+            submit_lobby(User, execute, {transaction, {',', {retract, Deny}, Goal}})),
+        NoChanges()
+    after
+        {ok, _, {normalized, {committed, _, _}}} = submit_lobby(User, execute, {retract, Deny})
+    end.
 
-m1a_controller(User = #{reference := {agent_instance_ref, Ns, Anchor, me}, keypair := Pair, network := Network}) ->
+m1a_controller(User = #{reference := {agent_instance_ref, Ns, Anchor, me}, keypair := Pair, network := Network},Other) ->
     Agent = {agent_instance_ref, Ns, Anchor, personal},
     C = #{namespace => Ns, human => maps:get(reference, User), human_pair => Pair,
-        agent => Agent, key => m1a_read(User, {personal_agent, Agent, {0}}),
+        agent => Agent, key => m1a_read(User, {'::',<<"quod:user">>,{personal_agent,Agent,{0}}}),
         network => Network, session => quod_personal_agent_tests:session(Pair, Network)},
     Subject = {entity_ref, Ns, Anchor, me},
     Reader = #{agent => {Ns, Anchor}, key_pair => Pair, network => Network, instance => <<"me.">>},
@@ -1097,8 +1210,9 @@ m1a_controller(User = #{reference := {agent_instance_ref, Ns, Anchor, me}, keypa
         {operation_view, controller_settings, Subject, Revision, _, _, Fields, controller_save, _, _} = Offer,
         ?assert(lists:member({field, controller_reset, false}, Fields)),
         Goal = {gui_operation, Subject, controller_settings, Revision, controller_save, Fields, {0}},
-        %% A direct U invocation has no personal-instruction authority.
-        ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Goal)),
+        %% The storing ontology refuses another human's settings mutation.
+        ?assertMatch({ok, _, {normalized, {failed, _}}},
+            submit_lobby(Other, execute, {'::',Ns,Goal})),
         {Outcome, Bytes} = m1a_personal(C, Goal),
         ?assertEqual([{result, revision, 1}], m1a_output(Outcome)),
         _ = m1a_frame(Operations, <<"refresh">>),
@@ -1129,7 +1243,7 @@ m1a_controller(User = #{reference := {agent_instance_ref, Ns, Anchor, me}, keypa
         Fresh = C#{session => quod_personal_agent_tests:session(Pair,Network)},
         [ ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}},
             quod_personal_agent_tests:lookup(Fresh, Original)) || Original <- [Bytes,ResetBytes]],
-        {controller_view,2,_,_} = m1a_read(User, {controller_preferences_view,me,{0}}),
+        {controller_view,2,_,_} = m1a_read(User, {'::',<<"quod:user">>,{controller_preferences_view,{entity_ref,Ns,Anchor,me},{0}}}),
         Open(Operations, gui_operations, Subject), _ = m1a_frame(Operations, <<"projection">>),
         m1a_renew(Operations, fun() -> Open(Operations, gui_operations, Subject) end, 3)
     after
@@ -1194,7 +1308,7 @@ m1a_revocation(User=#{reference:={agent_instance_ref,Ns,Anchor,me},keypair:=Pair
     after Socket!stop end.
 
 m1a_restart_accounts(Users,Vault,Dir,Unlock) ->
-    Before=[m1a_read(U,{account_setup_state,{0}})||U<-Users],
+    Before=[m1a_read(U,{'::',<<"quod:user">>,{account_setup_state,{0}}})||U<-Users],
     stop_process(Vault),
     {ok,NextVault}=quod_agent_vault:start_link(#{directory=>filename:join(Dir,"vault"),unlock_file=>Unlock}),
     unlink(NextVault),
@@ -1208,16 +1322,16 @@ m1a_restart_accounts(Users,Vault,Dir,Unlock) ->
                 quod_personal_agent_tests:await_runtime_ready(Ns)
              end || #{reference:={agent_instance_ref,Ns,_,_}}<-Users]
         end),
-        ?assertEqual(Before,[m1a_read(U,{account_setup_state,{0}})||U<-Users]),
+        ?assertEqual(Before,[m1a_read(U,{'::',<<"quod:user">>,{account_setup_state,{0}}})||U<-Users]),
         [begin
-            ?assertEqual(Result,m1a_read(U,{account_setup_state,{0}})),
+            ?assertEqual(Result,m1a_read(U,{'::',<<"quod:user">>,{account_setup_state,{0}}})),
             ?assertMatch({ok,_,{operation_outcome,_,#{status:=committed}}},
                 resolve_lobby_request(element(1,Original),element(2,Original))),
             Ready=quod_runtime:stats(Ns),
             quod_lobby_tests:assert_read_has_no_io(fun()->
                 [begin
                     ?assertEqual(ok,quod_client_goal_target:available({Ns,Anchor})),
-                    ?assertEqual({complete,Result},m1a_read(U,{account_setup_preparation,{0}}))
+                    ?assertEqual({complete,Result},m1a_read(U,{'::',<<"quod:user">>,{account_setup_preparation,{0}}}))
                  end || _<-lists:seq(1,3)]
             end),
             After=quod_runtime:stats(Ns),
@@ -1225,14 +1339,14 @@ m1a_restart_accounts(Users,Vault,Dir,Unlock) ->
             %% A new offered operation exercises the original encrypted key
             %% after both custody/runtime and source/outcome owners restarted.
             C=m1a_actor_context(U), Subject={entity_ref,Ns,Anchor,me},
-            {controller_view,Previous,_,_}=m1a_read(U,{controller_preferences_view,me,{0}}),
+            {controller_view,Previous,_,_}=m1a_read(U,{'::',<<"quod:user">>,{controller_preferences_view,{entity_ref,Ns,Anchor,me},{0}}}),
             [{operation_view,controller_settings,Subject,Revision,_,_,Fields,controller_save,_,_}]=
                 m1a_read(U,{gui_operations,Subject,{0}}),
             {Outcome,_}=m1a_personal(C,{gui_operation,Subject,controller_settings,Revision,controller_save,
                 m1a_field(Fields,controller_reset,true),{0}}),
             ?assertEqual([{result,revision,Previous+1}],m1a_output(Outcome)),
-            ?assertMatch({controller_view,_,_,_},m1a_read(U,{controller_preferences_view,me,{0}})),
-            ?assertEqual(Result,m1a_read(U,{account_setup_state,{0}}))
+            ?assertMatch({controller_view,_,_,_},m1a_read(U,{'::',<<"quod:user">>,{controller_preferences_view,{entity_ref,Ns,Anchor,me},{0}}})),
+            ?assertEqual(Result,m1a_read(U,{'::',<<"quod:user">>,{account_setup_state,{0}}}))
          end || U=#{reference:={agent_instance_ref,Ns,Anchor,_},setup_request:=Original,setup_result:=Result}<-Users]
     after stop_process(NextVault) end.
 
@@ -1257,7 +1371,7 @@ m1a_https(Dir, Network, Users, Gui, UserClass, PublicReader) ->
               public_key=>m1a_b64(Public),seed=>m1a_b64(Seed)}
         end || U <- Users],
         [Owner|_] = Users, {agent_instance_ref,Ns,Anchor,me} = maps:get(reference,Owner),
-        Key = m1a_read(Owner,{personal_agent,{agent_instance_ref,Ns,Anchor,personal},{0}}),
+        Key = m1a_read(Owner,{'::',<<"quod:user">>,{personal_agent,{agent_instance_ref,Ns,Anchor,personal},{0}}}),
         Origin = list_to_binary("https://127.0.0.1:" ++ integer_to_list(PortNumber)),
         #{reference:={agent_instance_ref,PublicNs,PublicAnchor,outsider},keypair:={ReaderKey,ReaderSeed}}=PublicReader,
         ReaderConfig=#{agent=>#{namespace=>PublicNs,anchor=>m1a_b64(PublicAnchor),instanceText=><<"outsider.">>},
@@ -1307,14 +1421,14 @@ m1a_drive_https(Port) ->
         {Port,{exit_status,Exit}} -> error({https_client_failed,Exit})
     after 60000 -> error(https_client_event_missing) end.
 
-m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, Components, PublicReader) ->
+m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, PublicReader) ->
     case os:getenv("QUOD_M1A_EVIDENCE") of
         false -> ok;
         Path ->
             Sources = [#{file => list_to_binary(F), sha256 => binary:encode_hex(crypto:hash(sha256, m1a_source(F)))}
-                || F <- lists:usort(GuiFiles ++ Components ++ ["common_predicates.pl", "construction.pl", "material_policy.pl", "gui_forms.pl", "geometry_schema.pl", "quod_node.pl", "node_instance.pl", "quod_agent.pl", "quod_controllers.pl", "quod_user.pl", "quod_root.pl"])],
+                || F <- lists:usort(GuiFiles ++ ["quod_space.pl", "common_predicates.pl", "construction.pl", "material_policy.pl", "gui_forms.pl", "geometry_schema.pl", "quod_node.pl", "node_instance.pl", "quod_agent.pl", "quod_controllers.pl", "quod_user.pl", "quod_root.pl"])],
             Rows = [#{namespace => N, anchor => binary:encode_hex(A)} || {ontology_ref, N, A} <- Catalogue],
-            Accounts = [quod_client_goal_parser:value_text(m1a_read(U, {account_setup_state, {0}})) || U <- Users],
+            Accounts = [quod_client_goal_parser:value_text(m1a_read(U, {'::',<<"quod:user">>,{account_setup_state,{0}}})) || U <- Users],
             Profiles = [begin
                 {ok, [#{'Profile' := Profile}], _} = quod_prolog:prove_ro(N, {external_predicate_modules, {'Profile'}}),
                 #{namespace => N, modules => [#{module => M, sha256 => binary:encode_hex(H)} || {M, H} <- Profile]}
@@ -1327,7 +1441,7 @@ m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, Components, PublicReader)
             Orders = #{root => [<<"quod_root.pl">>], node => [<<"quod_node.pl">>], agent => [<<"quod_agent.pl">>],
                 gui => [list_to_binary(F) || F <- GuiFiles], controllers => [<<"quod_controllers.pl">>],
                 space => [<<"quod_space.pl">>], user => [<<"quod_user.pl">>],
-                private_account => [list_to_binary(F) || F <- Components],
+                private_account => <<"terms">>,
                 startup_base => [<<"common_predicates.pl">>,<<"construction.pl">>,
                     <<"material_policy.pl">>,<<"gui_forms.pl">>,<<"geometry_schema.pl">>]},
             ok = file:write_file(Path, json:encode(#{network => binary:encode_hex(Network),
@@ -1354,7 +1468,11 @@ m1a_submit({Bytes, Signature}) ->
 
 m1a_read(User, Goal) ->
     {ok, _, {normalized, {read, _, {answers, _, [Binding]}}}} = submit_lobby(User, read, Goal),
-    {ok, [{_, Value}]} = quod_client_result:decode_binding(Binding), Value.
+    {_, Variables, _} = erlog_int:term_instance(Goal, 0),
+    {Index} = orddict:fetch(0, Variables),
+    Name = <<"V", (integer_to_binary(Index))/binary>>,
+    {ok, Bindings} = quod_client_result:decode_binding(Binding),
+    {Name, Value} = lists:keyfind(Name, 1, Bindings), Value.
 m1a_complete(Evidence) ->
     Op = quod_client_goal:operation_ref(Evidence),
     ?assertMatch(#{operation_state := terminal}, quod_ct:await_operation_complete(element(2, Op), Op, 10000)).
@@ -1628,7 +1746,7 @@ full_physical_composition_uses_governed_preparation_budget(_Fixture) ->
         wait_ready(Ns, 300),
         ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {composition_marker, complete})),
-        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {isa, physical_space, space})),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {current_predicate, {'/', physics_close_hinged, 4}})),
         %% The committed create retains the complete policy, not just the
         %% marker. Ordinary namespace recovery must use that same genesis.
         ok = quod_namespace_manager:stop_content(Ns),
@@ -1643,7 +1761,7 @@ full_physical_composition_uses_governed_preparation_budget(_Fixture) ->
 
 physical_composition_options() ->
     [{source_file, list_to_binary(filename:join([code:priv_dir(quod), "ontologies", File]))}
-     || File <- ["agent_instance.pl", "quod_space.pl", "quod_physics.pl"]] ++
+     || File <- ["agent_instance.pl", "quod_physics.pl", "quod_hinged.pl"]] ++
     [{source, <<"can_invoke(_, _, _, _).\ncomposition_marker(complete).\n">>},
      {external_predicate_modules, [quod_agent_predicates]}].
 
@@ -1661,7 +1779,7 @@ bundled_agent_policy_uses_ordinary_creation(_Fixture) ->
     Options =
         [{source_file, filename:join([code:priv_dir(quod), "ontologies", File])}
          || File <- ["agent_instance.pl", "agent_recovery_policy.pl"]] ++
-        [{terms, [{instance_of, agent, <<"worker">>},
+        [{terms, [{instance_of, {':',quod,{':',agent,agent}}, <<"worker">>},
                   {domain_state, <<"worker">>, <<"before-loss">>},
                   {agent_recovery_threshold, <<"worker">>, 2}]},
          {external_predicate_modules, [quod_agent_predicates]}],
@@ -2144,9 +2262,16 @@ found_lobby_classes() ->
         <<"environment-eidolons">>, "quod_environment_eidolons.pl",
         [{environment_vocabulary, EnvironmentNs, EnvironmentAnchor}]),
     GuiNs = <<"quod:gui">>, GuiAnchor = quod_simplex:genesis_hash(GuiNs),
+    found_lobby_named_sources(<<"quod:agent">>, ["quod_agent.pl"], [], [quod_agent_predicates]),
+    found_lobby_named_sources(<<"quod:user">>, ["quod_user.pl"], [], [quod_agent_predicates]),
+    found_lobby_named_sources(<<"quod:space">>, ["quod_space.pl"],
+        [{measure_vocabulary, MeasureNs, MeasureAnchor},
+         {rendering_vocabulary, RenderNs, RenderAnchor},
+         {modelling_vocabulary, ModelNs, ModelAnchor},
+         {gui_vocabulary, GuiNs, GuiAnchor}], [quod_agent_predicates]),
     Templates = [{lobby_source_file, list_to_binary(filename:join(
         code:priv_dir(quod), "ontologies/" ++ File))}
-        || File <- ["lobby_instance.pl", "quod_space.pl", "agent_instance.pl", "quod_physics.pl", "voxel_world.pl", "voxel_world_view.pl", "gui_instance.pl", "voxel_world_gui.pl", "lobby_worlds.pl"]],
+        || File <- ["lobby_instance.pl", "agent_instance.pl", "quod_physics.pl", "voxel_world.pl", "voxel_world_view.pl", "gui_instance.pl", "voxel_world_gui.pl", "lobby_worlds.pl"]],
     found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
         [{names_vocabulary, NamesNs, NamesAnchor},
          {rendering_vocabulary, RenderNs, RenderAnchor},
@@ -2183,9 +2308,10 @@ found_lobby_user({ClassNs, ClassAnchor}, Network, Node) ->
     {Public, _} = Pair = quod_identity:generate(),
     Name = unique_ns(<<"personal-lobby">>),
     {Ns, Anchor} = found_lobby_sources(<<"human-user">>,
-        ["user_instance.pl", "agent_instance.pl", "quod_space.pl",
+        ["agent_instance.pl",
          filename:absname("test/fixtures/physical-preset.pl")],
-        [{instance_of, human_user, me}, {agent_key, me, Public, active},
+        quod_personal_agent_tests:user_terms() ++
+        [{instance_of, {':',quod,{':',user,human_user}}, me}, {agent_key, me, Public, active},
          {lobby_vocabulary, ClassNs, ClassAnchor},
          {hosting_node, Node},
          {physical_fixture_name, Name}]),
@@ -2198,7 +2324,8 @@ found_lobby_user({ClassNs, ClassAnchor}, Network, Node) ->
 lobby_user_request(User = #{reference := {agent_instance_ref, Ns, Anchor, Instance},
                      keypair := {Public, _} = Pair, network := Network}, Mode, Goal) ->
     {ok, InstanceText} = quod_client_goal_parser:format(Instance),
-    {ok, GoalText} = quod_client_goal_parser:format(Goal),
+    {CanonicalGoal, _, _} = erlog_int:term_instance(Goal, 0),
+    {ok, GoalText} = quod_client_goal_parser:format(CanonicalGoal),
     {ok, Bytes} = quod_client_goal:encode(#{network_identity => Network,
         signing_public_key => Public, operation_id => crypto:strong_rand_bytes(32),
         agent_namespace => Ns, agent_genesis_anchor => Anchor,
@@ -2346,7 +2473,8 @@ prepared_genesis_native_format_golden_test() ->
 
 prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
     Ns = unique_ns(<<"prepared-journal-native">>),
-    Action = {create_ontology, Ns, physical_composition_options()},
+    Clause = {':-', {prepared_identity, {'Value'}, {'Value'}}, true},
+    Action = {create_ontology, Ns, [{terms, [Clause]} | physical_composition_options()]},
     {ok, Structural} = quod_ontology:validate_action(Action),
     {ok, Prepared0} = quod_ontology:prepare_action(Structural),
     {prepared_lifecycle, create, Ns, _InitialAnchor, Config0, created} = Prepared0,
@@ -2397,6 +2525,9 @@ prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
     ok = wait_ready(Ns, 300),
     ok = wait_effect_target_state(Ns, applied, 300),
     ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {prepared_identity, first, first})),
+    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {prepared_identity, second, second})),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {prepared_identity, first, second})),
     ?assertMatch({ok, [#{'Incarnation' := Incarnation}], _},
                  quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Incarnation'}})),
     ?assertEqual(crypto:hash(sha256, Bytes), quod_effect:prepared_digest(Effect)),

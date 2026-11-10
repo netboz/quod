@@ -50,7 +50,8 @@ instruction(Action, Session, Bytes, Signature, Peer) ->
         Error -> Error
     end.
 
-instructed(submit, Evidence = #{goal := {{'$quod_symbol', <<"personal_instruction_accept">>}, TargetBytes, {0}},
+instructed(submit, Evidence = #{goal := {'::', <<"quod:user">>,
+        {{'$quod_symbol', <<"personal_instruction_accept">>}, TargetBytes, {0}}},
                                 request := #{agent_namespace := Ns}}, [Signature], Deadline)
   when is_binary(TargetBytes) ->
     case quod_runtime:agent_request_now(Ns, Evidence, {TargetBytes, Signature}, Deadline) of
@@ -69,9 +70,11 @@ instructed(submit, Evidence = #{goal := {{'$quod_symbol', <<"personal_instructio
         {error, instruction_unknown} -> instruction_pending(TargetBytes);
         {error, Reason} -> {error, {request_not_submitted, Reason}}
     end;
-instructed(resolve, #{goal := {{'$quod_symbol', <<"personal_instruction_lookup">>}, <<_:256>>, {0}, {1}}},
+instructed(resolve, #{goal := {'::', <<"quod:user">>,
+        {{'$quod_symbol', <<"personal_instruction_lookup">>}, <<_:256>>, {0}, {1}}}},
            [none, none], _) -> {error, instruction_not_found};
-instructed(resolve, #{goal := {{'$quod_symbol', <<"personal_instruction_lookup">>}, <<_:256>>, {0}, {1}},
+instructed(resolve, #{goal := {'::', <<"quod:user">>,
+        {{'$quod_symbol', <<"personal_instruction_lookup">>}, <<_:256>>, {0}, {1}}},
                       request := #{agent_namespace := Ns, agent_genesis_anchor := Anchor}},
             [Bytes, Signature], Deadline) ->
     case quod_client_goal:verify(Bytes, Signature) of

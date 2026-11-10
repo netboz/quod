@@ -31,7 +31,7 @@ lobby_options(Owner, Node, Options) :-
             attribute(personal_roof,mark_id,<<"roof">>),
             attribute(console,mark_id,<<"console">>),
             attribute(personal_sky,mark_id,<<"sky">>),
-            instance_of(agent, pilot),
+            instance_of(quod:agent:agent, pilot),
             rendering_vocabulary(RenderingNamespace, RenderingAnchor),
             instance_of(sky_sphere, personal_sky),
             attribute(personal_sky, panorama, belfast_sunset_puresky),
@@ -100,9 +100,7 @@ lobby_surface(Rings, surface(Vertices, Triangles)) :-
          C is (Row+1)*24+Cn, D is Row*24+Cn,
          member(Triangle, [triangle(A,C,B), triangle(A,D,C)])), Triangles).
 
-isa(lobby, physical_space).
-isa(physical_space, space).
-isa(space, thing).
+isa(lobby, quod:space:physical_space).
 isa(lobby_floor, thing).
 isa(device, thing).
 isa(prolog_console, device).

@@ -323,11 +323,10 @@ load_protocol_era(Table, Era) ->
 
 -doc "Stage the exact histories returned by the shared live-finality reducer.".
 -spec preview_histories(delta(), #{binary() => quod_atomic:group_history()}) ->
-    {ok, delta()} | {error, index_error()}.
+    {ok, delta()}.
 preview_histories(Delta, Histories) when is_map(Histories) ->
-    maps:fold(fun(Group, History, {ok, D}) -> stage_history(D, Group, undefined, History);
-                 (_Group, _History, {error, _} = Error) -> Error
-              end, {ok, Delta}, Histories).
+    {ok, maps:fold(fun(Group, History, D) -> stage_history(D, Group, undefined, History)
+                  end, Delta, Histories)}.
 
 -doc "Indexed post-slot committee lookup bounded by the captured height and era count.".
 -spec committee(index(), pos_integer()) -> {ok, tuple()} | not_found | {error, index_error()}.
@@ -459,12 +458,9 @@ preview_batch(Index = #index{}, Delta = #delta{}, Controls, Projection)
                     case quod_atomic:reduce_batch(
                            Controls, Histories0, Projection) of
                         {ok, Histories1, Projection1, Items} ->
-                            case stage_batch_histories(
-                                   Delta, GroupIds, Histories0, Histories1) of
-                                {ok, Delta1} ->
-                                    {ok, Delta1, Projection1, Items};
-                                {error, _} = Error -> Error
-                            end;
+                            Delta1 = stage_batch_histories(
+                                       Delta, GroupIds, Histories0, Histories1),
+                            {ok, Delta1, Projection1, Items};
                         {error, _} = Error -> Error
                     end;
                 {error, _} = Error -> Error
@@ -496,15 +492,11 @@ load_batch_histories(Index, Delta, [GroupId | Rest], Histories0) ->
             end
     end.
 
-stage_batch_histories(Delta, [], _Histories0, _Histories1) -> {ok, Delta};
+stage_batch_histories(Delta, [], _Histories0, _Histories1) -> Delta;
 stage_batch_histories(Delta0, [GroupId | Rest], Histories0, Histories1) ->
-    case stage_history(
-           Delta0, GroupId, maps:get(GroupId, Histories0),
-           maps:get(GroupId, Histories1)) of
-        {ok, Delta1} ->
-            stage_batch_histories(Delta1, Rest, Histories0, Histories1);
-        {error, _} = Error -> Error
-    end.
+    Delta1 = stage_history(Delta0, GroupId, maps:get(GroupId, Histories0),
+                           maps:get(GroupId, Histories1)),
+    stage_batch_histories(Delta1, Rest, Histories0, Histories1).
 
 delta_history(_Index, #delta{rows = Rows}, GroupId)
   when is_map_key(GroupId, Rows) ->
@@ -514,7 +506,7 @@ delta_history(Index, _Delta, GroupId) ->
     history(Index, GroupId).
 
 stage_history(Delta, _GroupId, History, History) ->
-    {ok, Delta};
+    Delta;
 stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
               GroupId, _OldHistory, History) ->
     Blob = encode_history(History),
@@ -525,8 +517,8 @@ stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
             error -> 0
         end,
     NewBytes = Bytes - OldBytes + HistoryBytes,
-    {ok, Delta#delta{rows = Rows#{GroupId => {History, HistoryBytes}},
-                     bytes = NewBytes}}.
+    Delta#delta{rows = Rows#{GroupId => {History, HistoryBytes}},
+                bytes = NewBytes}.
 
 -doc "Install one fully previewed window delta after its ledger sink succeeds.".
 -spec commit_delta(index(), delta()) -> ok | {error, index_error()}.

@@ -6,18 +6,20 @@ ordered_diamond_and_initial_values_test() ->
     with_fixture([], fun(St) ->
         Inputs = [{attribute, wheels, 8}, {attribute, name, <<"Amphi">>}],
         S = prove({with_build_plan, Inputs, {test_initialize, amphibious, id}}, St),
-        holds({findall, {'C'}, {ran, {'C'}, id, 8, Inputs},
-               [vehicle, car, boat, amphibious]}, S),
+        holds({'$quod_constructor_plan', amphibious, id, Inputs,
+               [thing, vehicle, car, boat, amphibious], {'_'}}, St),
+        holds({attribute, id, wheels, 8}, S),
         holds({attribute, id, name, <<"Amphi">>}, S),
         holds({'$quod_build_plan', []}, S),
         %% No instance creation executor or assertion hook is installed here.
         fails({instance_of, amphibious, id}, S)
     end).
 
-missing_own_constructor_keeps_parents_test() ->
+inherited_slots_need_no_own_declarations_test() ->
     with_fixture([], fun(St) ->
         S = prove({test_initialize, trailer, id}, St),
-        holds({findall, {'C'}, {ran, {'C'}, id, 4, []}, [vehicle, car]}, S)
+        holds({attribute, id, wheels, 4}, S),
+        holds({attribute, id, name, <<"Vehicle">>}, S)
     end).
 
 invalid_orders_are_preflight_failures_test_() ->
@@ -26,7 +28,7 @@ invalid_orders_are_preflight_failures_test_() ->
         St = load(Terms, St1),
         {fail, Failed} = erlog_int:prove_goal({test_initialize, amphibious, id}, St),
         fails({attribute, id, {'_'}, {'_'}}, Failed),
-        fails({ran, {'_'}, {'_'}, {'_'}, {'_'}}, Failed)
+        ?assertEqual(changes(St), changes(Failed))
     end) end} || {Label, Terms} <- [
         {"missing", []},
         {"omitted parent", [{constructor_order, amphibious, [car]}]},
@@ -57,7 +59,7 @@ conflicting_defaults_need_explicit_resolution_test() ->
     Extra = [{have_attribute, boat, wheels, integer, {default, 2}}],
     with_fixture(Extra, fun(St) ->
         {fail, F} = erlog_int:prove_goal({test_initialize, amphibious, id}, St),
-        fails({ran, {'_'}, {'_'}, {'_'}, {'_'}}, F),
+        ?assertEqual([], changes(F)),
         S = prove({with_build_plan, [{attribute, wheels, 6}],
                    {test_initialize, amphibious, supplied}}, St),
         holds({attribute, supplied, wheels, 6}, S),
@@ -78,7 +80,7 @@ invalid_inputs_never_fall_back_test_() ->
         {fail, F} = erlog_int:prove_goal(
             {with_build_plan, Inputs, {test_initialize, car, id}}, St),
         fails({attribute, id, {'_'}, {'_'}}, F),
-        fails({ran, {'_'}, {'_'}, {'_'}, {'_'}}, F),
+        ?assertEqual([], changes(F)),
         holds({'$quod_build_plan', []}, F)
     end)) || Inputs <- [
         [{attribute, wheels, bad}], [{attribute, name, atom_name}],
@@ -87,36 +89,36 @@ invalid_inputs_never_fall_back_test_() ->
         [{part, left_eye, [invalid]}], [{attribute, wheels, 4} | invalid]
     ]].
 
-constructor_failures_propagate_test_() ->
+constructor_bodies_are_refused_without_execution_test_() ->
     [?_test(with_fixture([], fun(St) ->
         {fail, F} = erlog_int:prove_goal({test_initialize, Class, id}, St),
         fails(should_not_run, F)
     end)) || Class <- [failing_child, parent_failure_child]].
 
-nested_parts_receive_only_explicit_inputs_test() ->
+parts_are_initialized_explicitly_with_separate_inputs_test() ->
     with_fixture([], fun(St) ->
-        Inputs = [{attribute, name, <<"Parent">>}, {attribute, color, green},
-                  {part, left_eye, [{attribute, name, <<"Left eye">>}]}],
-        S = prove({with_build_plan, Inputs, {test_initialize, head, id}}, St),
+        S = prove(conj([
+            {with_build_plan, [{attribute, name, <<"Parent">>}, {attribute, color, green}],
+             {test_initialize, head, id}},
+            {with_build_plan, [{attribute, name, <<"Left eye">>}],
+             {test_initialize, eye, {left, id}}},
+            {test_initialize, eye, {right, id}}]), St),
         holds({attribute, id, name, <<"Parent">>}, S),
         holds({attribute, {left, id}, name, <<"Left eye">>}, S),
         holds({attribute, {right, id}, name, <<"Eye">>}, S),
         holds({attribute, {left, id}, color, blue}, S),
         holds({attribute, {right, id}, color, blue}, S),
-        holds({parts, id, {left, id}, {right, id}}, S),
-        fails({with_build_plan, [{part, left_eye, [{attribute, color, invalid}]}],
-               {test_initialize, head, bad}}, St)
+        fails({with_build_plan, [{attribute, color, invalid}],
+               {test_initialize, eye, bad}}, St)
     end).
 
-unknown_parts_fail_before_bodies_and_inherit_supported_roles_test() ->
-    with_fixture([{isa, child_head, head}], fun(St) ->
-        refused({test_initialize, head, id}, [{part, left_eyes, []}],
-                {unknown_initial_part, left_eyes}, St),
-        %% Nested overrides are validated against the part's own class.
-        refused({test_initialize, head, id}, [{part, left_eye, [{part, left_eye, []}]}],
-                {unknown_initial_part, left_eye}, St),
-        holds({with_build_plan, [{part, left_eye, [{attribute, name, <<"Inherited">>}]}],
-               {test_initialize, child_head, inherited}}, St)
+part_inputs_are_refused_before_slot_writes_test() ->
+    with_fixture([], fun(St) ->
+        refused({test_initialize, head, id}, [{part, left_eye, []}],
+                invalid_build_inputs, St),
+        refused({test_initialize, head, id}, [{part, left_eye, [{part, nested, []}]}],
+                invalid_build_inputs, St),
+        ?assertEqual([], changes(St))
     end).
 
 initial_attribute_refusals_identify_the_key_test() ->
@@ -149,9 +151,8 @@ required_and_unrelated_default_need_explicit_resolution_test() ->
 absent_optional_declaration_predicates_test() ->
     with_terms([], fun(St) ->
         holds({'$quod_constructor_plan', standalone, id, [], [standalone], []}, St),
-        holds({'$quod_run_constructors', [standalone], id, []}, St),
         refused({'$quod_constructor_plan', standalone, id, [{part, typo, []}], {'_'}, {'_'}},
-                [], {unknown_initial_part, typo}, St)
+                [], invalid_build_inputs, St)
     end).
 
 name_metadata_is_not_class_membership_evidence_test() ->
@@ -208,16 +209,16 @@ scope_success_failure_backtracking_cut_and_exceptions_test() ->
         ?assertEqual([], changes(St))
     end).
 
-conflicting_branch_orders_fail_before_bodies_test() ->
+conflicting_branch_orders_fail_before_writes_test() ->
     with_fixture([{isa, first, x}, {isa, first, y},
                   {isa, second, x}, {isa, second, y},
                   {isa, joined, first}, {isa, joined, second},
                   {constructor_order, first, [x, y]},
                   {constructor_order, second, [y, x]},
-                  {constructor_order, joined, [first, second]},
-                  {':-', {constructor, x, {'_'}, {'_'}}, {assertz, leaked}}], fun(St) ->
+                  {constructor_order, joined, [first, second]}], fun(St) ->
         {fail, Failed} = erlog_int:prove_goal({test_initialize, joined, id}, St),
-        fails(leaked, Failed)
+        ?assertEqual([], changes(Failed)),
+        ?assert(lists:member(constructor_order_cycle, Failed#est.fail_reasons))
     end).
 
 declared_constructor_head_mismatch_is_failure_test() ->
@@ -226,15 +227,14 @@ declared_constructor_head_mismatch_is_failure_test() ->
         fails({test_initialize, specialized, id}, St)
     end).
 
-resolved_values_do_not_change_between_constructors_test() ->
+resolved_values_are_stored_once_test() ->
     with_fixture([{isa, base, thing}, {isa, child, base},
-                  {have_attribute, base, size, integer, {default, 4}},
-                  {':-', {constructor, base, {'_'}, {'_'}}, conj([
-                      {retract, {have_attribute, base, size, integer, {default, 4}}},
-                      {assertz, {have_attribute, base, size, integer, {default, 9}}}])},
-                  {':-', {constructor, child, {'I'}, {'_'}},
-                         {attribute, {'I'}, size, 4}}], fun(St) ->
-        S = prove({test_initialize, child, id}, St),
+                  {have_attribute, base, size, integer, {default, 4}}], fun(St) ->
+        S = prove(conj([
+            {'$quod_constructor_plan', child, id, [], {'_'}, {'Attributes'}},
+            {retract, {have_attribute, base, size, integer, {default, 4}}},
+            {assertz, {have_attribute, base, size, integer, {default, 9}}},
+            {'$quod_initial_attribute_writes', id, {'Attributes'}}]), St),
         holds({attribute, id, size, 4}, S),
         holds({have_attribute, base, size, integer, {default, 9}}, S)
     end).
@@ -328,6 +328,85 @@ scopes_preserve_caller_bindings_and_interleaved_read_checks_test() ->
                      {'$quod_build_plan', []}, {'=', {'Y'}, {'X'}}]),
         holds({findall, {pair, {'X'}, {'Y'}}, Goal, [{pair, one, one}, {pair, two, two}]}, St)
     end).
+
+signed_qualified_class_initializes_slots_at_the_storing_ontology_test_() ->
+    {timeout, 120, fun signed_qualified_class/0}.
+
+signed_qualified_class() ->
+    Dir = filename:join("/tmp", "quod-qualified-construction-" ++
+        binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    Ctx = quod_lobby_tests:start(Dir),
+    {ontology_ref, Lobby, _} = maps:get(lobby, Ctx),
+    {_, Base} = maps:get(Lobby, maps:get(ontologies, Ctx)),
+    Owner = <<"constructor-owner">>, Store = <<"constructor-store">>,
+    Class = fun(Name) -> {':', 'constructor-owner', Name} end,
+    Ask = fun(Ns, G) -> {'::', Ns, G} end,
+    Terms = quod_prolog:read_terms("test/fixtures/constructors.pl") ++ [
+        {can_invoke, {'_'}, {'_'}, {'_'}, Owner},
+        {class_permission, vehicle, create, allow},
+        {class_permission, vehicle, place, allow},
+        {have_attribute, amphibious, flag, owner_type, {default_from, owner_default}},
+        {owner_type, good}, {owner_default, {'_'}, good},
+        {isa, mutating_default, vehicle},
+        {have_attribute, mutating_default, name, binary, {default_from, leaking_default}},
+        {':-', {leaking_default, {'_'}, <<"Name">>}, {assertz, leaked}}],
+    {OwnerSup, _} = quod_lobby_tests:start_namespace(Owner, Base#{
+        data_dir => filename:join(Dir, "owner"),
+        genesis_diff => quod_prolog:terms_to_diff(Terms)}),
+    {StoreSup, _} = quod_lobby_tests:start_namespace(Store, Base#{
+        data_dir => filename:join(Dir, "store"),
+        genesis_diff => quod_prolog:terms_to_diff([
+            {can_invoke, {'_'}, {'_'}, {'_'}, Store},
+            {owner_type, bad}, {owner_default, {'_'}, bad}])}),
+    Create = {assert, {instance_of, Class(amphibious), {'New'}}},
+    try
+        commit(Ctx, Ask(Store, conj([
+            Create,
+            {assertz, {instance_permission, {'New'}, place, deny}},
+            {operation_authorized, {instance, {'New'}}, place},
+            {assertz, {created, {'New'}}}]))),
+        Query = Ask(Store, conj([{created, {'I'}},
+            {instance_of, Class(amphibious), {'I'}},
+            {attribute, {'I'}, name, <<"Vehicle">>},
+            {attribute, {'I'}, wheels, 4}, {attribute, {'I'}, flag, good}])),
+        ?assertMatch({ok, [_], _}, quod_lobby_tests:read(Ctx, Query)),
+        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+            Ask(Owner, {attribute, {'_'}, flag, good}))),
+        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store,
+            {',', {created, {'I'}}, {operation_authorized, {instance, {'I'}}, place}}))),
+        lists:foreach(fun(Goal) ->
+            ?assertMatch({ok, _, {normalized, {failed, _}}},
+                quod_lobby_tests:submit(Ctx, execute, Ask(Store, Goal)))
+        end, [{with_build_plan, [{attribute, flag, bad}], Create},
+              {assert, {instance_of, Class(failing_child), {'_'}}},
+              {with_build_plan, [{part, wheel, []}], Create}]),
+        ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}},
+            quod_lobby_tests:submit(Ctx, execute, Ask(Store,
+                {assert, {instance_of, Class(mutating_default), {'_'}}}))),
+        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Owner, leaked))),
+        %% Invalid owner order remains invalid after qualifying its parent names.
+        commit(Ctx, Ask(Owner, conj([
+            {retract, {constructor_order, amphibious, [car, boat]}},
+            {assertz, {constructor_order, amphibious, [car, boat | {'_'}]}}]))),
+        ?assertMatch({ok, _, {normalized, {failed, _}}},
+            quod_lobby_tests:submit(Ctx, execute, Ask(Store, Create))),
+        commit(Ctx, Ask(Owner, conj([
+            {retract, {constructor_order, amphibious, {'_'}}},
+            {assertz, {constructor_order, amphibious, [car, boat]}}]))),
+        Preflight = Ask(Store, {'$quod_constructor_plan', Class(amphibious), sample,
+            [], {'Order'}, {'Attributes'}}),
+        ?assertMatch({ok, [_], _}, quod_lobby_tests:read(Ctx, Preflight)),
+        quod_lobby_tests:assert_read_has_no_io(fun() ->
+            [?assertMatch({ok, [_], _}, quod_lobby_tests:read(Ctx, Preflight))
+             || _ <- lists:seq(1, 3)]
+        end),
+        ?assertMatch({ok, [#{}], _}, quod_lobby_tests:read(Ctx, Ask(Store,
+            {findall, {'I'}, {instance_of, Class(amphibious), {'I'}}, [{'_'}]})))
+    after
+        quod_lobby_tests:stop_process(StoreSup),
+        quod_lobby_tests:stop_process(OwnerSup),
+        quod_lobby_tests:stop(Ctx)
+    end.
 
 signed_owner_stores_defaults_and_reuses_reads_test_() ->
     {timeout, 120, fun signed_owner/0}.

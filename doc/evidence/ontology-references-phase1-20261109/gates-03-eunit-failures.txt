@@ -1,0 +1,51 @@
+Failures:
+
+  1) quod_lifecycle_single_path_tests:-m1a_seven_foundations_test_/0-fun-6-/0
+     Failure/Error: {error,
+                        {https_client_failed,1},
+                        [{quod_lifecycle_single_path_tests,m1a_drive_https,1,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1421}]},
+                         {quod_lifecycle_single_path_tests,m1a_https,6,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1388}]},
+                         {quod_lifecycle_single_path_tests,
+                             '-m1a_seven_foundations_test_/0-fun-6-',0,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,578}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]}]}
+     Output: file:///home/yan/src/quod_worktrees/pearl-stone/client/src/world.js:446
+  if (reply.result === 'fail') throw new GoalFailure(reply.reasons)
+                                     ^
+
+GoalFailure: The query returned no answer.
+    at singleBinding (file:///home/yan/src/quod_worktrees/pearl-stone/client/src/world.js:446:38)
+    at file:///home/yan/src/quod_worktrees/pearl-stone/client/test/godot-m1a.acceptance.mjs:53:16
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  accessDenied: false,
+  reasons: [
+    '<<"human:zMAtMAYJ13VlLl7LuSsdcwfJSH1X-4_MmFavCssh4io">>::(current_ontology_identity(<<"human:zMAtMAYJ13VlLl7LuSsdcwfJSH1X-4_MmFavCssh4io">>, kp_3e205c6e), account_setup_state(unbound))',
+    'current_ontology_identity(<<"human:zMAtMAYJ13VlLl7LuSsdcwfJSH1X-4_MmFavCssh4io">>, kp_3e205c6e)',
+    'account_setup_state(unbound)',
+    'nonvar(unbound)'
+  ]
+}
+
+Node.js v26.10.0
+
+
+Finished in 888.606 seconds
+4349 tests, 1 failures
+===> Error running tests

@@ -46,7 +46,10 @@ public partial class ExportChecks : Node
         try {
             var args = OS.GetCmdlineUserArgs(); profile = args[Array.IndexOf(args, "--profile") + 1];
             app = application;
-            if(DisplayServer.GetName()=="headless")GetTree().Root.Size=new(1200,800);
+            if(DisplayServer.GetName()=="headless") {
+                GetTree().Root.Size=new(1200,800);
+                GetTree().Root.GuiEmbedSubwindows=true;
+            }
             app.Changed += () => {
                 var state = State.AsObject(); state.Remove("setup"); state.Remove("human"); state.Remove("public_key"); state.Remove("network");
                 Console.WriteLine("M1B_STATE " + state.ToJsonString()); Console.Out.Flush();
@@ -56,6 +59,7 @@ public partial class ExportChecks : Node
             string phase = Env("M1B_PHASE");
             if (phase is "startup-new" or "startup-saved") { await Startup(phase); return; }
             if (phase == "menu") { await NativeMenu(); return; }
+            if (phase == "icons") { await IconAllowances(); return; }
             if (phase == "scene") { await SceneAdapter(); return; }
             if (phase == "controller-input") { await ControllerAdapter(); return; }
             if (phase == "presentation") { await PresentationAdapter(); return; }
@@ -78,7 +82,7 @@ public partial class ExportChecks : Node
                 await Press("register");
                 if (State["human"] == null) { Check(State["pending"]!.GetValue<int>() > 0, "lost signup response retains original signed work"); await Press("resolve"); }
                 Check(State["human"] != null, "original fresh human recovered");
-                await Press("prepare"); Check(State["status"]!.ToString().Contains("saved in your personal account"), "starting space storage explained in plain words");
+                await Press("prepare"); Check(State["status"]!.ToString().Contains("saved in your ontology"), "starting space storage explained in plain words");
                 await Press("setup");
                 if (State["setup"] == null) { Check(State["pending"]!.GetValue<int>() > 0, "lost setup response retains original signed work"); await Press("resolve"); }
             }
@@ -97,7 +101,7 @@ public partial class ExportChecks : Node
             if (operations.Current == null) {
                 var human = app.ActiveAccounts.Human!;
                 Console.WriteLine("M2_EMPTY_OFFER_SCOPE " + ((Label)operations.FindChild("operation-scope",true,false)).Text);
-                foreach (string goal in new[] { "controller_preferences_current(me,R,S),controller_preferences_basis(S,D,State).", $"gui_operations({human.Entity},View)." }) {
+                foreach (string goal in new[] { $"<<\"quod:user\">>::controller_preferences_view({human.Entity},View).", $"gui_operations({human.Entity},View)." }) {
                     Console.WriteLine("M2_EMPTY_OFFER_READ " + goal);
                     Console.WriteLine((await app.ActiveSession.Read(human,goal,CancellationToken.None)).ToJsonString());
                 }
@@ -105,6 +109,7 @@ public partial class ExportChecks : Node
             var offered = operations.Current ?? throw new Exception("No offered operation");
             Check(offered.Name == "controller_settings", "actual offered controller-preference operation");
             Check(offered.Form.Tree.Leaves.Count(c => c.Input) > 2, "generic typed offered inputs rendered");
+            await ChooseOfferedOperation(operations,offered.Name);
             if(phase=="m4-live") { await ControllerLive(operations);return; }
             if (phase.StartsWith("m2-")) { await SpaceCreation(phase, original); return; }
             if (phase == "closing") {
@@ -236,8 +241,8 @@ public partial class ExportChecks : Node
         line.TextChanged += Changed;
         try {
             line.SelectAll();
-            GetViewport().PushInput(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, Pressed = true }, true);
-            GetViewport().PushInput(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, Pressed = false }, true);
+            line.GetViewport().PushInput(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, Pressed = true }, true);
+            line.GetViewport().PushInput(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, Pressed = false }, true);
             await edited.Task.WaitAsync(TimeSpan.FromSeconds(5));
         } finally { line.TextChanged -= Changed; }
         Console.WriteLine($"INPUT_AFTER text={line.Text} draft={operations.FormPanel.Draft[role]}"); Console.Out.Flush();
@@ -256,7 +261,7 @@ public partial class ExportChecks : Node
         using var session = new SignedSession(key, store, new Transport(saved.Endpoint, saved.NodeKey(saved.Endpoint)));
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         await session.Authenticate(timeout.Token);
-        var instructions = Json.Binding(await session.Read(human, "personal_instructions(Instructions).", timeout.Token), "Instructions").Items;
+        var instructions = Json.Binding(await session.Read(human, "<<\"quod:user\">>::personal_instructions(Instructions).", timeout.Token), "Instructions").Items;
         int expected=Environment.GetEnvironmentVariable("M4_REPAIR")=="1" ? 3 : 2;
         Check(instructions.Length == expected, "server retains exactly original Save and Reset associations plus any explicitly qualified repair");
         foreach (var row in instructions) Check(Json.Committed(await session.ResolveInstruction(human, Identity.Encode(row.Require("instruction", 3)[0].Bytes), timeout.Token)), "original result recovered without originating journal");
@@ -264,15 +269,15 @@ public partial class ExportChecks : Node
         using var strangerStore = new LocalStore(profile + "-stranger"); strangerStore.Create(stranger.Payload());
         using var wrong = new SignedSession(stranger, strangerStore, new Transport(saved.Endpoint, saved.NodeKey(saved.Endpoint))); await wrong.Authenticate(timeout.Token);
         bool denied = false;
-        try { denied = (await wrong.Read(human, "account_setup_state(State).", timeout.Token))["result"]?.ToString() == "fail"; }
+        try { denied = (await wrong.Read(human, "<<\"quod:user\">>::account_setup_state(State).", timeout.Token))["result"]?.ToString() == "fail"; }
         catch (ApiError) { denied = true; }
         Check(denied, "wrong identity refuses private account data");
         denied = false;
-        try { denied = (await session.Read(human with { Anchor = Identity.Encode(new byte[32]) }, "account_setup_state(State).", timeout.Token))["result"]?.ToString() == "fail"; }
+        try { denied = (await session.Read(human with { Anchor = Identity.Encode(new byte[32]) }, "<<\"quod:user\">>::account_setup_state(State).", timeout.Token))["result"]?.ToString() == "fail"; }
         catch (ApiError) { denied = true; }
         Check(denied, "wrong history anchor refuses");
         var offers = Offer.Decode(Json.Binding(await session.Read(human, Term.Call("gui_operations", human.Entity, Term.Variable("Offers")) + ".", timeout.Token), "Offers").ToString(), human.Entity);
-        var form = offers.Single(); var personal = await session.Read(human, "personal_agent(Agent,Key).", timeout.Token);
+        var form = offers.Single(); var personal = await session.Read(human, "<<\"quod:user\">>::personal_agent(Agent,Key).", timeout.Token);
         var agent = Actor.FromTerm(Json.Binding(personal, "Agent")); var publicKey = Json.Binding(personal, "Key").Bytes;
         async Task Refuses(string goal, string label) {
             var reply = await session.Personal(human, agent, publicKey, human, goal, timeout.Token);

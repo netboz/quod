@@ -36,12 +36,19 @@ space_pie_overrides_the_default_test_() ->
             {assertz,{space_member,room,{entity_ref,Ns,Anchor,closed}}},
             {assertz,{attribute,closed,name,<<"Closet">>}},
             {assertz,{attribute,room,name,<<"Workshop">>}},
+            {assertz,{instance_permission,room,space_visit,deny}},
             {assertz,{attribute,room,dimensions,{box,{q,4,<<"m">>},{q,3,<<"m">>},{q,5,<<"m">>}}}},
             {assertz,{attribute,room,exterior,solid}},{assertz,{attribute,room,transform,{transform,0,0,0,0,0,0}}}])),
         {menu,Tree} = menu(C,room),
         ?assertEqual(<<"Workshop">>,property(Tree,label)),
         plain_labels(Tree),
         Create = wedge(Tree,1), ?assertEqual(<<"Create here">>,property(Create,label)),
+        ?assertMatch({image,{asset,_,<<"image/png">>},{resources,_,_}},property(Create,image)),
+        {image,{asset,Digest,_},{resources,Transfer,Pixels}} = property(Create,image),
+        {ok,IconBytes} = file:read_file(filename:join([code:priv_dir(quod),"explorer","assets","icons",
+                                                     binary_to_list(Digest)++".png"])),
+        <<_:16/binary,Width:32,Height:32,_/binary>> = IconBytes,
+        ?assertEqual({byte_size(IconBytes),Width*Height},{Transfer,Pixels}),
         ?assertEqual(5,property(Create,back)),
         ?assertEqual(lists:sort([<<"Create space">>,<<"Create space with rational lengths">>,
                                  <<"Create infinite space">>]),
@@ -63,12 +70,12 @@ space_pie_overrides_the_default_test_() ->
         ?assertMatch({choice,{entity_ref,Ns,Anchor,closed},{eidolon,{operation,instance},enter,_}},
                      property(Closet,target)),
         %% The class itself keeps the shared default pie: its creation forms.
-        {menu,ClassPie} = menu(C,space),
+        {menu,ClassPie} = menu(C,space_class()),
         ?assertEqual(lists:sort([<<"Create space">>,<<"Create space with rational lengths">>,<<"Create infinite space">>]),
                      lists:sort([property(W,label) || W <- children(ClassPie), property(W,target) =/= undefined,
                                  element(1,element(2,property(W,target))) =:= class_ref])),
-        %% Authorization is advisory and read again: ownership enables Leave.
-        edit(Ns,{assertz,{attribute,room,owner,maps:get(human,C)}}),
+        %% Availability reads the storing ontology's committed ACL again.
+        edit(Ns,{retract,{instance_permission,room,space_visit,deny}}),
         {menu,Owned} = menu(C,room),
         ?assertEqual(true,property(wedge(Owned,5),enabled))
     end) end}.
@@ -83,30 +90,31 @@ interior_boundary_uses_the_exterior_recipes_test_() ->
             {assertz,{attribute,closed,dimensions,infinite}},
             {assertz,{attribute,closed,exterior,solid}},{assertz,{attribute,closed,transform,T}}])),
         quod_space_creation_tests:with_models(C,fun() ->
-            ?assertEqual([],boundary(Ns,A)),
-            executed(C,{space_represent,room,solid,T,none,solid,T,wireframe}),
-            applied(Ns,fun() -> boundary(Ns,A) =/= [] end),
-            {[Root],Parts} = boundary(Ns,A),
+            ?assertEqual([],boundary(C,Ns,A)),
+            executed(C,space({space_represent,ref(Ns,room),solid,T,none,solid,T,wireframe})),
+            applied(Ns,fun() -> boundary(C,Ns,A) =/= [] end),
+            {[Root],Parts} = boundary(C,Ns,A),
             ?assertMatch({mark,_,<<"group">>,[],T,no_surface,_,{depicts,Ns,A,room}},Root),
             ?assertMatch([{mark,_,<<"wire_box">>,[{f,<<"width">>,4000},{f,<<"height">>,3000},{f,<<"depth">>,5000}],_,_,_,_}],Parts),
             %% One recipe answers both selectors: it is the exterior wireframe.
-            {ok,[#{'P':=[{part,_,{wire_box,4000,3000,5000},_,_,_,_}]}],_} =
-                quod_prolog:prove_ro(Ns,{eidolon,space_wireframe,room,{'P'}}),
-            executed(C,{space_represent,room,solid,T,wireframe,solid,T,matrix}),
-            applied(Ns,fun() -> case boundary(Ns,A) of {_,P} -> length(P) =:= 2; [] -> false end end),
-            {[_],Matrix} = boundary(Ns,A),
+            ?assertMatch([{part,_,{wire_box,4000,3000,5000},_,_,_,_}],
+                read(C,space({eidolon,space_wireframe,
+                    {subject,{ontology_ref,Ns,A},room},{'Parts'}}))),
+            executed(C,space({space_represent,ref(Ns,room),solid,T,wireframe,solid,T,matrix})),
+            applied(Ns,fun() -> case boundary(C,Ns,A) of {_,P} -> length(P) =:= 2; [] -> false end end),
+            {[_],Matrix} = boundary(C,Ns,A),
             ?assertMatch([{mark,_,<<"box">>,_,_,{surface,_,_,_,_,220,[]},_,_},{mark,_,<<"wire_box">>,_,_,_,_,_}],Matrix),
-            executed(C,{space_represent,room,solid,T,matrix,solid,T,none}),
-            applied(Ns,fun() -> boundary(Ns,A) =:= [] end),
-            ?assertEqual([],boundary(Ns,A)),
+            executed(C,space({space_represent,ref(Ns,room),solid,T,matrix,solid,T,none})),
+            applied(Ns,fun() -> boundary(C,Ns,A) =:= [] end),
+            ?assertEqual([],boundary(C,Ns,A)),
             fails(Ns,{attribute,room,interior,{'_'}}),
             %% Infinite extent refuses finite boundaries with the existing reason.
-            denied(C,{space_represent,closed,solid,T,none,solid,T,matrix},{space_exterior_unavailable,matrix,infinite})
+            denied(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix}),{space_exterior_unavailable,matrix,infinite})
         end)
     end) end}.
 
-boundary(Ns,A) ->
-    {ok,[#{'Marks':=Marks}],_} = quod_prolog:prove_ro(Ns,{world_view,room,playing,{'Marks'}}),
+boundary(C,Ns,A) ->
+    Marks = read(C,space({world_view,ref(Ns,room),playing,{'Marks'}})),
     case [M || M={mark,_,<<"group">>,_,_,_,_,{depicts,N,H,room}} <- Marks, {N,H}=:={Ns,A}] of
         [] -> [];
         [Root] -> {[Root],[M || M={mark,_,_,_,{relative,P,_},_,_,_} <- Marks, P =:= element(2,Root)]}
@@ -140,9 +148,7 @@ unplaced_agent_pie_offers_the_ways_in_test_() ->
         Anchor = quod_simplex:genesis_hash(Ns),
         edit(Ns,conj([{assertz,{account_setup,me,{complete,menu_fixture}}},
             {assertz,{attribute,room,name,<<"Workshop">>}},
-            {assertz,{attribute,personal,transform,{transform,0,0,0,0,0,0}}},
-            %% Production composes these class edges from quod:agent and quod:user.
-            {assertz,{':-',{isa,human_user,agent},true}},{assertz,{':-',{isa,agent,thing},true}}])),
+            {assertz,{attribute,personal,transform,{transform,0,0,0,0,0,0}}}])),
         {menu,Tree} = menu(C,personal),
         ?assertEqual(<<"You are nowhere yet">>,property(Tree,label)),
         plain_labels(Tree),
@@ -151,6 +157,8 @@ unplaced_agent_pie_offers_the_ways_in_test_() ->
             [{property(I,label),property(I,target)} || I <- children(Known), property(I,label) =:= <<"Workshop">>]),
         ?assertEqual(<<"Create a space">>,property(wedge(Tree,3),label)),
         ?assertEqual(3,length(children(wedge(Tree,3)))),
+        ?assertEqual([<<"quod:space">>],lists:usort([Owner || Item <- children(wedge(Tree,3)),
+            {choice,{class_ref,Owner,_,space},_} <- [property(Item,target)]])),
         Account = wedge(Tree,5),
         ?assertMatch([{choice,{entity_ref,Ns,Anchor,me},{eidolon,prolog,source,_}}],
                      [property(I,target) || I <- children(Account)]),
@@ -168,7 +176,7 @@ menu_view_socket_projects_the_pie_test_() ->
                    network=>maps:get(network,C),instance=><<"me.">>},
         try
             Socket ! {client,quod_gui_question_tests:gui_open_message(Reader,maps:get(session,C),menu,Ns,
-                quod_simplex:genesis_hash(Ns),space,0)},
+                quod_simplex:genesis_hash(Ns),space_class(),0)},
             #{<<"value">>:=Value,<<"kind">>:=<<"menu">>} = quod_physics_tests:simulation_reply(Socket,<<"projection">>),
             ?assertNotEqual(nomatch,binary:match(Value,<<"Create infinite space">>))
         after Socket ! stop end
@@ -224,12 +232,21 @@ with_menus(Fun) ->
     end).
 
 menu(C,Entity) ->
-    {Bytes,Signature} = quod_personal_agent_tests:request(C,read,{client_menu,Entity,{'View'}}),
-    Reply = quod_client_goal_ingress:submit(Bytes,Signature),
-    ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},Reply),
-    {ok,_,{normalized,{read,_,{answers,_,[Binding]}}}} = Reply,
-    {ok,[{_,View}]} = quod_client_result:decode_binding(Binding),
-    View.
+    read(C,{client_menu,Entity,{'View'}}).
+
+read(C,Goal) ->
+    {Bytes,Signature} = quod_personal_agent_tests:request(C,read,Goal),
+    case quod_client_goal_ingress:submit(Bytes,Signature) of
+        {ok,_,{normalized,{read,_,{answers,_,[Binding]}}}} ->
+            {ok,[{_,Value}]} = quod_client_result:decode_binding(Binding), Value;
+        {ok,_,{normalized,{read,_,{failed,Blob}}}} ->
+            {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+            error({menu_read_failed,Goal,lists:flatten(io_lib:format("~P",[Reasons,12]))});
+        {ok,_,{normalized,Other}} -> error({menu_read_error,element(1,Other)})
+    end.
+ref(Ns,Id) -> {entity_ref,Ns,quod_simplex:genesis_hash(Ns),Id}.
+space_class() -> {':',quod,{':',space,space}}.
+space(Goal) -> {'::',<<"quod:space">>,Goal}.
 
 property({component,_,_,Properties,_},Key) -> proplists:get_value(Key,[{K,V} || {property,K,V} <- Properties]).
 children({component,_,_,_,Children}) -> Children.

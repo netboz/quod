@@ -305,7 +305,7 @@ command_correlation_generation_and_no_reply_commands_test() ->
       fun(Router, TestPid, TargetKey, Binding, Handle,
           RequestLink, ReturnLink) ->
           InvocationId = id(31),
-          Selection = {tx_selection, none, [], ordinary},
+          Selection = {tx_selection, none, [], ordinary, read_write},
           {ok, RequestId} = quod_ask_router:command(
                               Handle, 20000,
                               {invoke_open, InvocationId, Selection,
@@ -954,6 +954,21 @@ finalize_cleanly_detaches_scope_at_one_router_boundary_test() ->
           end,
           stop_link(RequestLink)
       end).
+
+stopped_proof_releases_owner_and_stale_stop_cannot_touch_successor_test() ->
+    with_open_scope(fun(Router,_TestPid,TargetKey,Binding,_Handle,RequestLink,ReturnLink) ->
+        ok = quod_ask_router:finalize(Router,proof_id(1)),
+        _ = receive_command(request),
+        ok = quod_ask_router:stop(Router,proof_id(1)),
+        ?assertEqual(0,maps:get(owners,quod_ask_router:test_stats(Router))),
+        Next = binding(origin_key(Binding),TargetKey,2,<<"quod:next">>,12),
+        _ = pending_ref(quod_ask_router:ensure_scope(Router,endpoint(),Next,node,30000),Router),
+        ok = quod_ask_router:stop(Router,proof_id(1)),
+        ?assertMatch(#{owners := 1,scopes := 1},quod_ask_router:test_stats(Router)),
+        ok = quod_ask_router:stop(Router,proof_id(2)),
+        ?assertMatch(#{owners := 0,scopes := 0},quod_ask_router:test_stats(Router)),
+        stop_link(RequestLink), stop_link(ReturnLink)
+    end).
 
 finalize_detects_dead_link_before_queued_down_is_consumed_test() ->
     with_open_scope(

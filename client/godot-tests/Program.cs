@@ -55,7 +55,7 @@ static class Tests
                 }
             }
             Check(verified == 100, "all 100 real production fixtures including Reset");
-            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo); Menus();
+            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo); Menus(); Icons(repo);
             Console.WriteLine("CORE_PASS checks=" + checks); return 0;
         } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
@@ -96,6 +96,28 @@ static class Tests
         nav.Move(new(1, 0), 410); Check(nav.Hovered == 3 && !nav.HoveredItem!.Enabled && nav.Caption == "Wire box · Not here." && nav.Commit() == PieOutcome.Open, "a disabled wedge stays visible with its reason and never selects");
         nav.Move(new(-.7f, .7f), 420); Check(nav.HoveringBack && nav.Caption == "Back · Workshop" && nav.Commit() == PieOutcome.Open && nav.Level == root, "the reserved back wedge returns to the parent");
         Check(nav.Choose(2) && nav.Commit() == PieOutcome.Open && nav.Choose(1) && nav.Commit() == PieOutcome.Selected && nav.Selection!.Choice.ToString().Contains("solid"), "click and keyboard choice open sub-pies and select a leaf");
+    }
+    static void Icons(string repo)
+    {
+        var source = File.ReadAllText(Path.Combine(repo, "priv/ontologies/quod_gui.pl"));
+        var icons = System.Text.RegularExpressions.Regex.Matches(source, @"gui_icon\(\w+, (image\(asset\(.*?\), resources\(\d+, \d+\)\))\)\.");
+        Check(icons.Count == 36, "every authored icon declares its own resources");
+        foreach (System.Text.RegularExpressions.Match row in icons) {
+            var term = Term.Parse(row.Groups[1].Value);
+            var image = Component.ImageAsset(term);
+            byte[] bytes = File.ReadAllBytes(Path.Combine(repo, "priv/explorer/assets/icons", image.File!));
+            Check(Convert.ToHexStringLower(SHA256.HashData(bytes)) == image.File!.Split('.')[0] && bytes.LongLength == image.Transfer &&
+                StaticGlb.ImagePixels(bytes, "image/png") == image.Pixels, "authored icon digest, transfer and pixels match the served file");
+            string ComponentText(string value) => $"component(f,form,[property(label,f),property(image,{value})],[])";
+            Check(Component.Decode(Term.Parse(ComponentText(term.ToString()))).Properties["image"].ToString() == term.ToString(), "form preserves the declared image allowance");
+            var menu = Term.Parse($"menu(component(m,menu,[property(label,<<\"Menu\">>),property(help,<<\"\">>),property(enabled,true),property(image,{term}),property(slot,auto),property(wedges,8),property(back,none)],[]))");
+            var decoded = MenuNode.Decode(menu)!;
+            Check((decoded.Image, decoded.Transfer, decoded.Pixels) == image, "menu carries the declared image allowance to its consumer");
+            Check(decoded.Signature != (decoded with { Transfer = decoded.Transfer + 1 }).Signature, "changed icon allowance invalidates the menu signature");
+        }
+        string asset = "asset(<<\"" + new string('a', 64) + "\">>,<<\"image/png\">>)";
+        foreach (string invalid in new[] { asset, $"image({asset},resources(0,1))", $"image({asset},resources(1,-1))", $"image({asset},resources(1.5,1))" })
+            Reject(() => Component.ImageAsset(Term.Parse(invalid)), "missing or invalid authored icon allowance refuses");
     }
     static void Scenes()
     {

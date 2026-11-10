@@ -11,9 +11,9 @@ The [source audit](evidence/godot-m0-20261027/ontology-audit.json),
 ## Authority and exact identities
 
 Keep Prolog as the domain and policy owner. Continue using signed goals,
-assertion construction, committed operation guards, atomic multi-ontology
+instance assertion, committed operation guards, atomic multi-ontology
 writes, reactions, direct-effect custody and existing recovery. Loading decided
-state does not run constructors or replay historical reactions. Godot renders
+state does not repeat creation or replay historical reactions. Godot renders
 descriptors and submits operations; no client fact store or new executor is
 authorized by this contract.
 
@@ -28,18 +28,18 @@ histories remain ordinary instances outside this shared count.
 | --- | --- | --- |
 | `quod:root` | Catalogue, foundation creation/admission, root resource policy | `quod_root.pl`; optional `root_licence.pl` |
 | `quod:node` | Enrollment/allocation and execution/hosting policy | `quod_node.pl`; frozen `node_instance.pl` template |
-| `quod:agent` | Agent class and hosting/recovery/action vocabulary | `quod_agent.pl`; `agent_instance.pl` is composed in actual instance owners |
+| `quod:agent` | Agent class and hosting/recovery/action vocabulary | `quod_agent.pl`; the two hosting derivations remain in instance owners |
 | `quod:gui` | Portable components, exact unit algebra, scenes, model composition and inspection vocabulary | `quod_gui.pl`, `gui_measure.pl`, `gui_scene.pl`, `gui_tools.pl`, optional `gui_materials.pl` |
 | `quod:controllers` | Device descriptions, capabilities, roles and binding validation | `quod_controllers.pl` |
-| `quod:space` | Space class, construction, extent, admission, entry and space forms/Eidolons | `quod_space.pl`; optional `space_physics.pl`, `space_terrain.pl`, `space_hinged.pl`, `space_environment.pl` templates |
-| `quod:user` | Human class, signup/allocation policy and private signup receipts | `quod_user.pl`; frozen private `user_instance.pl` composition, optional `user_names.pl` |
+| `quod:space` | Space class, slots, extent, admission, entry and space forms/Eidolons | `quod_space.pl`; optional `space_physics.pl`, `space_terrain.pl`, `space_hinged.pl`, `space_environment.pl` templates |
+| `quod:user` | Human/personal-agent classes, setup, instructions, signup policy and private receipts | `quod_user.pl`; signup returns facts, ACL clauses and reactions as terms |
 
 The required compositions are authoritative. Optional filenames describe
 their later owner consolidation. The retirement map records the original
 inputs; M1a evidence records the bytes actually installed. A composed file does not create another ontology. The generic startup
 base is `common_predicates.pl`, `construction.pl`, `material_policy.pl`,
 `gui_forms.pl` and `geometry_schema.pl` plus the existing governed predicate modules. The GUI file
-interprets local form declarations and binds offered operations; it installs
+compiles forms at their owners and binds offered operations; it installs
 no application state, entry permission or lifecycle handler. The geometry file
 validates supplied authored body data and coordinate allowances; it selects
 no world, physical presence, budget or admission policy. Package
@@ -98,43 +98,34 @@ GUI has no reverse dependency on space or a private user, so this graph is acycl
 
 ## Private composition and disclosure
 
-The private U ontology composes `user_instance.pl`, `agent_instance.pl`,
-`quod_space.pl` and `gui_instance.pl`, with the exact pins above. It contains
-human `me` and agent `personal`, with different active keys. The human key
-remains client-held; A's private key stays in the existing agent vault. Hosting,
-custody and the containing ontology do not merge those identities.
+The user's ontology holds the qualified human `me` and personal agent
+`personal` memberships, their slots and keys, the seven vocabulary pins, ACL
+clauses, the completion reaction and the two hosting derivations. Signup returns
+that exact authored term list through the existing creation owner. The human key
+remains client-held; A's private key stays in the existing agent vault.
 
-`quod_space.pl` in U is the reviewed executable schema and instance-operation
-component from the pinned space recipe. It acts on the facts owned by that
-storage ontology; it does not create a second catalogue foundation or copy
-mutable state from S. The S pin selects the shared vocabulary/template revision
-and its exact source hash; it is not a constructor import or class alias.
-Stage 1 still constructs from locally composed class code in the selected
-storage ontology. Thus its local `space` class has that storage's exact
-`entity_ref(StorageNamespace, StorageAnchor, space)` identity, distinct from
-`entity_ref(<<"quod:space">>, S, space)`. References to either class or its
-Eidolon must retain the actual owner; matching predicate names do not merge
-them. There is one authored implementation, with separately owned local class
-and instance facts, rather than competing mutable copies of S's shared state.
-M1a must check the original composed source against the pinned recipe, preserve
-Stage 1 construction and foreign-storage operations, and show that changing U's
-local facts cannot change S's class/template state. It must refuse missing or
-mismatched source pins instead of substituting another implementation. Private
-state remains with its actual owner, including when storage is foreign to U.
+Class behavior resides at `quod:user`, `quod:agent`, `quod:gui` and `quod:space`.
+The storing ontology's ACL governs their scoped reads and writes. Space creation
+asserts `instance_of(quod:space:space, Id)` in the selected storing ontology;
+slots remain there. The shared assertion hook reads class policy and slot
+declarations at their owners. Class references identify those owners; moving an
+instance reference does not move its storage. Changing U's slots or per-instance
+ACLs cannot modify the space owner's class declarations. No source digest or
+pasted class definition is involved.
 
 The user foundation contains signup receipts and must therefore remain
 source-restricted like current signup. Root's `system_source_access/2` must
 exclude the exact user foundation as well as root for ordinary public readers.
 Human vocabulary queries may be explicitly public; complete source reading
-cannot be made public with a per-predicate filter. Do not copy private account,
+cannot be made public with a per-predicate filter. Do not copy the user's private state,
 instruction, HUD, receipt or preference facts into GUI/controllers/catalogue.
 User-instance source admission remains owner-governed. Shared device defaults
-are public; actual settings, signed instruction associations and accounts are
+are public; actual settings, signed instruction associations and the user's ontology are
 private. Runtime hardware samples remain transient.
 
 M1a's production fixtures must use two unrelated humans, an unrelated agent
 and a public system-source reader. They must refuse raw/source/lens reads and
-writes of signup receipts, user account state, U→A instruction associations,
+writes of signup receipts, state in the user's ontology, U→A instruction associations,
 pending HUD questions and controller preferences. Public GUI/controller/space
 views must not contain those facts, keys, tokens or private target enumeration.
 Wrong-anchor, alternate-principal and public-source wrapper probes must fail
@@ -181,41 +172,27 @@ The existing lifecycle imposes two durable boundaries:
 
 1. Signup/allocation creates U's exact history and records its receipt plus
    the executor-bound node hosting intention through root's existing action
-   and atomic transaction. U genesis contains pending setup and frozen source,
-   not a constructor occurrence to replay on load. Resolve this original
+   and atomic transaction. U genesis contains pending setup and the exact
+   authored terms; loading does not execute setup. Resolve this original
    operation before beginning dependent setup; a lost reply never causes a new
    token, replacement U or new create request.
-2. U's explicit setup action prepares A's key using the existing custody read.
-   The read also returns an executor-signed receipt binding the exact A, prior
-   assignment, destination and key. Setup verifies this immutable receipt against
-   its proof-bound executor without a live vault lookup. Then in one transaction
-   it assigns A's host/key, constructs S0 through Stage 1
-   with explicit owner U, places A in S0 through `space_place/3` during that
-   active construction, stores exact U/A/S0 results and marks setup
-   complete. It consumes the signup receipt in that same multi-owner transition.
-   Setup requires successful unplaced U and A reads, not failed/missing
-   locations interpreted as absence. The ordinary constructor's near-agent
-   lookup sees its authenticated caller U at this step; explicit owner U avoids
-   the ordinary A-only owner default. No second reaction queue is added.
+2. U's explicit setup preparation uses the existing custody read. It returns an
+   executor-signed receipt binding exact A, prior assignment, destination and key.
+   The class-owned setup form accepts that pair. Its goal executes in the user's
+   ontology and verifies the receipt without a live vault lookup. In one
+   transaction it hosts A through `quod:agent`, asserts S0 with owner U, runs
+   `quod:space::goal(inside(S0, A, transform(0,0,0,0,0,0)))`, records the exact
+   U/A/S0 result, marks setup complete and acknowledges the signup receipt.
+   Preparation requires successful unplaced U and A reads; failed reads are not
+   absence.
 
-The source proof authenticates U and uses a narrowly declared setup operation
-guard permitting this specific construction on U's behalf; ordinary creation
-through A retains the existing `personal_agent_owner/1` contract. This is
-Prolog composition work in M1a, not a change to generic constructor semantics.
-Key preparation is not enrollment or placement. A staged grant cannot authorize
-its own proof: class/create, A-entry and S0-admission grants must already exist
-in the committed template policy and authorize the `construction(...)` scope.
-
-There is a concrete Prolog composition gap: the current space constructor has
-no initial-occupants part, and placing A after S0's assertion returns would
-lose its active construction authorization. M1a adds an optional declared
-`initial_occupants` part to the shared space constructor, using existing
-`have_part/2`, `build_plan_part/3` and `space_place/3`. Setup supplies the exact
-existing A reference; this part does not construct another agent. It validates
-the references and places them before the existing assertion context ends.
-Absence means the ordinary empty-space behavior. This adds no subclass,
-Erlang constructor executor, staged permission grant or replay hook. Preserve
-ordinary Stage-1 inputs/defaults and all existing failure/rollback cases.
+The source proof authenticates U and runs the setup form under its committed
+ACL. Class/create, A-entry and S0-admission permissions are checked at their
+owners. S0's newly asserted membership uses its original class policy until
+commit, without staged per-instance overrides. Setup places the existing A
+through the ordinary action; no constructor or initial-occupants part builds or
+places instances. Each later creation uses the same assertion, slots and action
+machinery under its selected storing ontology's ACL.
 
 If private custody or any receiver cannot prepare, the existing transaction
 rolls back the complete setup. A committed setup with an unavailable runtime
@@ -323,7 +300,7 @@ Broader ontology editing/D6 and other unimplemented D5 work stay open.
 
 ## Physics agreement and demonstrated gap
 
-The existing `space_place/3`/`space_withdraw/3` callbacks, source definition
+The `quod:space` placement and withdrawal actions, source definition
 delegations, live body revisions, `quod_runtime` retained source readers,
 `quod_physics` native owner, run/structure fences and authenticated control/
 observation remain authoritative. Unsimulated ordinary spaces allocate nothing.
@@ -407,11 +384,12 @@ genesis; it never reopens these packaged files.
    controllers with its exact G terms and `quod_agent_predicates`; found space
    with its exact G terms and `quod_agent_predicates`. Register each exact anchor
    in root only after verified ready. No obsolete seed is founded temporarily.
-5. Found user with exact AClass/G/C/S, the frozen private account source composition,
-   `user_source_directory` pointing only at the packaged reviewed sources and
-   `signup_host` bound to the verified enrolled node. Use
-   `quod_agent_predicates`. Its creation-policy function must validate the full
-   ordered options and private template, not caller-supplied arbitrary source.
+5. Found user with exact AClass/G/C/S and `signup_host` bound to the verified
+   enrolled node, using `quod_agent_predicates`. Signup returns terms only:
+   qualified memberships, slots, pins, ACL clauses, the completion reaction and
+   the two hosting derivations. The creation policy validates the complete
+   authored term list and options, including clause variables as clause data;
+   names, remaining options and material admission retain their existing checks.
 6. Atomically register the exact user catalogue/creation policy and node's exact
    `ontology_hosting_policy(<<"quod:user">>, UClass)` delegation. Keep the
    hosting write at the enrolled node, tied to the existing effect executor.

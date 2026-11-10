@@ -8,7 +8,7 @@ agent_hosting_suspended(I) :- physics_space(W, _, I), \+ physics_enabled(W, I).
 %% rule. Class membership by itself allocates nothing and grants no access.
 physics_enabled(W, I) :-
     physics_space(W, enabled, I),
-    space_instance(W, physical_space),
+    once((instance_of(Class,W),isa(Class,quod:space:physical_space))),
     unique_solution(physics_space(W,Mode,Actor)), Mode = enabled, Actor = I,
     physics_required_allowances(W, _, _, _, _),
     \+ physics_definition_delegate(W,_,_,_).
@@ -27,9 +27,9 @@ physics_preparation(W, State) :-
     ; physics_enabled(W,Authority),
       (agent_hosted(Authority,_,_,_) ->
           physics_client_control(W,_), State = ready
-      ; agent_preparation_assignment(Authority,none,0),
+      ; current_ontology_identity(Ns,Anchor),
+        quod:agent::agent_preparation_assignment(agent_instance_ref(Ns,Anchor,Authority),none,0),
         unique_solution(physics_initial_host(W,Node)),
-        current_ontology_identity(Ns,Anchor),
         prepare_agent_key_custody(agent_instance_ref(Ns,Anchor,Authority),none,0,Node,Key),
         State = prepared(Node,Key))).
 
@@ -38,9 +38,9 @@ physics_initialize(W, Node, Key) :-
     transaction((current_principal(P), can_initialize_physics(W,P),
         physics_enabled(W,Authority),
         unique_solution(physics_initial_host(W,SelectedNode)), SelectedNode = Node,
-        agent_preparation_assignment(Authority,none,0),
-        goal(agent_hosted(Authority,Node,1,Key)),
         current_ontology_identity(Ns,Anchor),
+        quod:agent::agent_preparation_assignment(agent_instance_ref(Ns,Anchor,Authority),none,0),
+        quod:agent::goal(agent_hosted(agent_instance_ref(Ns,Anchor,Authority),Node,1,Key)),
         findall(E,physics_admission(W,entity_ref(Ns,Anchor,E),_,_),Entities),
         sort(Entities,Unique), length(Entities,Count), length(Unique,Count), Count > 0,
         physics_place_all(Unique,entity_ref(Ns,Anchor,W)),
@@ -50,7 +50,10 @@ physics_initialize(W, Node, Key) :-
 
 physics_place_all([], _).
 physics_place_all([Entity|Rest], Destination) :-
-    space_place(Entity,0,Destination), physics_place_all(Rest,Destination).
+    current_ontology_identity(Ns,Anchor),
+    quod:space::space_assignment(entity_ref(Ns,Anchor,Entity),0,none),
+    quod:space::goal(inside(Destination,entity_ref(Ns,Anchor,Entity),transform(0,0,0,0,0,0))),
+    physics_place_all(Rest,Destination).
 
 %% One authored body description, either owned geometry or an exact live source.
 %% Body identity, kind and placement belong to the admitting world; source shape
@@ -73,10 +76,10 @@ physics_definition(_, _, _) :- fail.
 %% A contents frame exports its authored transform, not another collider or
 %% mutable geometry copy. The same source delegation owns both export kinds.
 physics_definition(Space,Revision,frame(Transform,Recipe)) :-
-    space_instance(Space,space), attribute(Space,exterior,contents),
+    once((instance_of(Class,Space),isa(Class,quod:space:space))), attribute(Space,exterior,contents),
     unique_solution(attribute(Space,transform,SelectedTransform)),
-    SelectedTransform = Transform, space_transform(Transform),
-    current_ontology_identity(Ns,A),
+    SelectedTransform = Transform, quod:space::space_transform(Transform),
+    quod:space::current_ontology_identity(Ns,A),
     entity_eidolons(Space,playing,contents,[eidolon(playing,contents,Recipe)]),
     entity_eidolons(Space,edition,contents,[eidolon(edition,contents,Recipe)]),
     Recipe = recipe(Ns,A,space_contents),
@@ -91,7 +94,7 @@ physics_admission(_, _, _, _) :- fail.
 %% This pure, source-owned export is also evaluated over retained verified state.
 %% Installation delegation is not user invocation or disclosure permission.
 physics_definition_projection(World, Authority, Entity, Revision, Definition) :-
-    space_assignment(Entity, Assignment, Destination), Destination \== none,
+    unique_solution(space_assignment_state(Entity,Assignment,Destination)), Destination \== none,
     unique_solution(physics_definition_delegate(Entity,SelectedWorld,SelectedAuthority,SelectedAssignment)),
     SelectedWorld = World, SelectedAuthority = Authority, SelectedAssignment = Assignment,
     physics_exported_definition(Entity,Revision,Definition).
@@ -106,7 +109,9 @@ physics_delegate_definition(Entity, World, Authority, Assignment, Revision, Defi
     term_variables([Entity,World,Authority,Assignment], []),
     transaction((current_principal(P),
         can_delegate_physics_definition(Entity,P,World,Authority),
-        space_assignment(Entity,Assignment,Destination), Destination \== none,
+        current_ontology_identity(Store,StoreAnchor),
+        quod:space::space_assignment(entity_ref(Store,StoreAnchor,Entity),Assignment,Destination),
+        Destination \== none,
         \+ physics_definition_delegate(Entity,_,_,_),
         physics_exported_definition(Entity,Revision,Definition),
         (Definition = frame(_,_) -> physics_independent_frame(Entity); true),
@@ -116,9 +121,11 @@ physics_release_definition(Entity, World, Assignment) :-
     term_variables([Entity,World,Assignment], []),
     transaction((
         unique_solution(physics_definition_delegate(Entity,World,Authority,Assignment)),
-        (Next is Assignment + 1, space_assignment(Entity,Next,none) -> true
-        ; space_assignment(Entity,Assignment,Destination), Destination \== none,
-          World = world_ref(Ns,Anchor,W), current_ontology_identity(Here,History),
+        current_ontology_identity(Here,History),
+        (Next is Assignment + 1,
+         quod:space::space_assignment(entity_ref(Here,History,Entity),Next,none) -> true
+        ; quod:space::space_assignment(entity_ref(Here,History,Entity),Assignment,Destination),
+          Destination \== none, World = world_ref(Ns,Anchor,W),
           in_ontology(Ns,Anchor,
                \+ physics_source_binding(W,entity_ref(Here,History,Entity),Assignment))),
         retract(physics_definition_delegate(Entity,World,Authority,Assignment)))).
@@ -166,7 +173,6 @@ physics_domain(Space,World,Authority,Path) :-
     World = world_ref(RootNs,RootAnchor,W),
     in_ontology(RootNs,RootAnchor,
              physics_frame_member(W,Subject,Assignment,Revision,Path)).
-space_simulation_domain(Space,World,Authority,Path) :- physics_domain(Space,World,Authority,Path).
 
 physics_independent_frame(Space) :-
     (\+ physics_space(Space,enabled,_), \+ physics_body_definition(Space,_,_,_,_,_),
@@ -204,7 +210,7 @@ physics_view_frames([Edge|Rest],W,Before,[Transform|Frames]) :-
     Edge = frame(Subject,Assignment,Revision), Subject = entity_ref(Ns,A,Space),
     append(Before,[Edge],Path), physics_frame_member(W,Subject,Assignment,Revision,Path),
     in_ontology(Ns,A,
-         entity_scene(Space,playing,appearance(_,contents,_,Transform,Eidolons))),
+         client_entity_scene(Space,playing,appearance(_,contents,_,Transform,Eidolons))),
     unique_solution(member(eidolon(playing,contents,Recipe),Eidolons)),
     term_digest(frame(Transform,Recipe),Revision),
     physics_view_frames(Rest,W,Path,Frames).
@@ -222,7 +228,7 @@ physics_admit_component(W,Frame,Path,Subject) :-
         ; Selections = [] -> fail_with_reason(physics_admission_unavailable(Subject))
         ; fail_with_reason(ambiguous_physics_admission(Subject))),
         \+ physics_source_binding(W,Subject,_),
-        in_ontology(Ns,Anchor,space_assignment(Entity,Assignment,Frame)),
+        quod:space::space_assignment(Subject,Assignment,Frame),
         (Selection = frame, physics_inert_frame(Subject) -> true
         ; physics_component_definition(Selection,Definition),
           in_ontology(Ns,Anchor,
@@ -232,8 +238,8 @@ physics_component_definition(frame,frame(_,_)).
 physics_component_definition(body(_,_),geometry(_,_)).
 
 physics_inert_frame(entity_ref(Ns,A,Space)) :-
-    in_ontology(Ns,A,(space_instance(Space,space),
-         attribute(Space,exterior,Style))), member(Style,[solid,wireframe]).
+    quod:space::space_instance(entity_ref(Ns,A,Space),space),
+    in_ontology(Ns,A,attribute(Space,exterior,Style)), member(Style,[solid,wireframe]).
 
 physics_component_body(W,Frame,Subject,Kind,Pose) :-
     current_ontology_identity(Ns,A), Frame = entity_ref(Ns,A,W),
@@ -242,7 +248,7 @@ physics_component_body(W,Frame,Subject,Kind,Pose) :-
     Subject = entity_ref(Ns,A,Entity),
     in_ontology(Ns,A,
          unique_solution(attribute(Entity,transform,SelectedPose))),
-    SelectedPose = Pose, space_transform(Pose),
+    SelectedPose = Pose, quod:space::space_transform(Pose),
     physics_component_admission(W,Frame,Subject,Kind,Pose).
 
 physics_install_component(body(Kind,Local),W,Subject,Assignment,Revision,geometry(Shape,Density),Path) :-
@@ -371,7 +377,9 @@ physics_redelegate_definition(Entity,World,Before,After,Assignment) :-
     term_variables([Entity,World,Before,After,Assignment], []),
     transaction((current_principal(P), can_delegate_physics_definition(Entity,P,World,After),
         World = world_ref(Ns,Anchor,Space),
-        space_assignment(Entity,Assignment,Destination), Destination \== none,
+        current_ontology_identity(Store,StoreAnchor),
+        quod:space::space_assignment(entity_ref(Store,StoreAnchor,Entity),Assignment,Destination),
+        Destination \== none,
         in_ontology(Ns,Anchor, physics_world_authority(Space,World,After)),
         unique_solution(physics_definition_delegate(Entity,SelectedWorld,Actor,Revision)),
         SelectedWorld = World, Actor = Before, Revision = Assignment,
@@ -394,8 +402,9 @@ physics_definition_consequence(Entity,Before,Next,Definition) :-
     findall(grant(W,A,R),physics_definition_delegate(Entity,W,A,R),Grants),
     (Grants = [] -> true
     ; Grants = [grant(world_ref(Ns,Anchor,Space),_,Assignment)],
-      space_assignment(Entity,Assignment,Destination), Destination \== none,
       current_ontology_identity(Here,History),
+      quod:space::space_assignment(entity_ref(Here,History,Entity),Assignment,Destination),
+      Destination \== none,
       in_ontology(Ns,Anchor,
            physics_refresh_definition(Space,entity_ref(Here,History,Entity),Assignment,Before,Next,Definition))).
 
@@ -456,8 +465,9 @@ physics_delete_definition(Entity, Expected) :-
     term_variables([Entity,Expected], []),
     transaction((current_principal(P), can_edit_physics_definition(Entity,P),
         unique_solution(physics_definition(Entity,Expected,Before)),
-        space_assignment(Entity,Assignment,Destination),
-        (Destination = none -> true ; space_withdraw(Entity,Assignment,Destination)),
+        current_ontology_identity(Store,StoreAnchor),
+        quod:space::space_assignment(entity_ref(Store,StoreAnchor,Entity),_,Destination),
+        (Destination = none -> true ; quod:space::goal(unplaced(entity_ref(Store,StoreAnchor,Entity)))),
         retract(physics_definition(Entity,Expected,Before)), Next is Expected + 1,
         assertz(physics_definition(Entity,Next,none)))).
 
@@ -572,7 +582,7 @@ physics_control_choice(W, Principal, controlled(Agent, Viewpoint)) :-
 physics_agent_configuration(W, Principal, Agent, Viewpoint, Configuration) :-
     Configuration = controlled_agent(Agent, _, _, _, _, viewpoint(Viewpoint, _, _)),
     can_control_physics_agent(W, Principal, Agent),
-    once((instance_of(Class, Agent), (Class = agent ; isa(Class, agent)))),
+    once((instance_of(Class, Agent), isa(Class, quod:agent:agent))),
     (findall(definition(R, B, M), physics_agent(W, Agent, R, B, M),
             [definition(Revision, Body, Motion)]),
      findall(A, physics_agent(W, A, _, Body, _), [Agent]),
@@ -601,7 +611,7 @@ physics_client_control(W, control(Epoch,
 %% A signed control proof reads committed policy and stages one live input.
 %% Camera/tracking offsets never enter this motion descriptor.
 physics_input_projection(W, control_frame(Frame, Registration), Epoch, Sequence, Input, Control, Lease, Limits) :-
-    agent_identifier(Registration), integer(Sequence), Sequence >= 0, current_principal(Principal),
+    quod:agent::agent_identifier(Registration), integer(Sequence), Sequence >= 0, current_principal(Principal),
     physics_input_control(W, Principal, Epoch, Configuration),
     physics_input_limits(W, Principal, Configuration, Frame, Input, Lease, Limits),
     Control = control(Principal, Epoch, Configuration).
@@ -796,7 +806,7 @@ physics_actor(W) :-
 %% work in the existing ontology transaction lane, not a local outbox.
 physics_store_request(W, Generation, Prior, Token, Bytes, Signature) :-
     transaction((physics_actor(W), physics_run(W, Generation, _),
-        physics_custody(W, Prior), physics_previous_complete(Prior, Generation), agent_identifier(Token),
+        physics_custody(W, Prior), physics_previous_complete(Prior, Generation), quod:agent::agent_identifier(Token),
         signed_physics_request(physics_activate(W, Generation, Token), Bytes, Signature),
         \+ physics_cancelled_request(W, request(Token, Generation, Bytes, Signature)),
         (Prior = none -> true ; retract(physics_request(W, Prior))),
@@ -876,11 +886,13 @@ physics_valid_joint_command(position(Target,motor(Stiffness,Damping,Torque),stop
 
 %% Both physical measurement schemas carry this same immutable, signed envelope.
 %% Domain consumers match exact participating revisions, command and payload.
+%% Reaction matching uses local run state; signed store/finish actions check
+%% class eligibility and the acting authority together through physics_actor/1.
 physics_valid_sample(physics_sample(
         physics_frame(world_ref(Ns,Anchor,W),agent_instance_ref(Ns,Anchor,I),Epoch,G,Token,Structure),
         activity(_,_,_),revisions(_),Tick,validity(At,Expiry),_), W) :-
-    physics_enabled(W,I), current_ontology_identity(Ns,Anchor), agent_hosted(I,_,Epoch,_),
-    physics_run(W,G,Token), integer(G), G > 0, agent_identifier(Token),
+    physics_space(W,enabled,I), current_ontology_identity(Ns,Anchor), agent_hosted(I,_,Epoch,_),
+    physics_run(W,G,Token), integer(G), G > 0, binary_codes(Token,Bytes), length(Bytes,32),
     physics_structure(W,Structure),
     integer(Tick), Tick > 0, Tick < 18446744073709551616,
     physics_required_allowances(W,_,_,_,Budget),
@@ -933,7 +945,7 @@ can_checkpoint_physics_body(_, _, _) :- fail.
 physics_rest_policy(_, _, _) :- fail.
 
 physics_checkpoint_body(W,D,Revision,Sequence,Id) :-
-    term_variables([W,D,Revision,Sequence,Id], []), agent_identifier(Id),
+    term_variables([W,D,Revision,Sequence,Id], []), quod:agent::agent_identifier(Id),
     transaction((current_principal(P), can_checkpoint_physics_body(W,D,P), physics_enabled(W,_),
         (physics_free_body(W,D,Revision) -> true ; fail_with_reason(body_not_free(D))),
         (physics_rest_policy(W,D,_) -> true ; fail_with_reason(rest_policy_missing(D))),

@@ -1,0 +1,67 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_lifecycle_single_path_tests:-default_lobby_physics_startup_test_/0-fun-30-/0
+[0;31m     Failure/Error: {error,
+                        {lobby_physics_not_ready,
+                            #{hosted_agent_instances => 0,
+                              source_interests_active => 0,collapses => 0,
+                              e_frontier => 4,rejected_subscriptions => 0,
+                              agent_work_idle => 0,hosted_agents => 0,
+                              reactions_active => 2,reaction_matches => 0,
+                              agent_pending_bytes => 0,
+                              agent_observation_capacity => ready,
+                              source_targets_active => 0,
+                              resource_dependencies => 5,source_attempts => 1,
+                              observed_agent_instances => 0,
+                              source_views_unreachable => 0,
+                              physics_worlds => 0,mode => live,
+                              agent_observation_bytes => 0,
+                              reconcile_failures => 0,
+                              agent_capacity_refusals_total => 0,
+                              events_seen => 3,subscriptions_active => 0,
+                              source_views_active => 1,
+                              resource_failures => #{},
+                              agent_capacity_status => ready,
+                              runner_active => false,reaction_candidates => 0,
+                              agent_work_blocked => 0,height => 4,
+                              dropped_events => 0,p_height => 4,
+                              source_views_building => 0,
+                              reaction_failures => 0,queue_len => 0,
+                              agent_observation_refusals_total => 0,
+                              reconciles => 1,source_attach_queued => 0,
+                              reactions_executed => 0,
+                              source_views_ready => 1}},
+                        [{quod_lifecycle_single_path_tests,
+                             await_lobby_physics,3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,280}]},
+                         {quod_lifecycle_single_path_tests,
+                             '-default_lobby_physics_startup_test_/0-fun-30-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,193}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 12.289 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

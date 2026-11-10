@@ -189,7 +189,7 @@ view_request(world,#{goal_text := Text,parser_version := Version},Ns,Anchor) ->
             case quod_wire_term:is_ground(Instance) andalso quod_wire_term:is_symbol(Mode)
                  andalso length(Dependencies) =:= length(Rows)
                  andalso quod_wire_term:encode_canonical(Goal) =:= quod_wire_term:encode_canonical(Expected)
-                 andalso element(1,quod_client_result:encode({read,Dependencies,fail})) =:= ok of
+                 andalso element(1,quod_client_result:encode({read,[{N,A,H,[]} || {N,A,H} <- Dependencies],fail})) =:= ok of
                 true -> {ok,Instance,Dependencies};
                 false -> error
             end;
@@ -210,15 +210,15 @@ view_request(Kind,#{goal_text := Text,parser_version := Version},Ns,Anchor) ->
         _ -> error
     end.
 
-gui_view_goal(gui_hud,{_,{0}}) ->
-    {ok,hud,{gui_pending_questions,{0}}};
-gui_view_goal(hud_commands,{_,{0}}) ->
-    {ok,hud_commands,{hud_commands,{0}}};
-gui_view_goal(navigation,{_,{0}}) ->
-    {ok,navigation,{account_navigation,{0}}};
-gui_view_goal(gui_question,{_,Question,{0}}) ->
+gui_view_goal(gui_hud,{_,<<"quod:gui">>,{_,{0}}}) ->
+    {ok,hud,{'::',<<"quod:gui">>,{gui_pending_questions,{0}}}};
+gui_view_goal(hud_commands,{_,<<"quod:gui">>,{_,{0}}}) ->
+    {ok,hud_commands,{'::',<<"quod:gui">>,{hud_commands,{0}}}};
+gui_view_goal(navigation,{_,<<"quod:user">>,{_,{0}}}) ->
+    {ok,navigation,{'::',<<"quod:user">>,{account_navigation,{0}}}};
+gui_view_goal(gui_question,{_,<<"quod:gui">>,{_,Question,{0}}}) ->
     case quod_wire_term:is_ground(Question) of
-        true -> {ok,Question,{gui_question_form,Question,{0}}};
+        true -> {ok,Question,{'::',<<"quod:gui">>,{gui_question_form,Question,{0}}}};
         false -> error
     end;
 gui_view_goal(gui_operations,{_,Subject,{0}}) ->
@@ -226,9 +226,9 @@ gui_view_goal(gui_operations,{_,Subject,{0}}) ->
         true -> {ok,Subject,{gui_operations,Subject,{0}}};
         false -> error
     end;
-gui_view_goal(controller_preferences,{_,Human,{0}}) ->
+gui_view_goal(controller_preferences,{_,<<"quod:user">>,{_,Human,{0}}}) ->
     case quod_wire_term:is_ground(Human) of
-        true -> {ok,Human,{controller_preferences_view,Human,{0}}};
+        true -> {ok,Human,{'::',<<"quod:user">>,{controller_preferences_view,Human,{0}}}};
         false -> error
     end;
 gui_view_goal(source_access,{_,Target = {_,Ns,Anchor},_,{0}})
@@ -257,7 +257,8 @@ gui_view_goal(Kind,{_,Entity,Choice,{0}}) when Kind =:= eidolon; Kind =:= eidolo
 gui_view_goal(_,_) -> error.
 
 open_result({ok, #{request_digest := Digest, request := #{not_after_ms := Expiry}} = Evidence,
-             {normalized, {read, Dependencies, Outcome}}}, S) ->
+             {normalized, {read, Reads, Outcome}}}, S) ->
+    Dependencies = [{N,A,H} || {N,A,H,_} <- Reads],
     case Outcome of
         {error, _} -> reply(#{type => unavailable, reason => proof_unavailable}, release(S));
         _ ->

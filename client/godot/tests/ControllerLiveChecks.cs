@@ -14,14 +14,19 @@ public partial class ExportChecks
         var views=(IEnumerable<SignedView>)typeof(Main).GetField("views",flags)!.GetValue(app)!;
         var view=views.Single(v=>(string)typeof(SignedView).GetField("kind",flags)!.GetValue(v)! == "controller_preferences");
         await Until(()=>State["controller_status"]?["available"]?.GetValue<bool>()==true);
-        var original=Json.Binding(await session.Read(human,"controller_preferences_view(me,View).",CancellationToken.None),"View");
+        var original=Json.Binding(await session.Read(human,Term.Call("::",Term.Text("quod:user"),Term.Call("controller_preferences_view",human.Entity,Term.Variable("View")))+".",CancellationToken.None),"View");
         var baseline=ControllerMapping.Decode(original)!;
         Check(baseline.Profiles.Single().Model.Digest=="bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94","actual signed Prolog projection selects the pinned licensed controller appearance");
         adapter.AttachSources();
         var tracker=new XRControllerTracker { Name="m4_live_source",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
         tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
         tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
-        XRServer.AddTracker(tracker);await Frame();await adapter.Completion;adapter.Advance(1,true,true,true);
+        var installed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void SourceInstalled(){if(adapter.Router.Count==1)installed.TrySetResult();}
+        adapter.Changed+=SourceInstalled;
+        try { XRServer.AddTracker(tracker);await installed.Task.WaitAsync(TimeSpan.FromSeconds(30)); }
+        finally { adapter.Changed-=SourceInstalled; }
+        await adapter.Completion;adapter.Advance(1,true,true,true);
         var resources=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
         Check(resources["Decodes"]!.GetValue<int>()==1 && resources["LiveLeases"]!.GetValue<int>()==1,"real HTTPS asset bytes pass digest/profile/cost admission and instantiate in the production scene owner");
         using var probe=new System.Net.Sockets.TcpClient();await probe.ConnectAsync("127.0.0.1",int.Parse(Env("M1B_CONTROL_PORT")));
@@ -42,7 +47,7 @@ public partial class ExportChecks
         // U owns source editing separately from the normal preference operation.
         // This signed, revision-fenced edit creates only the disposable test's
         // invalid row; repair below must use the real offered U-to-A action.
-        string invalid=$"transaction((controller_preferences_current(me,{baseline.Revision},Previous),retract(attribute(me,controller_preferences,preferences({baseline.Revision},Previous))),assertz(attribute(me,controller_preferences,preferences({revision},settings([],removed_binding_set,[])))))).";
+        string invalid=$"transaction((<<\"quod:user\">>::controller_preferences_view({human.Entity},controller_view({baseline.Revision},{original.Args[1]},_)),retract(attribute(me,controller_preferences,preferences({baseline.Revision},Previous))),assertz(attribute(me,controller_preferences,preferences({revision},settings([],removed_binding_set,[])))))).";
         using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(5));
         var edited=await ExecuteComplete(session,app.ActiveStore,human,invalid,deadline.Token);
         Check(Json.Committed(edited),"explicit owner source edit installs a revision-valid invalid preference row");
@@ -65,7 +70,7 @@ public partial class ExportChecks
         await Until(()=>State["controller_status"]?["available"]?.GetValue<bool>()==true && State["controller_status"]?["revision"]?.ToString()==(revision+1).ToString());
         after=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
         Check(after.ToJsonString()==resources.ToJsonString(),"real invalidation and Reset restore input without reacquiring/redecoding/rebuilding unchanged controller resources");
-        var repaired=ControllerMapping.Decode(Json.Binding(await session.Read(human,"controller_preferences_view(me,View).",deadline.Token),"View"))!;
+        var repaired=ControllerMapping.Decode(Json.Binding(await session.Read(human,Term.Call("::",Term.Text("quod:user"),Term.Call("controller_preferences_view",human.Entity,Term.Variable("View")))+".",deadline.Token),"View"))!;
         Check(repaired.Revision==revision+1 && repaired.Digest==baseline.Digest,"committed repair advances preference revision while retaining exact shared-default mapping");
         XRServer.RemoveTracker(tracker);tracker.Dispose();adapter.StopSession();await adapter.Completion;
         Check(adapter.Subscriptions==0 && adapter.Router.Count==0,"real signed-consumer source removal releases all input subscriptions");

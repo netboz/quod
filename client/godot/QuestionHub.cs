@@ -39,7 +39,7 @@ public sealed class QuestionHub : IDisposable
         attention.Pressed+=()=>{Expanded=true;list.Visible=!list.Visible;UpdatePresentation();};
         close.SizeFlagsHorizontal=Control.SizeFlags.Fill;close.Pressed+=Close;list.Hide();workingHost.Hide();close.Hide();
         var human = accounts.Human!;
-        hud = new(session, human, human, "gui_hud", SignedSession.ViewGoal(human, Term.Call("gui_pending_questions", Term.Variable("View"))));
+        hud = new(session, human, human, "gui_hud", SignedSession.ViewGoal(human, Term.Call("::", Term.Text("quod:gui"), Term.Call("gui_pending_questions", Term.Variable("View")))));
         hud.Projection += projection => {
             receiver = Json.S(projection["receiver"], "token");
             var references = Term.Parse(Json.S(projection, "value")); references.Ground(); var keep = new HashSet<string>();
@@ -82,8 +82,9 @@ public sealed class QuestionHub : IDisposable
         if (token == selected) { ReceiverAccepted(token); return; }
         try {
             if (store.Snapshot!.Pending.Any(w => w.Network == session.Network && w.Flow == "receiver")) return;
-            var goal = Term.Call("gui_select_receiver", Term.Parse(accounts.Human!.InstanceText.TrimEnd('.')),
-                Term.Binary(Identity.Decode(node)), Term.Binary(Identity.Decode(token)));
+            var goal = Term.Call("::", Term.Text("quod:gui"), Term.Call("gui_select_receiver",
+                Term.Call("agent_instance_ref", accounts.Human!.Entity.Require("entity_ref", 3)),
+                Term.Binary(Identity.Decode(node)), Term.Binary(Identity.Decode(token))));
             var reply = await session.Execute(accounts.Human, SignedSession.ViewGoal(accounts.Human, goal), "receiver", lifetime.Token);
             if (!disposed && Json.Committed(reply)) ReceiverAccepted(token);
         } catch (Exception) when (disposed || lifetime.IsCancellationRequested) { }
@@ -189,13 +190,13 @@ public partial class QuestionPanel : VBoxContainer
     public void Open(SignedSession session, Accounts accounts, Term reference, Action changed)
     {
         this.session=session;this.accounts = accounts;this.changed=changed; var human = accounts.Human!;
-        var a = reference.Require("question_ref", 3);question=a[2];target = new Actor(a[0].TextValue, Identity.Encode(a[1].Bytes), human.InstanceText);
+        var a = reference.Require("question_ref", 3);question=reference;target = new Actor(a[0].TextValue, Identity.Encode(a[1].Bytes), human.InstanceText);
         var heading=new HBoxContainer();AddChild(heading);source.SizeFlagsHorizontal=SizeFlags.ExpandFill;heading.AddChild(source);references.SizeFlagsHorizontal=SizeFlags.Fill;heading.AddChild(references);later.SizeFlagsHorizontal=SizeFlags.Fill;heading.AddChild(later);AddChild(panel);AddChild(identity);
         references.ToggleMode=true;references.Pressed+=()=>{if(GetViewport().GetParent() is SpatialGui gui)gui.AppearanceLayoutChanging();Update();};
         AddChild(availability);
         var actions=new HBoxContainer();AddChild(actions);status.SizeFlagsHorizontal=SizeFlags.ExpandFill;actions.AddChild(status);actions.AddChild(resolve);actions.AddChild(cancel);
         later.Pressed+=()=>Later?.Invoke();
-        view = new(session, human, target, "gui_question", SignedSession.ViewGoal(target, Term.Call("gui_question_form", question, Term.Variable("View"))));
+        view = new(session, human, target, "gui_question", SignedSession.ViewGoal(target, Term.Call("::", Term.Text("quod:gui"), Term.Call("gui_question_form", question, Term.Variable("View")))));
         view.Projection += message => {
             generation++;
             var next = QuestionDescriptor.Decode(Term.Parse(Json.S(message, "value")));
@@ -233,7 +234,7 @@ public partial class QuestionPanel : VBoxContainer
     {
         long expected=generation;
         try {
-            var reply=await session.Read(accounts.Human!,SignedSession.ViewGoal(target,Term.Call("gui_question_status",question,Term.Variable("Status"))),lifetime.Token);
+            var reply=await session.Read(accounts.Human!,SignedSession.ViewGoal(target,Term.Call("::",Term.Text("quod:gui"),Term.Call("gui_question_status",question,Term.Variable("Status")))),lifetime.Token);
             if(disposed||expected!=generation||!available)return;
             completionStatus=Json.Binding(reply,"Status").Name;
             status.Text=completionStatus switch {
@@ -250,7 +251,7 @@ public partial class QuestionPanel : VBoxContainer
         if(answer&&!panel.Validate()){status.Text="Invalid input · Check the marked fields; your edits are retained.";Update();return;}
         busy=settled=true;status.Text=answer ? "Sending answer…" : "Cancelling request…";Update();
         try {
-            Term goal=answer ? Term.Call("gui_submit",question,current.Opened,current.Form.Submit,current.Form.Fields(panel.Draft)) : Term.Call("gui_cancel",question);
+            Term goal=Term.Call("::",Term.Text("quod:gui"), answer ? Term.Call("gui_submit",question,current.Opened,current.Form.Submit,current.Form.Fields(panel.Draft)) : Term.Call("gui_cancel",question));
             var previous=accounts.Pending().Select(w=>w.Id).ToHashSet();
             originalAnswer=answer;var sending=session.Execute(accounts.Human!,SignedSession.ViewGoal(target,goal),"question",lifetime.Token);
             original=accounts.Pending().SingleOrDefault(w=>!previous.Contains(w.Id));

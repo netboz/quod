@@ -10,11 +10,10 @@ and scene projection as other spaces. This reflection grants no entry, placement
 founding, ownership or physical permission; those operations retain their
 explicit authored policy.
 
-[quod_space.pl](../priv/ontologies/quod_space.pl) defines the shared space
-foundation and is composed into the ontologies owning individual spaces through
-ordinary founding or authorized source editing. Each selected storage owns its
-local class and instances; the shared foundation's exact pin and source hash
-certify the composition without becoming a remote constructor or class alias.
+[quod_space.pl](../priv/ontologies/quod_space.pl) defines the space class at
+`quod:space`. A storing ontology holds `instance_of(quod:space:space, Id)`,
+its slots and its ACL facts. Shared behavior reads and writes that exact storing
+ontology through `::` under its ACL.
 The [ordered founding recipe](godot-foundation-contract.md#reproducible-founding-recipe)
 does not rewrite existing histories or grant deployment authority.
 
@@ -24,11 +23,13 @@ The vocabulary declares `isa(space, thing)` and
 `isa(physical_space, space)`. Shared `isa/2` rules compute reflexive/transitive
 ancestry, including authored multiple inheritance. `instance_of(Class, Entity)`
 is class-first, remains authored, and does not itself expand ancestry.
-`space_instance(Entity, Class)` explicitly combines membership with ancestry.
+`quod:space::space_instance(EntityRef, Class)` combines membership in the
+storing ontology with ancestry at the class owners.
 Neither declaration imports behavior or grants invocation rights. The existing
 lobby likewise explicitly expands its device classes before recipe selection.
-For the same class, purpose, style and recipe name, a local Eidolon recipe
-replaces an imported copy; differently named recipes remain separate choices.
+Class-selected Eidolon recipes run at their declared owners; the ordinary
+most-specific selection applies, and differently named recipes remain separate
+choices.
 Ontology reflection specializes space for display; it does not change lobby classes.
 
 An `entity_ref(Namespace, GenesisAnchor, Entity)` refers to an existing entity
@@ -43,21 +44,17 @@ membership changes neither the entity reference, code, ACL nor history.
 space S0 for human U; S0 is the initial personal lobby, has no containing space,
 and initially contains A.]{decided by="yan.guiborat" email=yan.guiborat@gmail.com on=2026-10-27 over="a dedicated lobby subclass for this delivery"} [Y](https://console.nimbalyst.com/app/cite/ed9cd520-b2a4-4607-a8f5-ff99d08f3e46/prompt/80fe5d70d8db7a67f1cc071ad91cced3 "by=yan.guiborat email=yan.guiborat@gmail.com at=2026-10-27T14:04:14.517Z quote='some points before starting :%0A- I would like to clarify new users onbording. These should only prolog if possible:%0A%2A When a normal user is created atm we will create for it a simple empty space. It will be later the user lobby %28 we will create a dedicated subclass for it %29 but for now we will use a simple space class. So I guess when registering a new user, we should create a space and an agent…'")
 
-The user-owned setup composition uses the existing `space` class and defaults,
-including its 100-metre box extent, after signup has allocated the exact account.
-A dedicated user-lobby subclass is later work. S0 is a space instance, not the
-root ontology, a shared lobby foundation or a new ontology per room.
+The setup form uses `quod:space:space` and its defaults, including the 100-metre
+box extent, after signup has allocated the user's ontology. S0 is an ordinary
+space instance; a dedicated user-lobby subclass is later work.
 
 The [M0 contract](godot-foundation-contract.md#ordinary-onboarding-and-storage)
-selects the existing private account ontology explicitly for automatic S0
-provisioning and records that exact selection. Additional spaces still use
-explicit selected storage, including permitted foreign storage; this is not a
-universal account-storage default. Its Prolog setup transaction binds A's
-host/key, constructs S0 and places the existing A inside it. An optional
-initial-occupants part must run during S0 construction so the committed class
-guard can authorize the new destination; placing A after that context ends
-cannot use staged S0 membership as authority. The normal empty-space defaults
-and existing constructor/placement machinery remain the foundation.
+selects the user's existing ontology explicitly for S0 and records that exact
+selection. Additional spaces use explicit selected storage, including permitted
+foreign storage. The setup transaction binds A's host/key, asserts S0 and runs
+`quod:space::goal(inside(S0, A, transform(0,0,0,0,0,0)))`. S0's staged membership
+uses its class policy until commit. No constructor or initial-occupants part is
+involved; both membership and placement commit in the same transaction.
 
 Having a containing space is optional for every ordinary space. S0 is unplaced
 while A is placed inside it; these are different assignments. Other spaces may
@@ -92,7 +89,7 @@ flowchart LR
 
 Signup composition, ownership, initial placement, offered operations and grants
 belong in Prolog. Reuse existing governed founding, key custody, actions,
-construction, atomic writes and recovery; Godot renders descriptors and sends
+assertion, atomic writes and recovery; Godot renders descriptors and sends
 authenticated instructions. The onboarding composition must explicitly select
 and record its authorized storage after any required existing founding step;
 automatic onboarding does not introduce an implicit storage default for later
@@ -112,18 +109,18 @@ mesh-only exterior or require entry before a contents-displaying exterior works.
 ## Empty creation
 
 U instructs the distinct personal agent A through the existing immediate signed
-route, selecting an **existing** ontology explicitly. Compose `quod_space.pl` into
-that storage owner and A's ontology, and `quod_space.pl` where space exteriors
-or contents are projected. Finite dimensions use the storage owner's exact
-`measure_vocabulary(Namespace, Anchor)` reference to the measurement ontology.
-No automatic lobby storage selection or ontology founding occurs.
+route, selecting an **existing** ontology explicitly. The space class owner
+holds the forms, recipes, validators and `measure_vocabulary(Namespace, Anchor)`
+pin used for finite dimensions. The storing ontology admits the requested
+assertion and the class owner's scoped reads and writes through its ACL. No
+automatic lobby storage selection or ontology founding occurs.
 
 The shared assertion mechanism creates the instance. A goal inside the selected
 anchored scope can return both durable outputs:
 
 ```prolog
 with_build_plan([attribute(name, <<"Workshop">>)],
-                assert(instance_of(space, Space))),
+                assert(instance_of(quod:space:space, Space))),
 current_ontology_identity(Ns, Anchor),
 Ref = entity_ref(Ns, Anchor, Space),
 attribute(Space, name, Name).
@@ -133,59 +130,61 @@ The default name is `<<"Space">>`; supplied names override it. Names are stored,
 mutable and nonunique. The generated ULID and anchor form the identity. Named
 outputs `Ref` and `Name` use the ordinary selected-result machinery: a lost
 reply is recovered from the original operation, including after restart or
-later instance deletion. Recovery does not run construction again.
+later instance deletion. Recovery does not create the instance again.
 
 `dimensions` defaults to `box(q(100, <<"m">>), q(100, <<"m">>),
 q(100, <<"m">>))`: X, Y and Z lengths centred on the local origin, extending
 50 metres in each direction. It also accepts `infinite` or three strictly
 positive exact length quantities. Existing measurement conversion validates
 compatible units and rational values without floats or rounding. Malformed,
-unitless, non-length, zero and negative dimensions fail construction. Supplied
+unitless, non-length, zero and negative dimensions fail creation. Supplied
 quantities remain stored as supplied; interior extent does not impose a resource
 budget, allocate geometry or establish collision boundaries.
 
-The default `owner` is U, proved by A's anchored `personal_agent_owner/1` query.
-An explicit owner is a construction input subject to the storage/class policy.
-Ownership, storage and containing space remain independent. The bundle supplies
-no invocation or class permission grants: authors admit A's exact request and
-declare `create` and `space_enter` policy. The destination separately enforces
-`space_admit` and its invocation policy. During a constructor, the shared guard
-checks committed class policy using the scoped
-`construction(Class, Id, Inputs)` subject; staged instance grants cannot supply
-permission. See [construction authorization](proofs.md#class-and-instance-operation-permissions).
+The default `owner` is U, read through `quod:user`. An explicit owner is a slot
+input subject to the storing ontology's ACL and class policy. Ownership, storage
+and containing space remain independent. `quod:space` supplies class ACL defaults;
+the storing ontology may declare per-instance ACLs. The shared guard checks a
+new instance using its original class and inputs until the transaction commits;
+staged instance grants cannot supply permission. See
+[creation authorization](proofs.md#class-and-instance-operation-permissions).
 
-An optional `attribute(placement, at(DestinationRef, transform(X,Y,Z,RX,RY,RZ)))`
-chooses an exact destination and exterior transform, using existing integer
-millimetres/degrees. The constructor consumes this input; it stores no second
-location record. Omission or explicit `near_agent` reads A's `space_location/2`. A successful
-`unplaced` result creates an unplaced space; `placed(Destination, Transform)`
-places it one metre along that frame's X axis from A. This is one-time placement,
+After assertion, `quod:space::goal(inside(DestinationRef, Ref, Pose))` chooses an
+exact destination and transform, using existing integer millimetres/degrees.
+The action stores the pose in the instance's `transform` slot. The creation
+form's placement choice is an input to this action, not a stored slot.
+`near_agent` reads A's exact location at `quod:space`; a successful `unplaced`
+result leaves the new space unplaced. A `placed(Destination, Transform)` result
+places it in front of A along that frame's −Z axis: 2 m from A's position plus
+half the new space's depth, so its near wall opens at arm's reach plus a step
+(Yan, 2026-11-07); an infinite space uses half-depth zero. This is one-time placement,
 not following A. A denied, unavailable, ambiguous or incomplete location read
 fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
 Transform)`; missing pose does not prove absence. Physical-pilot entry and live
 body poses remain the separate physical/entry integration.
-Explicit `attribute(placement, unplaced)` skips that location lookup and requests
+The explicit `unplaced` form choice skips that location lookup and requests
 no admission. It is distinct from treating a failed near-agent read as absence.
 
-Creation and placement use the existing assertion savepoint and `space_place/3`
-transaction. Refused explicit placement rolls back the instance and all admission
-writes; it never tries another destination or unplaced creation. Physical
+Creation asserts the space and runs `goal(inside(…))` in the same transaction.
+Refused placement rolls back the instance and all admission writes; it never tries another destination or unplaced creation. Physical
 destinations retain their mandatory physical hook and checks. Creation does not
 prepare a simulation, terrain, sky or walls. The defined solid Eidolon uses a
 half-metre cube independently of finite or infinite interior extent, through the
 existing scene/model/rendering path. Contents remain empty. The landscape/terrain
 creation route is unchanged.
 
-Compose `quod_space.pl` and `gui_instance.pl` in the storage
-owner to offer **Create space** and **Create infinite space**. The existing
-`gui_vocabulary/2` must pin the component vocabulary. The forms initialize name
+The space class owner offers **Create space** and **Create infinite space**
+through its recipes and forms. Its `gui_vocabulary/2` pins the component
+vocabulary. Forms compile at that owner and their goals run in the selected
+storing ontology. The forms initialize name
 and finite dimensions from class defaults; leaving those fields unchanged uses
 the defaults, while edits supply explicit values. Finite controls accept positive
 integers in mm, cm, m or km (1–1,000,000 per axis); the domain model still accepts
 the wider exact measurement contract above. The placement selector supplies
-`near_agent` and authored exact destinations. Storage authors may replace its
-options with permitted local or foreign references. Submission returns both
-`result(space, entity_ref(...))` and the committed `result(location, ...)`.
+`near_agent` and authored exact destinations. The class owner authors its options for each selected storing ontology,
+including permitted local or foreign references. Submission returns both
+`result(space, entity_ref(...))`, the committed `result(location, ...)` and
+`result(owner, ...)`.
 The [shared operation panel](gui-implementation-plan.md#offered-class-and-instance-operations)
 displays these bindings and can open the returned subject's offered operations.
 Source composition in an already founded ontology requires its existing owner
@@ -196,18 +195,11 @@ positive integer numerator/divisor per axis and an explicit length unit. The
 ordinary finite form retains its integer defaults; both use the same Stage 1
 assertion and binder. Names may be empty binary values; leaving the supplied
 default unchanged keeps `Space`. Every form selects placement and an exterior
-recipe. Creation and form definition check the unique anchored
-`space_vocabulary/2` plus `space_source_digest/1` against the shared source's
-`space_template_hash/1`; missing, ambiguous or mismatched composition refuses.
-This certifies the original composition without aliasing the target's class.
-
-The account composition separately authorizes its personal A's new-space
-constructor to place a newly constructed space, and that A's admission into
-completed U-owned destinations for other source subjects. These are committed
-class and destination policies. They grant no later A entry/leave permission
-and no blanket invocation. Foreign storage independently authorizes the exact
-operation and source assignment callback. Its owner, U and destination remain
-distinct.
+recipe. The creation subject is `class_ref(<<"quod:space">>, Anchor, space)`;
+its class identity is independent of the selected storing ontology. Each storing
+ontology separately authorizes the acting principal's request and the class
+owner's scoped callbacks. Class defaults and per-instance ACLs remain subject to
+the committed guard.
 
 ## Relations and owners
 
@@ -216,7 +208,7 @@ distinct.
 | `space_member(Space, EntityRef)` | Space ontology | Independent display reference, possibly many-to-many |
 | `space_assignment_state(Entity, Revision, DestinationRef)` | Entity ontology | Exclusive admission assignment, or `none` after withdrawal |
 | `space_placement(Space, EntityRef, Revision)` | Space ontology | Admission corresponding to that assignment revision |
-| `space_contains(Space, EntityRef)` | Derived query at space ontology | Direct view subjects: display references or placed instances |
+| `space_contains(SpaceRef, EntityRef)` | Derived query at `quod:space` | Direct view subjects: display references or placed instances |
 
 The assignment and placement facts express the entity's exclusive assignment
 and the space's admission. They contain no duplicate pose, body, code or geometry.
@@ -242,66 +234,61 @@ an authorized action. Hot controls retain their existing transient path.
 
 ## Governed transitions
 
-`space_contain(Space, EntityRef)` executes at the destination and checks both
-owners' committed operation policy in `display` mode. Only the destination
-writes `space_member/2`. `space_remove/2` removes that reference when destination
-policy allows removal or the entity owner allows withdrawal. Display grants
-provide no placement, disclosure or ownership authority.
+`quod:space::goal(shown_in(SpaceRef, EntityRef))` uses the `show` action to
+check both owners' committed operation policy in `display` mode and write
+`space_member/2` in the destination's storing ontology. `goal(not_shown_in(…))`
+uses `hide` when destination policy allows removal or source policy allows
+withdrawal. Display grants provide no placement, disclosure or ownership
+authority.
 
-`space_place(Entity, ExpectedRevision, DestinationRef)` executes at the entity
-owner. It checks that owner's `space_enter` permission in `placement` mode,
-an empty slot at the expected revision and the destination's `space_admit`
-permission. It stages the next assignment and calls `space_accept_placement/3`,
-which checks `space` membership and reads the staged assignment back through
-the existing re-entrant proof scope before admitting the entity. This supports
-ordinary and physical spaces, in the same ontology or different ontologies.
-Two completed proofs from the same empty slot conflict at the single assignment
-owner. Refusal, stale revision and conflict leave no partial assignment.
+`quod:space::goal(inside(SpaceRef, EntityRef, Pose))` uses the `place` action.
+Its `goal(unplaced(EntityRef))` prerequisite withdraws the entity first if needed;
+`placement_pose/3` binds an omitted pose. Source `space_enter` and destination
+`space_admit` checks use committed policy. The action writes the next source
+assignment, its pose and the matching destination admission through their
+storing ontologies' ACLs, with the required physical consequence. An already
+satisfied desired state writes nothing. Two completed proofs from the same
+assignment conflict at its sole owner; refusal and conflict leave no partial
+assignment.
 
-`space_withdraw(Entity, ExpectedRevision, DestinationRef)` is the common entry
-for instance withdrawal and destination revocation. It stages the next empty
-assignment and calls `space_release_placement/4`. Destination policy must allow
-removal, or the instance owner must allow that principal to leave. The callback
-checks the new empty slot, performs any required physical consequence and removes
-the exact old admission. Both owners commit together or neither changes.
-Changing a future-entry grant alone does not revoke existing membership; compose
-that policy edit with the withdrawal/removal action when immediate revocation is
-required. Neither a missing owner nor a timeout authorizes unilateral release.
-If either required ontology is unavailable, this transition remains unavailable;
-there is no offline eviction or invented successful withdrawal.
+`quod:space::goal(unplaced(EntityRef))` uses `withdraw` and requires source
+`space_leave` permission. It writes the next empty assignment, performs the
+required physical consequence and removes the exact old admission in one
+transaction. Changing a future-entry grant alone does not revoke existing
+membership; compose the policy edit with the applicable action when immediate
+revocation is required. Neither a missing owner nor a timeout authorizes
+unilateral release. An unavailable required ontology makes the transition
+unavailable.
 
-Participant entries cannot create or release a slot. Invoking them alone in a
-valid committed state fails: admission lacks a matching new assignment or
-already exists; release lacks the next empty assignment. Failed candidates use
-ordinary transaction savepoints. No handoff process, transfer ledger or second
-executor is introduced.
+Participant entries cannot create or release a slot independently: `place`
+requires an empty assignment and the exact destination; `withdraw` removes the
+matching assignment and admission together. Failed candidates use ordinary
+transaction savepoints.
 
 ## Same-agent travel
 
-`space_travel(Entity, ExpectedRevision, Before, After, Revision)` moves the
-existing entity through the same withdrawal and admission actions. `Before` is
-the exact destination reference or `none`; `After` is `placed(Destination,Pose)`
-or `unplaced`. A placed-to-placed move consumes a withdrawal and an admission
-revision. The new source pose is staged before destination admission so its
-physical consequence sees the same transform as the committed assignment.
-Source leave/entry permission, both destination consequences and pose changes
-form one existing atomic transaction. A refusal or conflict restores all owners.
+The same `goal(inside(…))` and `goal(unplaced(…))` actions move the existing
+personal agent. A placed-to-placed move consumes a withdrawal and an admission
+revision. Its pose is staged before destination admission so the physical
+consequence sees the same transform as the committed assignment. Source leave
+and entry permission, destination consequences and pose changes form one atomic
+transaction; refusal or conflict restores all owners.
 
 The offered Enter and Leave forms bind the existing personal agent and its
 exact assignment revision. Their ordinary U-to-A instruction executes this
 operation; navigation reads the resulting assignment. Leave may explicitly make
 the agent unplaced. Storage and display references do not supply an inferred
-parent or destination. Completed-account travel grants are separate from the
-constructor's initial-placement grant.
+parent or destination. A newly asserted instance uses its class policy; later operations use its
+committed membership and per-instance ACLs.
 
-The account's owner-authorized `account_navigation/1` returns
+The user class owner's `quod:user::account_navigation/1` returns
 `navigation(AssignmentRevision, Location, Modes)` from the same assignment and
 location queries, including an explicit `unplaced`. Its signed `navigation` view
 uses the existing view owner and retained dependency lifecycle. Setup's original
 S0 result remains immutable. A client retires scene/control on invalidation and
 opens only the current exact placed space; an unplaced client keeps navigation
 subscribed and may open an explicitly selected existing subject's ordinary Enter
-offer. `account_navigation/2` remains the placed-location query for world reads.
+offer. `quod:user::account_navigation/2` remains the placed-location query for world reads.
 
 The signed `client_world_view/4` result is
 `world_view(ExactSpace,Name,Marks,Selection)`. `Name` is the selected owner's
@@ -313,8 +300,8 @@ it is neither a naming service nor a second current-location record. Ordinary
 solid/wireframe space recipes use the same authored name in their scene label.
 An empty permitted scene remains black; its context belongs to the GUI chrome.
 
-`space_represent(Space, BeforeStyle, BeforePose, BeforeInterior, Style, Pose,
-Interior)` checks the exact source values and committed `space_represent`
+`quod:space::space_represent(SpaceRef, BeforeStyle, BeforePose, BeforeInterior,
+Style, Pose, Interior)` checks the exact source values and committed `space_represent`
 instance policy. A changed exterior or pose invokes the admitting destination's
 physical consequence in the same transaction. An unchanged representation
 performs no state mutation.
@@ -329,27 +316,20 @@ The space's pie offers the interior choices under **Show as**.
 
 ## Invocation policy
 
-The bundle installs no `can_invoke/4` clauses. Entry ACLs and domain grants are
-separate requirements. The authenticated principal is unchanged through `::`;
-calling from a space does not impersonate the entity owner. Expose only exact
-needed shapes, with appropriate principals and authenticated call paths:
+The class owner admits its public reads and desired-state goals through
+`can_invoke/4`. Each storing ontology separately admits the actor's scoped reads
+and writes, including the exact operation guard. The authenticated principal is
+unchanged through `::`; the call chain identifies the class owner. Calling from
+a space does not impersonate the entity owner.
 
-| Owning scope | Shapes required by the composition |
-| --- | --- |
-| Space | Public `space_contain/2`, `space_remove/2`; anchored `space_accept_placement/3`, `space_release_placement/4` for admitted callers |
-| Entity | Public `space_place/3`, `space_withdraw/3`; anchored `space_consent/4`, `space_withdrawal_consent/4`, `space_assignment/3` |
-| Caller whose operation enters another scope | The exact outer `Namespace::Goal` request permitted by its own entry policy |
-
-An anchored shape is `(current_ontology_identity(Namespace, Anchor), Goal)`.
-A curator evicting an entity needs the entity owner's invocation grant for
-`space_withdraw/3` as well as the space's removal policy. Otherwise it is denied
-even if that curator may edit the space. Conversely, a publisher's delegation
-does not grant destination invocation or admission. Read disclosure remains
-subject to the owning scope's policy. Helpers, raw assertions/retractions and
-lifecycle callbacks are not end-user entries. An unrestricted administrative
-ACL already authorizes arbitrary source/state editing and is not constrained
-by these domain actions. Revision/configuration conflicts return reasoned
-failures; denied operation policy remains ordinary Prolog failure.
+An anchored call has the shape `(current_ontology_identity(Namespace, Anchor),
+Goal)`. Placement needs both storing ontologies' ACLs and operation permissions;
+disclosure remains subject to each source's ACL. A curator's destination grant
+does not supply the entity's `space_leave` or invocation permission. Raw
+assertions and retractions remain governed by the storing ACL. An unrestricted
+administrative ACL authorizes source and state editing independently of these
+domain actions. Configuration conflicts return reasoned failures; denied
+operation policy remains ordinary Prolog failure.
 
 ## Shared operation authorization
 
@@ -362,20 +342,19 @@ The operation inputs are `space_enter(SourceRef, DestinationRef, Mode)`,
 reference comes from the requested transition. Placement requires instance
 subjects; display consent also accepts class subjects.
 
-Authors declare `class_permission/3`, `class_requirement/3` and governed
-`instance_permission/3` overrides. The bundle grants no default permission.
-Each owner checks its own committed memberships, ancestry and policy. A live
-constructor supplies its original class and inputs through the shared assertion
-scope before the new membership commits; this does not read staged grants or
-weaken destination checks. Staged grants cannot authorize the current transition. Compulsory requirements from
-every applicable parent survive overrides. Policy reads participate in the
-existing conflict checks. Scope invocation remains separately required.
+The class owner declares `class_permission/3` defaults and compulsory
+`class_requirement/3` checks; the storing ontology declares `instance_permission/3`
+overrides. `space` allows creation, entry, admission, leave, removal, visit and
+representation by default. Each operation checks committed membership, ancestry
+and policy through the shared guard, following qualified classes to their owners.
+A membership asserted in the current transaction uses its original class and
+inputs without staged instance overrides. Compulsory requirements survive
+overrides, and policy reads enter the ordinary conflict checks. Scope invocation
+remains separately required.
 
-Callbacks use only local committed policy. Exact identities are already operation
-inputs, so callbacks need neither the identity bridge nor a foreign scope call.
-The lobby's `lobby_admission/4` supplies its local admission definitions to both
-permission checks and the existing anchored physics projection. Physical
-consequences retain their checks independently of default permission overrides.
+The lobby's `lobby_admission/4` supplies its instance ACL checks and the existing
+anchored physics projection. Physical consequences retain their own checks
+independently of the class defaults or per-instance ACL overrides.
 
 ## Direct depiction
 
@@ -421,9 +400,8 @@ enabled runs cannot join through contents selection. Empty ordinary spaces
 allocate no physics solely because they are spaces; admission, custody and
 transfer guarantees still apply.
 
-The shared projection in `common_predicates.pl` projects the union of placement and display
-references, deduplicating each exact subject within that view. It asks the source
-owner for `entity_scene/3` and uses the existing Eidolon, `place_model/5`, local
+The shared projection at `quod:space` projects the union of placement and display
+references, deduplicating each exact subject within that view. It resolves `entity_scene/3` through the existing source and class owners and uses the existing Eidolon, `place_model/5`, local
 `transform/6` and anchored `depicts/3` contracts. Ordinary placement uses the
 scene's local transform. Display references use that same presentation path;
 no domain facts, ownership or storage move to the viewing space.
@@ -475,8 +453,8 @@ distinction through the existing durable operation owner. This establishes no
 deletion/recreation identity or individually selectable clause semantics.
 
 Pure exposure and model composition share the common presentation owner.
-The space bundle retains construction, assignment, admission and physical
-transitions. A configured modelling vocabulary remains the exact owner pin;
+The space class owner retains assignment, admission and physical transitions;
+the shared assertion hook initializes slots. A configured modelling vocabulary remains the exact owner pin;
 when none is composed, the root catalogue supplies the installed GUI vocabulary
 for presentation. Source policy still governs every reflected catalogue read.
 There is no client predicate identity type or domain-type selection branch.
@@ -529,10 +507,10 @@ an uncertain signed request resolves that exact operation through existing
 outcome resolution; absence or timeout is not rejection and must not trigger a
 fresh admission/withdrawal. Physical recovery additionally obeys current run
 fences, compatible checkpoints and custody described in [world.md](world.md).
-Creation destination selection uses the constructor and source-owned transform
-described under [Empty creation](#empty-creation). During construction, placement
-checks committed class policy through the shared construction scope; existing
-instances use committed instance policy. Installed desktop entry and recursive
+Creation destination selection uses the form and storing ontology's transform
+slot described under [Empty creation](#empty-creation). Until commit, the new
+instance uses committed class policy through its creation context; existing
+instances use committed membership and per-instance ACLs. Installed desktop entry and recursive
 rendering qualification are distinct from these server transitions and receipts.
 General transfer between independent simulations is outside this slice: atomic
 membership delete/add is insufficient and provides no authority-transfer claim.
@@ -545,16 +523,10 @@ simulated integration is exercised through production owners in
 [quod_physics_tests.erl](../test/quod_physics_tests.erl).
 
 
-The `quod_space.pl` constructor declares optional `initial_occupants`. Its input
-is `part(initial_occupants,[attribute(entities,[entity_ref(Ns,Anchor,Id),...])])`.
-Every reference must be ground, exact and unique, and identify an existing
-unplaced entity in the same storage history as the new space. A cross-history
-occupant refuses with `initial_occupants_require_local_storage`: constructor
-authority belongs to the active assertion continuation in its actual owner.
-M1a places the existing A in its own account storage. Ordinary foreign storage
-creation remains supported; this part cannot import an occupant from another
-history. Construction places those entities through `space_place/3`
-before its assertion authorization ends. Source entry and destination admission
-still require committed policy; a part cannot grant itself permission. Failure
-rolls back the assertion and all placement participants. With no part, ordinary
-empty creation is unchanged. Loading or recovery never runs this constructor.
+A goal that creates a space and places existing occupants asserts the space and
+runs one `quod:space::goal(inside(NewSpace, OccupantRef, Pose))` per occupant in
+the same transaction. Each exact occupant may reside in any permitted storing
+ontology. Source entry and destination admission still require committed policy;
+new staged ACLs cannot authorize the placement. Failure rolls back the assertion
+and all placements. Loading and recovery restore the decided facts and do not
+repeat those actions.

@@ -4661,7 +4661,6 @@ enqueue_dtx_intent(_From, EnginePid, IntentId, Material, GroupRef, DeadlineMs, S
                     Owned = admission_state(S),
                     project_pending_votes(S#s.ns, Journal),
                     {ok, S#s{dtx_admission = Owned#dtx_admission{waiting = Rows}}};
-                {false, {error, busy}} -> {error, busy};
                 _ -> {error, invalid_dtx_intent}
             end;
         {false, _, _, _} -> {error, stale_engine};
@@ -5964,7 +5963,6 @@ start_dtx_endpoint_operation(_Peer, Destination,
                     {Delivered, Actions} = deliver_dtx_endpoint_response(
                         Destination, {presented, RequestId, GroupId}, [], Next),
                     {ok, Delivered, Actions};
-                {error, busy} = Busy -> Busy;
                 {error, _} -> {error, not_ready}
             end;
         error -> {error, invalid_request}
@@ -8485,15 +8483,11 @@ sign_local_change(#transaction{}, _InitialState, _S) ->
 
 reject_append(From, bad_change, S) ->
     reply_now(From, {error, bad_change}, S#s{r_bad = S#s.r_bad + 1});
-reject_append(From, too_large, S) ->
-    reply_now(From, {error, too_large}, S#s{r_bad = S#s.r_bad + 1});
 reject_append(From, stale_seq, S) ->   %% a newer sequence became approved first; retryable by contract,
                                        %% so it counts as r_stale, NEVER as r_bad — r_bad is
                                        %% the "malformed workload" alarm and must stay quiet
                                        %% for a locally confirmed sequence race
-    reply_now(From, {error, stale_seq}, S#s{r_stale = S#s.r_stale + 1});
-reject_append(From, busy, S) ->
-    reply_now(From, {error, busy}, S#s{r_busy = S#s.r_busy + 1}).
+    reply_now(From, {error, stale_seq}, S#s{r_stale = S#s.r_stale + 1}).
 
 %%%===================================================================
 %%% ingress park queue — take a ticket, drain on the pipeline's own events
@@ -11932,8 +11926,9 @@ send_protocol_evidence(Peer, {Era, View, Finalized},
         {Link, _Ref} ->
             Missing = lists:sort([{V, Kind, Cert} || {{Kind, V, _}, Cert} <- maps:to_list(Certs),
                                   V > Finalized, V =< View + 1]),
-            [_ = quod_link:send_ordered(Link, encode(S#s.ns, {cert, Cert}))
-             || {_V, _Kind, Cert} <- Missing],
+            lists:foreach(fun({_V, _Kind, Cert}) ->
+                quod_link:send_ordered(Link, encode(S#s.ns, {cert, Cert}))
+            end, Missing),
             S;
         undefined -> S
     end;

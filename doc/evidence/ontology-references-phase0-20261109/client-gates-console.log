@@ -1,0 +1,204 @@
+{"name": "client-core-clean", "command": ["dotnet", "clean", "client/godot-tests/Quod.Client.Tests.csproj"], "started": "2026-11-09T11:38:54.658687+00:00", "ended": "2026-11-09T11:38:55.299171+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/client-core-clean.log"}
+Build started 11/09/2026 12:38:54.
+     1>Project "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Quod.Client.Tests.csproj" on node 1 (Clean target(s)).
+     1>CoreClean:
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/bin/Debug/net10.0/Quod.Client.Tests".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/bin/Debug/net10.0/Quod.Client.Tests.deps.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/bin/Debug/net10.0/Quod.Client.Tests.runtimeconfig.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/bin/Debug/net10.0/Quod.Client.Tests.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/bin/Debug/net10.0/Quod.Client.Tests.pdb".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/bin/Debug/net10.0/BouncyCastle.Cryptography.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.csproj.AssemblyReference.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.GeneratedMSBuildEditorConfig.editorconfig".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.AssemblyInfoInputs.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.AssemblyInfo.cs".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.csproj.CoreCompileInputs.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.sourcelink.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Cli.F96E8748.Up2Date".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/refint/Quod.Client.Tests.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.pdb".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/Quod.Client.Tests.genruntimeconfig.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/obj/Debug/net10.0/ref/Quod.Client.Tests.dll".
+     1>Done Building Project "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Quod.Client.Tests.csproj" (Clean target(s)).
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.46
+
+{"name": "client-godot-clean", "command": ["env", "NUGET_PACKAGES=/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/nuget", "dotnet", "clean", "client/godot/Quod.csproj"], "started": "2026-11-09T11:38:55.331171+00:00", "ended": "2026-11-09T11:38:56.115141+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/client-godot-clean.log"}
+Build started 11/09/2026 12:38:55.
+     1>Project "/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj" on node 1 (Clean target(s)).
+     1>CoreClean:
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.deps.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.runtimeconfig.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.pdb".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/BouncyCastle.Cryptography.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/GodotSharp.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/GodotSharpEditor.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.csproj.AssemblyReference.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.GeneratedMSBuildEditorConfig.editorconfig".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.AssemblyInfoInputs.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.AssemblyInfo.cs".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.csproj.CoreCompileInputs.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.sourcelink.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.csproj.Up2Date".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/refint/Quod.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.pdb".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.genruntimeconfig.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/ref/Quod.dll".
+     1>Done Building Project "/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj" (Clean target(s)).
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.57
+
+{"name": "client-core", "command": ["dotnet", "run", "--project", "client/godot-tests", "--", "/home/yan/src/quod_worktrees/pearl-stone"], "started": "2026-11-09T11:38:56.146053+00:00", "ended": "2026-11-09T11:39:03.666545+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/client-core.log"}
+s match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS missing or invalid authored icon allowance refuses
+PASS missing or invalid authored icon allowance refuses
+PASS missing or invalid authored icon allowance refuses
+PASS missing or invalid authored icon allowance refuses
+CORE_PASS checks=358
+
+{"name": "client-godot-build", "command": ["python3", "client/godot-tools/run.py", "--build"], "started": "2026-11-09T11:39:03.703382+00:00", "ended": "2026-11-09T11:39:13.205420+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/client-godot-build.log"}
+trollerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(110,33): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(123,33): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(123,77): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(125,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(125,43): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(127,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(127,53): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(129,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(164,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(164,97): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(164,141): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(168,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(171,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(181,37): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+    106 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:04.57
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Started Project initialization (5 steps)[39m[0m
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Scanning file structure...[39m[0m
+[  16% ] [90m[1mfirst_scan_filesystem[22m | Loading global class names...[39m[0m
+[  33% ] [90m[1mfirst_scan_filesystem[22m | Verifying GDExtensions...[39m[0m
+[  50% ] [90m[1mfirst_scan_filesystem[22m | Creating autoload scripts...[39m[0m
+[  66% ] [90m[1mfirst_scan_filesystem[22m | Initializing plugins...[39m[0m
+[  83% ] [90m[1mfirst_scan_filesystem[22m | Starting file scan...[39m[0m
+[92m[ DONE ][39m [1mfirst_scan_filesystem[22m
+[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Started Loading editor (5 steps)[39m[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Loading editor layout...[39m[0m
+[  16% ] [90m[1mloading_editor_layout[22m | Loading docks...[39m[0m
+[92m[ DONE ][39m [1mloading_editor_layout[22m
+[0m
+
+{"name": "client-godot-icons", "command": ["env", "M1B_PHASE=icons", "python3", "client/godot-tools/run.py", "--", "--headless", "--xr-mode", "off", "--", "--qualification", "--profile", "/tmp/quod-phase0-icons-gate-20261109"], "started": "2026-11-09T11:39:13.246877+00:00", "ended": "2026-11-09T11:39:15.208216+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/client-godot-icons.log"}
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+PASS actual icon consumer refuses transfer above its authored allowance
+PASS actual icon consumer refuses pixels above its authored allowance before decoding
+PASS actual icon consumer refuses a digest mismatch
+PASS actual icon consumer admits the declared bytes and pixels
+PASS unchanged icon reuses the same verified texture without another fetch
+PASS unchanged icon reuses the same verified texture without another fetch
+PASS unchanged icon reuses the same verified texture without another fetch
+PASS cached verification cannot bypass a smaller authored allowance
+PASS a changed icon fetches and installs its own verified texture
+ICON_ALLOWANCES_PASS
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+
+GODOT_CLIENT_GATES_PASS

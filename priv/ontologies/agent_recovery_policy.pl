@@ -17,6 +17,7 @@ agent_remote_observation_kind(withdrawing).
 
 can_prepare_agent_key(Destination, Instance, OldHost, Epoch, Destination) :-
     integer(Epoch), Epoch > 0,
+    agent_hosted(Instance, OldHost, Epoch, _),
     eligible_agent_host(Instance, Destination),
     Destination \= OldHost.
 
@@ -26,20 +27,22 @@ agent_recovery_executor(Principal, Instance) :-
     eligible_agent_host(Instance, Principal).
 
 agent_recovery_candidate(Principal, Instance, OldHost, Epoch, Round, Destination, Rank) :-
+    current_ontology_identity(Ns, Anchor), Agent = agent_instance_ref(Ns, Anchor, Instance),
     agent_recovery_executor(Principal, Instance),
     Principal \= OldHost,
-    agent_recovery_current(Instance, OldHost, Epoch, Round),
+    quod:agent::agent_recovery_current(Agent, OldHost, Epoch, Round),
     eligible_agent_host(Instance, Destination),
     Destination \= OldHost,
     agent_host_rank(Instance, Destination, Rank),
     agent_recovery_observer(Instance, Destination),
-    agent_report_support(Instance, OldHost, Epoch, Round, Destination, suspected_unreachable),
+    quod:agent::agent_report_support(Agent, OldHost, Epoch, Round, Destination, suspected_unreachable),
     agent_observer_threshold(Instance, OldHost, Epoch, Round, suspected_unreachable).
 
 %% This public grant repeats no weaker alternative to the candidate policy:
 %% direct assignment goals must prove the same threshold and exact custody.
 can_assign_agent_host(Principal, Instance, OldHost, Epoch, Destination, PublicKey) :-
-    agent_recovery_current(Instance, OldHost, Epoch, Round),
+    current_ontology_identity(Ns, Anchor),
+    quod:agent::agent_recovery_current(agent_instance_ref(Ns, Anchor, Instance), OldHost, Epoch, Round),
     agent_candidate_key(Instance, OldHost, Epoch, Destination, PublicKey),
     agent_recovery_candidate(Principal, Instance, OldHost, Epoch, Round, Destination, _).
 
@@ -52,12 +55,13 @@ can_resolve_agent_recovery(Principal, Instance, OldHost, Epoch, Round) :-
 %% configuration fails closed. Only current authorized observers count, and
 %% every supporting report must cover the signed request's own expiry.
 agent_observer_threshold(Instance, OldHost, Epoch, Round, Kind) :-
+    current_ontology_identity(Ns, Anchor), Agent = agent_instance_ref(Ns, Anchor, Instance),
     findall(N, agent_recovery_threshold(Instance, N), [Required]),
     integer(Required), Required > 0,
     findall(Observer,
         (agent_recovery_observer(Instance, Observer),
          Observer \= OldHost,
-         agent_report_support(Instance, OldHost, Epoch, Round, Observer, Kind)),
+         quod:agent::agent_report_support(Agent, OldHost, Epoch, Round, Observer, Kind)),
         Observers),
     sort(Observers, Distinct),
     length(Distinct, Count),
@@ -91,11 +95,15 @@ agent_recovery_data(Observer, I, Host, Epoch, Expected, Round, Kind,
     can_report_agent_failure(Observer, I, Host, Kind),
     agent_hosted(I, Host, Epoch, _),
     agent_observed_round(I, Host, Epoch, Expected),
-    agent_report_next(I, Host, Epoch, Round, Observer, Sequence),
+    findall(Observation,
+        agent_failure_report(I, Host, Epoch, Round, Observer, Observation, _), Reports),
+    (Reports = [] -> Sequence = 1
+    ; Reports = [observation(Previous, _, _)],
+      integer(Previous), Previous > 0, Sequence is Previous + 1),
     agent_observation_expiry(I, Host, Epoch, Round, Observer, Kind,
                              ObservedAt, Maximum, Expiry),
     (Kind = suspected_unreachable,
-     agent_key_preparation(Observer, I, Host, Epoch, Observer),
+     can_prepare_agent_key(Observer, I, Host, Epoch, Observer),
      \+ agent_candidate_key(I, Host, Epoch, Observer, _) -> Preparation = required
     ; agent_failure_report(I, Host, Epoch, Round, Observer,
                            observation(_, _, ReportExpiry), Kind),

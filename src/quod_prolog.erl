@@ -70,7 +70,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          format_status/1]).
--export([prove_est/2]).
+-export([prove_est/2, prove_est/3]).
 %% Prove against a raw #est{} handle for the runtime projection.
 -ifdef(TEST).
 -export([open_cursor/4, worker_allowance/2, positive_limit/2,
@@ -177,6 +177,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           principal = undefined :: term(),
           expected_anchor = any :: any | <<_:256>>,
           request_evidence = none :: none | quod_client_goal:evidence(),
+          read_mode = read_write :: read_write | committed_read,
           deadline_ms = infinity :: infinity | integer(),
           started_native = undefined :: undefined | integer()
          }).
@@ -196,6 +197,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           anchor      :: <<_:256>>,
           height      :: non_neg_integer(),
           context     :: quod_predicates:ctx(),
+          read_mode = read_write :: read_write | committed_read,
           session     :: quod_proof_session:session()
          }).
 
@@ -2755,6 +2757,12 @@ execute_active_scope_command(
       Binding, RequestId, CommandSeq,
       {protocol_error, unexpected_scope_command}, S);
 execute_active_scope_command(
+  scope_read_set, RequestId, CommandSeq, Binding,
+  #remote_scope{handle = {quod_scope_session,Pid,_,ProofId,SessionRef,_,_}}, S) ->
+    Ref = make_ref(),
+    Pid ! {scope_read_set,self(),ProofId,SessionRef,Ref},
+    add_remote_pending(Binding,Ref,{scope_read_set,RequestId,CommandSeq},S);
+execute_active_scope_command(
   scope_seal, RequestId, CommandSeq,
   Binding = {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
              OriginIdentity, _TargetIdentity, _Mode,
@@ -3103,6 +3111,12 @@ handle_bound_scope_reply(
       Binding,
       {invoke_result, RequestId, CommandSeq,
        InvocationId, ExpectedSeq, Reply}, Scope, S);
+handle_bound_scope_reply(
+  Binding, _Scope, {scope_read_set,RequestId,CommandSeq}, {read_set,Reads}, S) ->
+    case quod_scope_wire:encode_payload(read_set,Reads) of
+        {ok,Blob} -> emit_scope_event(Binding,RequestId,CommandSeq,{scope_read_set,Blob},S);
+        {error,Reason} -> poison_remote_scope(Binding,RequestId,CommandSeq,Reason,S)
+    end;
 handle_bound_scope_reply(
   Binding, _Scope,
   {scope_seal, RequestId, CommandSeq},
@@ -4322,9 +4336,15 @@ run_pinned_origin(
   Engine, Ref, Kind, ProofId, Deadline, Ns, Applied, Anchor,
   #proof_request{principal = Principal,
                  request_evidence = RequestEvidence,
+                 read_mode = ReadMode,
                  started_native = StartedNative}, Est, Signer, RunFun) ->
     ReadOnly = Kind =:= prove_ro,
     OriginIdentity = {Ns, Anchor},
+    AuthenticationIdentity = case RequestEvidence of
+        #{request := #{agent_namespace := AgentNs, agent_genesis_anchor := AgentAnchor}} ->
+            {AgentNs, AgentAnchor};
+        none -> OriginIdentity
+    end,
     AuthPrincipal = case Principal of
                         undefined -> proof_principal(Signer);
                         _ -> Principal
@@ -4333,7 +4353,7 @@ run_pinned_origin(
       quod_trace:context(), <<"quod.prolog.context_start">>, internal, #{},
       fun(_SpanCtx) ->
           quod_proof_context:start(
-            ProofId, ReadOnly, OriginIdentity, Deadline,
+            ProofId, ReadOnly, AuthenticationIdentity, Deadline,
             AuthPrincipal, RequestEvidence)
       end),
     OverlayOpts = #{read_set => true,
@@ -4367,13 +4387,18 @@ run_pinned_origin(
                     scope_id = ScopeId,
                     deadline_ms = Deadline, kind = Kind,
                     namespace = Ns, anchor = Anchor, height = Applied,
+                    read_mode = ReadMode,
                     context = Context, session = Session},
         try
-            Result = finalize_request_result(RequestEvidence,RunFun(Origin),Deadline),
+            Raw = RunFun(Origin),
             case RequestEvidence of
                 #{request := #{mode := read}} ->
-                    {read, quod_proof_context:read_dependencies(), Result};
-                _ -> Result
+                    {Dependencies,ReadResult} = case quod_proof_context:read_dependencies(ReadMode) of
+                        {ok,Reads} -> {Reads,Raw};
+                        {error,Reason,Reads} -> {Reads,{error,Reason}}
+                    end,
+                    {read,Dependencies,finalize_request_result(RequestEvidence,ReadResult,Deadline)};
+                _ -> finalize_request_result(RequestEvidence,Raw,Deadline)
             end
         after
             quod_trace:with_span(
@@ -5366,8 +5391,9 @@ attest_plans([], _Plans, _Manifest, RevBundles) ->
 attest_plans(
   [{Identity, PlanDigest} | Rest], Plans, Manifest, RevBundles) ->
     Plan = maps:get(Identity, Plans),
-    case {quod_proof_context:scope_handle(Identity), quod_dtx:encode(Plan)} of
-        {{ok, Handle}, {ok, PlanBlob}} ->
+    case quod_proof_context:scope_handle(Identity) of
+        {ok, Handle} ->
+            {ok, PlanBlob} = quod_dtx:encode(Plan),
             case quod_scope_session:attest_plan(Handle, Plan, Manifest) of
                 {ok, Attestation} ->
                     Bundle = {Identity, PlanDigest, PlanBlob, Attestation},
@@ -5375,8 +5401,7 @@ attest_plans(
                       Rest, Plans, Manifest, [Bundle | RevBundles]);
                 {error, _} = Error -> Error
             end;
-        {error, _} -> {error, {protocol_error, session_binding}};
-        {_, {error, _} = Error} -> Error
+        error -> {error, {protocol_error, session_binding}}
     end.
 
 %% The remote target committed under its own authorship; only the bounded
@@ -5477,10 +5502,10 @@ cursor_wait(Owner, CallRef, CursorId, InvocationId, Session, Height) ->
 
 run_origin_invocation(
   #pinned_origin{scope_id = ScopeId,
-                 session = Session, context = Context}, Goal, Verdict) ->
+                 session = Session, context = Context, read_mode = ReadMode}, Goal, Verdict) ->
     InvocationId = crypto:strong_rand_bytes(16),
     Actor = {ScopeId, InvocationId},
-    Selection = quod_transaction_scope:empty_selection(),
+    Selection = quod_transaction_scope:empty_selection(ReadMode),
     case quod_proof_context:register_invocation(Actor, Selection) of
         ok ->
             try quod_proof_session:open_first(
@@ -5994,6 +6019,21 @@ race history pruning.
 -spec prove_est(term(), tuple()) ->
           {ok, [map()] | map(), list(), map()} | fail | {error, term()}.
 prove_est(Goal, Est) -> run_proof_est(Goal, Est).
+
+-doc """
+Run an internal committed selector over its retained snapshot, with the node's
+signed identity for ordinary foreign scopes. Snapshot ownership authorizes the
+local selection, as in prove_est/2; every foreign invocation still proves its
+ACL. The existing bounded caller pins the snapshot and owns the deadline.
+""".
+prove_est(Goal, Est, #{identity := {Ns,Anchor}, height := Height,
+                       deadline_ms := Deadline, evidence := Evidence =
+                           #{request := #{mode := read}, agent_ref_blob := Agent}}) ->
+    Request = #proof_request{principal = {agent,Agent},
+                             request_evidence = Evidence, read_mode = committed_read},
+    run_pinned_origin(self(),make_ref(),prove_ro,crypto:strong_rand_bytes(32),
+        Deadline,Ns,Height,Anchor,Request,Est,none,
+        fun(Origin) -> run_origin_invocation(Origin,Goal,allowed) end).
 
 run_proof_est(Goal, Est) ->
     case quod_proof_session:run_first(

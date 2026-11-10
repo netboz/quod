@@ -618,7 +618,10 @@ signed_read_dependencies_test_() ->
         {timeout,30,fun() ->
             {ok,Network} = quod_ontology:network_identity(),
             BA = quod_simplex:genesis_hash(B), CA = quod_simplex:genesis_hash(C),
-            lists:foreach(fun(Text) ->
+            Trace = trace:session_create(signed_read_dependencies,self(),[]),
+            trace:function(Trace,{quod_scope_session,read_set,1},true,[local]),
+            trace:process(Trace,all,true,[call]),
+            try lists:foreach(fun(Text) ->
                 F = quod_ct:signed_goal_fixture(#{mode => read,network => Network,
                     target => {B,BA},goal_text => Text}),
                 [KeyFact] = quod_ct:signed_agent_facts(F),
@@ -626,13 +629,22 @@ signed_read_dependencies_test_() ->
                 BH = quod_prolog:applied(B), CH = quod_prolog:applied(C),
                 #{goal := Frozen} = maps:get(evidence,F),
                 {ok,Goal} = quod_wire_term:materialize_symbols(Frozen),
-                {read,Deps,_} = quod_prolog:execute_signed(
-                    maps:get(evidence,F),Goal,maps:get(principal,F)),
-                ?assertEqual([{B,BA,BH},{C,CA,CH}],Deps)
+                lists:foreach(fun(_) ->
+                    {read,Deps,_} = quod_prolog:execute_signed(
+                        maps:get(evidence,F),Goal,maps:get(principal,F)),
+                    ?assertEqual([{B,BA,BH,[]},{C,CA,CH,[]}],Deps)
+                end,[first,unchanged])
             end,[<<"chain_c::true.">>,<<"(chain_c::true, fail).">>,
                   <<"((chain_c::true, fail); true).">>,
                   <<"chain_c::assertz(read_must_not_write).">>]),
-            ?assertMatch({fail,_},prove(C,read_must_not_write))
+            ?assertMatch({fail,_},prove(C,read_must_not_write)),
+            Delivered = trace:delivered(Trace,all),
+            receive {trace_delivered,all,Delivered} -> ok
+            after 5000 -> error(read_trace_not_delivered) end,
+            receive {trace,_,call,{quod_scope_session,read_set,_}} ->
+                error(ordinary_read_fetched_predicate_versions)
+            after 0 -> ok end
+            after trace:session_destroy(Trace) end
         end}
     end}.
 

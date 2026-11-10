@@ -158,7 +158,7 @@ public partial class Main : Control
         });
         xr=new() { Name="openxr-input" };scene.Viewport.AddChild(xr);
         xr.Configure(scene,gui,models,()=>controls,()=>GuiOpen || gui.NativePressed,pie,hit=>OpenPie(hit,null));
-        pie.Selected+=chosen=>{var occurrence=pieOccurrence;var at=pieAt;ClosePie();Activate(chosen,occurrence,at);};
+        pie.Selected+=chosen=>{var occurrence=pieOccurrence;var at=pieAt;var source=pieView?.Target;ClosePie();Activate(chosen,occurrence,at,source);};
         gui.Surface.AddChild(hud);hud.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
         hud.Activated+=(command,control)=>{
             if(hud.Commands is not {} commands||!OpenPie(null,control.GetGlobalRect().GetCenter(),local:commands))return;
@@ -223,7 +223,7 @@ public partial class Main : Control
     static HFlowContainer Row(Godot.Container parent) { var row = new HFlowContainer(); parent.AddChild(row); return row; }
     // A chosen wedge or HUD command: its subject's sub-pie, the question list,
     // a local device action, or exactly that offered Eidolon choice.
-    void Activate(MenuTarget chosen,ScenePanel.Selection? occurrence,Vector2? at)
+    void Activate(MenuTarget chosen,ScenePanel.Selection? occurrence,Vector2? at,Actor? source)
     {
         if(chosen.Subject is {Kind:"atom",Name:"this_device"}){DeviceAction(chosen.Choice.Name);return;}
         if(session==null||accounts?.Human==null||store==null)return;
@@ -231,7 +231,7 @@ public partial class Main : Control
         if(purpose is {Kind:"atom",Name:"menu"}){OpenPie(null,at,chosen.Subject);return;}
         if(purpose is {Kind:"atom",Name:"attention"}){if(questions!=null){OverlayChanging();if(questions.Expanded)questions.Close();else questions.Show();Notify();}return;}
         if(at is Vector2 point)dockLeft=point.X>workspaceShell.Size.X/2;
-        EnsureRepresentations().OpenChoice(session,accounts,store,chosen,occurrence);ShowInspector();
+        EnsureRepresentations().OpenChoice(session,accounts,store,chosen,occurrence,source);ShowInspector();
     }
     // "This device" is the one client-authored command (decision 3).
     MenuNode DeviceMenu()
@@ -293,7 +293,10 @@ public partial class Main : Control
         if(local!=null){if(gui.Spatial&&at is Vector2 origin)xr.PlacePieAtHud(origin);pie.Present(local,"");Notify();return true;}
         Subject exact;
         try{exact=Subject.Decode(subject);}catch(FormatException){pie.Close();return false;}
-        var view=new SignedView(consumer,human,exact.Target,"menu",SignedSession.ViewGoal(exact.Target,Term.Call("client_menu",exact.Local,Term.Variable("View"))));
+        var storing=exact.Exact.Name=="class_ref" && representations?.Current?.Exact.ToString()==subject.ToString()
+            ? operations?.SelectedStorage??exact.Target : exact.Target;
+        var selected=exact.Exact.Name=="class_ref" ? exact.Exact : exact.Local;
+        var view=new SignedView(consumer,human,storing,"menu",SignedSession.ViewGoal(storing,Term.Call("client_menu",selected,Term.Variable("View"))));
         pieView=view;
         view.Projection+=message=>{
             if(expected!=pieGeneration)return;
@@ -421,7 +424,7 @@ public partial class Main : Control
         controls?.Dispose(); controls=new(consumer,human);
         controls.Suspended += reason => { statusText="Control suspended: "+reason; Notify(); };
         foreach (var view in views) view.Dispose(); views.Clear();
-        var route = new SignedView(consumer,human,human,"navigation",SignedSession.ViewGoal(human,Term.Call("account_navigation",Term.Variable("View")))); views.Add(route);
+        var route = new SignedView(consumer,human,human,"navigation",SignedSession.ViewGoal(human,Term.Call("::",Term.Text("quod:user"),Term.Call("account_navigation",Term.Variable("View"))))); views.Add(route);
         route.Projection += message => {
             var next = Navigation.Decode(message);
             if (navigation != null && next.Revision < navigation.Revision) return;
@@ -436,7 +439,7 @@ public partial class Main : Control
         route.Withdrawn += reason => { navigationAvailable=false; SuspendWorld(route.Updating); location.Text = "Location unavailable: " + reason; UpdateButtons(); Notify(); };
         _ = route.Start();
         var preferences = new SignedView(consumer, human, human, "controller_preferences", SignedSession.ViewGoal(human,
-            Term.Call("controller_preferences_view", Term.Parse(human.InstanceText.TrimEnd('.')), Term.Variable("View")))); views.Add(preferences);
+            Term.Call("::", Term.Text("quod:user"), Term.Call("controller_preferences_view", human.Entity, Term.Variable("View"))))); views.Add(preferences);
         preferences.Projection += message => {
             var value=Term.Parse(Json.S(message,"value"));var mapping=ControllerMapping.Decode(value);xr.Install(mapping);
             controllers.Text="Keyboard/mouse available. "+(mapping==null ? "Stored controller settings are invalid; use the offered Reset operation." : "Controller mapping revision "+mapping.Revision+".");Notify();
@@ -444,7 +447,7 @@ public partial class Main : Control
         preferences.Withdrawn += reason => { xr.Install(null);controllers.Text = "Controller mapping unavailable: " + reason; Notify(); };
         _ = preferences.Start();
         questions?.Dispose(); questions = new(consumer, accounts, store!, attentionHost, Notify); questions.Start();
-        var commands=new SignedView(consumer,human,human,"hud_commands",SignedSession.ViewGoal(human,Term.Call("hud_commands",Term.Variable("View")))); views.Add(commands);
+        var commands=new SignedView(consumer,human,human,"hud_commands",SignedSession.ViewGoal(human,Term.Call("::",Term.Text("quod:gui"),Term.Call("hud_commands",Term.Variable("View"))))); views.Add(commands);
         commands.Projection+=message=>{
             try{hud.Present(MenuNode.Decode(Term.Call("menu",Term.Parse(Json.S(message,"value")).Require("hud",1)[0])));}
             catch(Exception error){hud.Present(null);statusText="Your commands are unavailable: "+error.Message;}
@@ -477,7 +480,7 @@ public partial class Main : Control
         }
         long expected = worldIncarnation;
         async Task<(Actor Target,string Goal)?> WorldGoal(CancellationToken cancellation) {
-            var read = await consumer.Read(human,"account_navigation(Navigation).",cancellation);
+            var read = await consumer.Read(human,"<<\"quod:user\">>::account_navigation(Navigation).",cancellation);
             var route=Json.Binding(read,"Navigation").Require("navigation",3);
             if(route[1].Kind=="atom" && route[1].Name=="unplaced") return null;
             var selected = Actor.FromTerm(route[1].Require("placed",2)[0]);
@@ -650,27 +653,29 @@ public partial class Main : Control
         action?.Cancel(); CloseSession(); state = "offline"; statusText = "Disconnected. Your key and unsent work stay on this device."; UpdateButtons(); Notify();
     }
     // Authored icons by served file; a fetch in flight or failed is a null entry.
-    readonly Dictionary<string,Texture2D?> icons=new();
+    readonly Dictionary<string,(Texture2D Texture,long Transfer,long Pixels)?> icons=new();
     // The texture for a node's authored image: bundled for the client's own
     // commands, otherwise the ontology's content-addressed asset, fetched once.
     Texture2D? Icon(MenuNode node)
     {
         if(node.Image is not string image)return null;
         if(image.StartsWith("res://"))return GD.Load<Texture2D>(image);
-        if(icons.TryGetValue(image,out var texture))return texture;
+        if(icons.TryGetValue(image,out var cached))return cached is {} verified && verified.Transfer<=node.Transfer && verified.Pixels<=node.Pixels ? verified.Texture : null;
         icons[image]=null;
-        if(session is {IsExpired:false} consumer)_=FetchIcon(consumer,image);
+        if(session is {IsExpired:false} consumer)_=FetchIcon(consumer,node);
         return null;
     }
-    async Task FetchIcon(SignedSession consumer,string image)
+    async Task FetchIcon(SignedSession consumer,MenuNode node)
     {
         try {
+            string image=node.Image!;
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            // An icon is a small picture; the bound only stops a runaway transfer.
-            var bytes=await consumer.Transport.Icon(image,1<<20,deadline.Token);
+            var bytes=await consumer.Transport.Icon(image,node.Transfer,deadline.Token);
+            long pixels=StaticGlb.ImagePixels(bytes,image.EndsWith(".png") ? "image/png" : "image/jpeg");
+            if(pixels>node.Pixels)throw new FormatException("Icon image pixels exceeded.");
             var picture=new Image();
             if((image.EndsWith(".png") ? picture.LoadPngFromBuffer(bytes) : picture.LoadJpgFromBuffer(bytes))!=Error.Ok)throw new FormatException("Unreadable icon.");
-            icons[image]=ImageTexture.CreateFromImage(picture);
+            icons[image]=(ImageTexture.CreateFromImage(picture),bytes.LongLength,pixels);
         } catch { return; }
         if(!disposed){hud.RefreshIcons();pie.QueueRedraw();}
     }

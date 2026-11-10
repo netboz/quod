@@ -22,6 +22,7 @@ no_follow(gui_workspace_fields/2).
 %% Shared semantic GUI vocabulary. A proof workspace is the first composite
 %% form; its adapter reuses the existing cursor controls, never another executor.
 acl_sovereign(quod:gui).
+gui_vocabulary(Ns, Anchor) :- current_ontology_identity(Ns, Anchor).
 can_invoke(Goal, _, _, _) :- gui_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- gui_query(Goal).
 can_invoke(Goal, _, _, _) :- system_source_query(Goal).
@@ -172,42 +173,42 @@ isa(hud, thing).
 %% falls back to the label's initials without.
 no_follow(gui_icon/2).
 no_follow(gui_purpose_icon/2).
-gui_icon(accept, asset(<<"7b243c704098440348152df08bb33d5ce3c2bdfe71e828db26b56f73455a1c85">>, <<"image/png">>)).
-gui_icon(account, asset(<<"c198ab56893753eb5b82ba1491940e8e44f35ca8f1f539710dfedd6f6e98c8dc">>, <<"image/png">>)).
-gui_icon(account_controls, asset(<<"6f4da85202f3a0c808df9981663341d40671ab17f133522a0669fdda1ac6cd83">>, <<"image/png">>)).
-gui_icon(attention, asset(<<"392f95140074b3e5162d8b2cc860a3ebe66c0bb20ca30deb4f4fe31949eab56a">>, <<"image/png">>)).
-gui_icon(back, asset(<<"e799c393a99d0d3628d05f4c39518c9211213979fd95ffd5204e54e3bf430a93">>, <<"image/png">>)).
-gui_icon(controllers, asset(<<"22874de5cdc094924b7b54ce5198dce0c0b07f23704ec31327212afc52671a03">>, <<"image/png">>)).
-gui_icon(create_exact, asset(<<"81551291fff5b3b6278d22f58083766e9d39a4f7323f1813da9dc326b786004e">>, <<"image/png">>)).
-gui_icon(create_finite, asset(<<"10cb7a60ee0d4b85f634b888d23c34384dcc2fd40bf27115aa6133e85d1751ed">>, <<"image/png">>)).
-gui_icon(create_here, asset(<<"1320941c3a3b79716403806ad34b19b39f10920e266b93d9e9783fb20d6abeef">>, <<"image/png">>)).
-gui_icon(create_infinite, asset(<<"6e838ec3e3cef10dffeb52c32e25f1e94be12b37216dc70fe7a4e38dbb451d1c">>, <<"image/png">>)).
-gui_icon(create_storage, asset(<<"ccb396c150eca6bd7dc6ad5decfb2d5ee5ea4216ced72e5881a320dec6df478b">>, <<"image/png">>)).
-gui_icon(decline, asset(<<"89595f66e3caaa073570349da4111a3c4818b8fea496c94465a7eca28dfe6a77">>, <<"image/png">>)).
-gui_icon(device, asset(<<"059015d96d31a1b494de7b7c8001f64b2946a66bc433198c09500cc16cfada32">>, <<"image/png">>)).
-gui_icon(enter, asset(<<"eaa918e337b050b95e91f2728b56d46b9a605cafb95ded4787a8111af33d3713">>, <<"image/png">>)).
-gui_icon(farther, asset(<<"56c975f652fb70f04975b2fc0f33d6b4878cc7c66be21da76358d21574f233fe">>, <<"image/png">>)).
-gui_icon(go_to, asset(<<"36652b712193cb0eb76fdac8319b2788cf2cbaae279cee7877f67d1427eaa183">>, <<"image/png">>)).
-gui_icon(hide, asset(<<"ca04f09de6eab99c94f999ed8086dac3b35992371e89f46de23ac58594fde191">>, <<"image/png">>)).
-gui_icon(inspect, asset(<<"8aa3240d88ef69fc14ab29514a4380d0b901f9f4aced431c393013a6b311237f">>, <<"image/png">>)).
-gui_icon(inspection, asset(<<"b2779413cf637752e512a046a515ec4d2a8af1752e5d87eba1aa516acd361f9f">>, <<"image/png">>)).
-gui_icon(leave, asset(<<"bb182c7fb117a1dc013d5eb9bb99f5605c9b2c46e4311669325b75a804e6c521">>, <<"image/png">>)).
-gui_icon(matrix, asset(<<"793cabf0c5cb2b0ef16e85c10b080130dab950ada00657b215550213c11f1300">>, <<"image/png">>)).
-gui_icon(me, asset(<<"a33fbc2379ea162f586a6e964e6765c9c7630d4729a823ecaf787cc0e22554d5">>, <<"image/png">>)).
-gui_icon(more, asset(<<"07f924613b4cc096db76d30d800ed1c32e5e5ff2bc8d7c25cebb29b20e1661d2">>, <<"image/png">>)).
-gui_icon(move_panel, asset(<<"0a9277d4a88bc694812ae5fba3480ac6c1ad297e3a9bb8c6d9a19ee63b51351a">>, <<"image/png">>)).
-gui_icon(nearer, asset(<<"3c502ab9596d9f693d23e2a335cc64ac40f1cec574db7a510b64bebe05df49ba">>, <<"image/png">>)).
-gui_icon(panels_opacity, asset(<<"147243a8fda4f33f8aa0d4ecd01b16e9857c9a180cba9516a1b46f221ef4c487">>, <<"image/png">>)).
-gui_icon(question, asset(<<"e4e8fb93e34d08ac72646a9eea4dc66109b810d056afdba90f38dfdc18884d48">>, <<"image/png">>)).
-gui_icon(recenter, asset(<<"f51e7c627d0f067505b52232f9cb787af5b9fcd37a05e5f243c829318e842727">>, <<"image/png">>)).
-gui_icon(show_as, asset(<<"443faa8df4937365e159ecd54a0c7b5b23539bf55141d5330912d2a0665c57c2">>, <<"image/png">>)).
-gui_icon(show_none, asset(<<"fe4318c1ff1e4fbb9be665ffc5ab08508084e6423e685af6f49a9bbe32ad8375">>, <<"image/png">>)).
-gui_icon(source, asset(<<"957dde426601d7cbf44db51a213e5a6f04a75e7b221a677ebc3804ccc46e5e2c">>, <<"image/png">>)).
-gui_icon(text_larger, asset(<<"3e382db372492f52ef2554c76136e05f03ed9757d549a9b26ca707b2f8f029ce">>, <<"image/png">>)).
-gui_icon(text_smaller, asset(<<"7a205675c04f6c46b85d107f264c4bd54eae68fb63e2802d492fb65dc613b88e">>, <<"image/png">>)).
-gui_icon(vr, asset(<<"c8b7ec10c76c9c2fffd890a8aef1480a1d3f69e501ec2c68a9ce17bf8e8b3ba5">>, <<"image/png">>)).
-gui_icon(wireframe, asset(<<"dd8cf8820abe42498cb57c0b0d0c479ceeb0dda28595b45821ba9700275f94e5">>, <<"image/png">>)).
-gui_icon(workspace, asset(<<"30eb5539c7181615c9fb9eed6f5b0e0418c0dcdfe1d3f81c72ef717979831489">>, <<"image/png">>)).
+gui_icon(accept, image(asset(<<"7b243c704098440348152df08bb33d5ce3c2bdfe71e828db26b56f73455a1c85">>, <<"image/png">>), resources(1860, 16384))).
+gui_icon(account, image(asset(<<"c198ab56893753eb5b82ba1491940e8e44f35ca8f1f539710dfedd6f6e98c8dc">>, <<"image/png">>), resources(2766, 16384))).
+gui_icon(account_controls, image(asset(<<"6f4da85202f3a0c808df9981663341d40671ab17f133522a0669fdda1ac6cd83">>, <<"image/png">>), resources(1632, 16384))).
+gui_icon(attention, image(asset(<<"392f95140074b3e5162d8b2cc860a3ebe66c0bb20ca30deb4f4fe31949eab56a">>, <<"image/png">>), resources(4379, 16384))).
+gui_icon(back, image(asset(<<"e799c393a99d0d3628d05f4c39518c9211213979fd95ffd5204e54e3bf430a93">>, <<"image/png">>), resources(955, 16384))).
+gui_icon(controllers, image(asset(<<"22874de5cdc094924b7b54ce5198dce0c0b07f23704ec31327212afc52671a03">>, <<"image/png">>), resources(4893, 16384))).
+gui_icon(create_exact, image(asset(<<"81551291fff5b3b6278d22f58083766e9d39a4f7323f1813da9dc326b786004e">>, <<"image/png">>), resources(3206, 16384))).
+gui_icon(create_finite, image(asset(<<"10cb7a60ee0d4b85f634b888d23c34384dcc2fd40bf27115aa6133e85d1751ed">>, <<"image/png">>), resources(2785, 16384))).
+gui_icon(create_here, image(asset(<<"1320941c3a3b79716403806ad34b19b39f10920e266b93d9e9783fb20d6abeef">>, <<"image/png">>), resources(4641, 16384))).
+gui_icon(create_infinite, image(asset(<<"6e838ec3e3cef10dffeb52c32e25f1e94be12b37216dc70fe7a4e38dbb451d1c">>, <<"image/png">>), resources(2841, 16384))).
+gui_icon(create_storage, image(asset(<<"ccb396c150eca6bd7dc6ad5decfb2d5ee5ea4216ced72e5881a320dec6df478b">>, <<"image/png">>), resources(4523, 16384))).
+gui_icon(decline, image(asset(<<"89595f66e3caaa073570349da4111a3c4818b8fea496c94465a7eca28dfe6a77">>, <<"image/png">>), resources(1292, 16384))).
+gui_icon(device, image(asset(<<"059015d96d31a1b494de7b7c8001f64b2946a66bc433198c09500cc16cfada32">>, <<"image/png">>), resources(1970, 16384))).
+gui_icon(enter, image(asset(<<"eaa918e337b050b95e91f2728b56d46b9a605cafb95ded4787a8111af33d3713">>, <<"image/png">>), resources(1567, 16384))).
+gui_icon(farther, image(asset(<<"56c975f652fb70f04975b2fc0f33d6b4878cc7c66be21da76358d21574f233fe">>, <<"image/png">>), resources(1837, 16384))).
+gui_icon(go_to, image(asset(<<"36652b712193cb0eb76fdac8319b2788cf2cbaae279cee7877f67d1427eaa183">>, <<"image/png">>), resources(3837, 16384))).
+gui_icon(hide, image(asset(<<"ca04f09de6eab99c94f999ed8086dac3b35992371e89f46de23ac58594fde191">>, <<"image/png">>), resources(3870, 16384))).
+gui_icon(inspect, image(asset(<<"8aa3240d88ef69fc14ab29514a4380d0b901f9f4aced431c393013a6b311237f">>, <<"image/png">>), resources(3410, 16384))).
+gui_icon(inspection, image(asset(<<"b2779413cf637752e512a046a515ec4d2a8af1752e5d87eba1aa516acd361f9f">>, <<"image/png">>), resources(1629, 16384))).
+gui_icon(leave, image(asset(<<"bb182c7fb117a1dc013d5eb9bb99f5605c9b2c46e4311669325b75a804e6c521">>, <<"image/png">>), resources(1605, 16384))).
+gui_icon(matrix, image(asset(<<"793cabf0c5cb2b0ef16e85c10b080130dab950ada00657b215550213c11f1300">>, <<"image/png">>), resources(2500, 16384))).
+gui_icon(me, image(asset(<<"a33fbc2379ea162f586a6e964e6765c9c7630d4729a823ecaf787cc0e22554d5">>, <<"image/png">>), resources(3555, 16384))).
+gui_icon(more, image(asset(<<"07f924613b4cc096db76d30d800ed1c32e5e5ff2bc8d7c25cebb29b20e1661d2">>, <<"image/png">>), resources(609, 16384))).
+gui_icon(move_panel, image(asset(<<"0a9277d4a88bc694812ae5fba3480ac6c1ad297e3a9bb8c6d9a19ee63b51351a">>, <<"image/png">>), resources(2296, 16384))).
+gui_icon(nearer, image(asset(<<"3c502ab9596d9f693d23e2a335cc64ac40f1cec574db7a510b64bebe05df49ba">>, <<"image/png">>), resources(1672, 16384))).
+gui_icon(panels_opacity, image(asset(<<"147243a8fda4f33f8aa0d4ecd01b16e9857c9a180cba9516a1b46f221ef4c487">>, <<"image/png">>), resources(2234, 16384))).
+gui_icon(question, image(asset(<<"e4e8fb93e34d08ac72646a9eea4dc66109b810d056afdba90f38dfdc18884d48">>, <<"image/png">>), resources(5336, 16384))).
+gui_icon(recenter, image(asset(<<"f51e7c627d0f067505b52232f9cb787af5b9fcd37a05e5f243c829318e842727">>, <<"image/png">>), resources(4455, 16384))).
+gui_icon(show_as, image(asset(<<"443faa8df4937365e159ecd54a0c7b5b23539bf55141d5330912d2a0665c57c2">>, <<"image/png">>), resources(4311, 16384))).
+gui_icon(show_none, image(asset(<<"fe4318c1ff1e4fbb9be665ffc5ab08508084e6423e685af6f49a9bbe32ad8375">>, <<"image/png">>), resources(3489, 16384))).
+gui_icon(source, image(asset(<<"957dde426601d7cbf44db51a213e5a6f04a75e7b221a677ebc3804ccc46e5e2c">>, <<"image/png">>), resources(2418, 16384))).
+gui_icon(text_larger, image(asset(<<"3e382db372492f52ef2554c76136e05f03ed9757d549a9b26ca707b2f8f029ce">>, <<"image/png">>), resources(2118, 16384))).
+gui_icon(text_smaller, image(asset(<<"7a205675c04f6c46b85d107f264c4bd54eae68fb63e2802d492fb65dc613b88e">>, <<"image/png">>), resources(2027, 16384))).
+gui_icon(vr, image(asset(<<"c8b7ec10c76c9c2fffd890a8aef1480a1d3f69e501ec2c68a9ce17bf8e8b3ba5">>, <<"image/png">>), resources(2175, 16384))).
+gui_icon(wireframe, image(asset(<<"dd8cf8820abe42498cb57c0b0d0c479ceeb0dda28595b45821ba9700275f94e5">>, <<"image/png">>), resources(4531, 16384))).
+gui_icon(workspace, image(asset(<<"30eb5539c7181615c9fb9eed6f5b0e0418c0dcdfe1d3f81c72ef717979831489">>, <<"image/png">>), resources(1466, 16384))).
 %% The icon a menu shows for a view or an inspection of a given purpose.
 gui_purpose_icon(playing, show_as).
 gui_purpose_icon(edition, show_as).
@@ -259,7 +260,7 @@ gui_chain_property(Chain, Key, Default) :-
     \+ (gui_attribute(Nearer, Key, _, _), Nearer \== Owner, member_eq(Nearer, Chain), isa(Nearer, Owner)).
 
 no_follow(gui_kind_properties/3).
-gui_kind_properties(image, _, Properties) :- !, member(property(image, asset(_, _)), Properties).
+gui_kind_properties(image, _, Properties) :- !, member(property(image, image(_, _)), Properties).
 gui_kind_properties(table, _, Properties) :- !,
     member(property(headings, Headings), Properties),
     member(property(options, Options), Properties),
@@ -355,7 +356,8 @@ labelled_values(Options) :- Options = [_ | _], gui_options(Options, []).
 text_list(Headings) :- Headings = [_ | _], gui_texts(Headings).
 optional_image_asset(none).
 optional_image_asset(Value) :- image_asset(Value).
-image_asset(asset(Digest, Mime)) :-
+image_asset(image(asset(Digest, Mime), resources(Transfer, Pixels))) :-
+    integer(Transfer), Transfer > 0, integer(Pixels), Pixels > 0,
     member(Mime, [<<"image/png">>, <<"image/jpeg">>]),
     binary(Digest), binary_codes(Digest, Bytes), length(Bytes, 64), gui_digest(Bytes).
 menu_slot(auto).
@@ -663,9 +665,7 @@ gui_query(gui_native_activate(_, _, _, _)).
 
 gui_native_prepare(Human, Receiver, Question, Descriptor, Capacity, Receipt) :-
     term_variables([Human, Receiver, Question, Descriptor, Capacity], []),
-    Human = agent_instance_ref(Ns, Anchor, Instance),
-    Ns::(current_ontology_identity(Ns, Anchor),
-         gui_receiver_accept(Instance, Receiver, Capacity)),
+    gui_receiver_accept(Human, Receiver, Capacity),
     '$quod_gui_receiver_prepare'(Human, Receiver, Question, Descriptor, Capacity, Receipt).
 
 gui_native_activate(Human, Connection, Token, Status) :-
@@ -681,16 +681,11 @@ action('$quod_stage_gui'(Handle, Opening, gui_prepared(Opening)),
        [gui_opening_allowed(Opening)], gui_prepared(Opening)).
 
 gui_opening_allowed(gui_opening(ontology_ref(GuiNs, GuiAnchor), Reference,
-    form_ref(SourceNs, SourceAnchor, Form), Human, Actor, View, Receiver, Hosting, Capacity)) :-
+    Source, Human, Actor, View, Receiver, Hosting, Capacity)) :-
     current_ontology_identity(GuiNs, GuiAnchor),
-    SourceNs::(current_ontology_identity(SourceNs, SourceAnchor),
-               gui_open_definition(Form, Human, Actor, Reference, View)),
-    Actor = agent_instance_ref(ActorNs, ActorAnchor, Instance),
-    ActorNs::(current_ontology_identity(ActorNs, ActorAnchor),
-              gui_responder_for(Instance, form_ref(SourceNs, SourceAnchor, Form), Human, Hosting)),
-    Human = agent_instance_ref(HumanNs, HumanAnchor, HumanInstance),
-    HumanNs::(current_ontology_identity(HumanNs, HumanAnchor),
-              gui_receiver_accept(HumanInstance, Receiver, Capacity)).
+    gui_open_definition(Source, Human, Actor, Reference, View),
+    gui_responder_for(Actor, Source, Human, Hosting),
+    gui_receiver_accept(Human, Receiver, Capacity).
 
 gui_prepared(Opening) :- '$quod_gui_prepared'(Opening).
 
@@ -700,3 +695,426 @@ gui_query(Goal) :- rendering_query(Goal).
 gui_query(Goal) :- modelling_query(Goal).
 gui_query(Goal) :- lens_query(Goal).
 gui_query(Goal) :- prolog_query(Goal).
+
+%% Question behavior belongs to the class owner; exact references identify
+%% the application form, responsible agent and rows in their storing ontologies.
+gui_query(gui_open(_, _)).
+gui_query(gui_open_definition(_, _, _, _, _)).
+gui_query(gui_validate_submission(_, _, _, _, _, _)).
+gui_query(gui_form_projection(_, _, _, _)).
+gui_query(gui_continue(_)).
+gui_query(gui_submit(_, _, _, _)).
+gui_query(gui_complete(_)).
+gui_query(gui_consume(_)).
+gui_query(gui_cancel(_)).
+gui_query(gui_answer(_, _, _, _, _, _)).
+gui_query(gui_question_view(_, _, _, _)).
+gui_query(gui_question_form(_, _)).
+gui_query(gui_question_status(_, _)).
+gui_query(gui_retirement(_, _)).
+gui_query(gui_responder_for(_, _, _, _)).
+gui_query(gui_native_handler(_, _, _, _, _)).
+gui_query(gui_accept_question(_)).
+gui_query(gui_accepting(_)).
+gui_query(gui_completion_signing(_, _, _)).
+
+gui_question(question_ref(Ns, Anchor, Q), Source, Human, Actor, Revision, State) :-
+    in_ontology(Ns, Anchor, gui_question(Q, Source, Human, Actor, Revision, State)).
+
+gui_validate_submission(form_ref(Ns, Anchor, Form), Human, Actor, Revision, Control, Fields) :-
+    term_variables([Ns, Anchor, Form, Human, Actor, Revision, Control, Fields], []),
+    current_principal(Human),
+    in_ontology(Ns, Anchor,
+        (gui_question_policy(Form, Human, Actor), gui_bind(Form, Revision, Control, Fields, _))).
+
+gui_form_projection(form_ref(Ns, Anchor, Form), Human, Actor,
+                    form_view(Revision, Tree, ValuesToken, Values, Control)) :-
+    term_variables([Ns, Anchor, Form, Human, Actor], []),
+    current_principal(Human),
+    in_ontology(Ns, Anchor,
+        (gui_question_policy(Form, Human, Actor),
+         gui_definition(Form, Revision, Tree, Fields, submit(Control, _)),
+         gui_initial_values(Fields, Form, Tree, Values))),
+    term_digest(Values, ValuesToken).
+
+gui_continue(Reference) :-
+    term_variables(Reference, []), current_principal(Actor),
+    transaction((
+        gui_answer(Reference, form_ref(Ns, Anchor, Form), Human, Revision, Control, Fields),
+        in_ontology(Ns, Anchor,
+            (gui_question_policy(Form, Human, Actor),
+             gui_bind(Form, Revision, Control, Fields, Continuation),
+             \+ gui_application_active(Reference), assertz(gui_application_active(Reference)),
+             call(Continuation))),
+        gui_consume(Reference),
+        in_ontology(Ns, Anchor, retract(gui_application_active(Reference))))).
+
+gui_open(Source, Reference) :-
+    term_variables(Source, []), Source = form_ref(Ns, Anchor, Form),
+    transaction((
+        current_principal(Caller),
+        in_ontology(Ns, Anchor,
+            findall(pair(H, A), (gui_question_policy(Form, H, A), (Caller = H; Caller = A)), [pair(Human, Actor)])),
+        gui_open_definition(Source, Human, Actor, Reference, View),
+        gui_responder_for(Actor, Source, Human, Hosting),
+        gui_receiver_accept(Human, Receiver, Capacity),
+        current_ontology_identity(GuiNs, GuiAnchor),
+        Opening = gui_opening(ontology_ref(GuiNs, GuiAnchor), Reference, Source, Human, Actor,
+                              View, Receiver, Hosting, Capacity),
+        gui_prepare_question(Opening), gui_accept_question(Opening))).
+
+gui_open_definition(Source, Human, Actor, question_ref(ActorNs, ActorAnchor, question(Id)),
+                    form_view(Revision, Tree, ValuesToken, Values, Control)) :-
+    term_variables([Source, Human, Actor], []),
+    current_principal(Caller), (Caller = Human; Caller = Actor),
+    Source = form_ref(Ns, Anchor, Form), current_request_operation(Operation),
+    Actor = agent_instance_ref(ActorNs, ActorAnchor, _),
+    term_digest(gui_question(Operation, Source, Human, Actor), Id),
+    in_ontology(Ns, Anchor,
+        (gui_question_policy(Form, Human, Actor),
+         gui_definition(Form, Revision, Tree, Fields, submit(Control, _)),
+         gui_initial_values(Fields, Form, Tree, Values))),
+    term_digest(Values, ValuesToken).
+
+ontology_interface(gui_operations/2, <<"explicit class or instance operations">>).
+ontology_interface(gui_operation_bind/7, <<"bind typed inputs to an authored goal and named results">>).
+ontology_interface(gui_operation/6, <<"call the bound operation and return only its named results">>).
+ontology_interface(gui_operation_classes/1, <<"classes offering creation in this storing ontology">>).
+
+gui_question_view(Reference, Source, Revision, State) :-
+    term_variables(Reference, []), current_principal(Human),
+    gui_question(Reference, Source, Human, _, Revision, Stored), gui_visible_state(Stored, State).
+
+gui_question_form(Reference, question_form(Source, Responsible, Revision, State, View)) :-
+    term_variables(Reference, []), current_principal(Human),
+    Reference = question_ref(Ns, Anchor, _),
+    gui_question(Reference, Source, Human, Actor, Revision, Stored),
+    gui_visible_state(Stored, State), Responsible = agent_instance_ref(Ns, Anchor, Actor),
+    gui_form_projection(Source, Human, Responsible, View).
+
+gui_submit(Reference, Revision, Control, Fields) :-
+    term_variables([Reference, Revision, Control, Fields], []),
+    Reference = question_ref(Ns, Anchor, Q),
+    transaction((
+        current_principal(Human), current_request_operation(Submission),
+        gui_question(Reference, Source, Human, Actor, Revision, awaiting),
+        gui_validate_submission(Source, Human, agent_instance_ref(Ns, Anchor, Actor), Revision, Control, Fields),
+        gui_completion_request(Reference, Submission, Actor, Bytes),
+        in_ontology(Ns, Anchor,
+            (retract(gui_question(Q, Source, Human, Actor, Revision, awaiting)),
+             assertz(gui_question(Q, Source, Human, Actor, Revision, submitted(Submission, Control, Fields, Bytes))))))).
+
+gui_answer(Reference, Source, Human, Revision, Control, Fields) :-
+    term_variables(Reference, []), Reference = question_ref(Ns, Anchor, _),
+    current_principal(agent_instance_ref(Ns, Anchor, Actor)),
+    gui_question(Reference, Source, Human, Actor, Revision, submitted(_, Control, Fields, _)).
+
+gui_complete(Reference) :-
+    term_variables(Reference, []), Reference = question_ref(Ns, Anchor, _),
+    current_principal(agent_instance_ref(Ns, Anchor, Actor)),
+    transaction((gui_question(Reference, _, _, Actor, _, submitted(_, _, _, Bytes)),
+                 current_signed_request(Bytes), gui_continue(Reference))).
+
+gui_consume(Reference) :-
+    term_variables(Reference, []), Reference = question_ref(Ns, Anchor, Q),
+    current_principal(agent_instance_ref(Ns, Anchor, Actor)),
+    transaction((
+        gui_question(Reference, Source, Human, Actor, Revision, Submitted),
+        Submitted = submitted(_, _, _, Bytes), current_signed_request(Bytes),
+        Source = form_ref(SourceNs, SourceAnchor, _),
+        in_ontology(SourceNs, SourceAnchor, gui_application_active(Reference)),
+        in_ontology(Ns, Anchor, assertz(gui_retiring(Q, Human))),
+        gui_remove_hud(Human, Reference),
+        in_ontology(Ns, Anchor,
+            (retract(gui_question(Q, Source, Human, Actor, Revision, Submitted)),
+             retract(instance_of(quod:gui:question, Q)), retract(gui_retiring(Q, Human)))))).
+
+gui_cancel(Reference) :-
+    term_variables(Reference, []), Reference = question_ref(Ns, Anchor, Q),
+    transaction((
+        current_principal(Human), gui_question(Reference, Source, Human, Actor, Revision, State),
+        gui_cancelable(Reference, State),
+        in_ontology(Ns, Anchor, assertz(gui_retiring(Q, Human))),
+        gui_remove_hud(Human, Reference),
+        in_ontology(Ns, Anchor,
+            (retract(gui_question(Q, Source, Human, Actor, Revision, State)),
+             retract(instance_of(quod:gui:question, Q)), retract(gui_retiring(Q, Human)))))).
+
+gui_remove_hud(Human, Reference) :- gui_unlink(Human, Reference).
+gui_retirement(Reference, Human) :-
+    Reference = question_ref(Ns, Anchor, Q),
+    in_ontology(Ns, Anchor, gui_retiring(Q, Human)), current_principal(Principal),
+    (gui_question(Reference, _, Human, _, _, _), Principal = Human
+    ; gui_question(Reference, _, Human, Actor, _, submitted(_, _, _, _)),
+      Principal = agent_instance_ref(Ns, Anchor, Actor)).
+
+gui_completion_request(Reference, Submission, Actor, Bytes) :-
+    Reference = question_ref(Ns, Anchor, _),
+    in_ontology(Ns, Anchor,
+        (findall(K, agent_key(Actor, K, active), [Key]),
+         findall(Ms, gui_completion_allowance(Actor, Ms), [Allowance]))),
+    integer(Allowance), Allowance > 0,
+    current_request_expiry(SubmissionExpiry), Expiry is SubmissionExpiry + Allowance,
+    term_digest(gui_completion(Reference, Submission), Operation),
+    <<"quod:root">>::(current_ontology_identity(<<"quod:root">>, Network), acl_sovereign(quod:root)),
+    '$quod_program_source'([Actor], InstanceText),
+    '$quod_program_source'([<<"quod:gui">>::gui_complete(Reference)], GoalText),
+    agent_request_bytes(agent_goal_v1(Network, agent_instance_ref(Ns, Anchor, Actor), InstanceText, Key,
+                                     Operation, Expiry, execute, 3, GoalText), Bytes).
+
+%% Only the exact retained bytes and fixed completion goal may be signed.
+gui_completion_signing(Node, Responsible, Typed) :-
+    term_variables(Typed, []), Responsible = agent_instance_ref(Ns, Anchor, Actor),
+    Typed = agent_goal_v1(_, Responsible, _, Key, _, _, execute, 3, GoalText),
+    agent_request_bytes(Typed, Bytes),
+    in_ontology(Ns, Anchor,
+        (agent_hosted(Actor, Node, _, Key), gui_question(Q, _, _, Actor, _, submitted(_, _, _, Bytes)))),
+    '$quod_program_source'([Completion], GoalText),
+    term_variables(Completion, []), Completion = <<"quod:gui">>::gui_complete(question_ref(Ns, Anchor, Q)).
+
+gui_visible_state(awaiting, awaiting).
+gui_visible_state(submitted(Submission, Control, Fields, _), submitted(Submission, Control, Fields)).
+gui_question_status(Reference, Status) :-
+    term_variables(Reference, []), current_principal(Human),
+    gui_question(Reference, _, Human, _, _, State),
+    (State = awaiting -> Status = awaiting
+    ; State = submitted(_, _, _, Bytes), Reference = question_ref(Ns, Anchor, _),
+      in_ontology(Ns, Anchor, committed_operation_outcome(Bytes, Status))).
+gui_cancelable(_, awaiting).
+gui_cancelable(question_ref(Ns, Anchor, _), submitted(_, _, _, Bytes)) :-
+    in_ontology(Ns, Anchor, committed_operation_outcome(Bytes, Status)),
+    member(Status, [rejected, aborted, expired]).
+
+gui_responder_for(Responsible, Source, Human, hosted(Node, Epoch, Key)) :-
+    term_variables([Responsible, Source, Human], []),
+    Responsible = agent_instance_ref(Ns, Anchor, Instance),
+    current_principal(Principal), (Principal = Human; Principal = Responsible),
+    in_ontology(Ns, Anchor,
+        (gui_responder_policy(Instance, Source, Human),
+         findall(hosted(N, E, K), agent_hosted(Instance, N, E, K), [hosted(Node, Epoch, Key)]),
+         findall(Limit, gui_pending_allowance(Instance, Limit), [Capacity]),
+         findall(Q, gui_question(Q, _, _, Instance, _, _), Pending),
+         findall(Ms, gui_completion_allowance(Instance, Ms), [Allowance]))),
+    integer(Capacity), Capacity > 0, length(Pending, Count), Count < Capacity,
+    integer(Allowance), Allowance > 0.
+
+gui_native_handler(Responsible, Source, Human, Hosting, Token) :-
+    gui_responder_for(Responsible, Source, Human, Hosting),
+    Responsible = agent_instance_ref(Ns, Anchor, Instance), Hosting = hosted(_, Epoch, Key),
+    Head = react_on(assert(gui_question(Q, S, H, A, R, Submitted)),
+                    <<"quod:gui">>::gui_complete(question_ref(ReactionNs, ReactionAnchor, Q))),
+    Body = (Submitted = submitted(_, _, _, Bytes),
+            me(agent_instance_ref(ReactionNs, ReactionAnchor, A)),
+            gui_question(Q, S, H, A, R, Submitted), use_agent_request(Bytes)),
+    in_ontology(Ns, Anchor,
+        (clause(Head, Body), installed_agent_reaction(Instance, Epoch, Key, (Head :- Body), Token))).
+
+gui_accept_question(Opening) :-
+    term_variables(Opening, []),
+    Opening = gui_opening(ontology_ref(GuiNs, GuiAnchor), question_ref(Ns, Anchor, Q), Source,
+        Human, Responsible, form_view(Revision, _, _, _, _), _, Hosting, _),
+    Responsible = agent_instance_ref(Ns, Anchor, Actor), current_ontology_identity(GuiNs, GuiAnchor),
+    transaction((
+        gui_responder_for(Responsible, Source, Human, Hosting), gui_prepared(Opening),
+        in_ontology(Ns, Anchor,
+            (\+ gui_question(Q, _, _, _, _, _),
+             assertz((instance_of(quod:gui:question, Q) :- true)),
+             assertz(gui_question(Q, Source, Human, Actor, Revision, awaiting)))),
+        gui_link_question(Opening))).
+
+gui_accepting(Opening) :-
+    term_variables(Opening, []),
+    Opening = gui_opening(ontology_ref(GuiNs, GuiAnchor), Reference, Source,
+        Human, agent_instance_ref(Ns, Anchor, Actor), form_view(Revision, _, _, _, _), _, _, _),
+    Reference = question_ref(Ns, Anchor, _), current_ontology_identity(GuiNs, GuiAnchor),
+    gui_question(Reference, Source, Human, Actor, Revision, awaiting), gui_prepared(Opening).
+
+%% The receiver route and pending references stay in the human's ontology.
+gui_query(gui_pending_questions(_)).
+gui_query(gui_select_receiver(_, _, _)).
+gui_query(gui_receiver_for(_, _)).
+gui_query(gui_receiver_accept(_, _, _)).
+gui_query(gui_unlink(_, _)).
+gui_query(gui_link_question(_)).
+
+gui_pending_questions(References) :-
+    current_principal(agent_instance_ref(Ns, Anchor, Human)),
+    in_ontology(Ns, Anchor,
+        (instance_of(quod:user:human_user, Human),
+         findall(Reference, gui_pending(Human, Reference), Pending))),
+    sort(Pending, References).
+
+gui_select_receiver(Human, Node, Token) :-
+    term_variables([Human, Node, Token], []),
+    Human = agent_instance_ref(Ns, Anchor, Instance), current_principal(Human),
+    binary_codes(Node, NodeBytes), length(NodeBytes, 32),
+    binary_codes(Token, TokenBytes), length(TokenBytes, 32),
+    transaction((
+        in_ontology(Ns, Anchor,
+            (instance_of(quod:user:human_user, Instance),
+             findall(gui_selected_receiver(Instance, N, T), gui_selected_receiver(Instance, N, T), Previous))),
+        (Previous = [gui_selected_receiver(Instance, Node, Token)] -> true
+        ; gui_forget_receivers(ontology_ref(Ns, Anchor), Previous),
+          in_ontology(Ns, Anchor, assertz(gui_selected_receiver(Instance, Node, Token)))))).
+
+gui_forget_receivers(_, []).
+gui_forget_receivers(ontology_ref(Ns, Anchor), [Row|Rows]) :-
+    in_ontology(Ns, Anchor, retract(Row)), gui_forget_receivers(ontology_ref(Ns, Anchor), Rows).
+
+gui_receiver_for(Human, receiver(Node, Token)) :-
+    term_variables(Human, []), Human = agent_instance_ref(Ns, Anchor, Instance),
+    current_principal(Principal),
+    in_ontology(Ns, Anchor,
+        (instance_of(quod:user:human_user, Instance),
+         (Principal = Human; gui_receiver_policy(Instance, Principal)),
+         findall(receiver(N, T), gui_selected_receiver(Instance, N, T), [receiver(Node, Token)]))).
+
+gui_receiver_accept(Human, Receiver, Capacity) :-
+    gui_receiver_for(Human, Receiver), Human = agent_instance_ref(Ns, Anchor, Instance),
+    in_ontology(Ns, Anchor,
+        (findall(Limit, gui_pending_allowance(Instance, Limit), [Capacity]),
+         findall(Q, gui_pending(Instance, Q), Pending))),
+    integer(Capacity), Capacity > 0, length(Pending, Count), Count < Capacity.
+
+gui_unlink(Human, Reference) :-
+    term_variables([Human, Reference], []), Human = agent_instance_ref(Ns, Anchor, Instance),
+    gui_retirement(Reference, Human),
+    in_ontology(Ns, Anchor,
+        (instance_of(quod:user:human_user, Instance), retract(gui_pending(Instance, Reference)))).
+
+gui_link_question(Opening) :-
+    term_variables(Opening, []),
+    Opening = gui_opening(_, Reference, _, Human, _, _, Receiver, _, Capacity),
+    Human = agent_instance_ref(Ns, Anchor, Instance),
+    gui_receiver_accept(Human, Receiver, Capacity), gui_accepting(Opening),
+    in_ontology(Ns, Anchor,
+        (\+ gui_pending(Instance, Reference), assertz(gui_pending(Instance, Reference)))).
+
+%% HUD choices are exact references. Only the storing ontology holds the
+%% accepted contributions, waiting offers and authored display allowance.
+gui_query(gui_definition(_, _, _, _, _, _)).
+gui_query(gui_bind_values(_, _, _, _, _)).
+gui_query(gui_initial_values(_, _, _, _)).
+gui_query(gui_form_caption(_, _, _, _, _)).
+gui_query(hud_commands(_)).
+gui_query(hud_contribute(_, _)).
+gui_query(hud_withdraw(_, _)).
+gui_query(hud_offer(_, _)).
+gui_query(hud_withdraw_offer(_, _)).
+gui_query(hud_answer_offer(_, _, _)).
+
+hud_commands(hud(Tree)) :-
+    current_principal(agent_instance_ref(Ns, A, Human)),
+    in_ontology(Ns, A,
+        (instance_of(quod:user:human_user, Human), instance_of(quod:gui:hud, Hud),
+         findall(N, hud_allowance(Hud, N), [Allowance]))),
+    findall(Item, hud_command(entity_ref(Ns, A, Hud), Human, Item), Items),
+    menu_tree(menu(<<"Commands">>, <<"">>, [wedges(Allowance)], Items), Tree).
+
+hud_command(entity_ref(Ns, A, _), Human,
+    item(choice(Me, Choice), <<"Your attention">>, <<"Questions waiting for you">>, available, [image(Icon)])) :-
+    Me = entity_ref(Ns, A, Human),
+    in_ontology(Ns, A, entity_eidolons(Human, attention, _, [Choice])), gui_icon(attention, Icon).
+hud_command(entity_ref(Ns, A, _), Human,
+    item(choice(Me, Choice), <<"Me">>, <<"Your settings and keys">>, available, [image(Icon)])) :-
+    Me = entity_ref(Ns, A, Human),
+    in_ontology(Ns, A, entity_eidolons(Human, menu, _, [Choice])), gui_icon(me, Icon).
+hud_command(entity_ref(Ns, A, _), _, Item) :-
+    <<"quod:space">>::space_location(entity_ref(Ns, A, personal), placed(entity_ref(SNs, SA, Space), _)),
+    in_ontology(SNs, SA,
+        (entity_eidolons(Space, hud, _, Choices), member(Choice, Choices),
+         client_eidolon(Space, Choice, hud(Items)))), member(Item, Items).
+hud_command(entity_ref(Ns, A, Hud), _, Item) :-
+    in_ontology(Ns, A, hud_contribution(Hud, Subject, Choice, _)),
+    Subject = entity_ref(Source, Anchor, Entity),
+    (in_ontology(Source, Anchor, gui_menu_source(Entity, menu_source(_, Items))),
+     member(Offered, Items), Offered = item(choice(Subject, Choice), _, _, _, _) -> Item = Offered
+    ; Item = item(choice(Subject, Choice), <<"Unavailable">>, <<"">>, unreachable, [])).
+
+eidolon(attention, subject(ontology_ref(Ns, A), Human), attention(References)) :-
+    current_principal(agent_instance_ref(Ns, A, Human)), gui_pending_questions(References).
+
+%% The ordinary choice term carries the contributed subject and its recipe;
+%% the HUD reference identifies where acceptance is stored.
+hud_contribute(Hud, choice(Subject, Choice)) :-
+    term_variables([Hud, Subject, Choice], []),
+    Subject = entity_ref(_, _, _), Choice = eidolon(_, Style, recipe(_, _, _)), atom(Style),
+    current_principal(Principal), hud_direct_contributor(Hud, Principal),
+    Hud = entity_ref(Ns, A, Id),
+    transaction(in_ontology(Ns, A,
+        (instance_of(quod:gui:hud, Id),
+         \+ hud_contribution(Id, Subject, Choice, _),
+         assertz(hud_contribution(Id, Subject, Choice, Principal))))).
+
+hud_direct_contributor(entity_ref(Ns, A, Id), Principal) :-
+    in_ontology(Ns, A,
+        (instance_of(quod:gui:hud, Id),
+         findall(H, instance_of(quod:user:human_user, H), [Human]),
+         findall(D, space_assignment_state(personal, _, D), Destinations))),
+    (Principal = agent_instance_ref(Ns, A, Human)
+    ; Principal = agent_instance_ref(Ns, A, personal)
+    ; Destinations = [entity_ref(SNs, SA, Space)], in_ontology(SNs, SA, attribute(Space, owner, Principal))).
+
+hud_offer(Hud, choice(Subject, Choice)) :-
+    term_variables([Hud, Subject, Choice], []),
+    Subject = entity_ref(_, _, _), Choice = eidolon(_, Style, recipe(_, _, _)), atom(Style),
+    Hud = entity_ref(Ns, A, Id), current_principal(Principal),
+    in_ontology(Ns, A,
+        (instance_of(quod:gui:hud, Id), instance_of(quod:user:human_user, Human),
+         gui_receiver_policy(Human, Principal))),
+    (hud_direct_contributor(Hud, Principal) -> fail_with_reason(hud_contribute_directly); true),
+    transaction(in_ontology(Ns, A,
+        (instance_of(quod:gui:hud, Id),
+         \+ hud_offered(Id, _, Subject, Choice), \+ hud_contribution(Id, Subject, Choice, _),
+         assertz(hud_offered(Id, Principal, Subject, Choice))))).
+
+hud_withdraw_offer(entity_ref(Ns, A, Id), choice(Subject, Choice)) :-
+    term_variables([Ns, A, Id, Subject, Choice], []), current_principal(Principal),
+    transaction(in_ontology(Ns, A,
+        (instance_of(quod:gui:hud, Id), retract(hud_offered(Id, Principal, Subject, Choice))))).
+
+hud_withdraw(entity_ref(Ns, A, Id), choice(Subject, Choice)) :-
+    term_variables([Ns, A, Id, Subject, Choice], []), current_principal(Principal),
+    transaction((
+        in_ontology(Ns, A, (instance_of(quod:gui:hud, Id), hud_contribution(Id, Subject, Choice, Contributor))),
+        (Principal = agent_instance_ref(Ns, A, Human),
+         in_ontology(Ns, A, instance_of(quod:user:human_user, Human)) -> true; Principal = Contributor),
+        in_ontology(Ns, A, (instance_of(quod:gui:hud, Id), retract(hud_contribution(Id, Subject, Choice, Contributor)))))).
+
+%% The human answers through their existing class-selected operation form.
+hud_answer_offer(entity_ref(Ns, A, Human), Offer, Answer) :-
+    term_variables([Ns, A, Human, Offer, Answer], []), member(Answer, [accept, decline]),
+    <<"quod:user">>::personal_agent_owner(agent_instance_ref(Ns, A, Human)),
+    Offer = offer(Contributor, Subject, Choice),
+    in_ontology(Ns, A, operation_authorized(instance(Human), answer_hud_offer(Offer, Answer))),
+    transaction(in_ontology(Ns, A,
+        (instance_of(quod:gui:hud, Id), retract(hud_offered(Id, Contributor, Subject, Choice)),
+         (Answer == accept -> assertz(hud_contribution(Id, Subject, Choice, Contributor)); true)))).
+
+eidolon(answer_hud_offer, subject(ontology_ref(Ns, A), instance(Human)), operation(hud_offers(Owner))) :-
+    Owner = entity_ref(Ns, A, Human),
+    in_ontology(Ns, A,
+        (instance_of(quod:user:human_user, Human), instance_of(quod:gui:hud, Id), once(hud_offered(Id, _, _, _)))).
+instance_of(quod:gui:form, hud_offers(entity_ref(Ns, A, H))) :- in_ontology(Ns, A, instance_of(quod:user:human_user, H)).
+instance_of(quod:gui:selection, hud_offer_choice(_)).
+instance_of(quod:gui:selection, hud_offer_answer).
+instance_of(quod:gui:button, hud_offer_submit).
+attribute(hud_offers(_), label, <<"Offered commands">>).
+attribute(hud_offers(_), image, Icon) :- gui_icon(question, Icon).
+attribute(hud_offers(_), help, <<"Other agents asked to add these commands to your HUD. Nothing is added unless you accept.">>).
+attribute(hud_offer_choice(_), label, <<"Offer">>).
+attribute(hud_offer_choice(entity_ref(Ns, A, _)), options, Options) :-
+    findall(option(offer(P, S, C), Label),
+        (in_ontology(Ns, A, (instance_of(quod:gui:hud, Id), hud_offered(Id, P, S, C))),
+         hud_offer_label(S, C, Label)), Options).
+attribute(hud_offer_answer, label, <<"Answer">>).
+attribute(hud_offer_answer, options, [option(accept, <<"Add it to my HUD">>), option(decline, <<"Decline">>)]).
+attribute(hud_offer_submit, label, <<"Answer">>).
+gui_children(hud_offers(H), [hud_offer_choice(H), hud_offer_answer, hud_offer_submit]).
+gui_initial(hud_offers(_), hud_offer_answer, decline).
+gui_form(hud_offers(Human), [field(hud_offer_choice(Human), Offer), field(hud_offer_answer, Answer)],
+    submit(hud_offer_submit, <<"quod:gui">>::hud_answer_offer(Human, Offer, Answer), operation(answer_hud_offer(Offer, Answer), []))).
+hud_offer_label(entity_ref(Ns, A, Entity), Choice, Label) :-
+    (in_ontology(Ns, A, gui_menu_source(Entity, menu_source(_, Items))),
+     member(item(choice(_, Choice), Offered, _, _, _), Items), binary(Offered) -> Label = Offered
+    ; Label = <<"A command whose source can't be reached">>).

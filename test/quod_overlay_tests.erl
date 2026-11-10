@@ -400,6 +400,43 @@ read_only_frame_uses_same_staged_view_and_restores_writes_test() ->
                       end, Changes)),
     quod_erlog_db_local_prove:cleanup_read_set(W2).
 
+committed_read_frame_preserves_staging_across_publication_and_reentry_test() ->
+    C = committed([{policy, allow}]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    {succeed, W1} = erlog_int:prove_goal(
+        {',', {retract, {policy, allow}}, {assertz, {policy, deny}}}, W0),
+    Guard = quod_erlog_db_local_prove:committed_read_state(W1),
+    ?assertMatch({succeed, _}, erlog_int:prove_goal({policy, allow}, Guard)),
+    ?assertMatch({fail, _}, erlog_int:prove_goal({policy, deny}, Guard)),
+    Published = quod_erlog_db_local_prove:replace_revision(
+        W1, quod_erlog_db_local_prove:revision(Guard)),
+    ?assertMatch({succeed, _}, erlog_int:prove_goal({policy, deny}, Published)),
+    {succeed, Reentered} = erlog_int:prove_goal({assertz, domain_work}, Published),
+    Refreshed = quod_erlog_db_local_prove:replace_revision(
+        Guard, quod_erlog_db_local_prove:revision(Reentered)),
+    ?assertMatch({succeed, _}, erlog_int:prove_goal({policy, allow}, Refreshed)),
+    ?assertMatch({fail, _}, erlog_int:prove_goal(domain_work, Refreshed)),
+    ?assertMatch({erlog_error, {permission_error, modify, static_procedure, _}},
+        catch erlog_int:prove_goal({assertz, leaked}, Refreshed)),
+    ?assertEqual({present, 1}, maps:get({policy, 1},
+        quod_erlog_db_local_prove:get_read_set(db_ref(Refreshed)))),
+    ?assertEqual(quod_erlog_db_local_prove:get_local_changes(db_ref(Reentered)),
+        quod_erlog_db_local_prove:get_local_changes(db_ref(Refreshed))),
+    quod_erlog_db_local_prove:cleanup_read_set(W0).
+
+construction_context_follows_revision_and_rollback_test() ->
+    W0 = quod_erlog_db_local_prove:wrap_state(committed([])),
+    Checkpoint = quod_erlog_db_local_prove:checkpoint(W0),
+    Inputs = [{attribute, name, <<"original">>}],
+    W1 = quod_erlog_db_local_prove:put_construction(W0, new_id, document, Inputs),
+    Reentered = quod_erlog_db_local_prove:replace_revision(
+        W0, quod_erlog_db_local_prove:revision(W1)),
+    ?assertEqual({ok, {document, Inputs}},
+        quod_erlog_db_local_prove:construction(Reentered, new_id)),
+    RolledBack = quod_erlog_db_local_prove:restore(Reentered, Checkpoint),
+    ?assertEqual(error, quod_erlog_db_local_prove:construction(RolledBack, new_id)),
+    ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(W1))).
+
 read_only_frames_are_nestable_test() ->
     C = committed([]),
     W0 = quod_erlog_db_local_prove:wrap_state(C),

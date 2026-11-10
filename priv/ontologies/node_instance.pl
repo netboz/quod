@@ -81,11 +81,12 @@ react_on(observed(agent_recovery_ready(Observer, Target, Host, Epoch, Expected,
 
 node_recovery_goal(Target, Host, Epoch, Expected, Round, Report, Kind, required,
                    node_authorized_goal(Source, Anchor, Operation)) :-
-    Target = agent_instance_ref(Source, Anchor, Instance),
+    Target = agent_instance_ref(Source, Anchor, _),
     prepare_agent_custody(Target, Epoch, Prepared),
-    Operation = report_agent_observation_with_custody(Instance, Host, Epoch,
+    Operation = quod:agent::report_agent_observation_with_custody(Target, Host, Epoch,
                                                      Expected, Round, Report, Kind, Prepared).
-node_recovery_goal(agent_instance_ref(Source, Anchor, Instance), Host, Epoch,
+node_recovery_goal(Target, Host, Epoch,
                    Expected, Round, Report, Kind, none,
                    node_authorized_goal(Source, Anchor,
-                     report_agent_observation(Instance, Host, Epoch, Expected, Round, Report, Kind))).
+                     quod:agent::report_agent_observation(Target, Host, Epoch, Expected, Round, Report, Kind))) :-
+    Target = agent_instance_ref(Source, Anchor, _).

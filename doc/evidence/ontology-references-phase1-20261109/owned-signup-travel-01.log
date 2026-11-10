@@ -1,0 +1,11 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling test/quod_lobby_tests.erl failed
+     ┌─ test/quod_lobby_tests.erl:
+     │
+ 555 │                    space_view(Ns,personal_lobby,playing,{0})}})),
+     │                               ╰── variable 'Ns' is unbound, did you mean 'Nested'?
+
+

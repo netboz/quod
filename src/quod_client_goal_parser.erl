@@ -291,20 +291,16 @@ lex(Chars0, Line0, PriorLayout, Lex0) ->
 lex_token([$. | Rest], Line, _Layout, #lex{terminator = next} = Lex0) ->
     case skip_layout(Rest, Line, false) of
         {ok, Tail, EndLine, Layout} when Tail =:= []; Layout =:= true ->
-            case push({'.', Line}, Lex0) of
-                {ok, Lex} -> {ok, lists:reverse(Lex#lex.tokens), Lex, Tail, EndLine};
-                {error, _} = Error -> Error
-            end;
+            Lex = push({'.', Line}, Lex0),
+            {ok, lists:reverse(Lex#lex.tokens), Lex, Tail, EndLine};
         {ok, _, _, _} -> lex_graphic([$. | Rest], Line, Lex0);
         {error, _} = Error -> Error
     end;
 lex_token([$. | Rest], Line, _Layout, Lex0) ->
     case only_layout(Rest, Line) of
         true ->
-            case push({'.', Line}, Lex0) of
-                {ok, Lex} -> {ok, lists:reverse(Lex#lex.tokens), Lex};
-                {error, _} = Error -> Error
-            end;
+            Lex = push({'.', Line}, Lex0),
+            {ok, lists:reverse(Lex#lex.tokens), Lex};
         false ->
             lex_graphic([$. | Rest], Line, Lex0)
     end;
@@ -354,11 +350,10 @@ lex_token([C | _] = Chars, Line, _Layout, Lex0) ->
         false -> {error, invalid_syntax}
     end.
 
-continue(_Rest, _Line, {error, _} = Error) -> Error;
-continue(Rest, Line, {ok, Lex}) -> lex(Rest, Line, false, Lex).
+continue(Rest, Line, Lex) -> lex(Rest, Line, false, Lex).
 
 push(Token, #lex{tokens = Tokens} = Lex) ->
-    {ok, Lex#lex{tokens = [Token | Tokens]}}.
+    Lex#lex{tokens = [Token | Tokens]}.
 
 skip_layout([C | Rest], Line, _Layout)
   when C >= 0, C =< 32 ->

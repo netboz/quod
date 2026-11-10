@@ -1,0 +1,161 @@
+======================== EUnit ========================
+module 'quod_evidence_resolver_tests'
+  quod_evidence_resolver_tests: current_era_hit_has_one_committed_capture_and_zero_foreign_work_test...OBSERVED_CALL pid=<0.113.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+ASSERTED_SNAPSHOT_CALLS test=<0.87.0> pids=[<0.113.0>]
+[0.267 s] ok
+  quod_evidence_resolver_tests: malformed_requests_are_refused_before_owner_work_test...[0.038 s] ok
+  quod_evidence_resolver_tests: wrong_target_refusal_has_a_real_routed_primitive_control_test...OBSERVED_CALL pid=<0.160.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+[0.063 s] ok
+  quod_evidence_resolver_tests: -nonhosted_identity_routes_once_test_/0-fun-1- (none)...OBSERVED_CALL pid=<0.183.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+[0.043 s] ok
+  quod_evidence_resolver_tests: -nonhosted_identity_routes_once_test_/0-fun-1- (replaced_incarnation)...OBSERVED_CALL pid=<0.201.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+[0.056 s] ok
+  quod_evidence_resolver_tests: lagging_hosted_prefix_waits_for_verified_suffix_without_foreign_work_test...OBSERVED_CALL pid=<0.237.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+ASSERTED_SNAPSHOT_CALLS test=<0.87.0> pids=[<0.237.0>]
+[0.030 s] ok
+  quod_evidence_resolver_tests: lagging_hosted_prefix_expires_without_routed_repair_test...ASSERTED_SNAPSHOT_CALLS test=<0.87.0> pids=[]
+[0.435 s] ok
+  quod_evidence_resolver_tests: unavailable_hosted_capture_does_not_route_test...[0.027 s] ok
+  quod_evidence_resolver_tests: persisted_cache_replays_at_startup_not_on_later_requests_test...OBSERVED_CALL pid=<0.284.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+OBSERVED_CALL pid=<0.284.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+OBSERVED_CALL pid=<0.302.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_projection,
+                                                                               materialize_turn,
+                                                                               1}
+OBSERVED_CALL pid=<0.312.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+OBSERVED_CALL pid=<0.313.0> mfa={quod_foreign_log,replay_cache,7} caller={quod_foreign_log,
+                                                                          measure_foreign_stage,
+                                                                          2}
+OBSERVED_CALL pid=<0.320.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+ASSERTED_SNAPSHOT_CALLS test=<0.87.0> pids=[<0.320.0>]
+[0.099 s] ok
+  quod_evidence_resolver_tests: capture_owner_death_before_a_usable_view_stays_unavailable_test...[0.030 s] ok
+  quod_evidence_resolver_tests: sufficient_invalid_local_evidence_never_falls_back_test...OBSERVED_CALL pid=<0.354.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+OBSERVED_CALL pid=<0.355.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+OBSERVED_CALL pid=<0.356.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.032 s] ok
+  quod_evidence_resolver_tests: current_era_accepts_distinct_valid_quorum_subsets_test...OBSERVED_CALL pid=<0.368.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+OBSERVED_CALL pid=<0.369.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+OBSERVED_CALL pid=<0.370.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.030 s] ok
+  quod_evidence_resolver_tests: historical_era_uses_verified_resident_proof_despite_unused_hints_test...OBSERVED_CALL pid=<0.382.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+OBSERVED_CALL pid=<0.383.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+OBSERVED_CALL pid=<0.384.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+OBSERVED_CALL pid=<0.385.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.042 s] ok
+  quod_evidence_resolver_tests: -pinned_owner_loss_never_recaptures_or_routes_test_/0-fun-1- (before_verification)...[0.035 s] ok
+  quod_evidence_resolver_tests: -pinned_owner_loss_never_recaptures_or_routes_test_/0-fun-1- (after_verification)...OBSERVED_CALL pid=<0.423.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.030 s] ok
+  quod_evidence_resolver_tests: expired_or_invalid_deadline_never_starts_capture_test...[0.026 s] ok
+  quod_evidence_resolver_tests: queued_capture_cannot_launch_after_expiry_test...[0.454 s] ok
+  quod_evidence_resolver_tests: queued_routed_admission_preserves_capture_deadline_test...[0.677 s] ok
+  quod_evidence_resolver_tests: historical_local_read_never_queues_at_foreign_owner_test...OBSERVED_CALL pid=<0.508.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.042 s] ok
+  quod_evidence_resolver_tests: verified_local_success_cannot_publish_after_expiry_test...OBSERVED_CALL pid=<0.525.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[1.061 s] ok
+  quod_evidence_resolver_tests: append_after_capture_preserves_the_borrowed_prefix_test...OBSERVED_CALL pid=<0.542.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+ASSERTED_SNAPSHOT_CALLS test=<0.87.0> pids=[<0.542.0>]
+[0.036 s] ok
+  quod_evidence_resolver_tests: local_serving_uses_any_capture_and_unchanged_absolute_deadline_test...OBSERVED_CALL pid=<0.559.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.027 s] ok
+  quod_evidence_resolver_tests: -local_serving_expiry_is_not_ready_without_routed_fallback_test_/0-fun-1- (already_expired)...[0.026 s] ok
+  quod_evidence_resolver_tests: -local_serving_expiry_is_not_ready_without_routed_fallback_test_/0-fun-1- (queued_capture)...[0.456 s] ok
+  quod_evidence_resolver_tests: -local_serving_unavailable_copy_never_routes_test_/0-fun-1- (lagging)...[0.029 s] ok
+  quod_evidence_resolver_tests: -local_serving_unavailable_copy_never_routes_test_/0-fun-1- (none)...[0.027 s] ok
+  quod_evidence_resolver_tests: -local_serving_unavailable_copy_never_routes_test_/0-fun-1- (replaced_incarnation)...[0.054 s] ok
+  quod_evidence_resolver_tests: local_serving_wrong_expected_namespace_is_invalid_before_capture_test...[0.030 s] ok
+  quod_evidence_resolver_tests: -candidate_same_entry_reuses_one_verified_source_test_/0-fun-1- (foreign)...OBSERVED_CALL pid=<0.675.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+[0.025 s] ok
+  quod_evidence_resolver_tests: -candidate_same_entry_reuses_one_verified_source_test_/0-fun-1- (local)...OBSERVED_CALL pid=<0.698.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.028 s] ok
+  quod_evidence_resolver_tests: -candidate_same_entry_reuses_one_verified_source_test_/0-fun-1- (cohosted)...OBSERVED_CALL pid=<0.713.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.027 s] ok
+  quod_evidence_resolver_tests: -same_entry_reselection_preserves_claim_and_witness_rules_test_/0-fun-1- (none)...OBSERVED_CALL pid=<0.721.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+[0.035 s] ok
+  quod_evidence_resolver_tests: -same_entry_reselection_preserves_claim_and_witness_rules_test_/0-fun-1- (current)...OBSERVED_CALL pid=<0.758.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.026 s] ok
+  quod_evidence_resolver_tests: -same_entry_new_selection_preserves_hosted_incarnation_test_/0-fun-2- (before_read-death)...OBSERVED_CALL pid=<0.787.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.032 s] ok
+  quod_evidence_resolver_tests: -same_entry_new_selection_preserves_hosted_incarnation_test_/0-fun-2- (before_read-replacement)...OBSERVED_CALL pid=<0.804.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.031 s] ok
+  quod_evidence_resolver_tests: -same_entry_new_selection_preserves_hosted_incarnation_test_/0-fun-2- (after_read-death)...OBSERVED_CALL pid=<0.828.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.023 s] ok
+  quod_evidence_resolver_tests: -same_entry_new_selection_preserves_hosted_incarnation_test_/0-fun-2- (after_read-replacement)...OBSERVED_CALL pid=<0.845.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.031 s] ok
+  quod_evidence_resolver_tests: completed_foreign_entry_reselection_needs_no_live_foreign_capture_test...OBSERVED_CALL pid=<0.862.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+[0.024 s] ok
+  quod_evidence_resolver_tests: same_entry_reselection_cannot_publish_after_original_deadline_test...OBSERVED_CALL pid=<0.886.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+[0.440 s] ok
+  [done in 5.041 s]
+=======================================================
+  All 39 tests passed.
+RESOLVER_PROBE_RESULT ok

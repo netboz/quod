@@ -19,7 +19,7 @@ a synchronous call to itself.
 -include("quod_ledger.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/5, attest_plan/3, certify_reads/2, certify_reads_many/1,
+         read_set/1, seal/5, attest_plan/3, certify_reads/2, certify_reads_many/1,
          bind_group_effects/3,
          bind_operation_effect/3, submit_plan/5,
          materialize/4, restore_many/2, release_many/2,
@@ -223,6 +223,42 @@ seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity, Principal,
     remote_seal(Handle, Principal, RequestBinding);
 seal(_Handle, _OriginIdentity, _Principal, _RequestBinding, _OriginRole) ->
     {error, {protocol_error, session_binding}}.
+
+-doc "Return the existing monotonic read set without sealing a write plan.".
+-spec read_set(handle() | term()) -> {ok, map()} | {error, term()}.
+read_set({local_scope,_,_,_,_,Session}) ->
+    {ok,quod_proof_session:read_set(Session)};
+read_set({quod_scope_session,Pid,_,ProofId,SessionRef,_,_} = Handle) ->
+    case command_remaining_ms() of
+        0 -> {error,current_execution_limit()};
+        Remaining ->
+            Ref = make_ref(), Monitor = monitor(process,Pid),
+            Pid ! {scope_read_set,self(),ProofId,SessionRef,Ref},
+            try receive
+                {scope_reply,Pid,ProofId,SessionRef,Ref,{read_set,Reads}} -> {ok,Reads};
+                {'DOWN',Monitor,process,Pid,Reason} -> {error,failure_reason(Handle,Reason)}
+            after Remaining -> {error,current_execution_limit()}
+            end after demonitor(Monitor,[flush]) end
+    end;
+read_set({remote_scope,_,_,_,_} = Handle) ->
+    case bind_remote_router(Handle) of
+        {ok,Router,Monitor} ->
+            case command_remaining_ms() of
+                0 -> {error,current_execution_limit()};
+                Remaining -> case quod_ask_router:command(Handle,Remaining,scope_read_set) of
+                {ok,Ref} -> receive
+                    {quod_scope_event,Handle,Ref,_,_,{scope_read_set,Blob}} ->
+                        quod_scope_wire:decode_payload(read_set,Blob);
+                    {quod_scope_event,Handle,Ref,_,_,{scope_error,Reason}} -> {error,Reason};
+                    {quod_scope_down,Handle,Reason} -> {error,failure_reason(Handle,Reason)};
+                    {'DOWN',Monitor,process,Router,_} -> {error,failure_reason(Handle,unavailable)}
+                after Remaining -> remote_timeout(Handle,Ref,{error,current_execution_limit()}) end;
+                {sent,_} -> {error,{protocol_error,request_binding}};
+                {error,_} = Error -> Error
+                end
+            end;
+        {error,_} = Error -> Error
+    end.
 
 transient({local_scope,_,_,_,_,Session}) ->
     {ok,quod_proof_session:transient(Session)};
@@ -810,17 +846,13 @@ certify_local_read_plan(Ns, Target, Plan) ->
     end.
 
 certify_local_read_plan(Ns, Target, Plan, Deadline) ->
-    case quod_dtx:encode(Plan) of
-        {ok, PlanBlob} ->
-            case quod_simplex:history_view(Target, validator, Deadline) of
-                {ok, View} ->
-                    quod_dtx_current_view:certify_reads(
-                      Ns, {{local, View}, PlanBlob}, Deadline);
-                {error, _} ->
-                    {error, read_certificate_unavailable}
-            end;
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    case quod_simplex:history_view(Target, validator, Deadline) of
+        {ok, View} ->
+            quod_dtx_current_view:certify_reads(
+              Ns, {{local, View}, PlanBlob}, Deadline);
         {error, _} ->
-            {error, {protocol_error, proof_engine}}
+            {error, read_certificate_unavailable}
     end.
 
 normalize_read_certificate_result({ok, _} = Result) -> Result;
@@ -1356,6 +1388,13 @@ dispatch_message({scope_savepoint, Origin, ProofId, Ref,
             handled;
         false ->
             handled
+    end;
+dispatch_message({scope_read_set,Origin,ProofId,Ref,RequestRef}) ->
+    case valid_command(Origin,ProofId,Ref) of
+        true ->
+            send_reply(RequestRef,{read_set,quod_proof_session:read_set((runtime())#runtime.session)}),
+            handled;
+        false -> handled
     end;
 dispatch_message({scope_transient,Origin,ProofId,Ref,RequestRef}) ->
     case valid_command(Origin,ProofId,Ref) of

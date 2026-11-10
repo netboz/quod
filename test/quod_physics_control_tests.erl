@@ -69,7 +69,7 @@ ambiguous_body_ownership_test_() ->
 subclass_agent_binding_test_() ->
     {timeout,60,fun() -> with_control(fun(F) ->
         ?assertMatch({normalized,{committed,_,_}},action(F,bind(0,none,compact,eye)))
-    end, [{isa,pilot_class,agent},{instance_of,pilot_class,compact}]) end}.
+    end, [{isa,pilot_class,{':',quod,{':',agent,agent}}},{instance_of,pilot_class,compact}]) end}.
 
 bind(Epoch, Previous, Agent, Viewpoint) ->
     {physics_control_agent,room,Epoch,Previous,{controlled,Agent,Viewpoint}}.
@@ -96,7 +96,7 @@ bodies(Ns) ->
     Bodies.
 
 with_control(Fun) ->
-    with_control(Fun, [{instance_of,agent,compact}]).
+    with_control(Fun, [{instance_of,{':',quod,{':',agent,agent}},compact}]).
 
 with_control(Fun, CompactFacts) ->
     Ns = <<"host-test-agent">>,
@@ -105,7 +105,7 @@ with_control(Fun, CompactFacts) ->
          {can_invoke,{physics_client_control,{'_'},{'_'}},{'_'},{'_'},Ns},
          {can_view_physics,room,{'_'}},
          {physics_space,room,disabled,actor},
-         {instance_of,agent,wide},
+         {instance_of,{':',quod,{':',agent,agent}},wide},
          {physics_body_definition, room, 2, 1, fixed, {vector,0,1000,0}, {owned, {box,200,200,200}, 1}},
          {physics_body_definition, room, 3, 1, fixed, {vector,2000,1000,0}, {owned, {box,1000,300,500}, 1}},
          {physics_agent,room,compact,1,2,{motion,grounded}},

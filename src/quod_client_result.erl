@@ -44,7 +44,7 @@ where the proof ran.
         {material_limit, founding | plan | proof, atom(), non_neg_integer(), non_neg_integer()} |
         {effect_custody_limit, prepared_bytes, non_neg_integer(), non_neg_integer()}.
 -type result() ::
-        {read, [{binary(), <<_:256>>, non_neg_integer()}], read_outcome()} |
+        {read, [{binary(), <<_:256>>, non_neg_integer(), list()}], read_outcome()} |
         {answers, non_neg_integer(), [binary()]} |
         {solution, <<_:256>>, non_neg_integer(), binary()} |
         stopped | fail | {failed, binary()} |
@@ -311,10 +311,11 @@ valid_read_outcome({error, _} = Outcome) -> valid_result(Outcome);
 valid_read_outcome(_) -> false.
 
 valid_dependencies([], _) -> true;
-valid_dependencies([{Ns, <<_:256>>, Height} | Rest], Previous)
+valid_dependencies([{Ns, <<_:256>>, Height, Reads} | Rest], Previous)
   when is_binary(Ns), byte_size(Ns) > 0,
        (Previous =:= none orelse Previous < Ns) ->
-    valid_uint64(Height) andalso valid_dependencies(Rest, Ns);
+    valid_uint64(Height) andalso quod_read_set:valid_pairs(Reads) andalso
+        valid_dependencies(Rest, Ns);
 valid_dependencies(_, _) -> false.
 
 valid_binding_blobs([]) -> true;
@@ -403,7 +404,7 @@ http_normalized(Evidence, {read, Dependencies, Outcome}) ->
     {Status, Body} = http_normalized(Evidence, Outcome),
     {Status, Body#{dependencies =>
         [#{ns => Ns, genesis_anchor => b64url(Anchor), height => integer_to_binary(Height)}
-         || {Ns, Anchor, Height} <- Dependencies]}};
+         || {Ns, Anchor, Height, _Reads} <- Dependencies]}};
 http_normalized(Evidence, {answers, Height, Blobs}) ->
     {200, evidence_json(
             Evidence,

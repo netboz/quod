@@ -218,11 +218,10 @@ gui_local_id(Id) :- term_variables(Id, []), \+ (Id = _:_) .
 %% This base advertises no ontology interfaces and grants no invocation rights.
 gui_operation_classes(Classes) :-
     '$quod_state_check'((
-        current_ontology_identity(Ns, Anchor),
-        findall(Class, (isa(Class, Class),
+        findall(Subject, (isa(Class, Class), gui_menu_subject(Class, Subject),
             class_eidolons([Class], operation(class), _, Choices),
             member(eidolon(_,Name,_),Choices),
-            gui_operation_form(class_ref(Ns,Anchor,Class), Name, _, _, _)), Raw),
+            gui_operation_form(Subject, Name, _, _, _)), Raw),
         sort(Raw, Classes))).
 
 no_follow(gui_operations/2).
@@ -246,22 +245,25 @@ gui_operations(Subject, Operations) :-
 
 gui_operation_view(Subject, Name,
         operation_view(Name, Subject, Revision, Tree, Token, Values, Control, Names, Availability)) :-
-    gui_operation_definition(Subject, Name, Revision, Form, Tree, Fields,
+    gui_operation_definition(Subject, Name, Revision, form_ref(Ns, Anchor, Form), Tree, Fields,
                              submit(Control, _), operation(Local, Permission, Results)),
-    gui_initial_values(Fields, Form, Tree, Values), term_digest(Values, Token),
+    in_ontology(Ns, Anchor, gui_initial_values(Fields, Form, Tree, Values)),
+    term_digest(Values, Token),
     gui_results(Results, [], Names),
     gui_operation_availability(Local, Permission, Availability).
 
-%% A recipe selects a local form for this exact subject. The form, its fixed
+%% A recipe selects a form at its owner for this exact subject. The form, its fixed
 %% values, output sharing and permission parameters all enter the revision.
 %% Existing recipe selection retains most-specific/ambiguous-class semantics.
-gui_operation_definition(Subject, Name, Revision, Form, Tree, Fields, Submit,
+gui_operation_definition(Subject, Name, Revision, Reference, Tree, Fields, Submit,
                          operation(Local, Permission, Results)) :-
-    gui_operation_form(Subject, Name, Local, Recipe, Form),
-    gui_definition(Form, Schema, Tree, Fields, Submit, operation(Permission, Results)),
-    variant_digest(offered_operation(Subject, Name, Recipe, Form, Schema), Revision).
+    gui_operation_form(Subject, Name, Local, Recipe, Reference),
+    Reference = form_ref(Ns, Anchor, Form),
+    in_ontology(Ns, Anchor,
+        gui_definition(Form, Schema, Tree, Fields, Submit, operation(Permission, Results))),
+    variant_digest(offered_operation(Subject, Name, Recipe, Reference, Schema), Revision).
 
-gui_operation_form(Subject, Name, Local, recipe(Ns,Anchor,Recipe), Form) :-
+gui_operation_form(Subject, Name, Local, recipe(Ns,Anchor,Recipe), form_ref(Ns,Anchor,Form)) :-
     gui_operation_subject(Subject, Local, Classes, Mode),
     class_eidolons(Classes, operation(Mode), Name,
                    [eidolon(operation(Mode), Name, recipe(Ns, Anchor, Recipe))]),
@@ -269,8 +271,10 @@ gui_operation_form(Subject, Name, Local, recipe(Ns,Anchor,Recipe), Form) :-
     findall(F, in_ontology(Ns,Anchor,
                     eidolon(Recipe, subject(Target, Local), operation(F))), [Form]).
 
-gui_operation_subject(class_ref(Ns, Anchor, Class), class(Class), [Class], class) :-
-    current_ontology_identity(Ns, Anchor), isa(Class, Class).
+gui_operation_subject(class_ref(Ns, Anchor, Class), class(Owned), [Owned], class) :-
+    once(in_ontology(Ns, Anchor, isa(Class, Class))),
+    current_ontology_identity(Here, _),
+    (Ns == Here -> Owned = Class; Owned = Ns:Class).
 gui_operation_subject(entity_ref(Ns, Anchor, Entity), instance(Entity), Classes, instance) :-
     current_ontology_identity(Ns, Anchor),
     findall(Class, instance_of(Class, Entity), Raw), sort(Raw, Classes), Classes \== [].
@@ -290,9 +294,9 @@ gui_operation(Subject, Name, Revision, Control, Values, Results) :-
 gui_operation_binding(Subject, Name, Revision, Control, Values, Goal, Results) :-
     term_variables([Subject, Name, Revision, Control, Values], []),
     '$quod_state_check'((
-        gui_operation_definition(Subject, Name, Revision, Form, Tree, Fields,
+        gui_operation_definition(Subject, Name, Revision, form_ref(Ns, Anchor, Form), Tree, Fields,
                                  submit(Control, Goal), operation(Local, Permission, Results)),
-        gui_bind_values(Form, Tree, Fields, Control, Values),
+        in_ontology(Ns, Anchor, gui_bind_values(Form, Tree, Fields, Control, Values)),
         operation_authorized(Local, Permission))).
 
 %% The returned ordinary goal checks the current declaration and permission
@@ -322,22 +326,29 @@ gui_menu_source(Entity, menu_source(Name, Items)) :-
     findall(Item, (member(Choice, Choices), gui_menu_item(Subject, Choice, Item)), Items).
 
 gui_operation_caption(Subject, Name, Label, Help, Image, Availability) :-
-    gui_operation_form(Subject, Name, Local, _, Form),
+    gui_operation_form(Subject, Name, Local, _, form_ref(Source, History, Form)),
+    in_ontology(Source, History, gui_form_caption(Form, Label, Help, Image, Permission)),
+    gui_operation_availability(Local, Permission, Availability).
+
+no_follow(gui_form_caption/5).
+gui_form_caption(Form, Label, Help, Image, Permission) :-
     findall(ontology_ref(N, A), gui_vocabulary(N, A), [ontology_ref(Ns, Anchor)]),
     gui_component_tree(Form, Ns, [], _, component(Form, Classes, Attributes, _)),
     in_ontology(Ns, Anchor, gui_component_schema(Classes, Attributes, form, Properties)),
-    member(property(label, Label), Properties), member(property(help, Help), Properties),
-    member(property(image, Image), Properties),
     findall(binding(F, S), gui_form(Form, F, S), [binding(_, Declaration)]),
     gui_submission(Declaration, _, operation(Permission, _), _),
-    gui_operation_availability(Local, Permission, Availability).
+    member(property(label, Label), Properties), member(property(help, Help), Properties),
+    member(property(image, Image), Properties).
 
 gui_menu_subject(ontology_ref(Ns, Anchor), ontology_ref(Ns, Anchor)) :- !,
     current_ontology_identity(Ns, Anchor).
 gui_menu_subject(Entity, entity_ref(Ns, Anchor, Entity)) :-
     instance_of(_, Entity), !, current_ontology_identity(Ns, Anchor).
-gui_menu_subject(Class, class_ref(Ns, Anchor, Class)) :-
-    isa(Class, Class), current_ontology_identity(Ns, Anchor).
+gui_menu_subject(Class, class_ref(Ns, Anchor, Local)) :-
+    once(isa(Class, Class)),
+    ('$quod_owner_name'(Class, Owner, Local) ->
+        ontology_name(Owner,Ns), Ns::current_ontology_identity(Ns,Anchor)
+    ; Local = Class, current_ontology_identity(Ns,Anchor)).
 
 gui_menu_item(Subject, Choice, item(choice(Subject, Choice), Label, Help, Availability, Options)) :-
     Choice = eidolon(operation(_), Name, _), !,

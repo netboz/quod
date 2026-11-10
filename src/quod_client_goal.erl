@@ -515,15 +515,9 @@ parsed_evidence(#{goal_text := GoalText, parser_version := ParserVersion} = Requ
                 {ok, GoalBlob} ->
                     {ok, Identity#{signature => Signature, goal => Goal,
                                    goal_blob => GoalBlob, variables => Variables}};
-                {error, {too_large, goal}} ->
-                    {error, {too_large, goal}};
                 {error, _} ->
                     {error, invalid_goal}
             end;
-        {{error, {too_large, _}} = Error, _} ->
-            Error;
-        {_, {error, {too_large, _}} = Error} ->
-            Error;
         _ ->
             {error, invalid_goal}
     end.

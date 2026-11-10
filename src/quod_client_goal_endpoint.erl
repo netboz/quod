@@ -38,8 +38,7 @@ ACL, transactions, and outcomes remain with their existing owners.
         {cursor_result, request_id(), cursor_id(), binary()} |
         {error, request_id(), terminal_error()}.
 -type wire_error() ::
-        {error, result_too_large |
-                {too_large, client_goal_endpoint} |
+        {error, {too_large, client_goal_endpoint} |
                 {protocol_error, atom()}}.
 
 -doc "The one bidirectional signed-goal channel shared by all namespaces.".
@@ -197,7 +196,6 @@ validate_response({cursor_result, RequestId, CursorId, ResultBlob}) ->
         {true, true, {ok, _}} -> ok;
         {false, _, _} -> protocol_error(bad_request_id);
         {_, false, _} -> protocol_error(bad_cursor_id);
-        {_, _, {error, result_too_large}} -> {error, result_too_large};
         _ -> protocol_error(bad_result)
     end;
 validate_response({error, RequestId, Reason}) ->
@@ -216,7 +214,6 @@ validate_result_response(RequestId, ResultBlob) ->
     case {valid_request_id(RequestId), quod_client_result:decode(ResultBlob)} of
         {true, {ok, _}} -> ok;
         {false, _} -> protocol_error(bad_request_id);
-        {_, {error, result_too_large}} -> {error, result_too_large};
         _ -> protocol_error(bad_result)
     end.
 

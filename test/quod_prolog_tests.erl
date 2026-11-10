@@ -11,13 +11,12 @@ native_execution_uses_ordinary_acl_and_commit_test_() ->
       fun(#{namespace := Ns, identity := #{pubkey := Key}}) ->
           Principal = {node, Key},
           Allowed = {',', {me, Principal}, {assertz, native_committed}},
-          lists:foreach(fun(Goal) ->
-              ?assertMatch({ok, _, _}, quod_ct:rp(Ns,
-                {assertz, {can_invoke, Goal, Principal, {'_'}, Ns}}))
-          end, [Allowed, native_committed, native_refused]),
-          %% Remove the native founding grant to exercise its ordinary ACL.
-          ?assertMatch({ok, _, _}, quod_ct:rp(Ns,
-                        {retract, {can_invoke, {'_'}, {'_'}, [], {'_'}}})),
+          %% Install only the grants exercised below, replacing fixture-wide admission.
+          Grants = [{assertz, {can_invoke, Goal, Principal, {'_'}, Ns}}
+                    || Goal <- [Allowed, native_committed, native_refused]],
+          Policy = lists:foldr(fun(G, Rest) -> {',', G, Rest} end, true,
+                               [{abolish, {'/', can_invoke, 4}} | Grants]),
+          ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Policy)),
           ?assertMatch({ok, _, _}, quod_prolog:execute(Ns, Allowed)),
           ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, native_committed)),
           ?assertMatch({fail, _}, quod_prolog:execute(Ns, {assertz, native_refused})),
@@ -130,7 +129,7 @@ with_native_barrier(Fun) ->
     end).
 
 native_waiting() ->
-    receive {local_proof_waiting, Worker} -> Worker
+    receive {local_proof_waiting, Worker, _} -> Worker
     after 5000 -> error(native_proof_not_started) end.
 
 owned_async_execute_preserves_absolute_deadline_test_() ->
@@ -149,7 +148,7 @@ owned_async_execute_preserves_absolute_deadline_test_() ->
             Deadline = quod_time:mono_ms() + 1000,
             Goal = {',', test_local_wait, {assertz, expired_during_proof}},
             {ok, Engine} = quod_prolog:execute_async(Target, Goal, self(), Call, Deadline),
-            Worker = receive {local_proof_waiting, Pid} -> Pid
+            Worker = receive {local_proof_waiting, Pid, _} -> Pid
                      after 5000 -> error(async_proof_not_started) end,
             Monitor = monitor(process, Worker),
             receive {quod_proof_reply, Engine, Call, Reply} ->

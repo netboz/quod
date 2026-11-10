@@ -1,0 +1,11 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling test/quod_lifecycle_single_path_tests.erl failed
+      ┌─ test/quod_lifecycle_single_path_tests.erl:
+      │
+ 1411 │                  private_account => [list_to_binary(F) || F <- Components],
+      │                                                                ╰── variable 'Components' is unbound
+
+

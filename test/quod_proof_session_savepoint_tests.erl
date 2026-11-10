@@ -363,7 +363,7 @@ malformed_controller_lists_fail_before_mutation_test() ->
         Frame = opaque_id(),
         ?assertNot(
            quod_transaction_scope:valid_selection(
-             {tx_selection, none, [opaque_id() | improper], ordinary})),
+             {tx_selection, none, [opaque_id() | improper], ordinary, read_write})),
         ?assertEqual(
            {error, bad_request},
            quod_proof_context:tx_request(
@@ -381,7 +381,7 @@ malformed_controller_lists_fail_before_mutation_test() ->
         ?assertEqual(
            {error, bad_request},
            quod_proof_context:materialize(
-             {tx_selection, Lineage, [Baseline | improper], ordinary}, Actor)),
+             {tx_selection, Lineage, [Baseline | improper], ordinary, read_write}, Actor)),
         {ok, none} = quod_proof_context:tx_request(
                        Actor, {finish, Lineage, TxId})
     after
@@ -402,7 +402,7 @@ prove_goal(Session, Goal) ->
 empty_selection() -> quod_transaction_scope:empty_selection().
 
 selection(Lineage, BatchIds) ->
-    {tx_selection, Lineage, lists:usort(BatchIds), ordinary}.
+    {tx_selection, Lineage, lists:usort(BatchIds), ordinary, read_write}.
 
 actor(ScopeId) -> {ScopeId, opaque_id()}.
 

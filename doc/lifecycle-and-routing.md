@@ -6,9 +6,14 @@ preparation reads each file once, verifies the exact 32-byte SHA-256 hash, and
 compiles those same bytes. A mismatch refuses preparation with
 `source_hash_mismatch(Index)` and creates no ontology. The prepared genesis
 remains the recovery input; applying or recovering it does not reopen a source
-file. This lets an authored recipe pin packaged components without carrying
-their complete buffers through every cross-owner proof answer. Paths and hashes
-grant no creation, source-read or module authority.
+file. Paths and hashes grant no creation, source-read or module authority.
+
+The `terms(Clauses)` option accepts authored facts and rules, including their
+clause variables. The creation name, the clause list and all other request
+fields must be fixed before admission; variables inside a clause are source
+data. Policy approves the exact request before the existing compiler checks
+reserved heads and material allowances and freezes the genesis. Later caller
+bindings cannot change that prepared source.
 
 `quod:root` is the one ontology pinned in node configuration. When it is
 ready, `quod_system_ontology` proves the committed `system_ontology/2`

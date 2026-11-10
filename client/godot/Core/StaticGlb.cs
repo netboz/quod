@@ -149,7 +149,7 @@ public sealed record StaticGlb(long[] Costs,long[] Bounds)
         for(int axis=0;axis<3;axis++)if(bounds[axis]==bounds[axis+3]){bounds[axis]--;bounds[axis+3]++;}
         return new([bytes.Length,geometry,vertexTotal,triangleTotal,nodes.Count,materials.Count,pixels],bounds);
     }
-    static long ImagePixels(ReadOnlySpan<byte> bytes,string mime)
+    public static long ImagePixels(ReadOnlySpan<byte> bytes,string mime)
     {
         if(mime=="image/png") {
             Require(bytes.Length>=24 && BinaryPrimitives.ReadUInt64BigEndian(bytes)==0x89504e470d0a1a0a && BinaryPrimitives.ReadUInt32BigEndian(bytes[12..])==0x49484452,"invalid PNG");

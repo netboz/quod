@@ -1,0 +1,34 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_hud_tests:-hud_composes_standing_context_and_contributions_test_/0-fun-30-/0
+[0;31m     Failure/Error: ?assertEqual([{agent_instance_ref,<<104,111,115,116,45,116,101,115,116,45,110,111,100,101>>,<<159,182,120,74,28,85,44,79,226,42,156,89,244,11,165,212,246,75,12,182,107,216,181,220,229,116,36,48,6,105,121,168>>,physical_node}], proplists : get_value ( << "V1" >> , ProbeBindings ))
+       expected: [{agent_instance_ref,<<"host-test-node">>,
+                                      <<159,182,120,74,28,85,44,79,226,42,156,
+                                        89,244,11,165,212,246,75,12,182,107,
+                                        216,181,220,229,116,36,48,6,105,121,168>>,
+                                      physical_node}]
+            got: [{agent_instance_ref,<<"host-test-agent">>,
+                                      <<167,243,68,37,135,38,58,38,55,101,87,
+                                        165,62,26,49,229,180,105,110,164,31,76,
+                                        131,173,172,20,150,48,34,197,68,168>>,
+                                      me},
+                  {agent_instance_ref,<<"host-test-node">>,
+                                      <<159,182,120,74,28,85,44,79,226,42,156,
+                                        89,244,11,165,212,246,75,12,182,107,
+                                        216,181,220,229,116,36,48,6,105,121,168>>,
+                                      physical_node}][0m
+[0;36m     %% eunit_proc.erl:537:in `eunit_proc:handle_test/2`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_17C90080E999C176
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_17C90080E999C176
+[0m
+
+Finished in 4.517 seconds
+[0;31m2 tests, 1 failures
+[0m===> Error running tests

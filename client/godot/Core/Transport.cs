@@ -202,7 +202,7 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
         string atTarget = $"current_ontology_identity({Term.Text(target.Namespace)},{Term.Binary(Identity.Decode(target.Anchor))}),({goal.TrimEnd('.')})";
         string anchored = target.Namespace == agent.Namespace ? atTarget + "." : $"{Term.Text(target.Namespace)}::({atTarget}).";
         var targetBytes = Wire.Encode(Identity.Decode(Network), key, id, agent, 1, deadline, anchored);
-        var signed = Sign(human, Term.Call("personal_instruction_accept", Term.Binary(targetBytes), Term.Variable("Signature")) + ".");
+        var signed = Sign(human, Term.Call("::", Term.Text("quod:user"), Term.Call("personal_instruction_accept", Term.Binary(targetBytes), Term.Variable("Signature"))) + ".");
         return await Dispatch(new(Identity.Digest(signed.Bytes), Network, human, Json.S(signed.Body, "request"), Json.S(signed.Body, "signature"), "instruction", Identity.Encode(id)),
             signed.Body, "/api/agents/instructions", cancellation, deadline);
     }
@@ -257,7 +257,7 @@ public sealed class SignedSession(Identity identity, LocalStore store, Transport
     }
     public async Task<JsonNode> ResolveInstruction(Actor human, string id, CancellationToken cancellation)
     {
-        var signed = Sign(human, Term.Call("personal_instruction_lookup", Term.Binary(Identity.Decode(id)), Term.Variable("Bytes"), Term.Variable("Signature")) + ".");
+        var signed = Sign(human, Term.Call("::", Term.Text("quod:user"), Term.Call("personal_instruction_lookup", Term.Binary(Identity.Decode(id)), Term.Variable("Bytes"), Term.Variable("Signature"))) + ".");
         return await SendAt("/api/agents/instructions/outcomes", signed.Body, signed.Deadline, cancellation);
     }
     public static string ViewGoal(Actor target, Term goal) =>

@@ -1,0 +1,76 @@
+[
+  {
+    "name": "gates-03-clean-default",
+    "command": [
+      "rebar3",
+      "clean",
+      "--all"
+    ],
+    "started": "2026-11-09T13:14:26.665117+00:00",
+    "ended": "2026-11-09T13:14:27.168357+00:00",
+    "exit_code": 0,
+    "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/gates-03-clean-default.log"
+  },
+  {
+    "name": "gates-03-clean-test",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "clean",
+      "--all"
+    ],
+    "started": "2026-11-09T13:14:27.196005+00:00",
+    "ended": "2026-11-09T13:14:27.866109+00:00",
+    "exit_code": 0,
+    "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/gates-03-clean-test.log"
+  },
+  {
+    "name": "gates-03-eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit"
+    ],
+    "started": "2026-11-09T13:14:27.893658+00:00",
+    "ended": "2026-11-09T13:29:04.711547+00:00",
+    "exit_code": 1,
+    "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/gates-03-eunit.log"
+  },
+  {
+    "name": "gates-03-ct",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "ct"
+    ],
+    "started": "2026-11-09T13:29:04.743675+00:00",
+    "ended": "2026-11-09T13:37:40.515694+00:00",
+    "exit_code": 0,
+    "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/gates-03-ct.log"
+  },
+  {
+    "name": "gates-03-xref",
+    "command": [
+      "rebar3",
+      "xref"
+    ],
+    "started": "2026-11-09T13:37:40.546881+00:00",
+    "ended": "2026-11-09T13:37:49.450679+00:00",
+    "exit_code": 0,
+    "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/gates-03-xref.log"
+  },
+  {
+    "name": "gates-03-dialyzer",
+    "command": [
+      "rebar3",
+      "dialyzer"
+    ],
+    "started": "2026-11-09T13:37:49.485513+00:00",
+    "ended": "2026-11-09T13:38:44.660484+00:00",
+    "exit_code": 0,
+    "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase0-20261109/gates-03-dialyzer.log"
+  }
+]

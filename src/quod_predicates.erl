@@ -48,10 +48,11 @@ The typed **external-predicate contract** and the per-run **execution context**
    class registration alone never substitutes for captured dependencies.
 
 The context *kinds* are `proof` (a normal client proof or staged write),
+`operation_guard` (committed read-only policy with following and proof-bound
+or committed-snapshot queries),
 `verdict` (a committee membership re-proof — strictly local),
 `policy_verdict` (a strictly local authorization re-proof with every governed
-bridge disabled), `resource_selection` (local installed-resource reads allowing
-only proof-bound metadata), and `reaction` (read-only matching of one `react_on/2`
+bridge disabled), and `reaction` (read-only matching of one `react_on/2`
 declaration). Its selected goal subsequently uses an ordinary `proof` context.
 """.
 -include_lib("erlog/src/erlog_int.hrl").
@@ -64,10 +65,10 @@ declaration). Its selected goal subsequently uses an ordinary `proof` context.
 -export([load_modules/2, valid_manifest/1, descriptor/2]).
 -endif.
 %% context read/write on an #est{}
--export([set_context/2, context/1, local_only/1]).
+-export([set_context/2, context/1, local_only/1, operation_guard_context/1]).
 %% context constructors
 -export([proof_context/3, proof_context/4, verdict_context/2,
-         policy_verdict_context/2, resource_context/2, reaction_context/2]).
+         policy_verdict_context/2, reaction_context/2]).
 %% context accessors
 -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
          with_chain/2, with_executor/2, ctx_executor/1]).
@@ -91,7 +92,7 @@ declaration). Its selected goal subsequently uses an ordinary `proof` context.
                chain   = [] :: [quod_proof_context:identity()],
                executor = undefined :: term()}).
 
--type kind()  :: proof | verdict | policy_verdict | resource_selection | reaction.
+-type kind()  :: proof | operation_guard | verdict | policy_verdict | reaction.
 -type class() :: query | staging | reaction.
 -type dependency() :: none | proof_bound | committed_snapshot | live_observation.
 -type ctx()   :: #qctx{} | undefined.
@@ -403,18 +404,16 @@ only while matching a reaction declaration.
 -spec allowed(class(), kind() | undefined) -> boolean().
 allowed(_Class,     undefined)   -> false;
 allowed(query,      policy_verdict) -> false;
-allowed(query,      resource_selection) -> false;
+allowed(query,      operation_guard) -> false;
 allowed(query,      _Kind)       -> true;
 allowed(staging,    proof)       -> true;
 allowed(staging,    _Kind)       -> false;
 allowed(reaction,   reaction)    -> true;
 allowed(reaction,   _Kind)       -> false.
 
-%% Installed resources may inspect immutable engine-bound metadata, never a
-%% live query or another scope. Authorization re-proofs retain their stricter
-%% context. This does not give the selector an authenticated principal.
-allowed_dependency(query, proof_bound, resource_selection) -> true;
-allowed_dependency(_, _, resource_selection) -> false;
+allowed_dependency(query, proof_bound, operation_guard) -> true;
+allowed_dependency(query, committed_snapshot, operation_guard) -> true;
+allowed_dependency(_, _, operation_guard) -> false;
 allowed_dependency(Class, _, Kind) -> allowed(Class, Kind).
 
 %%%===================================================================
@@ -434,11 +433,15 @@ context(#est{fs = Fs}) ->
         false               -> undefined
     end.
 
+-doc "Retain the authenticated proof's identity and chain while forbidding live observations and staging.".
+-spec operation_guard_context(ctx()) -> ctx().
+operation_guard_context(#qctx{} = Context) -> Context#qctx{kind = operation_guard}.
+
 -doc "Whether this execution is confined to its local committed ontology.".
 -spec local_only(tuple()) -> boolean().
 local_only(Est) ->
     Kind = ctx_kind(context(Est)),
-    Kind =:= verdict orelse Kind =:= policy_verdict orelse Kind =:= resource_selection.
+    Kind =:= verdict orelse Kind =:= policy_verdict.
 
 %%%===================================================================
 %%% context constructors + accessors
@@ -464,12 +467,6 @@ verdict_context(Ns, Height) ->
 policy_verdict_context(Ns, Height) ->
     #qctx{kind = policy_verdict, ns = Ns, height = Height,
           subject = undefined}.
-
--doc "Local installed-resource selection with an owner-supplied immutable identity.".
--spec resource_context({binary(), binary()}, non_neg_integer()) -> #qctx{}.
-resource_context({Ns, <<_:256>> = Anchor}, Height) ->
-    #qctx{kind = resource_selection, ns = Ns, height = Height,
-          chain = [{Ns,Anchor}]}.
 
 -doc "Read-only reaction eligibility over a committed snapshot.".
 -spec reaction_context(binary() | undefined, non_neg_integer()) -> #qctx{}.

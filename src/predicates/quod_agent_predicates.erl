@@ -173,8 +173,8 @@ authorize_custody(Agent, Instance, Host, Epoch, Node, Finish, St = #est{vn = Vn}
     end,
     {succeed, PrincipalState} = erlog_int:prove_goal({current_principal, {Vn}}, St),
     Caller = erlog_int:dderef({Vn}, PrincipalState#est.bs),
-    Policy = {agent_key_preparation, Caller, Instance, Host, Epoch, Node},
-    case quod_ask:committed_authorization_result(Policy, St) of
+    Policy = {can_prepare_agent_key, Caller, Instance, Host, Epoch, Node},
+    case quod_ask:local_authorization_result(Policy, St) of
         allowed ->
             Deadline = case quod_scope_session:remaining_ms() of
                 {ok, Remaining} -> quod_time:mono_ms() + Remaining;
@@ -259,7 +259,7 @@ sign_typed(Typed, Signature, Next, St) ->
     end.
 
 authorize_sign(Request, Typed, NodeRef,
-               Signature, Next, #est{vn = Vn} = St) ->
+               Signature, Next, St) ->
     %% All arguments except the engine-authenticated caller are ground. The
     %% existing interpreter evaluates the ordinary ontology policy against this
     %% immutable read-only session; no staged grant can authorize this release.
@@ -269,8 +269,19 @@ authorize_sign(Request, Typed, NodeRef,
         error -> quod_proof_context:remaining_ms()
     end,
     Deadline = Now + Remaining,
-    Policy = {',', {current_principal, {Vn}},
-              {can_sign_agent_request, {Vn}, NodeRef, Typed}},
+    {agent_instance_ref, _, _, Instance} = element(3, Typed),
+    %% Reuse class traversal and named-check dispatch. Several inherited
+    %% classes can share an owner; ask its rule only once. The native call
+    %% remains bound to the exact storing identity checked above.
+    Checks = {',', {member, {'Class'}, {'Classes'}},
+              {'$quod_class_predicate', {'Class'}, can_sign_agent_request, {'Check'}}},
+    Policy = lists:foldr(fun(Goal, Rest) -> {',', Goal, Rest} end,
+        {operation_check, {'Check'}, {'Principal'}, NodeRef, Typed},
+        [{current_principal, {'Principal'}},
+         {entity_classes, Instance, {'Classes'}},
+         {findall, {'Check'}, Checks, {'RawChecks'}},
+         {sort, {'RawChecks'}, {'Checks'}},
+         {member, {'Check'}, {'Checks'}}]),
     case quod_ask:authorization_result(Policy, St) of
         allowed ->
             case quod_agent_vault:sign(Request, Deadline) of

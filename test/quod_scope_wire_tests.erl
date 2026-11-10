@@ -6,6 +6,16 @@
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_proof_limits.hrl").
 
+read_set_metadata_is_canonical_and_validated_test() ->
+    Reads = #{{policy,1} => {present,3},{absent_rule,2} => never_present},
+    {ok,Blob} = quod_scope_wire:encode_payload(read_set,Reads),
+    ?assertEqual({ok,Reads},quod_scope_wire:decode_payload(read_set,Blob)),
+    Event = event({scope_read_set,Blob}),
+    {ok,Encoded} = quod_scope_wire:encode_event(Event),
+    ?assertEqual({ok,Event},quod_scope_wire:decode_response(Encoded)),
+    {ok,Bad} = quod_wire_term:encode_canonical([{{policy,1},invalid_version}]),
+    ?assertMatch({error,_},quod_scope_wire:decode_payload(read_set,Bad)).
+
 scope_open_trace_metadata_is_transient_and_fail_closed_test() ->
     Carrier = [{<<"traceparent">>,
                 <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>}],
@@ -35,6 +45,7 @@ all_command_shapes_roundtrip_deterministically_test() ->
          {scope_open, signed_auth(<<"request">>, <<7:512>>), []},
          scope_close,
          scope_seal,
+         scope_read_set,
          {scope_attest, Manifest},
          certify_reads,
          {bind_group_effects, GroupRef, key(130)},
@@ -66,7 +77,7 @@ all_command_shapes_roundtrip_deterministically_test() ->
       end, lists:enumerate(Operations)).
 
 independent_metadata_roundtrips_and_refuses_malformed_values_test() ->
-    Selection = {tx_selection, none, [], independent},
+    Selection = {tx_selection, none, [], independent, read_write},
     Command = command({invoke_open, id(1), Selection, chain(2), payload(goal, true)}),
     {ok, Bytes} = quod_scope_wire:encode_command(Command),
     ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Bytes)),
@@ -88,13 +99,13 @@ independent_metadata_roundtrips_and_refuses_malformed_values_test() ->
            payload(goal, true), Selection},
           {nested_next, id(2), id(3), 1, {tx_selection, none, []}}]),
     ?assert(quod_transaction_scope:valid_selection(
-              {tx_selection, id(4), [], independent})),
+              {tx_selection, id(4), [], independent, read_write})),
     ?assertNot(quod_transaction_scope:valid_selection(
-                 {tx_selection, none, [], true})).
+                 {tx_selection, none, [], true, read_write})).
 
 savepoint_lineage_and_public_intent_are_independent_wire_fields_test() ->
     lists:foreach(fun(Mode) ->
-        Selection = {tx_selection, id(4), [id(5)], Mode},
+        Selection = {tx_selection, id(4), [id(5)], Mode, read_write},
         ?assertEqual(1, quod_transaction_scope:checkpoint_depth(Selection)),
         ?assertEqual(Mode, quod_transaction_scope:selection_mode(Selection)),
         Command = command({invoke_open, id(1), Selection, chain(2), payload(goal, true)}),
@@ -105,7 +116,19 @@ savepoint_lineage_and_public_intent_are_independent_wire_fields_test() ->
         ?assertMatch({error, {protocol_error, _}}, quod_scope_wire:decode_request(Old))
     end, [ordinary, atomic, independent]),
     ?assertNot(quod_transaction_scope:valid_selection(
-                 {tx_selection, none, [id(5)], independent})).
+                 {tx_selection, none, [id(5)], independent, read_write})).
+
+committed_guard_selection_survives_nested_wire_calls_test() ->
+    Selection = {tx_selection, id(4), [id(5)], ordinary, committed_read},
+    ?assertEqual(committed_read, quod_transaction_scope:selection_read_mode(Selection)),
+    Command = command({invoke_open, id(1), Selection, chain(2), payload(goal, true)}),
+    {ok, Bytes} = quod_scope_wire:encode_command(Command),
+    ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Bytes)),
+    Nested = event({nested_open, id(2), <<"owner">>, chain(2), payload(goal, true), Selection}),
+    {ok, Encoded} = quod_scope_wire:encode_event(Nested),
+    ?assertEqual({ok, Nested}, quod_scope_wire:decode_response(Encoded)),
+    ?assertNot(quod_transaction_scope:valid_selection(
+        {tx_selection, none, [], ordinary, forged})).
 
 scope_v5_authentication_digest_is_exact_and_bounded_test() ->
     {ok, NodeDigest} = quod_scope_wire:authentication_digest(node),
@@ -571,7 +594,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, lists:seq(1, 13)),
+      end, lists:seq(1, 14)),
     WrongDomain = term_to_binary({<<"other.scope">>, 5, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
@@ -891,7 +914,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 14, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 16, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(
@@ -905,7 +928,7 @@ signed_auth(RequestBytes, Signature) ->
     {signed_goal, RequestBytes, Signature, Certificate}.
 
 selection(Lineage, BatchIds) ->
-    {tx_selection, Lineage, BatchIds, ordinary}.
+    {tx_selection, Lineage, BatchIds, ordinary, read_write}.
 
 binding() -> binding_with_origin(<<"quod:a">>).
 

@@ -124,7 +124,7 @@ public partial class FormPanel : VBoxContainer
     }
     public void Edit(string role, string value)
     {
-        if (locked || !Draft.ContainsKey(role)) return;
+        if (Descriptor==null || locked || !Draft.ContainsKey(role)) return;
         var field = Descriptor.Tree.Leaves.Single(c => c.Role == role);
         if (field.Flag("readonly") || !field.Flag("enabled", true) || !controls[role].GetMeta("offered_enabled").AsBool()) return;
         Draft[role] = value;

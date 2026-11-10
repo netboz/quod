@@ -81,19 +81,38 @@ public partial class ExportChecks
     void NativeClick(Vector2 point)
     { NativeClick(GetTree().Root,point); }
     void NativeClick(Window window,Vector2 point)
-    { var size=window.GetVisibleRect().Size; Console.WriteLine("M2_NATIVE_CLICK "+System.Text.Json.JsonSerializer.Serialize(new { x=point.X,y=point.Y,width=size.X,height=size.Y,title=window.Title })); Console.Out.Flush(); }
+    {
+        if(DisplayServer.GetName()=="headless") {
+            while(window.IsEmbedded()) { point+=window.Position;window=window.GetParent().GetWindow(); }
+            window.PushInput(new InputEventMouseMotion { Position=point,GlobalPosition=point },true);
+            window.PushInput(new InputEventMouseButton { Position=point,GlobalPosition=point,ButtonIndex=MouseButton.Left,Pressed=true },true);
+            window.PushInput(new InputEventMouseButton { Position=point,GlobalPosition=point,ButtonIndex=MouseButton.Left,Pressed=false },true);
+        } else {
+            var size=window.GetVisibleRect().Size;
+            Console.WriteLine("M2_NATIVE_CLICK "+System.Text.Json.JsonSerializer.Serialize(new { x=point.X,y=point.Y,width=size.X,height=size.Y,title=window.Title })); Console.Out.Flush();
+        }
+    }
     async Task NativePress(Button button)
     {
         var pressed=new TaskCompletionSource(); void Pressed()=>pressed.TrySetResult(); button.Pressed+=Pressed;
-        // Scroll only once the panel has laid out what was just shown.
-        await Frame();
-        for(Node? node=button.GetParent();node!=null;node=node.GetParent()) if(node is ScrollContainer scroll) scroll.EnsureControlVisible(button);
-        try { await Frame(); await Frame();
+        var laidOut=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try {
+            if(DisplayServer.GetName()=="headless" && button.GetWindow()!=GetTree().Root) {
+                // The headless display clamps PopupCentered to a 1x1 screen.
+                // Give its embedded window the qualification host's viewport.
+                var container=(Container)button.GetParent();var resized=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                container.Connect("_layout_pending_finished",Callable.From(()=>resized.TrySetResult()),(uint)ConnectFlags.OneShot);
+                button.GetWindow().Size=GetTree().Root.Size;button.GetWindow().Position=Vector2I.Zero;container.QueueSort();
+                await resized.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            SpatialGui.Reveal(button,()=>IsInstanceValid(button)&&button.IsVisibleInTree(),()=>laidOut.TrySetResult());
+            await laidOut.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Console.WriteLine($"M2_NATIVE_POINTER target={button.Name} rect={button.GetGlobalRect()} point={OnWindow(button)} disabled={button.GetViewport().GuiDisableInput} window={button.GetWindow().Size}");Console.Out.Flush();
             NativeClick(button.GetWindow(),OnWindow(button)); await pressed.Task.WaitAsync(TimeSpan.FromSeconds(5)); }
         catch(TimeoutException) {
             // Name what the real pointer reached instead of the intended control.
             string Hovered(Viewport v)=>v.GuiGetHoveredControl() is Control c ? c.GetPath().ToString() : "none";
-            Console.WriteLine($"M2_NATIVE_MISS target={button.GetPath()} visible={button.IsVisibleInTree()} disabled={button.Disabled} rect={button.GetGlobalRect()} root={Hovered(GetTree().Root)} own={Hovered(button.GetViewport())}"); Console.Out.Flush();
+            Console.WriteLine($"M2_NATIVE_MISS target={button.GetPath()} visible={button.IsVisibleInTree()} disabled={button.Disabled} rect={button.GetGlobalRect()} point={OnWindow(button)} viewport={button.GetViewport().GetVisibleRect()} window={button.GetWindow().Size} embedded={button.GetWindow().IsEmbedded()} embed={GetTree().Root.GuiEmbedSubwindows} root={Hovered(GetTree().Root)} own={Hovered(button.GetViewport())}"); Console.Out.Flush();
             throw;
         }
         finally { button.Pressed-=Pressed; }
@@ -147,10 +166,12 @@ public partial class ExportChecks
         } else await Choose(storage,index);
         var classes=(OptionButton)panel.FindChild("operation-class",true,false);
         await Until(()=>!panel.IsWorking);
-        await Choose(classes,Enumerable.Range(0,classes.ItemCount).FirstOrDefault(i=>classes.GetItemText(i)=="space",-1));
+        await Choose(classes,Enumerable.Range(0,classes.ItemCount).FirstOrDefault(i=>classes.GetItemText(i)=="quod:space : space",-1));
         await Until(()=>panel.Available);
         await ChooseOfferedOperation(panel,operation);
-        Check(panel.Current!.Subject.ToString()==Term.Call("class_ref",Term.Text(target.Namespace),Term.Binary(Identity.Decode(target.Anchor)),Term.Atom("space")).ToString(),"selected target owns the actual local class and anchor");
+        var owner=app.ActiveAccounts.Catalogue.Single(c=>c.Namespace=="quod:space");
+        Check(panel.Current!.Subject.ToString()==Term.Call("class_ref",Term.Text(owner.Namespace),Term.Binary(Identity.Decode(owner.Anchor)),Term.Atom("space")).ToString(),"creation uses the exact class owner");
+        Check(panel.SelectedStorage==target,"creation retains the selected storing ontology");
     }
     // The storage catalogue with its collapsed exact-identity section open, as a user opens it.
     async Task OpenExactTarget(OperationsPanel panel,Func<Button,Task>? press=null)
@@ -164,34 +185,31 @@ public partial class ExportChecks
     {
         for(Node? node=line.GetParent();node!=null;node=node.GetParent()) if(node is ScrollContainer scroll) scroll.EnsureControlVisible(line);
         line.GrabFocus(); await Frame(); line.SelectAll();
-        NativeInput(new InputEventKey { Keycode=Key.Backspace,Pressed=true });
-        NativeInput(new InputEventKey { Keycode=Key.Backspace,Pressed=false });
-        foreach(char c in value) {
-            NativeInput(new InputEventKey { Unicode=c,Pressed=true });
-            NativeInput(new InputEventKey { Unicode=c,Pressed=false });
-        }
-        await Frame(); Check(line.Text==value,"keyboard enters exact offered text or integer");
+        var edited=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Changed(string text) { if(text==value)edited.TrySetResult(); }
+        line.TextChanged+=Changed;
+        try {
+            NativeInput(new InputEventKey { Keycode=Key.Backspace,Pressed=true });
+            NativeInput(new InputEventKey { Keycode=Key.Backspace,Pressed=false });
+            foreach(char c in value) {
+                NativeInput(new InputEventKey { Unicode=c,Pressed=true });
+                NativeInput(new InputEventKey { Unicode=c,Pressed=false });
+            }
+            await edited.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        } finally { line.TextChanged-=Changed; }
+        Check(line.Text==value,"keyboard enters exact offered text or integer");
     }
     async Task ClickSubmit(OperationsPanel panel)
     {
         var button=(Button)panel.FormPanel.Input(panel.Current!.Form.Submit.ToString())!;
         Check(!button.Disabled,"current offered Submit is enabled");
-        button.GrabFocus(); await Frame();
-        for(Node? node=button.GetParent();node!=null;node=node.GetParent()) if(node is ScrollContainer scroll) scroll.EnsureControlVisible(button);
-        await Frame();
-        var clicked=new TaskCompletionSource(); void Pressed()=>clicked.TrySetResult(); button.Pressed+=Pressed;
-        try {
-            var point=OnWindow(button);
-            Console.WriteLine($"M2_SUBMIT_POINTER rect={button.GetGlobalRect()} viewport={GetViewport().GetVisibleRect()} focus={button.HasFocus()} visible={button.IsVisibleInTree()}");
-            Check(GetViewport().GetVisibleRect().HasPoint(point),"offered Submit is inside the actual mouse viewport");
-            NativeClick(point);
-            await clicked.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Check(panel.IsWorking && ((OptionButton)panel.FindChild("operation-storage",true,false)).Disabled &&
-                ((OptionButton)panel.FindChild("operation-class",true,false)).Disabled &&
-                !app.OpenSubjectPie() &&
-                !((LineEdit)panel.FindChild("exact-storage-namespace",true,false)).Editable,
-                "active creation locks its actual target and offered selection");
-        } finally { button.Pressed-=Pressed; }
+        button.GrabFocus();
+        await NativePress(button);
+        Check(panel.IsWorking && ((OptionButton)panel.FindChild("operation-storage",true,false)).Disabled &&
+            ((OptionButton)panel.FindChild("operation-class",true,false)).Disabled &&
+            !app.OpenSubjectPie() &&
+            !((LineEdit)panel.FindChild("exact-storage-namespace",true,false)).Editable,
+            "active creation locks its actual target and offered selection");
         await Until(()=>!panel.IsWorking);
     }
     static Term[] SpaceResults(JsonNode reply) => Json.Binding(reply,"Results").Items;
@@ -266,11 +284,14 @@ public partial class ExportChecks
         long before=await Writes(); await Keyboard(panel,panel.Current!); await panel.Submit();
         Check(await Writes()==before,"invalid normal creation fields dispatch no instruction"); panel.Defaults();
         await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Preserved draft");
+        Check(panel.FormPanel.Draft["space_name"]=="Preserved draft","typed name is retained in the active draft: "+panel.FormPanel.Draft["space_name"]);
         panel.Cancel(); await CreationTarget(panel,human,"create");
-        Check(panel.FormPanel.Draft["space_name"]=="Preserved draft" && await Writes()==before,"local cancel and reopen preserve unsent input without submission");
+        Check(panel.FormPanel.Draft["space_name"]=="Preserved draft","local cancel and reopen preserve unsent input: "+panel.FormPanel.Draft["space_name"]);
+        long reopenedWrites=await Writes();
+        Check(reopenedWrites==before,$"local cancel and reopen submit no work: before={before} after={reopenedWrites}");
         var prior=panel.Current!.Revision.ToString();
         using(var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(30))) {
-            await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,"assertz(gui_validation_context(space_create(finite),m2_revision)).",timeout.Token);
+            await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"transaction((retract(attribute({s0.Args[2]},name,Name)),assertz(attribute({s0.Args[2]},name,<<\"Updated starting space\">>)))).",timeout.Token);
         }
         await Until(()=>panel.Current!.Revision.ToString()!=prior);
         before=await Writes(); await panel.Submit(); Check(await Writes()==before,"changed offered revision locks and retains the old creation draft");
@@ -318,7 +339,7 @@ public partial class ExportChecks
         foreach(var (role,value) in new[] { ("space_length(width)","1"),("space_divisor(width)","3"),("space_length(height)","1001"),("space_divisor(height)","1"),("space_length(depth)","1001"),("space_divisor(depth)","2") })
             await Type((LineEdit)panel.FormPanel.Input(role)!,value);
         await FieldChoice(panel,"space_unit",Term.Text("mm"));
-        await FieldChoice(panel,"space_placement",Term.Call("at",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))));
+        await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Call("at",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))));
         await FieldChoice(panel,"space_exterior(exact)",Term.Atom("wireframe"));
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"rational lengths create through the same authored generic form and constructor");
         Check(Result(SpaceResults(panel.LastOutcome!),"location").ToString()==Term.Call("placed",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))).ToString(),"normal GUI explicit placement preserves the selected exact destination and pose");
@@ -330,16 +351,22 @@ public partial class ExportChecks
         await CreationTarget(panel,human,"create_infinite"); NewDraft(panel);
         var exterior=panel.Current!.Form.Tree.Leaves.Single(c=>c.Role=="space_exterior(infinite)");
         Check(exterior.Options.All(o=>o.Value.Name!="wireframe") && exterior.Properties["help"].TextValue.Contains("no finite wireframe"),"infinite form explicitly explains wireframe unavailability and offers the real solid recipe");
-        await FieldChoice(panel,"space_placement",Term.Atom("unplaced"));
+        await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Atom("unplaced"));
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!) && Result(SpaceResults(panel.LastOutcome!),"location").Name=="unplaced","normal GUI supports explicit infinite unplaced creation without placement fallback");
         var foreign=await SpaceControl(new() { ["m2_foreign_storage"]=JsonSerializer.SerializeToNode(human) });
         var target=new Actor(Json.S(foreign,"namespace"),Json.S(foreign,"anchor"),"me.");
-        await CreationTarget(panel,target,"create"); NewDraft(panel); await ClickSubmit(panel);
+        await CreationTarget(panel,human,"create"); NewDraft(panel);
+        await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Local unsent name");
+        await CreationTarget(panel,target,"create");
+        Check(panel.FormPanel.Draft["space_name"]=="Space","another storing ontology has its own unsent draft for the same class");
+        NewDraft(panel); await ClickSubmit(panel);
         Check(Json.Committed(panel.LastOutcome!),"authorized existing foreign storage commits through the ordinary selected-target route");
         var foreignResults=SpaceResults(panel.LastOutcome!); var foreignSpace=Result(foreignResults,"space");
         Check(Actor.FromTerm(foreignSpace).Namespace==target.Namespace && Result(foreignResults,"owner").ToString()==setup[0].ToString() &&
             Result(foreignResults,"location").Args[0].ToString()==s0.ToString(),"foreign storage, U ownership and S0 placement remain distinct exact references");
         await Until(()=>scene.Count>=10); Check(scene.Count==10,"foreign-storage source appears through its authorized exact exterior recipe");
+        await CreationTarget(panel,human,"create");
+        Check(panel.FormPanel.Draft["space_name"]=="Local unsent name","returning to the original storing ontology restores its own unsent draft");
         var ids=scene.Ids.Order().ToArray();
         await SpaceRefusals(panel,human,s0,scene);
         await Until(()=>State["question_receiver_ready"]?.GetValue<bool>()==true);
@@ -353,7 +380,7 @@ public partial class ExportChecks
             Json.U(afterRestart,"writes")==Json.U(beforeRestart,"writes")+1 &&
             Json.U(afterRestart,"receiver_selections")==Json.U(beforeRestart,"receiver_selections")+1,
             "reconnect writes only its new HUD receiver selection and submits no creation instruction");
-        var navigation=Json.Binding(await app.ActiveSession.Read(human,"account_navigation(Space,Modes).",CancellationToken.None),"Space");
+        var navigation=Json.Binding(await app.ActiveSession.Read(human,"<<\"quod:user\">>::account_navigation(Space,Modes).",CancellationToken.None),"Space");
         Check(navigation.ToString()==s0.ToString(),"all creations leave the same A inside original parentless S0");
         await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,checks,original=first.Select(t=>t.ToString()).ToArray(),wire=wire.ToString(),rational=rational.ToString(),foreign=foreignSpace.ToString() }));
         await Press("disconnect"); await app.ViewsDisposed; Check(SignedView.LiveSockets==0,"M2 view and operation consumers dispose all sockets");
@@ -364,8 +391,9 @@ public partial class ExportChecks
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(30));
         async Task<string> StateOfSpaces()=>Json.Binding(await app.ActiveSession.Read(human,
-            "findall(state(S,Owner,Location),(instance_of(space,S),attribute(S,owner,Owner),space_location(S,Location)),Spaces).",timeout.Token),"Spaces").ToString();
+            "findall(state(S,Owner,Location),(current_ontology_identity(Ns,A),<<\"quod:space\">>::space_instance(entity_ref(Ns,A,S),space),attribute(S,owner,Owner),<<\"quod:space\">>::space_location(entity_ref(Ns,A,S),Location)),Spaces).",timeout.Token),"Spaces").ToString();
         string before=await StateOfSpaces();
+        Check(before!="[]","refusal checks observe the existing spaces through their class owner");
         await CreationTarget(panel,human,"create"); NewDraft(panel);
         var offer=panel.Current!;
         using(var key=Identity.Create())
@@ -381,6 +409,9 @@ public partial class ExportChecks
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"assertz(instance_permission({space},space_admit,deny)).",timeout.Token);
         await CreationTarget(panel,human,"create"); NewDraft(panel); await ClickSubmit(panel);
         Check(Json.Terminal(panel.LastOutcome!) && !Json.Committed(panel.LastOutcome!),"normal mouse creation displays definitive destination-admission refusal");
+        var detail=panel.FindChild("operation-exact-details",true,false).FindChildren("*","TextEdit",true,false).OfType<TextEdit>().Last();
+        Check(!detail.Editable && detail.WrapMode==TextEdit.LineWrappingMode.None &&
+            JsonNode.DeepEquals(JsonNode.Parse(detail.Text),panel.LastOutcome),"exact refusal details remain complete and selectable without whole-response wrapping");
         Check(await StateOfSpaces()==before && scene.Count==10,"denied construction leaves no generated space owner or assignment");
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({space},space_admit,deny)).",timeout.Token);
         await OpenExactTarget(panel);

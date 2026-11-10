@@ -1,0 +1,37 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+=WARNING REPORT==== 9-Nov-2026::18:37:36.710246 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 3
+[0;31mF[0m
+Failures:
+
+  1) quod_agent_hosting_tests:-class_owner_signing_preserves_storage_and_policy_boundaries_test_/0-fun-12-/0
+[0;31m     Failure/Error: ?assertMatch({ source_acl , { failed , _ } }, { source_acl , signed_read ( Ns , Read ) })
+       expected: = { source_acl , { failed , _ } }
+            got: {source_acl,{answers,1,
+                                      [<<131,104,3,97,6,104,2,97,4,108,0,0,
+                                         0,2,104,2,97,1,109,0,0,0,2,86,48,
+                                         104,2,97,1,109,0,0,0,64,175,186,64,
+                                         209,44,5,1,204,61,235,136,93,108,
+                                         135,83,131,54,46,231,197,52,195,
+                                         234,142,118,200,108,197,27,164,25,
+                                         46,152,152,200,24,248,7,195,172,98,
+                                         158,218,33,147,191,229,13,93,240,7,
+                                         172,87,69,153,252,176,27,222,65,
+                                         123,124,76,5,106,104,1,97,5>>]}}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Signing source ACL after withdrawal: {fail,
+                                      [{not_allowed,<<"host-test-agent">>}]}
+Failed hosted-agent fixture retained at /tmp/quod_hosted_138374C46EA28B42
+[0m
+[0;36m     Output: Signing source ACL after withdrawal: {fail,
+                                      [{not_allowed,<<"host-test-agent">>}]}
+Failed hosted-agent fixture retained at /tmp/quod_hosted_138374C46EA28B42
+[0m
+
+Finished in 0.450 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

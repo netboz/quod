@@ -91,9 +91,9 @@ settings_entered(Name, Level, Angle) :-
     goal(object_settings(Name, Level, Angle)).
 ```
 
-`gui_open(settings, Question)` is the convenient local entry supplied by shared
-GUI behavior. It captures the exact owning ontology, form and authorized
-responsible agent. The default human comes from authenticated context;
+`quod:gui::gui_open(form_ref(Ns, Anchor, settings), Question)` opens the exact
+form at its owner through the shared GUI behavior. The class owner selects the
+authorized responsible agent. The default human comes from authenticated context;
 agent-originated questions obtain their human from authorized application state.
 No caller-supplied human string confers authority.
 
@@ -247,8 +247,9 @@ validation-sensitive domain revisions in the goal or `gui_validation_context/2`,
 as for question forms; this is not a hash of every helper predicate's source.
 Broad authorized source rewriting retains its existing authority.
 
-`gui_operation_classes(Classes)` enumerates classes with explicit class offers
-in the selected storage ontology. The World screen's **Create / operations**
+`gui_operation_classes(Classes)` returns exact `class_ref` values for classes
+with explicit offers in the selected storing ontology. Each reference names
+the class owner; selecting its form retains the storing ontology. The World screen's **Create / operations**
 entry selects storage explicitly, then the class and authored form. Exact-instance
 operation recipes open from the same Eidolon choices as workspaces and inspection.
 Returned entity references can open their own operations with the original anchor.
@@ -481,15 +482,15 @@ do not rename them, raise constants or split transactions to evade them.
 
 ## 6. Questions and bounded current state
 
-The implemented transition layer is composed from
-[`gui_instance.pl`](../priv/ontologies/gui_instance.pl) in the responsible
-ontology and [`user_instance.pl`](../priv/ontologies/user_instance.pl) in the human ontology.
-The application uses the same shared instance source
-and declares `gui_question_policy(Form, HumanRef, ResponsibleRef)`.
+The transition layer lives at [`quod:gui`](../priv/ontologies/quod_gui.pl).
+The responsible actor's and human's storing ontologies hold question rows,
+ACL clauses and the completion reaction. The application declares
+`gui_question_policy(Form, HumanRef, ResponsibleRef)` and admits the class
+owner's exact scoped calls through its ACL.
 `gui_submit/4`, `gui_complete/1` and `gui_cancel/1` use the
 ordinary signed request and transaction owners. `gui_pending_questions/1`
 returns the authenticated human's exact references. In the referenced scope,
-`gui_question_view(Id, FormRef, Revision, State)` reads the authoritative row
+`quod:gui::gui_question_view(QuestionRef, FormRef, Revision, State)` reads the authoritative row
 for that human; it exposes either `awaiting` or
 `submitted(OriginalSubmitOperation, Control, Fields)`. These read interfaces
 do not grant another human or responder access to the accepted fields.
@@ -617,7 +618,7 @@ question row alone is insufficient: the admission contract must retain the
 same exact material operation identity through existing outcome machinery,
 rather than allowing another operation to recreate a consumed Question.
 
-`gui_submit(Question, Revision, Control, Fields)` replaces awaiting with submitted
+`quod:gui::gui_submit(Question, Revision, Control, Fields)` replaces awaiting with submitted
 state and exact completion intent atomically. The committed assertion is the
 correlated event; the shared reaction dispatches its exact request once. Recovery
 observes retained outcome evidence through the existing question controller
@@ -811,7 +812,8 @@ projection. The form can stay beside the sky or move to the personal workspace.
 
 ```prolog
 open_atmosphere(Sky, Question) :-
-    gui_open(atmosphere(Sky), Question).
+    current_ontology_identity(Ns, Anchor),
+    quod:gui::gui_open(form_ref(Ns, Anchor, atmosphere(Sky)), Question).
 
 gui_form(atmosphere(Sky),
     [field(preset(Sky), Preset),
@@ -860,7 +862,8 @@ attribute(phase(Instrument), unit, degrees) :-
     instance_of(instrument, Instrument).
 
 open_instrument(Instrument, Question) :-
-    gui_open(instrument_settings(Instrument), Question).
+    current_ontology_identity(Ns, Anchor),
+    quod:gui::gui_open(form_ref(Ns, Anchor, instrument_settings(Instrument)), Question).
 
 gui_form(instrument_settings(Instrument),
     [field(run_name(Instrument), Name), field(mode(Instrument), Mode),
@@ -898,7 +901,8 @@ after reconnecting, while the original opening proof has already ended.
 
 ```prolog
 ask_review(Work, Question) :-
-    gui_open(review(Work), Question).
+    current_ontology_identity(Ns, Anchor),
+    quod:gui::gui_open(form_ref(Ns, Anchor, review(Work)), Question).
 
 gui_recipient(review(Work), Human) :- work_reviewer(Work, Human).
 gui_responder(review(Work), Agent) :- work_responder(Work, Agent).

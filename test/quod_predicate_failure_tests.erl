@@ -5,6 +5,22 @@
 %% These contracts cannot be violated by signed ingress: it creates the scope
 %% and staging authority itself. Exercise their real overlay owners directly,
 %% rather than adding a public way to forge those private values.
+authored_clause_request_preserves_values_and_aliases_test() ->
+    with_state(fun(Base) ->
+        St = overlay(Base, #{}),
+        Clause = {':-', {related, {10}, {11}}, {pair, {10}, {11}}},
+        Action = {create_ontology, <<"clause:test">>, [{terms, [Clause]}]},
+        {Handle, Bound} = quod_erlog_db_local_prove:register_action_request(St, Action, prepared),
+        {Renamed, _, _} = erlog_int:term_instance(Action, 1000),
+        ?assertEqual({ok, prepared}, quod_erlog_db_local_prove:action_request(Bound, Handle, Renamed)),
+        [ ?assertEqual(error, quod_erlog_db_local_prove:action_request(Bound, Handle,
+            {create_ontology, <<"clause:test">>, [{terms, [Changed]}]})) || Changed <-
+            [{':-', {related, fixed, {11}}, {pair, fixed, {11}}},
+             {':-', {related, {10}, {10}}, {pair, {10}, {10}}},
+             {':-', {related, {10}, {11}}, {pair, {11}, {10}}}]],
+        ?assertEqual(error, quod_erlog_db_local_prove:action_request(Bound, make_ref(), Renamed))
+    end).
+
 physics_private_contracts_test() ->
     with_state(fun(Base) ->
         Read = quod_predicates:set_context(overlay(Base,

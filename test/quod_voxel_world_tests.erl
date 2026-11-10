@@ -181,7 +181,7 @@ with_world(ExtraSources,Fun) ->
         quod_ct:signed_goal_fixture(#{target => Target}),
     Terms = lists:append([quod_committed_projection:read_terms(
         filename:join([code:priv_dir(quod),"ontologies",F])) || F <-
-            ["quod_space.pl", "quod_physics.pl", "voxel_world.pl"] ++ ExtraSources]),
+            ["quod_physics.pl", "voxel_world.pl"] ++ ExtraSources]),
     Facts = [{can_create_voxel_world,land,Owner},{can_edit_voxel_world,land,Owner,{'_'}},
         {can_manage_voxel_world,land,Owner,{'_'}},
         {voxel_allowances,land,limits()},

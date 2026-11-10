@@ -102,7 +102,7 @@ or of every local resource. Consumers wait for their actual resource owner.
             reaction_failures = 0 :: non_neg_integer(),
             physics = #{}, physics_requests = #{},
             observer = none,
-            agent_projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
+            projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
             agent_capacity_blocked = false, agent_capacity_refusals = 0,
             agent_work_subscribed = false,
             agents = #{} :: map(),
@@ -332,7 +332,7 @@ handle_call({project_agent_observers, Scope, Rows}, {Caller, _},
     end;
 handle_call({project_agent_observers, _, _}, _From, S) ->
     {reply, {error, stale_resource_owner}, S};
-handle_call({resource_selected, Key, Basis}, {Caller, _},
+handle_call({resource_selected, Key, Basis}, From = {Caller, _},
             S = #s{runner = {resource, Caller, _, _, _}}) ->
     %% Canonical input may have arrived while the worker read its pinned view.
     %% Record dependencies before installation so the next applied delta also
@@ -344,9 +344,9 @@ handle_call({resource_selected, Key, Basis}, {Caller, _},
             Kept = case {Key, S#s.resource_waiter} of
                 {physics_worlds, _} -> Basis;
                 {{agent_work, _}, _} ->
-                    maps:merge(maps:get(Key, S#s.resource_basis, #{}), Basis);
+                    merge_resource_basis(maps:get(Key, S#s.resource_basis, #{}), Basis);
                 {_, {{internal, _}, _}} -> Basis;
-                _ -> maps:merge(maps:get(Key, S#s.resource_basis, #{}), Basis)
+                _ -> merge_resource_basis(maps:get(Key, S#s.resource_basis, #{}), Basis)
             end,
             S#s{resource_basis = (S#s.resource_basis)#{Key => Kept}}
     end,
@@ -354,14 +354,8 @@ handle_call({resource_selected, Key, Basis}, {Caller, _},
         {agent_work, _} -> maps:get(Key, Next#s.resource_basis);
         _ -> Basis
     end,
-    Changes = queued_resource_changes(S#s.queue, S#s.height),
-    case not source_basis_current(Checked,Next) orelse
-         (map_size(Changes) > 0 andalso quod_resource_basis:affected(Checked, Changes)) of
-        true when Key =:= agent_recovery; Key =:= agent_custody ->
-            {reply, {error, selection_superseded}, Next};
-        true -> {reply, {error, selection_superseded}, queue_resource_key(Key, changed, Next)};
-        false -> {reply, ok, Next}
-    end;
+    Retained = reconcile_source_views(S#s.subscriptions, Next),
+    {noreply, finish_source_selection(Retained#s{projection_waiter = {sources,From,Key,Checked}})};
 handle_call({resource_selected, _, _}, _From, S) ->
     {reply, {error, stale_resource_owner}, S};
 handle_call({deliver_recovery, Batch, Event, Metadata = #{deadline := Deadline}, Expiry}, {Caller, _},
@@ -420,7 +414,7 @@ handle_call({project_agents, Scope, Hosts}, From = {Caller, _},
                 true -> {blocked, capacity}; false -> ok end,
             case agent_retirements(Slots, Installed#s.agents) of
                 Waiting when map_size(Waiting) > 0 ->
-                    {noreply, Installed#s{agent_projection_waiter = {From, Waiting, Reply}}};
+                    {noreply, Installed#s{projection_waiter = {agents, From, Waiting, Reply}}};
                 _ -> {reply, Reply, Installed}
             end;
         {error, _} = Error -> {reply, Error, S}
@@ -1207,7 +1201,8 @@ resource_finished({interrupted, Reply}, S = #s{resource_waiter = {From, _}}) ->
                              Key =:= node_ontologies; Key =:= effect_custody; Key =:= physics_worlds;
                              is_tuple(Key), tuple_size(Key) =:= 2,
                              element(1, Key) =:= agent_work ->
-            (S#s.resource_basis)#{Key => quod_resource_basis:unknown()};
+            (S#s.resource_basis)#{Key => maps:merge(
+                maps:get(Key,S#s.resource_basis,#{}),quod_resource_basis:unknown())};
         _ -> S#s.resource_basis
     end,
     resource_finished(Reply, S#s{resource_basis = Basis});
@@ -1223,7 +1218,7 @@ resource_finished(Reply, S0 = #s{resource_waiter = {From, Monitor}}) ->
             S0#s{resource_failures = Failures};
         _ -> S0
     end,
-    next_after_runner(release_hosting(S#s{resource_waiter = none, agent_projection_waiter = none}));
+    next_after_runner(release_hosting(S#s{resource_waiter = none, projection_waiter = none}));
 resource_finished(_Reply, S) -> next_after_runner(S).
 
 %% Physical evidence waits for actual executor capacity. Committed advances
@@ -1653,9 +1648,13 @@ install_catalog_update(
 %%%===================================================================
 
 reconcile_source_views(Subscriptions, S0) ->
-    Desired = maps:from_keys(Subscriptions, true),
+    ReadSources = [Identity || Basis <- maps:values(S0#s.resource_basis),
+                              {source,_,Identity,lifecycle} <- maps:keys(Basis)],
+    Desired = maps:merge(maps:from_keys(ReadSources, progress),
+                         maps:from_keys(Subscriptions, projection)),
     Removed = [Identity || Identity <- maps:keys(S0#s.source_views),
-                           not maps:is_key(Identity, Desired)],
+                           maps:get(Identity,Desired,none) =/=
+                               maps:get(interest,maps:get(Identity,S0#s.source_views),projection)],
     S1 = lists:foldl(fun stop_source_view/2, S0, Removed),
     S2 = lists:foldl(
            fun(Identity, Acc) ->
@@ -1663,7 +1662,7 @@ reconcile_source_views(Subscriptions, S0) ->
                        true -> Acc;
                        false -> enqueue_source_follow(Identity, Acc)
                    end
-           end, S1, Subscriptions),
+           end, S1, lists:sort(maps:keys(Desired))),
     %% Attachment yields through one self-message per identity, so a large
     %% catalogue never blocks this runtime turn. A missing owner is parked and
     %% woken by its one gproc name-follow monitor, never by a retry timer.
@@ -1680,16 +1679,21 @@ enqueue_source_follow(Identity, S0) ->
       [Identity],
       put_source_view(
         Identity,
-        #{follow_ref => none, state => {building, Height}, attempt => 0}, S0)).
+        #{follow_ref => none, interest => source_interest(Identity,S0),
+          state => {building, Height}, attempt => 0}, S0)).
+
+source_interest(Identity, S) ->
+    case lists:member(Identity,S#s.subscriptions) of true -> projection; false -> progress end.
 
 attach_source_follow(Identity, S0) ->
     Height = source_view_height(Identity, S0),
     {Attempt, S1} = next_source_attempt(S0),
-    case quod_foreign_log:follow(Identity, projection) of
+    Interest = source_interest(Identity,S0),
+    case quod_foreign_log:follow(Identity, Interest) of
         {ok, FollowRef} ->
             put_source_view(
               Identity,
-              #{follow_ref => FollowRef, state => {building, Height},
+              #{follow_ref => FollowRef, interest => Interest, state => {building, Height},
                 attempt => Attempt}, S1);
         {error, Reason} ->
             mark_source_unreachable(Identity, Reason, Height, Attempt, S1)
@@ -1710,7 +1714,8 @@ next_source_attempt(S = #s{source_attempts = Attempts}) ->
 mark_source_unreachable(Identity, Reason, Height, Attempt, S0) ->
     put_source_view(
       Identity,
-      #{follow_ref => none, state => {unreachable, Reason, Height},
+      #{follow_ref => none, interest => source_interest(Identity,S0),
+        state => {unreachable, Reason, Height},
         attempt => Attempt}, S0).
 
 ensure_foreign_log_monitor(S = #s{source_views = Views})
@@ -1761,6 +1766,9 @@ handle_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
 source_notice_state({building, Height})
   when is_integer(Height), Height >= 0 ->
     {ok, {building, Height}, []};
+source_notice_state({certified, Height, _}) when is_integer(Height), Height >= 0 ->
+    {ok, {ready, Height, none, #{},
+          #{from => 0, changed_heads => [], resnapshot => true}}, []};
 source_notice_state({unreachable, Reason, Height})
   when is_integer(Height), Height >= 0 ->
     {ok, {unreachable, Reason, Height}, []};
@@ -1947,28 +1955,41 @@ source_last_height({ready, Height, _ProjectionId, _Freshness, _Delta}) -> Height
 source_last_height(_) -> 0.
 
 %% Source progress is a resource dependency, independently of reaction delivery.
-%% A building projection parks its worlds; only verified changed predicates
-%% decide whether their definitions need selecting again.
-source_resources_changed(Identity,Before,After,S) ->
+%% A building source parks its worlds; a certified advance invalidates only
+%% resources whose signed reads depended on that source.
+source_resources_changed(Identity,Before,After,S0) ->
+    S = finish_source_selection(advance_source_basis(Identity,After,S0)),
     case source_fence(Before) =:= source_fence(After) of
         true -> S;
         false ->
-            Basis = maps:get(physics_worlds,S#s.resource_basis,#{}),
-            Worlds = lists:usort([W || {source,W,I,lifecycle} <- maps:keys(Basis), I =:= Identity]),
+            Keys = [Key || {Key,B} <- maps:to_list(S#s.resource_basis), Key =/= physics_worlds,
+                maps:is_key({source,all,Identity,lifecycle},B),
+                maps:is_key(parent,B) orelse maps:is_key(Key,S#s.resource_failures) orelse
+                    not source_identity_current(Identity,B,S)],
+            Next = case After of
+                #{state := {ready,_,_,_,_}} -> queue_resource_keys(Keys,changed,S);
+                _ -> S
+            end,
+            Basis = maps:get(physics_worlds,Next#s.resource_basis,#{}),
+            Scopes = [W || {source,W,I,lifecycle} <- maps:keys(Basis), I =:= Identity],
+            Worlds = case lists:member(all,Scopes) of
+                true -> maps:keys(Next#s.physics);
+                false -> lists:usort(Scopes)
+            end,
             case After of
-                #{state := {ready,_,_,_,Delta}} ->
-                    Known = case Before of #{verified := {H,_}} -> H; _ -> unknown end,
-                    Changed = resource_changes(maps:get(changed_heads,Delta),true),
-                    Affected = [W || W <- Worlds,
-                        maps:get(resnapshot,Delta) orelse maps:get(from,Delta) =/= Known orelse
-                        source_world_affected(W,Identity,Basis,Changed)],
-                    Ready = source_worlds_ready(Identity,Worlds,Affected,invalidate_physics_worlds(Affected,S)),
-                    case Affected of [] -> Ready;
-                        _ -> queue_resource_key(physics_worlds,changed,Ready) end;
+                #{state := {ready,_,_,_,_}} ->
+                    Current = source_identity_current(Identity,Basis,Next),
+                    Affected = case Current of true -> []; false -> Worlds end,
+                    Ready = source_worlds_ready(Identity,Worlds,Affected,invalidate_physics_worlds(Affected,Next)),
+                    Retry = maps:is_key(parent,Basis) orelse maps:is_key(physics_worlds,S#s.resource_failures),
+                    case Scopes =/= [] andalso (not Current orelse Retry) of
+                        false -> Ready;
+                        true -> queue_resource_key(physics_worlds,changed,Ready)
+                    end;
                 _ ->
                     Paused = case After of
-                        #{state := {building,_}} -> pause_physics_worlds(Worlds,S);
-                        _ -> invalidate_physics_worlds(Worlds,S)
+                        #{state := {building,_}} -> pause_physics_worlds(Worlds,Next);
+                        _ -> invalidate_physics_worlds(Worlds,Next)
                     end,
                     Waiting = Paused#s{physics = maps:map(fun(W,E) ->
                         case lists:member(W,Worlds) of
@@ -1981,10 +2002,34 @@ source_resources_changed(Identity,Before,After,S) ->
             end
     end.
 
-source_world_affected(World,Identity,Basis,Changed) ->
-    Source = maps:from_keys([K || {source,W,I,K} <- maps:keys(Basis),
-                                  W =:= World,I =:= Identity,K =/= lifecycle],true),
-    map_size(Source) =:= 0 orelse quod_resource_basis:affected(Source,Changed).
+%% An exact verified delta can advance an unchanged read without proving it
+%% again. A gap or resnapshot still requires a fresh signed selection.
+advance_source_basis(Identity,#{state := {ready,To,_,_,
+        #{resnapshot := false,from := From,changed_heads := Heads}}},S) ->
+    Changed = resource_changes(Heads,true),
+    Advance = fun(Basis) -> maps:from_list([case Key of
+        {source_fence,Identity,{H,Reads}} when From =< H, H < To ->
+            Used = maps:from_keys([{fact,K} || {K,_} <- Reads],true),
+            case quod_resource_basis:affected(Used,Changed) of
+                false -> {{source_fence,Identity,{To,Reads}},Value};
+                true -> {Key,Value}
+            end;
+        _ -> {Key,Value}
+    end || {Key,Value} <- maps:to_list(Basis)]) end,
+    Waiter = case S#s.projection_waiter of
+        {sources,Caller,Key,Basis} -> {sources,Caller,Key,Advance(Basis)};
+        Other -> Other
+    end,
+    S#s{resource_basis = maps:map(fun(_,Basis) -> Advance(Basis) end,S#s.resource_basis),
+        projection_waiter = Waiter};
+advance_source_basis(_,_,S) -> S.
+
+source_identity_current(Identity,Basis,S) ->
+    Source = maps:filter(fun
+        ({source_fence,I,{H,Reads}},_) when is_integer(H), is_list(Reads) -> I =:= Identity;
+        (_,_) -> false
+    end,Basis),
+    map_size(Source) > 0 andalso source_basis_current(Source,S).
 
 source_worlds_ready(Identity,Worlds,Affected,S) ->
     S#s{physics = maps:map(fun(W,E) ->
@@ -2068,7 +2113,7 @@ kill_runner(S00) ->
             S0#s{resource_waiter = none};
         none -> S0
     end,
-    release_event_acks(Cleared#s{runner = none}).
+    release_event_acks(Cleared#s{runner = none, projection_waiter = none}).
 
 await_worker_downs(Pending) when map_size(Pending) =:= 0 -> ok;
 await_worker_downs(Pending) ->
@@ -2172,9 +2217,12 @@ node_scope({agent_instance_ref, Ns, Anchor, _} = Node,
 node_scope(_, _) -> false.
 
 refresh_node_executor(S = #s{config = Config}) ->
-    case maps:is_key(node, S#s.agents) of
-        false -> S;
-        true ->
+    %% Withdrawal retires owned handles without requiring a signature from
+    %% the withdrawn identity to select their next hosting projection.
+    case {local_node_reference(),maps:is_key(node, S#s.agents)} of
+        {none,_} -> stop_agents(S);
+        {_,false} -> S;
+        {_,true} ->
             Key = maps:get(node_id, Config),
             Desired = case node_executor_binding(Key, S) of
                 {ok, Binding} -> #{node => Binding};
@@ -2442,7 +2490,7 @@ stop_agent(Agent, Next) -> Agent#{successor => Next}.
 
 stop_agents(S) ->
     Agents = maps:map(fun(_, A) -> stop_agent(A, none) end, S#s.agents),
-    S#s{agents = Agents, hosting_dirty = #{}, agent_projection_waiter = none,
+    S#s{agents = Agents, hosting_dirty = #{},
         agent_capacity_blocked = false}.
 
 work_resource_key({agent, Instance}) -> {agent_work, Instance};
@@ -2571,15 +2619,15 @@ agent_retirements({keys, Instances}, Agents) ->
     maps:from_list([{M, I} || I <- Instances,
                             #{stopping := true, monitor := M} <- [maps:get(I, Agents, none)]]).
 
-finish_agent_projection(_Monitor, S = #s{agent_projection_waiter = none}) -> S;
-finish_agent_projection(Monitor, S = #s{agent_projection_waiter = {From, Waiting, Reply}}) ->
+finish_agent_projection(Monitor, S = #s{projection_waiter = {agents, From, Waiting, Reply}}) ->
     case maps:remove(Monitor, Waiting) of
         Remaining when map_size(Remaining) > 0 ->
-            S#s{agent_projection_waiter = {From, Remaining, Reply}};
+            S#s{projection_waiter = {agents, From, Remaining, Reply}};
         _ ->
             gen_server:reply(From, Reply),
-            S#s{agent_projection_waiter = none}
-    end.
+            S#s{projection_waiter = none}
+    end;
+finish_agent_projection(_Monitor, S) -> S.
 
 %% Readiness names an owned resource, never a declaration or callback goal.
 queue_agent_reconcile(S) -> queue_ready(agent_hosts, all, S).
@@ -2663,7 +2711,8 @@ queued_resource_changes(Queue, Height) ->
     resource_changes(lists:append([changed_heads(Env) || {local, Env, _} <- Queue]), Advanced).
 
 invalidate_resources(Changes, S) when map_size(Changes) =:= 0 -> S;
-invalidate_resources(Changes, S) ->
+invalidate_resources(Changes, S0) ->
+    S = finish_source_selection(S0),
     Keys = maps:fold(fun(Key, Basis, Acc) ->
         case quod_resource_basis:affected(Basis, Changes) of
             true -> [Key | Acc];
@@ -2748,18 +2797,76 @@ source_fence(#{follow_ref := Follow,state := {ready,H,Projection,Freshness,_}}) 
     {Follow,H,Projection,maps:get(reader,Freshness,none)};
 source_fence(#{follow_ref := Follow,state := State}) -> {Follow,State}.
 
-source_basis_current(Basis,S) ->
-    maps:fold(fun
-        ({terrain_demand,World,Demand},_,Current) ->
-            Current andalso maps:get(terrain_demand,maps:get(World,S#s.physics,#{}),none) =:= Demand;
-        ({source_fence,Identity,{snapshot,Follow,H,Projection,Pid,Generation,Deadline}},_,Current) ->
-            Current andalso
-            source_fence(maps:get(Identity,S#s.source_views,undefined)) =:= {Follow,H,Projection,{Pid,Generation}}
-            andalso is_process_alive(Pid) andalso Deadline > quod_time:mono_ms();
-        ({source_fence,Identity,Fence},_,Current) ->
-            Current andalso source_fence(maps:get(Identity,S#s.source_views,undefined)) =:= Fence;
-        (_,_,Current) -> Current
-    end,true,Basis).
+source_basis_current(Basis,S) -> source_basis_state(Basis,S) =:= ready.
+
+source_basis_state(Basis,S) ->
+    maps:fold(fun(Key,_,State) ->
+        Current = case Key of
+            {terrain_demand,World,Demand} ->
+                case maps:get(terrain_demand,maps:get(World,S#s.physics,#{}),none) =:= Demand of
+                    true -> ready; false -> stale
+                end;
+            {source_fence,Identity,{snapshot,Follow,H,Projection,Pid,Generation,Deadline}} ->
+                case source_fence(maps:get(Identity,S#s.source_views,undefined)) =:=
+                         {Follow,H,Projection,{Pid,Generation}} andalso
+                     is_process_alive(Pid) andalso Deadline > quod_time:mono_ms() of
+                    true -> ready; false -> stale
+                end;
+            {source_fence,{Ns,Anchor},{H,Reads}} when is_integer(H), is_list(Reads) ->
+                case S#s.binding of
+                    #{identity := {Ns,Anchor}} ->
+                        #est{db = #db{ref = Ref}} = S#s.est,
+                        case H =< S#s.height andalso lists:all(fun({K,V}) ->
+                            quod_read_set:kind(K) =:= predicate andalso
+                                quod_erlog_db_mvcc:version_token(Ref,K) =:= V
+                        end,Reads) of true -> ready; false -> stale end;
+                    _ -> case maps:get({Ns,Anchor},S#s.source_views,none) of
+                        #{state := {ready,H,_,_,_}} -> ready;
+                        #{state := {ready,Now,_,_,_}} when Now > H -> stale;
+                        _ -> pending
+                    end
+                end;
+            {source_fence,Identity,Fence} ->
+                case source_fence(maps:get(Identity,S#s.source_views,undefined)) =:= Fence of
+                    true -> ready; false -> stale
+                end;
+            _ -> ready
+        end,
+        case {State,Current} of
+            {stale,_} -> stale; {_,stale} -> stale;
+            {pending,_} -> pending; {_,pending} -> pending;
+            _ -> ready
+        end
+    end,ready,Basis).
+
+%% Follow before installation, then compare the signed read's exact heights.
+%% The existing worker owns this wait and its original deadline/cancellation.
+finish_source_selection(S = #s{projection_waiter = {sources,From,Key,Basis}}) ->
+    Changes = queued_resource_changes(S#s.queue,S#s.height),
+    State = case map_size(Changes) > 0 andalso quod_resource_basis:affected(Basis,Changes) of
+        true -> stale;
+        false -> source_basis_state(Basis,S)
+    end,
+    case State of
+        pending -> S;
+        ready -> gen_server:reply(From,ok), S#s{projection_waiter = none};
+        stale ->
+            gen_server:reply(From,{error,selection_superseded}),
+            Next = S#s{projection_waiter = none},
+            case Key of
+                agent_recovery -> Next;
+                agent_custody -> Next;
+                _ -> queue_resource_key(Key,changed,Next)
+            end
+    end;
+finish_source_selection(S) -> S.
+
+merge_resource_basis(Old,New) ->
+    Identities = maps:from_keys([I || {source_fence,I,_} <- maps:keys(New)],true),
+    maps:merge(maps:filter(fun
+        ({source_fence,I,_},_) -> not maps:is_key(I,Identities);
+        (_,_) -> true
+    end,Old),New).
 
 resolve_resource_sources(_,_,_,{physics_worlds,[]},_) -> {physics_worlds,[],[],#{}};
 resolve_resource_sources(Ns,H,Est,{physics_worlds,Rows},Deadline) ->
@@ -2877,10 +2984,10 @@ resolve_physics_pose(Identity={Ns,H},Est,World={world_ref,_,_,W},Authority,{fram
     end;
 resolve_physics_pose(_,_,_,_,Pose,_) -> {ok,Pose}.
 
-%% Geometry and every anchored frame share the existing retained reader and
-%% installed-source fences. There is no request-time projection reconstruction.
-physics_source_selection({Ns,H},Est,{world_ref,Ns,Anchor,_},{Ns,Anchor},Goal,_) ->
-    select_resource_result(Est,Goal,required,quod_predicates:resource_context({Ns,Anchor},H));
+%% Installation reads retain the existing source delegation and snapshot.
+%% Calls from that snapshot to class owners use ordinary signed scopes and ACLs.
+physics_source_selection({Ns,H},Est,World={world_ref,Ns,Anchor,_},{Ns,Anchor},Goal,Deadline) ->
+    signed_resource_selection(Ns,Est,World,{Ns,Anchor},H,Est,Goal,Deadline);
 physics_source_selection({Ns,_},Est,World,Identity,Goal,Deadline) ->
     %% Missing/denied selections retain their source dependency as well.
     quod_observation:note({source,World,Identity,lifecycle},Est),
@@ -2894,14 +3001,7 @@ physics_source_selection({Ns,_},Est,World,Identity,Goal,Deadline) ->
                     {Follow,H,Projection,{Pid,Generation}} ->
                         quod_observation:note({source_fence,Identity,
                             {snapshot,Follow,H,Projection,Pid,Generation,Deadline}},Est),
-                        {Captured,Basis} = quod_resource_basis:capture(SourceEst,
-                            fun(Observed) -> {selection,select_resource_result(Observed,Goal,required,
-                                quod_predicates:resource_context(Identity,H))} end),
-                        maps:foreach(fun(Key,_) -> quod_observation:note({source,World,Identity,Key},Est) end,Basis),
-                        case Captured of
-                            {selection,Result} -> Result;
-                            {error,{Class,Reason,Stack}} -> erlang:raise(Class,Reason,Stack)
-                        end;
+                        signed_resource_selection(Ns,Est,World,Identity,H,SourceEst,Goal,Deadline);
                     _ -> {error,source_selection_superseded}
                 end
             end);
@@ -2909,6 +3009,58 @@ physics_source_selection({Ns,_},Est,World,Identity,Goal,Deadline) ->
             quod_observation:note({source_fence,Identity,Fence},Est), Error;
         {error,_} = Error -> Error
     end.
+
+required_signed_selection(Ns,H,Est,Goal,Deadline) ->
+    Identity = {Ns,quod_simplex:genesis_hash(Ns)},
+    case signed_resource_selection(Ns,Est,all,Identity,H,Est,Goal,Deadline) of
+        {ok,Bindings} -> Bindings;
+        {error,Reason} -> throw({resource_selection_failed,Reason})
+    end.
+
+signed_resource_selection(Ns,Est,Scope,{Target,Anchor},Height,Snapshot,Goal,Deadline) ->
+    Query = {'::',Target,{',',{current_ontology_identity,Target,Anchor},Goal}},
+    {Numbered,_,_} = erlog_int:term_instance(Query,0),
+    Expires = quod_time:now_ms() + max(0,Deadline - quod_time:mono_ms()),
+    case quod_node_actor:signed_goal(read,Numbered,crypto:strong_rand_bytes(32),Expires) of
+        {ok,Bytes,Signature} ->
+            {ok,Evidence} = quod_client_goal:verify(Bytes,Signature),
+            Context = quod_predicates:proof_context(Target,Height,[]),
+            Raw = quod_prolog:prove_est(Goal,quod_predicates:set_context(Snapshot,Context),
+                #{identity => {Target,Anchor},height => Height,deadline_ms => Deadline,evidence => Evidence}),
+            case Raw of
+                {read,Dependencies,Outcome} ->
+                    lists:foreach(fun({Source,A,H,Reads}) ->
+                        Identity = {Source,A},
+                        quod_observation:note({source_fence,Identity,{H,Reads}},Est),
+                        case Source =:= Ns of
+                            true ->
+                                lists:foreach(fun({Key,_}) ->
+                                    Observation = case quod_read_set:kind(Key) of
+                                        predicate -> {fact,Key};
+                                        _ -> parent
+                                    end,
+                                    quod_observation:note(Observation,Est)
+                                end,Reads);
+                            false ->
+                                quod_observation:note({source,Scope,Identity,lifecycle},Est),
+                                lists:foreach(fun({Key,_}) ->
+                                    quod_observation:note({source,Scope,Identity,{fact,Key}},Est)
+                                end,Reads)
+                        end
+                    end,Dependencies),
+                    case Outcome of
+                        {error,_} -> quod_observation:note(parent,Est);
+                        _ -> ok
+                    end,
+                    resource_read_result(Goal,Outcome);
+                {error,_} = Error -> Error
+            end;
+        {error,_} = Error -> Error
+    end.
+
+resource_read_result(_Goal,{ok,Bindings,[],_ReadSet}) -> {ok,Bindings};
+resource_read_result(_Goal,{error,_} = Error) -> Error;
+resource_read_result(Goal,{fail,Reasons}) -> {error,{no_solution,functor_key(Goal),Reasons}}.
 
 physics_definition_goal(World,Authority,Entity,Assignment,Revision,Digest) ->
     {',',{physics_definition_projection,World,Authority,Entity,Revision,
@@ -2935,7 +3087,7 @@ run_resource(Ns, H, Est, Resource, Scope, Deadline, {Caller, _}) ->
             Key = resource_key(Resource, Scope),
             {Outcome, Basis} = quod_resource_basis:capture(Est,
                 fun(Observed) ->
-                    Selected = select_resource_description(Ns,H,Observed,Resource,Scope),
+                    Selected = select_resource_description(Ns,H,Observed,Resource,Scope,Deadline),
                     resolve_resource_sources(Ns,H,Observed,Selected,Deadline)
                 end),
             Selected = case Outcome of
@@ -2957,25 +3109,29 @@ run_resource(Ns, H, Est, Resource, Scope, Deadline, {Caller, _}) ->
             end
     end.
 
-select_resource_description(Ns, H, Est, physics_worlds, _Scope) ->
+select_resource_description(Ns, H, Est, physics_worlds, _Scope, Deadline) ->
     Goal = {physics_projection, local_node_reference(), {'Rows'}},
-    case optional_selection(Ns, H, Est, Goal) of
+    case optional_selection(Est,Goal,fun() ->
+        required_signed_selection(Ns,H,Est,Goal,Deadline)
+    end) of
         absent -> {physics_worlds, []};
         #{'Rows' := Rows} -> {physics_worlds, Rows}
     end;
-select_resource_description(Ns, H, Est, agent_hosts, Changed) ->
+select_resource_description(Ns, H, Est, agent_hosts, Changed, Deadline) ->
     Goal = {agent_hosting_projection, Changed, local_node_reference(), {'Scope'}, {'Rows'}},
-    case optional_selection(Ns, H, Est, Goal) of
+    case optional_selection(Est,Goal,fun() ->
+        required_signed_selection(Ns,H,Est,Goal,Deadline)
+    end) of
         absent -> {agent_hosts, all, []};
         #{'Scope' := Scope, 'Rows' := Rows} -> {agent_hosts, Scope, Rows}
     end;
-select_resource_description(Ns, H, Est, agent_observers, Changed) ->
+select_resource_description(Ns, H, Est, agent_observers, Changed, _Deadline) ->
     Goal = {agent_observation_projection, Changed, local_node_reference(), {'Scope'}, {'Rows'}},
     case optional_selection(Ns, H, Est, Goal) of
         absent -> {agent_observers, all, []};
         #{'Scope' := Scope, 'Rows' := Rows} -> {agent_observers, Scope, Rows}
     end;
-select_resource_description(Ns, H, Est, node_ontologies, _Scope) ->
+select_resource_description(Ns, H, Est, node_ontologies, _Scope, _Deadline) ->
     case local_node_reference() of
         {agent_instance_ref, Ns, _, _} ->
             Goal = {node_ontology_hosting_projection, {'Hosts'}, {'Contacts'}},
@@ -2985,15 +3141,15 @@ select_resource_description(Ns, H, Est, node_ontologies, _Scope) ->
             end;
         _ -> inactive
     end;
-select_resource_description(<<"quod:root">> = Ns, H, Est, effect_custody, all) ->
+select_resource_description(<<"quod:root">> = Ns, H, Est, effect_custody, all, _Deadline) ->
     Goal = {findall, {limits, {'C'}, {'B'}},
             {effect_custody_limits, {'C'}, {'B'}}, {'Limits'}},
     case select_resource(Ns, H, Est, Goal) of
         #{'Limits' := [{limits, Count, Bytes}]} -> {effect_custody, Count, Bytes};
         _ -> {error, invalid_effect_custody_limits}
     end;
-select_resource_description(_, _, _, effect_custody, _) -> inactive;
-select_resource_description(Ns, H, Est, agent_work, {Instance, Wake}) ->
+select_resource_description(_, _, _, effect_custody, _, _) -> inactive;
+select_resource_description(Ns, H, Est, agent_work, {Instance, Wake}, _Deadline) ->
     case project_agent_work(Ns, H, Instance, {cursor, Wake}) of
         {ok, Cursor} ->
             Goal = {agent_work_goal, Instance, Cursor, {'Key'}, {'Goal'}, {'Budget'}},
@@ -3008,7 +3164,7 @@ select_resource_description(Ns, H, Est, agent_work, {Instance, Wake}) ->
 select_resource_description(Ns, H, Est, agent_recovery,
           {{Ns, Anchor}, Batch,
            {agent_host_observed, _, Observer, I, Host, Epoch, Expected, Round,
-            Observation, Kind, At, _Validity}, Ceiling, Deadline}) ->
+            Observation, Kind, At, _Validity}, Ceiling, Deadline}, _ReadDeadline) ->
     Goal = {agent_recovery_data, Observer, I, Host, Epoch, Expected, Round,
             Kind, At, Ceiling, {'Data'}},
     case select_resource(Ns, H, Est, Goal) of
@@ -3027,14 +3183,14 @@ select_resource_description(Ns, H, Est, agent_recovery,
         _ -> {error, invalid_recovery_data}
     end;
 select_resource_description(Ns, H, Est, agent_custody,
-                            {{agent_instance_ref, Ns, _Anchor, I}, Epoch, Observer}) ->
+                            {{agent_instance_ref, Ns, _Anchor, I}, Epoch, Observer}, _Deadline) ->
     %% Exact identity and assignment are verified from the committed snapshot.
-    Goal = {agent_key_preparation, Observer, I, {'Host'}, Epoch, Observer},
+    Goal = {can_prepare_agent_key, Observer, I, {'Host'}, Epoch, Observer},
     case select_resource(Ns, H, Est, Goal) of
         fail -> {error, preparation_not_authorized};
         _ -> authorized
     end;
-select_resource_description(_, _, _, _, _) -> {error, invalid_resource_request}.
+select_resource_description(_, _, _, _, _, _) -> {error, invalid_resource_request}.
 
 install_resource(<<"quod:root">>, _, effect_custody, {error, _} = Error) ->
     %% A failed committed selection withdraws admission, preserving all
@@ -3058,14 +3214,17 @@ install_resource(_, _, _, authorized) -> ok;
 install_resource(_, _, _, inactive) -> ok;
 install_resource(_, _, _, {error, _} = Error) -> Error.
 
-optional_selection(Ns, H, Est = #est{db = #db{mod = M, ref = R}}, Goal) ->
+optional_selection(Ns, H, Est, Goal) ->
+    optional_selection(Est,Goal,fun() -> required_selection(Ns,H,Est,Goal) end).
+
+optional_selection(#est{db = #db{mod = M, ref = R}}, Goal, Select) ->
     %% Canonical removal leaves an empty interpreted procedure; both forms
     %% lack a selector definition. A defined selector whose body fails is an
     %% error instead. This semantic read retains the missing functor dependency.
     case M:get_procedure(R, functor_key(Goal)) of
         undefined -> absent;
         {clauses, []} -> absent;
-        _ -> required_selection(Ns, H, Est, Goal)
+        _ -> Select()
     end.
 
 local_node_reference() ->

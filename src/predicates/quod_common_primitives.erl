@@ -21,18 +21,19 @@ validation consumes that material under the existing trusted execution boundary.
   divisor, wrong divisor type/domain, or nonportable salt raises an error. Ontologies reach it through
   `proof_draw/3` in `common_predicates.pl`. It is deterministic selection:
   neither secure randomness nor a uniqueness guarantee.
-- `'$quod_committed_check'(+Goal)` — a boolean, strictly local read-only
-  policy check over the pinned committed base. Reuses custody authorization's
-  evaluator and absorbs its read dependencies even on denial; never exports
-  bindings or consults staged policy. The shared Prolog operation guard binds
-  the authenticated actor before calling it.
+- `'$quod_committed_check'(+Goal)` — a boolean read-only policy check over
+  pinned committed views, including foreign class owners. Reads remain in the
+  proof's dependencies even on denial; it never exports bindings or consults
+  staged policy. The shared Prolog operation guard binds the authenticated
+  actor before calling it. Custody and verdict re-proofs remain strictly local.
 - `'$quod_with_build_plan'(+Inputs, Goal)` and `'$quod_build_plan'(-Inputs)`
   carry temporary constructor inputs through private logical bindings. Prolog
   owns shape checks, inheritance and defaults. Scope release restores inputs on
   success, failure, redo and error; no facts, transaction mode or authority change.
-- `'$quod_construction'(+Id, -Class, -Inputs)` observes only an active assertion
-  scope. The operation guard checks that class's committed policy for work on
-  its new identity. The input wrapper cannot establish construction context.
+- `'$quod_construction'(+Id, -Class, -Inputs)` observes the original assertion
+  context in the current transaction revision, including after scope re-entry.
+  The operation guard checks that class's committed policy for work on its new
+  identity. The input wrapper cannot establish construction context.
 - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
   round, so generated text stays a binary and never becomes an atom. Fails
   on unequal valid values; malformed arguments raise errors.
@@ -152,15 +153,13 @@ assert_instance(Method, {instance_of, Class, Instance}, Next, #est{bs = Bs} = St
     end).
 
 %% Only the assertion hook establishes this context. Build-plan input data
-%% cannot impersonate an active construction or authorize an existing instance.
+%% cannot replace a creation's original inputs or authorize an existing instance.
 construction_3({'$quod_construction', Instance, Class, Inputs}, Next, #est{bs = Bs} = St) ->
-    {_, Active} = build_context(Bs),
     Id = erlog_int:deref(Instance, Bs),
-    case [{C, P} || {C, I, P} <- Active, erlog_int:deref(I, Bs) =:= Id,
-                    quod_wire_term:is_ground(Id)] of
-        [{C, P} | _] -> erlog_int:unify_prove_body(
+    case quod_erlog_db_local_prove:construction(St, Id) of
+        {ok, {C, P}} -> erlog_int:unify_prove_body(
             {construction, Class, Inputs}, {construction, C, P}, Next, St);
-        [] -> erlog_int:fail(St)
+        error -> erlog_int:fail(St)
     end.
 
 %% Full ULID: 48-bit Unix milliseconds and 80 independently secure random bits.
@@ -178,7 +177,15 @@ instance_id_1({'$quod_instance_id', Instance}, Next,
             Alphabet = <<"0123456789ABCDEFGHJKMNPQRSTVWXYZ">>,
             Id = << <<(binary:at(Alphabet, (Value bsr Shift) band 31))>>
                     || Shift <- lists:seq(125, 0, -5) >>,
-            erlog_int:unify_prove_body(Instance, Id, Next, St);
+            {_, Active} = build_context(Bs),
+            Recorded = case [{C, P} || {C, I, P} <- Active,
+                                     erlog_int:deref(I, Bs) =:= erlog_int:deref(Instance, Bs)] of
+                [{Class, Inputs} | _] ->
+                    quod_erlog_db_local_prove:put_construction(
+                        St, Id, erlog_int:dderef(Class, Bs), erlog_int:dderef(Inputs, Bs));
+                [] -> St
+            end,
+            erlog_int:unify_prove_body(Instance, Id, Next, Recorded);
         _ -> erlog_int:fail(St)
     end.
 

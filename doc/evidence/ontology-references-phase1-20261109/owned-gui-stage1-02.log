@@ -1,0 +1,37 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;32m.[0m=WARNING REPORT==== 9-Nov-2026::20:32:14.339815 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 10
+=WARNING REPORT==== 9-Nov-2026::20:32:14.340503 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m
+Failures:
+
+  1) quod_gui_stage1_tests:-selected_exterior_uses_exact_shared_scene_test_/0-fun-6-/0
+[0;31m     {badmatch,[]}[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_A2FC193A65B7FDF8
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_A2FC193A65B7FDF8
+[0m
+  2) quod_gui_stage1_tests:-authored_creation_recovery_test_/0-fun-10-/0: ordinary
+[0;31m     {badmatch,[]}[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F0DF12BA38103DA2
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F0DF12BA38103DA2
+[0m
+  3) quod_gui_stage1_tests:-authored_creation_recovery_test_/0-fun-10-/0: atomic
+[0;31m     {badmatch,[]}[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_35462568184BB4D1
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_35462568184BB4D1
+[0m
+
+Finished in 5.847 seconds
+[0;31m5 tests, 3 failures
+[0m===> Error running tests

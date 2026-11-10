@@ -20,7 +20,7 @@ the scope wire as Erlang references.
          read_only/0, deadline_ms/0, remaining_ms/0, vote_deadline_ms/0,
          finalize/1, seal_plans/0, scope_handle/1, select_independent/1, independent/0,
          bind_router/3,
-         get_or_open_scope/2, read_dependencies/0,
+         get_or_open_scope/2, read_dependencies/1,
          scope_owner/1,
          register_invocation/2, unregister_invocation/1,
          registered_invocation/2,
@@ -126,7 +126,7 @@ stop(CloseScopeFun, CloseProxyFun)
       quod_trace:context(), <<"quod.proof_context.cleanup">>, internal, #{},
       fun(_Span) ->
           case erase(?KEY) of
-              #ctx{router = Router, scopes = Scopes, proxies = Proxies} ->
+              #ctx{router = Router, proof_id = ProofId, scopes = Scopes, proxies = Proxies} ->
                   maps:foreach(
                     fun(_Ref, Proxy) ->
                         try CloseProxyFun(Proxy) catch _:_ -> ok end
@@ -136,6 +136,10 @@ stop(CloseScopeFun, CloseProxyFun)
                         try CloseScopeFun(Scope) catch _:_ -> ok end,
                         demonitor_scope(MRef)
                     end, Scopes),
+                  case Router of
+                      #router{pid = Pid} -> quod_ask_router:stop(Pid, ProofId);
+                      undefined -> ok
+                  end,
                   demonitor_router(Router),
                   ok;
               undefined ->
@@ -629,12 +633,21 @@ open_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
             {error, {protocol_error, proof_engine}}
     end.
 
--doc "Exact pinned reads, including scopes visited by failed alternatives.".
--spec read_dependencies() -> [{binary(), <<_:256>>, non_neg_integer()}].
-read_dependencies() ->
-    lists:sort([{Ns, Anchor, Height} ||
-                 {{Ns, Anchor}, #scope{height = Height}} <-
-                     maps:to_list((context())#ctx.scopes)]).
+-doc "Pinned scope heights; committed selectors also collect exact predicate versions.".
+read_dependencies(ReadMode) ->
+    {Rows,Errors} = lists:mapfoldl(fun({{Ns,Anchor},#scope{height = H,handle = Handle}},Failed) ->
+        ReadSet = case ReadMode of
+            read_write -> {ok, #{}};
+            committed_read -> quod_scope_session:read_set(Handle)
+        end,
+        case ReadSet of
+            {ok,Reads} ->
+                {ok,Pairs} = quod_read_set:pairs(Reads),
+                {{Ns,Anchor,H,Pairs},Failed};
+            {error,Reason} -> {{Ns,Anchor,H,[]},[Reason|Failed]}
+        end
+    end,[],lists:sort(maps:to_list((context())#ctx.scopes))),
+    case Errors of [] -> {ok,Rows}; [Reason|_] -> {error,Reason,Rows} end.
 
 monitor_scope(
   Pid, {quod_scope_session, Pid, _ScopeId, _ProofId,
@@ -806,7 +819,7 @@ tx_request(_Actor, _Operation) ->
 -doc "Lazily checkpoint the exact live selection on this target actor's scope.".
 -spec materialize(quod_transaction_scope:selection(), actor()) ->
           ok | {error, term()}.
-materialize({tx_selection, Lineage, BatchIds, _Mode} = Selection,
+materialize({tx_selection, Lineage, BatchIds, _Mode, _ReadMode} = Selection,
             {ScopeId, <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>} = Actor)
   when is_binary(ScopeId),
        byte_size(ScopeId) =:= ?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS div 8 ->

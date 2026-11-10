@@ -8,6 +8,9 @@ committed work whose private custody is still pending.
 
 ## Reactions and resources
 
+[A reaction is an agent's behaviour: an ontology without a hosted agent can hold
+`react_on/2` clauses but nothing executes them.]{decided by="yan.guiborat" on="2026-11-08"}
+
 `trigger_event/1` places an occurrence in a committed diff; it does not
 assert that term as a permanent fact. Editable `react_on/2` clauses match
 applied events with normal Prolog unification. Eligibility is read-only.
@@ -49,16 +52,18 @@ by backpressure.
 
 Governed external predicates are classified as query, staging or reaction
 operations. Their execution context distinguishes normal proofs, validator
-policy checks, local installed-resource selection and read-only reaction matching; an invalid context fails
+policy checks and read-only reaction matching; an invalid context fails
 closed. A live observation cannot silently become a replayable proof input.
 
-The resource selector remains local and read-only. When resolving a retained
-source it may use `resource_selection` context with that owner's exact namespace,
-anchor and snapshot height. Only proof-bound metadata queries are permitted;
-live queries, scope calls, staging and reaction commands are forbidden. This
-lets a source recipe identify its own anchored frame without network I/O or an
-authenticated principal. Committed `policy_verdict` checks retain their stricter
-bridge prohibition.
+Physics and agent-host selection run committed, read-only proofs over their
+retained snapshots in the existing bounded resource worker. The node signs the
+proof identity for ordinary class-owner calls, which retain the target's ACL.
+Physics installation reads retain their existing source delegation independently
+of display access. Live queries, staging and reaction commands remain forbidden.
+The runtime retains precise read dependencies and follows certified source
+progress before installing the selected resources. Unchanged checks do not
+rebuild history or write storage. Other local resource selectors and committed
+`policy_verdict` checks retain their stricter bridge prohibition.
 
 Common Prolog mechanics provide `in_ontology(Namespace,Anchor,Goal)` for the
 ordinary anchored scope conjunction, `unique_solution/1` for an exact singleton
@@ -124,32 +129,34 @@ assignment policy. Operational loss of custody remains a visible service failure
 
 ## Immediate personal instructions
 
-[user_instance.pl](../priv/ontologies/user_instance.pl) composes with the human
-instance and shared agent hosting rules. The human U and hosted instance
-`personal` (A) have distinct references and keys in the same containing ontology.
-`personal_agent/2` discovers A and its current public key. Preparation and initial
-assignment use `prepare_agent_key_custody/6` and the existing `agent_hosted/4`
-action. Signup creates U and retains its original receipt and hosting intention.
-An authorized `account_setup_preparation/1` read prepares the same existing A's
-custody and returns `prepared_key(Key, Receipt)` in the preparation. The
-`setup_account/4` input carries that pair; setup verifies the receipt before it
-assigns A's host/key, constructs ordinary S0
-owned by U in the explicitly selected existing account storage, places A while
-construction authorization is active, records the complete result, and consumes
-the signup receipt in one atomic transition. A complete setup read returns its
-original references and pins without another preparation or write. Existing ontologies require authorized source
-composition; opening an account never rewrites its ontology.
+[quod_user.pl](../priv/ontologies/quod_user.pl) owns the human and personal-agent
+classes and their shared behavior. The human U and hosted instance `personal`
+(A) have distinct references and keys in the user's ontology. That ontology
+stores their memberships, slots, ACL clauses, reaction and hosting facts, plus
+the two local hosting derivations. `quod:user::personal_agent/2` discovers A and
+its current public key. Signup writes terms only and retains U's original
+receipt and hosting intention.
 
-For [empty-space construction](spaces.md#empty-creation), A can query its exact
-account's `personal_agent_owner/1` and `space_location(personal, Location)`.
-The owner is the unique existing human-user reference. Location reuses the
-composed space vocabulary and exclusive assignment; there is no copied personal
-location or ownership registry. Both are anchored reads admitted only for A
-(alongside U's existing account authority). A missing space composition or failed
-location query refuses creation rather than declaring A unplaced.
+An authorized `quod:user::account_setup_preparation/1` read uses the existing
+`prepare_agent_key_custody/6` and returns `prepared_key(Key, Receipt)`. The
+human class's `setup` form accepts that pair as inputs. Its goal executes in the
+user's ontology: verify custody and host A through `quod:agent`, assert ordinary
+S0 with U as owner, place A with `quod:space::goal(inside(S0, A, Origin))`, record
+the complete result, and acknowledge the signup receipt in one transaction.
+S0's first admission uses its class policy while its membership is staged. A
+complete setup read returns the original references and pins without another
+preparation or write. Existing ontologies change only through authorized edits.
+
+For [empty-space creation](spaces.md#empty-creation), the form asks
+`quod:user::personal_agent/2` for the exact personal-agent reference and uses
+`quod:space::space_location/2` for its location. The default owner is the unique
+human reference read by the user class owner. These ordinary scoped reads use
+the storing ontology's ACL; a denied or failed location query refuses creation
+rather than declaring A unplaced. Explicit unplaced creation requires no
+personal-location lookup.
 
 `personalGoal` takes an explicit target ontology reference and goal. U signs a
-read request `personal_instruction_accept(Bytes, Signature)` enclosing A's exact
+read request `quod:user::personal_instruction_accept(Bytes, Signature)` enclosing A's exact
 unsigned execute request, including its operation ID, goal, key and expiry. The
 committed Prolog policy checks the U-to-A relationship; `sign_agent_request/2`
 uses the existing governed vault to produce A's signature. A normal read only
@@ -181,9 +188,9 @@ confirmed absence produces HTTP 409 with `submitted: false`; a retained
 association or an unavailable check preserves the original pending operation.
 This read shares the original deadline and creates no recovery state.
 
-`personal_instructions/1` lets an authorized U discover associations without a
+`quod:user::personal_instructions/1` lets an authorized U discover associations without a
 browser journal. `POST /api/agents/instructions/outcomes` takes a fresh U-signed
-read `personal_instruction_lookup(Id, Bytes, Signature)` and resolves the exact
+read `quod:user::personal_instruction_lookup(Id, Bytes, Signature)` and resolves the exact
 stored A request through the existing outcome owner, including original named
 bindings. Lookup still requires current U authority, but does not require A's
 key to remain active or the write expiry to remain valid. A missing transaction

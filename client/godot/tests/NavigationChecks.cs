@@ -94,7 +94,7 @@ public partial class ExportChecks
             await SpaceControl(new() { ["m2_restart"]=JsonSerializer.SerializeToNode(human) });
             await Until(()=>State["world_accepted"]!.GetValue<bool>());
             await SpaceControl(new() { ["m3_restart_runtime"]=JsonSerializer.SerializeToNode(human) });
-            var personal=await app.ActiveSession.Read(human,"personal_agent(Agent,Key).",CancellationToken.None);
+            var personal=await app.ActiveSession.Read(human,"<<\"quod:user\">>::personal_agent(Agent,Key).",CancellationToken.None);
             Check(Json.Binding(personal,"Agent").ToString()==setup[1].ToString() && Json.Binding(personal,"Key").ToString()==setup[4].ToString(),"runtime owner restart reuses the exact original A and custody key");
             await SpaceControl(new() { ["m3_restart_views"]=true });
             await Until(()=>!State["world_accepted"]!.GetValue<bool>());
@@ -110,7 +110,7 @@ public partial class ExportChecks
             var replies=app.ActiveAccounts.Outcomes.Where(o=>o["bindings"]?.AsArray().Any(b=>b?["Results"]!=null)==true).ToArray();
             Check(replies.All(Json.Committed) && replies.Length>=7,"original creation Enter and Leave outcomes recover from authoritative associations");
             using var cancellation=new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var before=Json.Binding(await app.ActiveSession.Read(human,"personal_instructions(Instructions).",cancellation.Token),"Instructions").Items.Select(t=>t.Args[0].ToString()).ToHashSet();
+            var before=Json.Binding(await app.ActiveSession.Read(human,"<<\"quod:user\">>::personal_instructions(Instructions).",cancellation.Token),"Instructions").Items.Select(t=>t.Args[0].ToString()).ToHashSet();
             string entity=Actor.FromTerm(s0).InstanceText.TrimEnd('.');
             await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"assertz(instance_permission({entity},space_admit,deny)).",cancellation.Token);
             await Move(panel,s0,denied:true);
@@ -118,7 +118,7 @@ public partial class ExportChecks
             // The budget covers signed operations, not the user's travel in between.
             using var after=new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({entity},space_admit,deny)).",after.Token);
-            var instruction=Json.Binding(await app.ActiveSession.Read(human,"personal_instructions(Instructions).",after.Token),"Instructions").Items.Single(t=>!before.Contains(t.Args[0].ToString()));
+            var instruction=Json.Binding(await app.ActiveSession.Read(human,"<<\"quod:user\">>::personal_instructions(Instructions).",after.Token),"Instructions").Items.Single(t=>!before.Contains(t.Args[0].ToString()));
             string id=Identity.Encode(instruction.Args[0].Bytes);route["negative_instruction"]=id;await File.WriteAllTextAsync(routePath,route.ToJsonString());
             var outcome=await app.ActiveSession.ResolveInstruction(human,id,after.Token);
             Check(!Json.Terminal(outcome),"an unclaimed denied attempt remains an explicitly unresolved original outcome across devices");
@@ -143,7 +143,7 @@ public partial class ExportChecks
         var t3=Term.Parse("transform(300,500,-900,23,47,71)");
         foreach(var (subject,pose,style) in new[] { (s1,t1,"contents"),(s2,t2,"contents"),(leaf,t3,"solid") }) {
             var actor=Actor.FromTerm(subject);
-            string goal=$"attribute({actor.InstanceText.TrimEnd('.')},exterior,Old),attribute({actor.InstanceText.TrimEnd('.')},transform,Pose),space_represent({actor.InstanceText.TrimEnd('.')},Old,Pose,none,{style},{pose},none).";
+            string goal=$"attribute({actor.InstanceText.TrimEnd('.')},exterior,Old),attribute({actor.InstanceText.TrimEnd('.')},transform,Pose),<<\"quod:space\">>::space_represent({subject},Old,Pose,none,{style},{pose},none).";
             await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,goal,timeout.Token);
         }
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==1);
@@ -157,10 +157,10 @@ public partial class ExportChecks
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
         Check(scene.SubjectIds(leaf).Distinct().Count()==4,"independent recursive paths preserve four occurrences of the same exact subject");
         Check(scene.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="Contents cycle")==2,"exact ancestor cycles render explicit terminal occurrences on each independent branch");
-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"space_represent({Entity(s2)},contents,{t2},none,wireframe,{t2},none).",timeout.Token);
+        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},contents,{t2},none,wireframe,{t2},none).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==1 && scene.SubjectIds(s2).Length==2);
         Check(scene.SubjectIds(s2).Length==2,"wireframe terminates each selected S2 occurrence while the independent S1 leaf remains visible");
-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"space_represent({Entity(s2)},wireframe,{t2},none,contents,{t2},none).",timeout.Token);
+        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},wireframe,{t2},none,contents,{t2},none).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
         int rebuilt=scene.Rebuilt;var ids=scene.Ids.ToArray();
         var view=(SignedView)typeof(Main).GetField("worldView",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(app)!;

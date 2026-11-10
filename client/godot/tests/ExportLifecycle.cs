@@ -99,7 +99,7 @@ public partial class ExportChecks
         string Vector(string tag) => "independent((assertz(m1b_vector_mark(" + tag + "))," + Term.Text(Json.S(target,"namespace")) + "::(current_ontology_identity(" + Term.Text(Json.S(target,"namespace")) + "," + Term.Binary(Identity.Decode(Json.S(target,"anchor"))) + "),m1b_vector_write(" + tag + "))))";
         var accounts = new Accounts(session, store);
         foreach (string flow in new[] { "signup", "setup" }) {
-            string binding = flow == "signup" ? ",Account=" + Term.Call("agent_instance_ref", human.Entity.Args) : ",account_setup_state(Setup)";
+            string binding = flow == "signup" ? ",Account=" + Term.Call("agent_instance_ref", human.Entity.Args) : ",<<\"quod:user\">>::account_setup_state(Setup)";
             await session.Execute(human, Vector(flow) + binding + ".", flow, timeout.Token);
             var work = store.Snapshot!.Pending.Single();
             using var owner = new TcpClient(); await owner.ConnectAsync("127.0.0.1", int.Parse(Env("M1B_CONTROL_PORT")), timeout.Token);
@@ -124,7 +124,7 @@ public partial class ExportChecks
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         await session.Authenticate(timeout.Token);
         var accounts = new Accounts(session, store); await accounts.Discover(timeout.Token);
-        var panel=new EidolonPanel();app.AddChild(panel);panel.Changed+=()=>app.EmitSignal(Main.SignalName.Changed);
+        var panel=new EidolonPanel();app.AddChild(panel.Preview);app.AddChild(panel);panel.Changed+=()=>app.EmitSignal(Main.SignalName.Changed);
         var target=accounts.Catalogue.Single(x=>x.Namespace=="quod:gui");
         async Task Inspect(Actor chosen){panel.Open(session,accounts,store,chosen.Ontology);await Until(()=>panel.Available);panel.Choose(panel.Offered.Single(e=>e.Purpose.Name=="prolog"));}
         await Inspect(target);var source=(SourcePanel)panel.FindChild("source-tools",true,false);
@@ -187,9 +187,9 @@ public partial class ExportChecks
         // Computed control declarations follow the production controller form;
         // they do not request construction of fixed-named material instances.
         string[] declarations = [
-            "instance_of(quod:gui:form,m1b_question):-instance_of(human_user,me)", "instance_of(quod:gui:group,m1b_group):-instance_of(human_user,me)",
-            "instance_of(quod:gui:text_box,m1b_answer):-instance_of(human_user,me)", "instance_of(quod:gui:button,m1b_apply):-instance_of(human_user,me)",
-            "instance_of(quod:gui:checkbox,m1b_confirm):-instance_of(human_user,me)", "instance_of(quod:gui:selectable_list,m1b_choices):-instance_of(human_user,me)",
+            "instance_of(quod:gui:form,m1b_question):-instance_of(quod:user:human_user,me)", "instance_of(quod:gui:group,m1b_group):-instance_of(quod:user:human_user,me)",
+            "instance_of(quod:gui:text_box,m1b_answer):-instance_of(quod:user:human_user,me)", "instance_of(quod:gui:button,m1b_apply):-instance_of(quod:user:human_user,me)",
+            "instance_of(quod:gui:checkbox,m1b_confirm):-instance_of(quod:user:human_user,me)", "instance_of(quod:gui:selectable_list,m1b_choices):-instance_of(quod:user:human_user,me)",
             "attribute(m1b_confirm,label,<<\"Confirm\">>)", "attribute(m1b_confirm,required,true)",
             "attribute(m1b_choices,label,<<\"Choices\">>)", "attribute(m1b_choices,required,true)", "attribute(m1b_choices,multiple,true)", "attribute(m1b_choices,options,[option(a,<<\"A\">>),option(b,<<\"B\">>)])",
             "gui_children(m1b_question,[m1b_group,m1b_apply])", "gui_children(m1b_group,[m1b_answer,m1b_confirm,m1b_choices])",
@@ -204,14 +204,14 @@ public partial class ExportChecks
         var installed = await ExecuteComplete(session, store, human, "transaction((" + string.Join(",", declarations.Select(d => "assertz((" + d + "))")) + ")).", timeout.Token);
         Check(Json.Committed(installed), "authored deferred form uses existing account ontology");
         for (int occurrence = 0; occurrence < 2; occurrence++) {
-            var opened = await ExecuteComplete(session, store, human, "gui_open(m1b_question,Reference).", timeout.Token);
+            var opened = await ExecuteComplete(session, store, human, $"<<\"quod:gui\">>::gui_open({source},Reference).", timeout.Token);
             Check(Json.Committed(opened), "genuine deferred opening commits with actual HUD preparation");
             QuestionPanel? panel = null;
             await Until(() => { panel = FindQuestion(app); return panel?.Available == true; });
             Check(panel!.FormPanel.Descriptor.Tree.Children.Any(c => c.Kind == "group"), "nested deferred descriptor rendered from source");
             Check(panel.FormPanel.Draft["m1b_answer"] == "Original typed default", "deferred typed default preserved");
             Check(panel.FormPanel.Draft["m1b_confirm"] == "false" && panel.FormPanel.Draft["m1b_choices"] == "[]" && !panel.FormPanel.Validate(), "real offered required false and empty defaults render and show validation");
-            var pendingBefore = Json.Binding(await session.Read(human, "gui_pending_questions(Questions).", timeout.Token), "Questions");
+            var pendingBefore = Json.Binding(await session.Read(human, "<<\"quod:gui\">>::gui_pending_questions(Questions).", timeout.Token), "Questions");
             Check(pendingBefore.Items.Length == 1, "real question remains deferred before user input");
             if (occurrence == 0) {
                 ((CheckButton)panel.FormPanel.Input("m1b_confirm")!).ButtonPressed = true;
@@ -221,7 +221,7 @@ public partial class ExportChecks
                 button.EmitSignal(BaseButton.SignalName.Pressed);
             } else (panel.FindChild("cancel-question", true, false) as Button)!.EmitSignal(BaseButton.SignalName.Pressed);
             await Until(() => FindQuestion(app) == null);
-            var pendingAfter = Json.Binding(await session.Read(human, "gui_pending_questions(Questions).", timeout.Token), "Questions");
+            var pendingAfter = Json.Binding(await session.Read(human, "<<\"quod:gui\">>::gui_pending_questions(Questions).", timeout.Token), "Questions");
             Check(pendingAfter.Items.Length == 0, occurrence == 0 ? "submitted deferred question completes through existing A reaction" : "cancelled deferred question removes original HUD reference");
             if (State["pending"]!.GetValue<int>() > 0) {
                 var work = app.ActiveStore.Snapshot!.Pending.Single();
@@ -237,16 +237,16 @@ public partial class ExportChecks
         var result = await session.Read(human, "findall(answer(Value,Confirm,Choices),m1b_received(Value,Confirm,Choices),Values).", timeout.Token);
         Check(Json.Binding(result, "Values").ToString() == "[answer(<<\"Original typed default\">>,true,[b])]", "question continuation executes exactly once with edited required fields in responsible ontology");
         string unsupportedSource = Term.Call("form_ref", Term.Text(human.Namespace), Term.Binary(Identity.Decode(human.Anchor)), Term.Atom("m1b_image_question")).ToString();
-        string[] unsupported = ["instance_of(quod:gui:form,m1b_image_question):-instance_of(human_user,me)", "instance_of(quod:gui:image,m1b_image):-instance_of(human_user,me)",
+        string[] unsupported = ["instance_of(quod:gui:form,m1b_image_question):-instance_of(quod:user:human_user,me)", "instance_of(quod:gui:image,m1b_image):-instance_of(quod:user:human_user,me)",
             "attribute(m1b_image_question,label,<<\"Unsupported descriptor test\">>)", "attribute(m1b_image,label,<<\"Image\">>)",
-            "attribute(m1b_image,image,asset(<<\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">>,<<\"image/jpeg\">>))",
+            "attribute(m1b_image,image,image(asset(<<\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">>,<<\"image/jpeg\">>),resources(1,1)))",
             "gui_children(m1b_image_question,[m1b_image,m1b_apply])", "gui_form(m1b_image_question,[],submit(m1b_apply,true))",
             $"gui_question_policy(m1b_image_question,{setup[0]},{setup[1]})", $"gui_responder_policy(personal,{unsupportedSource},{setup[0]})"];
         Check(Json.Committed(await ExecuteComplete(session, store, human, "transaction((" + string.Join(",", unsupported.Select(d => "assertz((" + d + "))")) + ")).", timeout.Token)), "authored unsupported descriptor installed in private test account");
-        var refused = await ExecuteComplete(session, store, human, "gui_open(m1b_image_question,Reference).", timeout.Token);
+        var refused = await ExecuteComplete(session, store, human, $"<<\"quod:gui\">>::gui_open({unsupportedSource},Reference).", timeout.Token);
         Check(refused["result"]?.ToString() == "fail" && app.FindChildren("*", "Label", true, false).OfType<Label>().Any(label => label.Text.Contains("Unsupported GUI component: image")), "unsupported genuine question visibly refuses preparation without an empty form");
-        Check(Json.Binding(await session.Read(human, "gui_pending_questions(Questions).", timeout.Token), "Questions").Items.Length == 0, "refused unsupported preparation leaves no committed empty question");
-        Check(Json.Committed(await ExecuteComplete(session, store, human, "gui_open(m1b_question,Reference).", timeout.Token)), "uncertain-submission case opens genuine deferred question");
+        Check(Json.Binding(await session.Read(human, "<<\"quod:gui\">>::gui_pending_questions(Questions).", timeout.Token), "Questions").Items.Length == 0, "refused unsupported preparation leaves no committed empty question");
+        Check(Json.Committed(await ExecuteComplete(session, store, human, $"<<\"quod:gui\">>::gui_open({source},Reference).", timeout.Token)), "uncertain-submission case opens genuine deferred question");
         QuestionPanel? uncertainPanel = null; await Until(() => { uncertainPanel = FindQuestion(app); return uncertainPanel?.Available == true; });
         ((CheckButton)uncertainPanel!.FormPanel.Input("m1b_confirm")!).ButtonPressed = true;
         var selection = (ItemList)uncertainPanel.FormPanel.Input("m1b_choices")!; selection.Select(0); selection.EmitSignal(ItemList.SignalName.MultiSelected, 0, true);
@@ -260,8 +260,8 @@ public partial class ExportChecks
         ((Button)uncertainPanel.FindChild("cancel-question", true, false)).EmitSignal(BaseButton.SignalName.Pressed);
         var after = await app.ActiveSession.Transport.Send("/qualification/traffic", null, timeout.Token);
         Check(before["questions"]!.ToString() == after["questions"]!.ToString() && !uncertainPanel.Available, "real awaiting renewal cannot resubmit or cancel uncertain original work");
-        var pendingQuestion = Json.Binding(await session.Read(human, "gui_pending_questions(Questions).", timeout.Token), "Questions").Items.Single();
-        var reopened = new QuestionPanel(); app.AddChild(reopened);
+        var pendingQuestion = Json.Binding(await session.Read(human, "<<\"quod:gui\">>::gui_pending_questions(Questions).", timeout.Token), "Questions").Items.Single();
+        var reopened = new QuestionPanel(); app.AddChild(reopened); app.AddChild(reopened.Choice);
         var owningAccounts = (Accounts)typeof(QuestionPanel).GetField("accounts", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(uncertainPanel)!;
         reopened.Open(app.ActiveSession, owningAccounts, pendingQuestion, () => app.EmitSignal(Main.SignalName.Changed));
         var streamView = (SignedView)typeof(QuestionPanel).GetField("view", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(reopened)!;
@@ -271,7 +271,7 @@ public partial class ExportChecks
         ((Button)reopened.FindChild("cancel-question", true, false)).EmitSignal(BaseButton.SignalName.Pressed);
         var reopenTraffic = await app.ActiveSession.Transport.Send("/qualification/traffic", null, timeout.Token);
         Check(!reopened.Available && before["questions"]!.ToString() == reopenTraffic["questions"]!.ToString(), "reopened genuine question retains original journal barrier without another dispatch");
-        reopened.DisposeView(); await reopened.Completion; reopened.QueueFree();
+        reopened.DisposeView(); await reopened.Completion; reopened.Choice.QueueFree(); reopened.QueueFree();
         var originalWork = app.ActiveStore.Snapshot!.Pending.Single(w => w.Flow == "question");
         var unknown = await app.ActiveSession.Resolve(originalWork, timeout.Token);
         Check(!Json.Terminal(unknown) && app.ActiveStore.Snapshot!.Pending.Any(w => w.Id == originalWork.Id), "original question absence remains uncertain after portable lookup");
@@ -298,7 +298,9 @@ public partial class ExportChecks
         Console.WriteLine("BACKUP_STATUS " + result); Console.Out.Flush();
         Check(expectSuccess == (result is "Encrypted backup saved." or "Original key and account references restored."), expectSuccess ? "actual encrypted-backup widget succeeded" : "actual encrypted-backup widget refused invalid input");
         var removed = new TaskCompletionSource(); dialog.TreeExited += () => removed.TrySetResult();
-        Console.WriteLine("M2_NATIVE_CLOSE "+JsonSerializer.Serialize(new { title=dialog.Title })); Console.Out.Flush(); await removed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if(DisplayServer.GetName()=="headless")dialog.EmitSignal(Window.SignalName.CloseRequested);
+        else { Console.WriteLine("M2_NATIVE_CLOSE "+JsonSerializer.Serialize(new { title=dialog.Title })); Console.Out.Flush(); }
+        await removed.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
     async Task LocalQualification(string phase)
     {

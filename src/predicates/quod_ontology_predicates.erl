@@ -152,10 +152,14 @@ bind_prepared_action(
     case erlog_int:unify(Anchor0, Anchor, Bs) of
         {succeed, Bs1} ->
             St1 = St#est{bs = Bs1},
-            Action = erlog_int:dderef(
-                       {create_ontology, Name, Options, Anchor0}, Bs1),
+            Action = {create_ontology, Name, Options, Anchor},
             Desired = erlog_int:dderef(Desired0, Bs1),
-            stage_prepared_action(Action, Desired, Prepared, Next, St1);
+            %% The exact request handle already fixes Name and Options. Clause
+            %% variables in terms/1 are source data, never postcondition inputs.
+            case quod_wire_term:is_ground(Desired) of
+                true -> stage_prepared_action(Action, Desired, Prepared, Next, St1);
+                false -> erlog_int:instantiation_error(St1)
+            end;
         fail -> erlog_int:fail(St)
     end;
 bind_prepared_action(Action0, Desired0, RequestAction, Prepared, Next,
@@ -174,23 +178,19 @@ bind_prepared_action(Action0, Desired0, RequestAction, Prepared, Next,
     end.
 
 stage_prepared_action(Action, Desired, Prepared, Next, St) ->
-    case quod_wire_term:is_ground({Action, Desired}) of
-        true ->
-            Principal = authenticated_principal(),
-            case quod_proof_session:signer_from_state(St) of
-                #{pubkey := <<_:256>> = Executor} ->
-                    case quod_ontology:prepared_effect(
-                           Action, Prepared, Executor, Principal) of
-                        {ok, Effect} ->
-                            St1 = quod_erlog_db_local_prove:put_prepared_effect(
-                                    St, Action, Desired, Effect, Prepared),
-                            erlog_int:prove_body(Next, St1);
-                        {error,_} -> erlog_int:erlog_error({system_error,invalid_prepared_effect},St)
-                    end;
-                none ->
-                    fail_reason(failure_reason(Action, rebuilding), St)
+    Principal = authenticated_principal(),
+    case quod_proof_session:signer_from_state(St) of
+        #{pubkey := <<_:256>> = Executor} ->
+            case quod_ontology:prepared_effect(
+                   Action, Prepared, Executor, Principal) of
+                {ok, Effect} ->
+                    St1 = quod_erlog_db_local_prove:put_prepared_effect(
+                            St, Action, Desired, Effect, Prepared),
+                    erlog_int:prove_body(Next, St1);
+                {error,_} -> erlog_int:erlog_error({system_error,invalid_prepared_effect},St)
             end;
-        false -> erlog_int:instantiation_error(St)
+        none ->
+            fail_reason(failure_reason(Action, rebuilding), St)
     end.
 
 -doc "Bind the authenticated principal owned by the current proof.".

@@ -25,7 +25,7 @@ for a peer or connection that produces neither signal.
 
 -export([start_link/0,
          identify/3, ensure_scope/4, identity/3,
-         command/3, cancel/2, close/2, finalize/2, stats/0]).
+         command/3, cancel/2, close/2, finalize/2, stop/2, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export_type([remote_handle/0]).
 
@@ -244,6 +244,11 @@ finalize(Router, <<_:256>> = ProofId) ->
 finalize(_Router, _ProofId) ->
     {error, bad_proof_id}.
 
+%% Finalization retains its result until the proof context closes. A bounded
+%% caller can then start another proof without retaining the previous identity.
+stop(Router, <<_:256>> = ProofId) ->
+    gen_server:cast(Router, {stop_proof, self(), ProofId}).
+
 -doc "Acquire or reuse this proof's one origin-agent identity certificate.".
 -spec identity(quod_client_goal:evidence(), <<_:256>>, non_neg_integer()) ->
           {ok, quod_agent_identity:certificate()} |
@@ -429,6 +434,11 @@ handle_cast(
 handle_cast(
   {identity_result, Owner, ProofId, Ref, Result}, S0) ->
     {noreply, finish_identity(Owner, ProofId, Ref, Result, S0)};
+handle_cast({stop_proof, Owner, ProofId}, S0) ->
+    case maps:get(Owner, S0#s.owners, undefined) of
+        #owner{proof_id = ProofId} -> {noreply, drop_owner(Owner, S0)};
+        _ -> {noreply, S0}
+    end;
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -1322,6 +1332,7 @@ build_bounded_command(
 %% optional fast scope_closed event may remove the scope first.
 command_expects_event(scope_close) -> false;
 command_expects_event(scope_seal) -> true;
+command_expects_event(scope_read_set) -> true;
 command_expects_event({scope_attest, _}) -> true;
 command_expects_event(certify_reads) -> true;
 command_expects_event({bind_group_effects, _, _}) -> true;

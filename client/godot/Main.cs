@@ -183,7 +183,7 @@ public partial class Main : Control
             else if(pie.IsOpen&&pie.Navigator?.Hovered>0)pie.Commit();
         };
         scene.Hovered+=(hit,point)=>{
-            hovered=hit;scene.Outline(hit);
+            hovered=hit;scene.PointAt(hit);
             string? text=float.IsNaN(point.X)||pie.IsOpen ? null : TargetLabel(hit);
             pointerLabel.Visible=text!=null;if(text==null)return;
             pointerLabel.Text=text;pointerLabel.Position=point+scene.GlobalPosition+new Vector2(18,18);hoverPoint=point+scene.GlobalPosition;
@@ -584,6 +584,8 @@ public partial class Main : Control
         Layout();
         xr.PresentForm(form&&!previewNear&&(!preview||representations!.Selected?.Operation==true));
         xr.BindOccurrence(form&&representations!.NearOccurrence ? representations.Occurrence : null);
+        // The thing the open panel is about shows its selected look, in whichever view it was picked.
+        var chosen=form ? representations!.Occurrence : null;scene.ShowSelected(chosen);representations?.Preview.ShowSelected(chosen);
     }
     // Floating glass panels: the subject panel docks to the side farther from
     // its target; the attention list and local tools open on the left.

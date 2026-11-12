@@ -136,7 +136,7 @@ that retained content is withdrawn, without an empty valid-scene fallback.
 
 Normal signup has the following Prolog composition. U, A and S0 are stable
 exact references, not lobby navigation aliases. S0 uses the ordinary space
-class/defaults: name `<<"Space">>`, 100 metres per axis, owner U, no containing
+class/defaults: name `<<"Space">>`, 10 metres per axis, owner U, no containing
 space. A starts inside S0 at the authored origin. The interior is black with
 available controllers and accessible GUI. No floor, sky, terrain, pilot body or
 simulation is required. The eventual dedicated user-lobby subclass is outside
@@ -241,27 +241,25 @@ S2 using the same operation, then enters S2. Each entry atomically withdraws
 the old assignment/admission and admits the new one with the existing slot
 revision/conflict rules. Do not move the camera first and infer entry success.
 
-Exterior is a viewing purpose, not a mesh type. Retain the small solid cube as
-one default recipe. Add a selectable **wireframe exterior**: a real-size box
-centred at the space's local origin, with X/Y/Z extents equal to its finite
-interior dimensions, transformed into the containing/displaying frame. The
-100-metre default therefore spans −50 to +50 metres per axis, not half a metre.
-It is a representation; it creates no floor, collision wall or simulation.
-Resolve exact unit conversion in Prolog. An infinite extent has no finite box:
-the wireframe choice must explicitly report unavailable for that extent and
-offer the other actual Eidolons; it must never invent a finite bound or silently
-substitute the cube. Sub-millimetre rational extents also must not be rounded.
-The M0 integer-mm `mark/7` box plus `surface/5` vocabulary lacked an edge-only
-box with arbitrary exact-rational dimensions. The shared `wire_box` kind carries
-positive reduced integer/rational millimetre dimensions until conversion at the
-render boundary. It has twelve edges independently of its dimensions, with no
-space-specific engine branch. M2 qualifies asymmetric extents, rotation,
-odd/rational dimensions and picking through that shared path.
+Exterior is a viewing purpose, not a mesh type. The default recipe is the
+shared fixed-size marker described in [spaces](spaces.md): half a metre
+whatever the interior measures, finite or infinite. It is a representation; it
+creates no floor, collision wall or simulation. The real size is shown from
+inside by the interior walls: a real-size outline centred at the space's local
+origin, with X/Y/Z extents equal to its finite interior dimensions. Resolve
+exact unit conversion in Prolog. An infinite extent has no finite outline:
+that choice must explicitly report unavailable and never invent a finite bound.
+Sub-millimetre rational extents also must not be rounded. The shared edge-only
+kinds `wire_box` and `corner_box` carry positive reduced integer/rational
+millimetre dimensions until conversion at the render boundary. Each has twelve
+edges independently of its dimensions, with no space-specific engine branch.
+The shared scene path qualifies asymmetric extents, rotation, odd/rational
+dimensions and picking.
 
 For a contents exterior, a selected space exposes its contents recursively.
 If S0 contains S1 and S1 contains S2 and both select contents, S2's contents
 are visible from S0 without entry. Continue at every contents level. Mesh or
-wireframe selection terminates expansion at that occurrence only. Do not fall
+marker selection terminates expansion at that occurrence only. Do not fall
 back to either when contents disclosure or a dependency is unavailable.
 
 The D5 subset required in M3 is:

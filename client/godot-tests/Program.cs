@@ -133,9 +133,18 @@ static class Tests
         Check(marks[1].Size[0] == new Length(1,3) && marks[1].Size[1] == new Length(1001,1) && marks[1].Parent == "source", "scene retains odd and submillimetre exact rational lengths and parent");
         Check(Math.Abs(marks[1].Size[0].RenderMetres() - 1f/3000) < 1e-10f, "rational conversion occurs at engine boundary without millimetre rounding");
         Check(marks[0].Subject!.ToString().StartsWith("entity_ref("), "scene keeps exact anchored subject independent of occurrence");
-        Check(new Length(100000,1).RenderMetres() == 100, "default wireframe extent is 100 metres");
-        Check(marks[1].Opacity == 1000 && SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,220,[])") + "]"))[1].Opacity == 220,
+        Check(new Length(10000,1).RenderMetres() == 10, "the default extent is ten metres");
+        Check(marks[1].Looks.Single().Opacity == 1000 && SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,220,[])") + "]"))[1].Looks.Single().Opacity == 220,
             "surface opacity is decoded as authored permille");
+        string plain = "surface(<<\"#6A90D9\">>,0,700,1000,1000,[])", gold = "surface(<<\"#F9C80E\">>,0,700,0,80,[])";
+        string corners = box.Replace("wire_box", "corner_box"), states = $"surfaces({plain},{gold},{gold.Replace(",80,", ",220,")})";
+        var marker = SceneMark.Decode(Term.Parse("[" + group + "," + corners.Replace(plain, states) + "]"))[1];
+        Check(marker.Kind == "corner_box" && marker.Edges && marker.Size[0] == new Length(1,3), "a corner box keeps exact rational lengths like a wire box");
+        Check(marker.Looks.Select(l => (l.Colour, l.Opacity)).SequenceEqual([("#6A90D9",1000),("#F9C80E",80),("#F9C80E",220)]), "a mark carries its display, pointed-at and selected surfaces in order");
+        Check(marks[0].Looks.Length == 0 && SceneMark.Decode(Term.Parse("[" + group + "," + corners + "]"))[1].Looks.Length == 1, "a group has no surface and a plain surface stays one look");
+        foreach (string bad in new[] { $"surfaces({plain},{gold})", $"surfaces({plain},{gold},no_surface)", $"surfaces({plain},{gold},{gold.Replace("#F9C80E","gold")})", $"surfaces({states},{gold},{gold})" })
+            Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + corners.Replace(plain, bad) + "]")), "incomplete or invalid state surfaces refuse");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace("no_surface", states) + "]")), "a group with state surfaces refuses");
         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,1001,[])") + "]")), "opacity above 1000 refuses");
         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,[])") + "]")), "a surface without opacity refuses");
         var huge = BigInteger.One << 1600;

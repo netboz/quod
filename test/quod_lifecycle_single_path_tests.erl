@@ -652,8 +652,8 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     Create=hd(Offers),
     {Outcome,Bytes}=m2_create(C,Ns,Create,element(7,Create)),
     [{result,space,S1={entity_ref,Ns,Anchor,Id}},{result,location,{placed,S0,Near}},{result,owner,Owner}]=m1a_output(Outcome),
-    %% In front of the agent: 2 m clearance plus half the default 100 m depth.
-    ?assertEqual({transform,0,0,-52000,0,0,0},Near),
+    %% In front of the agent: 2 m clearance plus half the 0.5 m marker's depth.
+    ?assertEqual({transform,0,0,-2250,0,0,0},Near),
     ?assertEqual(Owner,m1a_read(User,{attribute,Id,owner,{0}})),
     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
     ?assertEqual({placed,S0,Near},m1a_read(User,m2_space({space_location,m2_entity(User,Id),{0}}))),
@@ -933,7 +933,10 @@ m2_foreign_policy(Other=#{reference:={agent_instance_ref,Ns,Anchor,me}},Owner,Ac
             {Owner,{client_menu,Class,{'_'}}},
             {Owner,{gui_menu_source,{':',<<"quod:space">>,space},{'_'}}},
             {Actor,{gui_operation,Class,create,{'_'},space_create_submit,{'_'},{'_'}}}]] ++
-        [{can_invoke,{'_'},Principal,[<<"quod:space">>|{'_'}],Ns} || Principal <- [Owner,Actor]],
+        [{can_invoke,{'_'},Principal,[<<"quod:space">>|{'_'}],Ns} || Principal <- [Owner,Actor]] ++
+        %% The shared marker reads the shown space's name through the GUI vocabulary.
+        [{can_invoke,{',',{current_ontology_identity,Ns,Anchor},{client_subject_label,{'_'},{'_'}}},
+            Owner,[<<"quod:gui">>|{'_'}],Ns}],
     m2_edit(Other,{transaction,m1a_conj([
         {assertz,{instance_permission,element(4,PrivateSpace),space_admit,deny}}|
         [{assertz,G}||G<-Grants]])}).

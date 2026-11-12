@@ -13,7 +13,7 @@
 kinds_declare_their_fields_in_order_test() ->
     with_rendering(fun(St) ->
         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
+        ?assertEqual([<<"box">>, <<"capsule">>, <<"corner_box">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
                      lists:sort(Kinds)),
         %% Every kind's fields are declared at consecutive positions from 1, so
@@ -29,20 +29,56 @@ kinds_declare_their_fields_in_order_test() ->
                      solutions({'F'}, {geometry_field, <<"box">>, {'_'}, {'F'}}, St))
     end).
 
-exact_edge_box_retains_rational_lengths_test() ->
+exact_edge_boxes_retain_rational_lengths_test() ->
     with_rendering(fun(St) ->
         Width = {'/',1,3}, Height = 100001, Depth = {'/',1001,2},
         Size = [{f,<<"width">>,Width},{f,<<"height">>,Height},{f,<<"depth">>,Depth}],
-        Mark = sized(<<"wire_box">>,Size),
-        holds({well_formed_mark,Mark},St),
-        Expected = {mark,<<"edges">>,<<"wire_box">>,Size,{transform,10,20,30,15,35,75},
-            {surface,<<"#FFFFFF">>,0,700,0,1000,[]},unlabelled,depicts_nothing},
-        holds({model,[{part,<<"edges">>,{wire_box,Width,Height,Depth},
-            {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,1000,[]},
-            unlabelled,depicts_nothing}],[Expected]},St),
-        [fails({well_formed_mark,sized(<<"wire_box">>,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
-            || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]],
+        lists:foreach(fun({Kind,Shape}) ->
+            Mark = sized(Kind,Size),
+            holds({well_formed_mark,Mark},St),
+            Expected = {mark,<<"edges">>,Kind,Size,{transform,10,20,30,15,35,75},
+                {surface,<<"#FFFFFF">>,0,700,0,1000,[]},unlabelled,depicts_nothing},
+            holds({model,[{part,<<"edges">>,{Shape,Width,Height,Depth},
+                {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,1000,[]},
+                unlabelled,depicts_nothing}],[Expected]},St),
+            [fails({well_formed_mark,sized(Kind,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
+                || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]]
+        end, [{<<"wire_box">>,wire_box},{<<"corner_box">>,corner_box}]),
         fails({well_formed_mark,sized(<<"box">>,Size)},St)
+    end).
+
+%% A whole-millimetre corner box has faces to align against, like a box; the
+%% edge-only wire box and a rational corner box offer none.
+corner_box_aligns_by_its_faces_test() ->
+    with_rendering(fun(St) ->
+        ?assertEqual([{transform,0,300,0,0,0,0}],
+            solutions({'At'},{align,{box,100,100,100},bottom,{corner_box,500,500,500},top,0,{'At'}},St)),
+        fails({align,{box,100,100,100},bottom,{corner_box,{'/',1,3},500,500},top,0,{'_'}},St),
+        fails({align,{box,100,100,100},bottom,{wire_box,500,500,500},top,0,{'_'}},St)
+    end).
+
+%% The pointed-at and selected looks travel with the mark. A plain surface
+%% stays exactly what it was; the three-surface form needs all three valid.
+a_mark_may_carry_its_pointed_and_selected_surfaces_test() ->
+    with_rendering(fun(St) ->
+        Plain = {surface,<<"#848FA5">>,0,700,0,100,[]},
+        Gold = {surface,<<"#F9C80E">>,0,700,0,80,[]},
+        Part = fun(Material) -> {part,<<"sides">>,{box,500,500,500},{transform,0,0,0,0,0,0},
+                                 Material,unlabelled,depicts_nothing} end,
+        Mark = fun(Material) -> {mark,<<"sides">>,<<"box">>,
+                                 [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
+                                 {transform,0,0,0,0,0,0},Material,unlabelled,depicts_nothing} end,
+        States = {surfaces,Plain,Gold,Gold},
+        ?assertEqual([[Mark(Plain)]],solutions({'M'},{model,[Part(Plain)],{'M'}},St)),
+        ?assertEqual([[Mark(States)]],solutions({'M'},{model,[Part(States)],{'M'}},St)),
+        lists:foreach(fun(Bad) -> fails({well_formed_mark,Mark(Bad)},St) end,
+            [{surfaces,Plain,Gold},{surfaces,Plain,Gold,Gold,Gold},
+             {surfaces,Plain,Gold,{surface,<<"gold">>,0,700,0,80,[]}},
+             {surfaces,Plain,no_surface,Gold},{surfaces,States,Gold,Gold}]),
+        %% Groups, meshes and terrain keep their own single appearance.
+        fails({well_formed_mark,{mark,<<"g">>,<<"group">>,[],{transform,0,0,0,0,0,0},
+                                 States,unlabelled,depicts_nothing}},St),
+        fails({well_formed_mark,setelement(6,mesh_mark(),States)},St)
     end).
 
 a_well_formed_mark_test() ->
@@ -195,7 +231,7 @@ a_scene_needs_distinct_mark_ids_test() ->
 the_class_view_is_derived_test() ->
     with_rendering(fun(St) ->
         holds({isa, mark, thing}, St),
-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
+        ?assertEqual([<<"box">>, <<"capsule">>, <<"corner_box">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
         ?assertEqual([<<"diameter">>, <<"height">>],

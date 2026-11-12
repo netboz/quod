@@ -153,8 +153,8 @@ frames require the same contents recipe in playing and edition views.
 An incompatible selection becomes unavailable. The root
 retains `physics_frame_member(World,SpaceRef,Assignment,Revision,Path)`; every
 path edge names the exact source, assignment and frame revision. This binding
-does not change the source's ordinary assignment, storage or owner. A solid or
-wireframe space admitted as an inert frame creates no collider or child world.
+does not change the source's ordinary assignment, storage or owner. A space
+shown by its marker and admitted as an inert frame creates no collider or child world.
 
 One root authority, run and native world own the bodies of the component. Each
 exact entity/assignment has one body, even with independent decorative

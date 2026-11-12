@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-eidolon-toolkit
   title: Eidolon toolkit — reusable recipes, modes, and the space seen from outside
-  status: ready-for-development
+  status: in-development
   planType: system-design
   priority: high
   owner: Yan
@@ -14,8 +14,9 @@ planStatus:
     - vr
     - design
   created: "2026-11-12"
-  updated: "2026-11-12T01:40:00.000Z"
-  progress: 0
+  startDate: "2026-11-12"
+  updated: "2026-11-12T15:12:07.000Z"
+  progress: 86
 ---
 
 # Eidolon toolkit — reusable recipes, modes, and the space seen from outside
@@ -39,24 +40,24 @@ Yan's notes this answers (2026-11-11/12):
 ## Implementation checklist
 
 - [x] Phase 0 — Yan approved the plan; defaults for the open points are listed at the end
-- [ ] Phase 1 — Shared recipe and helpers in the scene vocabulary (`gui_scene.pl`)
-  - [ ] `corner_box` mark shape: declaration, fields, `shape/3`, bounds
-  - [ ] a part may carry its pointed-at and selected surfaces
-  - [ ] shared `marker` recipe and `extent` subrecipe; colours named once
-  - [ ] eunit: well-formed scenes; existing recipes give the same marks
-- [ ] Phase 2 — Godot client
-  - [ ] draws `corner_box`; switches pointed-at / selected surfaces locally
-  - [ ] the hardcoded gold tint goes away
-  - [ ] one real render of the marker kept as evidence
-- [ ] Phase 3 — Space uses them
-  - [ ] space display eidolon is the shared marker; inside walls use `extent`
-  - [ ] default 10 m; placement 2 m plus half the marker's depth
-  - [ ] outside choice `wireframe` removed; create form loses that field
-  - [ ] `doc/spaces.md` sentences; Erlang and client tests
-- [ ] Phase 4 — One mode per shown thing
-  - [ ] the client shows another mode's eidolon for one thing, in place
-  - [ ] space edition eidolon: marker plus real-size line
-  - [ ] a class may offer a `selected` eidolon; none is required
+- [x] Phase 1 — Shared recipe and helpers in the scene vocabulary (`gui_scene.pl`)
+  - [x] `corner_box` mark shape: declaration, fields, `shape/3`, bounds
+  - [x] a part may carry its pointed-at and selected surfaces
+  - [x] shared `marker` recipe and `extent` subrecipe; colours named once
+  - [x] eunit: well-formed scenes; existing recipes give the same marks
+- [x] Phase 2 — Godot client
+  - [x] draws `corner_box`; switches pointed-at / selected surfaces locally
+  - [x] the hardcoded gold tint goes away
+  - [x] one real render of the marker kept as evidence
+- [x] Phase 3 — Space uses them
+  - [x] space display eidolon is the shared marker; inside walls use `extent`
+  - [x] default 10 m; placement 2 m plus half the marker's depth
+  - [x] outside choice `wireframe` removed; create form loses that field
+  - [x] `doc/spaces.md` sentences; Erlang and client tests
+- [x] Phase 4 — One mode per shown thing
+  - [x] the client shows another mode's eidolon for one thing, in place
+  - [x] space edition eidolon: marker plus real-size line
+  - [x] a class may offer a `selected` eidolon; none is required
 - [ ] Phase 5 — Other recipes move over (predicate boxes, status marks)
 - [ ] Phase 6 — Handling: move and resize (own design round, see below)
 - [ ] Gates, line delta, changed doc sentences, then release on Yan's go
@@ -188,6 +189,14 @@ box to 100 m". Two ways that work at any size:
    sent. Works for 1 m and for 100 km alike.
 2. **From inside.** The walls are at real size; grab a wall corner with the
    ray. Natural for room-sized spaces, useless for very large ones.
+
+Yan, 2026-11-12, after seeing that successive spaces created "near my agent"
+land on the same spot: let the user place a new thing before it is created.
+It appears kind of see-through in front of them, they move it with the stick,
+and the trigger validates the position. He expects this to extend from spaces
+to other physical classes, and layout managers for spaces to come later. To be
+refined in this phase's design round; placing a new thing and moving an
+existing one look like the same gesture.
 
 Both need things that do not exist yet:
 

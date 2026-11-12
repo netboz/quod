@@ -159,10 +159,10 @@ public partial class ExportChecks
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
         Check(scene.SubjectIds(leaf).Distinct().Count()==4,"independent recursive paths preserve four occurrences of the same exact subject");
         Check(scene.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="Contents cycle")==2,"exact ancestor cycles render explicit terminal occurrences on each independent branch");
-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},contents,{t2},none,wireframe,{t2},none).",timeout.Token);
+        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},contents,{t2},none,solid,{t2},none).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==1 && scene.SubjectIds(s2).Length==2);
-        Check(scene.SubjectIds(s2).Length==2,"wireframe terminates each selected S2 occurrence while the independent S1 leaf remains visible");
-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},wireframe,{t2},none,contents,{t2},none).",timeout.Token);
+        Check(scene.SubjectIds(s2).Length==2,"the marker terminates each selected S2 occurrence while the independent S1 leaf remains visible");
+        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},solid,{t2},none,contents,{t2},none).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
         int rebuilt=scene.Rebuilt;var ids=scene.Ids.ToArray();
         var view=(SignedView)typeof(Main).GetField("worldView",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(app)!;

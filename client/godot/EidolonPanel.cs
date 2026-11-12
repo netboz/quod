@@ -22,6 +22,9 @@ public partial class EidolonPanel : VBoxContainer
     public Eidolon? Selected { get; private set; }
     public bool Available { get; private set; }
     public ScenePanel.Selection? Occurrence { get; private set; }
+    // The thing in the world now drawn in the chosen mode, in its own place.
+    ScenePanel.Selection? inPlace;
+    void RestoreDisplay(){var thing=inPlace;inPlace=null;thing?.Owner.ShowMode(thing,null);}
     public bool NearOccurrence { get; private set; }
     public string StatusText=>status.Text;
     public Eidolon[] Offered { get; private set; }=[];
@@ -80,6 +83,7 @@ public partial class EidolonPanel : VBoxContainer
         : e.Purpose.Name switch {
             "playing"=>e.Style.Replace('_',' ')+" view",
             "edition"=>e.Style.Replace('_',' ')+" view · editing",
+            "selected"=>e.Style.Replace('_',' ')+" view · selected",
             "prolog"=>e.Style=="source" ? "Source" : "Source · "+e.Style.Replace('_',' '),
             "inspection"=>"Inspect · "+e.Style.Replace('_',' '),
             _=>e.Caption };
@@ -97,6 +101,8 @@ public partial class EidolonPanel : VBoxContainer
     void SetOccurrence(ScenePanel.Selection? next)
     {
         if(Occurrence==next)return;
+        // A new pick of the same installed thing keeps the mode it is drawn in.
+        if(next==null||Occurrence==null||!ReferenceEquals(Occurrence.Owner,next.Owner)||Occurrence.Id!=next.Id||Occurrence.Identity!=next.Identity)RestoreDisplay();
         if(Occurrence!=null)Occurrence.Owner.PresentationChanged-=OccurrenceChanged;
         Occurrence=next;NearOccurrence=next!=null;
         if(next!=null)next.Owner.PresentationChanged+=OccurrenceChanged;
@@ -181,7 +187,9 @@ public partial class EidolonPanel : VBoxContainer
             var next=Eidolon.Decode(Json.S(message,"value"));
             Offered=next;Available=true;
             var chosen=next.SingleOrDefault(e=>e.Exact.ToString()==preferred);
-            if(preferred==null)chosen=next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Style==Operations.Current?.Name)??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
+            // A thing shown in the world that offers a selected Eidolon shows it on selection; none is required.
+            bool shown=Occurrence!=null&&!ReferenceEquals(Occurrence.Owner,preview);
+            if(preferred==null)chosen=(shown ? next.FirstOrDefault(e=>e.Purpose.Name=="selected") : null)??next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Style==Operations.Current?.Name)??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
             var answered=request;request=null;
             bool asked=answered!=null&&chosen?.Exact.ToString()==answered.Choice;
             if(chosen!=null)Choose(chosen,reveal:asked,execute:asked&&answered!.Execute);else{WithdrawRepresentation(KeepVisual);status.Text=next.Length==0 ? "No authored representations are currently offered." : "The selected representation was withdrawn. Choose a current offered representation.";}
@@ -203,11 +211,16 @@ public partial class EidolonPanel : VBoxContainer
         exact.Text=Current.Exact+"\n"+choice.Exact;
         if(choice.Operation){Operations.Show();Operations.Choose(choice.Style,reveal,execute);status.Text="";Changed?.Invoke();return;}
         Operations.Hide();bool revealPreview=reveal;var viewed=Current;
-        string kind=choice.Purpose.Kind=="atom" && choice.Purpose.Name is "playing" or "edition" ? "eidolon_scene" : "eidolon";
+        string kind=choice.Purpose.Kind=="atom" && choice.Purpose.Name is "playing" or "edition" or "selected" ? "eidolon_scene" : "eidolon";
         var view=new SignedView(session,accounts.Human!,viewed.Target,kind,SignedSession.ViewGoal(viewed.Target,choice.Read(viewed.Local)));representation=view;previewRead=kind=="eidolon_scene";
         view.Projection+=message=>{
             if(disposed||!ReferenceEquals(representation,view))return;
-            if(message["marks"]!=null){preview.ApplyProjection(message,viewed.Target,accounts.Human!,ack=>_ = view.Send(ack));preview.NavigationBlocked=true;preview.Show();if(Selected?.Operation!=true)status.Text="View only. Movement requires an offered action.";if(revealPreview&&Selected?.Exact.ToString()==choice.Exact.ToString()){revealPreview=false;RevealPreview();}}
+            if(message["marks"]!=null){
+                // The model of one thing already shown in the world is drawn there, in its place; anything else in the side view.
+                var thing=Occurrence;
+                if(thing!=null&&!ReferenceEquals(thing.Owner,preview)&&thing.Subject.ToString()==viewed.Exact.ToString()&&thing.Owner.ShowMode(thing,Term.Parse(Json.S(message,"marks")))){inPlace=thing;preview.Withdraw();preview.Hide();status.Text="";}
+                else {RestoreDisplay();preview.ApplyProjection(message,viewed.Target,accounts.Human!,ack=>_ = view.Send(ack));preview.NavigationBlocked=true;preview.Show();if(Selected?.Operation!=true)status.Text="View only. Movement requires an offered action.";if(revealPreview&&Selected?.Exact.ToString()==choice.Exact.ToString()){revealPreview=false;RevealPreview();}}
+            }
             else {
                 var value=Term.Parse(Json.S(message,"value"));
                 if(value.Name=="workbench") {
@@ -220,11 +233,11 @@ public partial class EidolonPanel : VBoxContainer
             }
             Changed?.Invoke();
         };
-        view.Message+=message=>{if(ReferenceEquals(representation,view) && message["frame"]!=null)preview.ApplyFrame(message,ack=>_ = view.Send(ack));};
+        view.Message+=message=>{if(ReferenceEquals(representation,view) && inPlace==null && message["frame"]!=null)preview.ApplyFrame(message,ack=>_ = view.Send(ack));};
         view.Withdrawn+=reason=>{
             if(!ReferenceEquals(representation,view))return;
             if(view.Updating){preview.Suspend();workbench.Suspend();source.Suspend();}
-            else {preview.Withdraw();workbench.Withdraw();source.Withdraw();}
+            else {RestoreDisplay();preview.Withdraw();workbench.Withdraw();source.Withdraw();}
             preview.Hide();workbench.Hide();status.Text=reason;Changed?.Invoke();
         };
         status.Text="Reading the chosen recipe…";_ = view.Start();Changed?.Invoke();
@@ -236,7 +249,7 @@ public partial class EidolonPanel : VBoxContainer
     {
         selection++;Selected=null;workbench.Withdraw();workbench.Hide();source.Withdraw();source.Hide();
         if(retainVisual)return;
-        previewRead=false;preview.Withdraw();preview.Hide();
+        RestoreDisplay();previewRead=false;preview.Withdraw();preview.Hide();
         var previous=representation;representation=null;previous?.Dispose();Keep(previous?.Completion??Task.CompletedTask);
     }
     void Keep(Task task)=>retired=retired.IsCompleted ? task : Task.WhenAll(retired,task);

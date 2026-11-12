@@ -31,10 +31,11 @@
 %% The descriptor:
 %%   mark(Id, Kind, Size, Transform, Material, Label, Depicts)
 %%     Id        a view-scoped occurrence identity, not a domain name
-%%     Size      ordered mm fields (exact rational for wire_box), or typed assets
+%%     Size      ordered mm fields (exact rational for edge-only boxes), or typed assets
 %%     Transform transform(X,Y,Z,RX,RY,RZ) | body_pose(Id, Revision)
 %%               | relative(Parent, transform(...)) | relative(Parent, body_pose(...))
 %%     Material  surface(Colour, Metal, Rough, Emission, Opacity, Textures) |
+%%               surfaces(Display, Pointed, Selected), three such surfaces |
 %%               asset_surfaces for meshes | no_surface for groups.
 %%               Optical factors, opacity and repeats are permille; a surface
 %%               below full opacity is drawn from both sides.
@@ -66,6 +67,7 @@ rendering_query(depicted(_, _, _, _, _)).
 
 mark_kind(<<"box">>).
 mark_kind(<<"wire_box">>).
+mark_kind(<<"corner_box">>).
 mark_kind(<<"sphere">>).
 mark_kind(<<"plane">>).
 mark_kind(<<"cylinder">>).
@@ -82,6 +84,9 @@ geometry_field(<<"box">>, 3, <<"depth">>).
 geometry_field(<<"wire_box">>, 1, <<"width">>).
 geometry_field(<<"wire_box">>, 2, <<"height">>).
 geometry_field(<<"wire_box">>, 3, <<"depth">>).
+geometry_field(<<"corner_box">>, 1, <<"width">>).
+geometry_field(<<"corner_box">>, 2, <<"height">>).
+geometry_field(<<"corner_box">>, 3, <<"depth">>).
 geometry_field(<<"sphere">>, 1, <<"diameter">>).
 geometry_field(<<"plane">>, 1, <<"width">>).
 geometry_field(<<"plane">>, 2, <<"height">>).
@@ -120,8 +125,13 @@ sized([Field | Fields], [f(Field, Extent) | Rest]) :-
     Extent > 0,
     sized(Fields, Rest).
 
+%% Edge-only boxes. A wire_box draws its twelve edges whole. A corner_box
+%% draws each edge from both of its corners, opaque at the corner and fading
+%% to nothing a third of the way along, so the middle of every edge is empty.
 %% Twelve edges cost the same at any extent. Interior dimensions are not a
 %% geometry allocation budget. Keep exact reduced fractions on the wire.
+edge_box(<<"wire_box">>).
+edge_box(<<"corner_box">>).
 exact_sized([],[]).
 exact_sized([Field|Fields],[f(Field,Extent)|Rest]) :-
     exact_length(Extent), exact_sized(Fields,Rest).
@@ -130,7 +140,7 @@ exact_length(N/D) :- integer(N), integer(D), N > 0, D > 1, exact_gcd(N,D,1).
 exact_gcd(N,0,N).
 exact_gcd(N,D,G) :- D > 0, R is N mod D, exact_gcd(D,R,G).
 
-geometry(<<"wire_box">>,Fields,Size) :- exact_sized(Fields,Size).
+geometry(Kind,Fields,Size) :- edge_box(Kind), exact_sized(Fields,Size).
 
 geometry(<<"mesh">>, [],
          mesh_asset(asset(Digest, <<"model/gltf-binary">>), <<"gltf2-static-v1">>,
@@ -160,7 +170,7 @@ geometry(<<"terrain">>, [], terrain_geometry(<<"qvt1">>,Palette,
     resource(Transfer), resource(Geometry),
     resource(Vertices), resource(Triangles),
     resource(Chunks).
-geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, Kind \== <<"wire_box">>, sized(Fields, Size).
+geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, \+ edge_box(Kind), sized(Fields, Size).
 
 terrain_palette([],_).
 terrain_palette([material(Id,Surface)|Rest],Previous) :-
@@ -237,7 +247,14 @@ appearance(<<"group">>, no_surface, Label) :- labelled(Label).
 appearance(<<"mesh">>, asset_surfaces, Label) :- labelled(Label).
 appearance(<<"terrain">>, terrain_surfaces, unlabelled).
 appearance(Kind, Material, Label) :-
-    Kind \== <<"group">>, Kind \== <<"mesh">>, Kind \== <<"terrain">>, surfaced(Material), labelled(Label).
+    Kind \== <<"group">>, Kind \== <<"mesh">>, Kind \== <<"terrain">>, shown(Material), labelled(Label).
+
+%% Beside its ordinary look, a mark may carry how it looks while pointed at
+%% and once selected. All three travel together and the client switches
+%% between them itself, so that feedback never waits for a read.
+shown(Surface) :- surfaced(Surface).
+shown(surfaces(Display, Pointed, Selected)) :-
+    surfaced(Display), surfaced(Pointed), surfaced(Selected).
 
 %% A colour is written the way a designer writes it: 35 is "#", and the six
 %% digits are upper-case hex so one colour has one spelling.
@@ -336,6 +353,7 @@ modelling_query(model(_, _)).
 modelling_query(shape(_, _, _)).
 modelling_query(align(_, _, _, _, _, _)).
 modelling_query(place_model(_, _, _, _, _)).
+modelling_query(marker_size(_)).
 
 %% --- reusable recipe helpers -------------------------------------------------
 %% A recipe proves Parts; model/2 derives a scene without asserting anything.
@@ -352,7 +370,7 @@ model_parts([part(Id, Shape, At, Surface, Label, Subject) | Parts],
     model_transform(At, Placed), model_parts(Parts, Marks).
 
 %% Source-level arithmetic is evaluated by Prolog once, not shipped as client
-%% code. Wire boxes preserve their already-resolved exact rational fields.
+%% code. Edge-only boxes preserve their already-resolved exact rational fields.
 model_dimensions([], []).
 model_dimensions([f(Name, Expression) | Rest], [f(Name, Value) | Values]) :-
     Value is Expression, model_dimensions(Rest, Values).
@@ -369,9 +387,9 @@ model_geometry(<<"mesh">>,
     PX is EPX, PY is EPY, PZ is EPZ.
 model_geometry(<<"terrain">>, terrain_geometry(Profile,Palette,View,Resources),
                terrain_geometry(Profile,Palette,View,Resources)).
-model_geometry(<<"wire_box">>,Fields,Fields).
+model_geometry(Kind,Fields,Fields) :- edge_box(Kind).
 model_geometry(Kind, Expressions, Size) :-
-    Kind \== <<"mesh">>, Kind \== <<"terrain">>, Kind \== <<"wire_box">>, model_dimensions(Expressions, Size).
+    Kind \== <<"mesh">>, Kind \== <<"terrain">>, \+ edge_box(Kind), model_dimensions(Expressions, Size).
 model_transform(transform(EX, EY, EZ, ERX, ERY, ERZ), transform(X, Y, Z, RX, RY, RZ)) :-
     X is EX, Y is EY, Z is EZ, RX is ERX, RY is ERY, RZ is ERZ.
 model_transform(body_pose(Body, Revision), body_pose(Body, Revision)).
@@ -384,6 +402,8 @@ shape(group, <<"group">>, []).
 shape(box(W, H, D), <<"box">>,
       [f(<<"width">>, W), f(<<"height">>, H), f(<<"depth">>, D)]).
 shape(wire_box(W,H,D),<<"wire_box">>,
+      [f(<<"width">>,W),f(<<"height">>,H),f(<<"depth">>,D)]).
+shape(corner_box(W,H,D),<<"corner_box">>,
       [f(<<"width">>,W),f(<<"height">>,H),f(<<"depth">>,D)]).
 shape(sphere(D), <<"sphere">>, [f(<<"diameter">>, D)]).
 shape(plane(W, H), <<"plane">>, [f(<<"width">>, W), f(<<"height">>, H)]).
@@ -409,6 +429,7 @@ align(Shape, Face, TargetShape, TargetFace, Gap, transform(X, Y, Z, 0, 0, 0)) :-
     aligned_axis(ZMin, ZMax, FZ, TZMin, TZMax, TZ, Gap, Z).
 
 bounds(box(W, H, D), W, H, D).
+bounds(corner_box(W, H, D), W, H, D).
 bounds(sphere(D), D, D, D).
 bounds(plane(W, H), W, H, 0).
 bounds(cylinder(D, H), D, H, D).
@@ -500,3 +521,41 @@ scoped_transform(Prefix, transform(X,Y,Z,RX,RY,RZ),
                  relative(Prefix, transform(X,Y,Z,RX,RY,RZ))).
 scoped_transform(Prefix, body_pose(Body,Revision), relative(Prefix,body_pose(Body,Revision))).
 scoped_transform(Prefix, body_frame_pose(Body,Revision),relative(Prefix,body_frame_pose(Body,Revision))).
+
+%% --- shared recipes -----------------------------------------------------------
+%% Named looks that any class may select in class_eidolon/4 or nest through
+%% place_model/5. Each reads only its subject's label, in the subject's own
+%% ontology.
+
+%% House colours, named once so recipes do not repeat their digits.
+house_colour(gray, <<"#848FA5">>).
+house_colour(gray_blue, <<"#C9D2DB">>).
+house_colour(gold, <<"#F9C80E">>).
+
+%% marker: the fixed-size box that stands for a thing, whatever the thing
+%% measures. See-through sides and fading corner lines; gold while pointed
+%% at, fuller gold once selected. Its edge is millimetres.
+marker_size(500).
+eidolon(marker, subject(ontology_ref(Ns, A), Entity),
+        [part(<<"sides">>, box(Size, Size, Size), transform(0, 0, 0, 0, 0, 0),
+              surfaces(surface(Gray, 0, 700, 0, 30, []),
+                       surface(Gold, 0, 700, 0, 40, []),
+                       surface(Gold, 0, 700, 0, 120, [])),
+              unlabelled, depicts_nothing),
+         part(<<"corners">>, corner_box(Size, Size, Size), transform(0, 0, 0, 0, 0, 0),
+              Lines, Label, depicts_nothing)]) :-
+    marker_size(Size), house_colour(gray, Gray), house_colour(gold, Gold),
+    house_colour(gray_blue, GrayBlue), corner_lines(GrayBlue, Lines),
+    in_ontology(Ns, A, client_subject_label(Entity, Label)).
+
+%% extent: a real-size outline in the marker's corner style. The longer form
+%% draws its lines in the caller's own colour.
+eidolon(extent(W, H, D), Subject, Parts) :-
+    house_colour(gray_blue, GrayBlue), eidolon(extent(W, H, D, GrayBlue), Subject, Parts).
+eidolon(extent(W, H, D, Colour), subject(ontology_ref(Ns, A), Entity),
+        [part(<<"extent">>, corner_box(W, H, D), transform(0, 0, 0, 0, 0, 0),
+              Lines, Label, depicts_nothing)]) :-
+    corner_lines(Colour, Lines), in_ontology(Ns, A, client_subject_label(Entity, Label)).
+
+corner_lines(Colour, surfaces(surface(Colour, 0, 700, 1000, 1000, []), Pointed, Pointed)) :-
+    house_colour(gold, Gold), Pointed = surface(Gold, 0, 700, 1000, 1000, []).

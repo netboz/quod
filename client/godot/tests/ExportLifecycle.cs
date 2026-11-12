@@ -45,9 +45,13 @@ public partial class ExportChecks
         bool before = control.ButtonPressed;
         if (DisplayServer.GetName() != "headless") await NativePress(control);
         else {
-            for (Node? node = control.GetParent(); node != null; node = node.GetParent())
-                if (node is ScrollContainer scroll) scroll.EnsureControlVisible(control);
-            await Frame();
+            // Scrolling into view lands on a later frame and announces nothing; press once the control is on screen.
+            for (int frames = 0; frames < 600; frames++) {
+                for (Node? node = control.GetParent(); node != null; node = node.GetParent())
+                    if (node is ScrollContainer scroll) scroll.EnsureControlVisible(control);
+                await Frame();
+                if (control.GetViewport().GetVisibleRect().HasPoint(control.GetGlobalRect().GetCenter())) break;
+            }
             var toggled = new TaskCompletionSource(); void Changed(bool _) => toggled.TrySetResult();
             control.Toggled += Changed;
             try {

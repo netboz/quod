@@ -120,8 +120,24 @@ the previous visual consumer. Recipes may live in the same ontology as their cla
 
 Solid primitives retain authored colour, metallic, roughness and emission values.
 Neutral adapter lighting distinguishes solid faces against the ordinary black
-background. Wire geometry remains unshaded and labels stay opaque. This supplies
+background. Wire and corner geometry remains unshaded and labels stay opaque. This supplies
 no physical sun, collision geometry or measured headset readability guarantee.
+
+A mark may carry three surfaces: display, pointed at and selected. Every mark
+of the pointed-at thing shows its pointed-at surface, and every mark of the
+thing the open panel is about shows its selected surface; selected wins. The
+switch is local and reads nothing. A mark with one surface looks the same in
+all three cases: the client adds no tint of its own.
+
+Each shown thing has a mode, display by default. Choosing another Eidolon of a
+thing that stands in the world (its `edition` one, or the `selected` one a
+class may offer, which is then chosen on selection) reads that one Eidolon and
+draws it in the thing's place: its parts take the place of the display parts
+under the same occurrence, everything else stays in display, and the thing
+returns to display when the choice is withdrawn. Parts that did not change are
+not rebuilt. A choice that is not the model of that one thing, such as a
+space's contents, and a subject not shown in the world, use the side view.
+A pick is the whole thing, whichever of its parts was hit.
 
 The ontology-authored **Workbench** representation shows direct authored local class
 inheritance and instance membership, with attributes of the selected exact node.
@@ -196,8 +212,8 @@ keeps the old draft locked rather than silently applying it to a new contract.
 and an offered form. Catalogue/account/current-space identities are advisory;
 an exact namespace/anchor can open other existing storage. The server validates
 composition and permission. Space forms offer finite, rational and infinite
-extents, placement and exterior choices through the same generic binder. The
-shared mark adapter draws solid boxes, exact finite edge boxes and groups,
+extents and placement through the same generic binder. The
+shared mark adapter draws solid boxes, exact finite wire and corner boxes and groups,
 and picking opens operations on the exact depicted subject. It creates no
 collision or local simulation. Creation leaves A in the current space.
 

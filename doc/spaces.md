@@ -70,13 +70,13 @@ ordinary space; it does not trigger rebuilding the old physical lobby.
 From S0, U uses the offered GUI to instruct A to create another space S1.
 Storage remains an explicitly selected existing ontology and default owner is
 U; near-agent placement puts S1 inside A's current space. S1 appears there via
-the ordinary default exterior Eidolon (currently the half-metre cube), whose
+the ordinary default exterior Eidolon, the shared half-metre marker, whose
 size is independent of its interior extent. Creating S1 does not enter it.
 Authorized GUI entry moves the same A to S1; navigation follows the committed
 assignment. The same creation and entry rules apply inside S1 to create S2,
 and at further levels, without a separate agent, class or storage ledger per
 level. The selected exterior Eidolon may display a mesh or the space's contents;
-the current default cube is one recipe, not a restriction on exterior views.
+the marker is one recipe, not a restriction on exterior views.
 If both S1 and S2 select contents exteriors, their contents are recursively
 displayed in S0 as one continuous space, subject to physics and each source
 owner's disclosure policy. No entry into S1 or S2 is required for that display.
@@ -132,7 +132,7 @@ outputs `Ref` and `Name` use the ordinary selected-result machinery: a lost
 reply is recovered from the original operation, including after restart or
 later instance deletion. Recovery does not create the instance again.
 
-`dimensions` defaults to `box(q(100, <<"m">>), q(100, <<"m">>),
+`dimensions` defaults to `box(q(10, <<"m">>), q(10, <<"m">>),
 q(100, <<"m">>))`: X, Y and Z lengths centred on the local origin, extending
 50 metres in each direction. It also accepts `infinite` or three strictly
 positive exact length quantities. Existing measurement conversion validates
@@ -156,8 +156,9 @@ form's placement choice is an input to this action, not a stored slot.
 `near_agent` reads A's exact location at `quod:space`; a successful `unplaced`
 result leaves the new space unplaced. A `placed(Destination, Transform)` result
 places it in front of A along that frame's −Z axis: 2 m from A's position plus
-half the new space's depth, so its near wall opens at arm's reach plus a step
-(Yan, 2026-11-07); an infinite space uses half-depth zero. This is one-time placement,
+half the shared marker's depth, read from the scene vocabulary's
+`marker_size/1`. With the 0.5 m marker the new space appears 2.25 m away,
+whatever it measures inside (Yan, 2026-11-12). This is one-time placement,
 not following A. A denied, unavailable, ambiguous or incomplete location read
 fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
 Transform)`; missing pose does not prove absence. Physical-pilot entry and live
@@ -194,8 +195,8 @@ The shared form also offers **Create space with rational lengths**, with a
 positive integer numerator/divisor per axis and an explicit length unit. The
 ordinary finite form retains its integer defaults; both use the same Stage 1
 assertion and binder. Names may be empty binary values; leaving the supplied
-default unchanged keeps `Space`. Every form selects placement and an exterior
-recipe. The creation subject is `class_ref(<<"quod:space">>, Anchor, space)`;
+default unchanged keeps `Space`. Every form selects placement. No form offers
+an outside choice: a new space is shown by the marker. The creation subject is `class_ref(<<"quod:space">>, Anchor, space)`;
 its class identity is independent of the selected storing ontology. Each storing
 ontology separately authorizes the acting principal's request and the class
 owner's scoped callbacks. Class defaults and per-instance ACLs remain subject to
@@ -296,8 +297,8 @@ single binary `attribute(Space,name,Name)`, or `unnamed` when absent; conflictin
 or non-binary names refuse the view. The existing endpoint checks the exact
 space before exposing this optional name (`name` string or null) alongside
 the projection. It has the same retained read dependencies and authorization;
-it is neither a naming service nor a second current-location record. Ordinary
-solid/wireframe space recipes use the same authored name in their scene label.
+it is neither a naming service nor a second current-location record. The
+marker and the inside walls use the same authored name in their scene label.
 An empty permitted scene remains black; its context belongs to the GUI chrome.
 
 `quod:space::space_represent(SpaceRef, BeforeStyle, BeforePose, BeforeInterior,
@@ -307,11 +308,12 @@ physical consequence in the same transaction. An unchanged representation
 performs no state mutation.
 
 `interior` (`none`, `wireframe` or `matrix`; absent means `none`) shows the
-space's own boundary from inside. The same class-selected boundary recipes serve
-`exterior` and `interior`: the interior projection places that boundary at the
-space's origin after its contents, depicting the space itself. `matrix` draws the
-exact wire box in emissive green over translucent faces. Infinite spaces refuse
-both finite boundaries with the existing `space_exterior_unavailable` reason.
+space's own walls from inside, at its real size. Both nest the scene
+vocabulary's shared `extent` recipe: a corner outline whose lengths equal the
+exact interior dimensions, never rounded. The interior projection places it at
+the space's origin after its contents, depicting the space itself. `matrix`
+draws that outline in emissive green over translucent faces. Infinite spaces
+refuse both with the `space_interior_unavailable` reason.
 The space's pie offers the interior choices under **Show as**.
 
 ## Invocation policy
@@ -363,21 +365,22 @@ independently of the class defaults or per-instance ACL overrides.
 Exterior and interior describe viewing purposes, not fixed representation types: showing
 contents does not require entering the space, moving A or changing containment.
 
-Exterior choices include a **full-size wireframe** of a finite
-space's box, centred on its local origin and transformed into the viewing
-frame. Its extents equal the exact interior dimensions: the default box spans
-−50 to +50 metres on X/Y/Z. It does not create collision walls or physics.
-Infinite dimensions have no finite wire box; report that choice unavailable,
-without inventing bounds or selecting a cube implicitly. Exact rational lengths
-must not be rounded. The shared scene vocabulary supplies `wire_box` with exact
-positive reduced integer/rational millimetre dimensions, as specified in the
-[M0 exterior contract](godot-foundation-contract.md#space-exterior-and-recursive-exposure).
-Prolog converts the stored quantities; the engine converts only when rendering.
-Twelve edges create no collision surfaces or physical bodies. The stored
-`exterior` selects the actual recipe. Infinite forms offer solid and contents
-and explain wireframe unavailability; a direct infinite/wireframe request
-refuses. The contents recipe returns a source-owned exposure, never a
-substitute mesh.
+Seen from outside, a space is the shared fixed-size **marker** of the scene
+vocabulary (`exterior` `solid`) or its permitted contents (`exterior`
+`contents`). The marker is half a metre whatever the space measures inside,
+finite or infinite: see-through sides, corner lines that fade along each edge,
+gold while pointed at and once selected. It creates no collision surfaces or
+physical bodies. Its `edition` Eidolon is the same marker with the real size
+written beneath it as authored, for example `10 m × 1/3 mm × 2 km`, or
+`Infinite`. A client reads it for the one space being edited and draws it in
+that space's place; the other things keep their display Eidolon. A class may
+also offer a `selected` Eidolon, read the same way on selection; the space
+class offers none. The earlier full-size `wireframe` exterior is retired: it is
+not a valid new `exterior` value, and a space still storing it is shown by the
+marker. The real size is shown from inside by the `interior` walls, where exact
+rational lengths are never rounded: Prolog converts the stored quantities and
+the engine converts only when rendering. The contents recipe returns a
+source-owned exposure, never a substitute mesh.
 
 [When S0 contains S1 containing S2, and both S1 and S2 select contents exteriors,
 their contents are displayed recursively in S0, subject to physics, as if all

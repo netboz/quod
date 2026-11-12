@@ -302,7 +302,7 @@ class_ref(Ns,Class) -> {class_ref,Ns,quod_simplex:genesis_hash(Ns),Class}.
 scoped(Ns,Goal) -> {'::',Ns,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},Goal}}.
 conj([G]) -> G;
 conj([G|Rest]) -> {',',G,conj(Rest)}.
-default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
+default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
 
 withdraw_views(C,Ns,Ref) -> [V || V = {operation_view,withdraw,_,_,_,_,_,_,_,_} <- views(C,Ns,Ref)].
 

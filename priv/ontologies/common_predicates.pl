@@ -223,11 +223,18 @@ client_eidolon(Entity,Choice,View) :-
     Choice = eidolon(Purpose,Style,recipe(Ns,A,Recipe)),
     entity_eidolons(Entity,Purpose,Style,Choices), member_eq(Choice,Choices),
     current_ontology_identity(Here,History), Target = ontology_ref(Here,History),
-    (member(Purpose,[playing,edition]) ->
-        client_entity_scene(Entity,Purpose,appearance(_,_,Context,Layout,_)),
+    (client_scene_purpose(Purpose,Shown) ->
+        client_entity_scene(Entity,Shown,appearance(_,_,Context,Layout,_)),
         in_ontology(Ns,A,eidolon(Recipe,Context,Model)),
         client_eidolon_scene(Entity,Purpose,Style,Layout,Model,View)
     ; in_ontology(Ns,A,eidolon(Recipe,subject(Target,Entity),View))).
+
+%% Each shown thing has a mode, display by default. A class may also offer a
+%% `selected` Eidolon; it adds to the thing as displayed, so it shares the
+%% display scene's context and place. None is required.
+client_scene_purpose(playing,playing).
+client_scene_purpose(edition,edition).
+client_scene_purpose(selected,playing).
 
 client_eidolon_scene(Entity,Mode,_,_,contents(Exposure),
         eidolon_scene(Subject,Marks,Selection,Exposures)) :- !,

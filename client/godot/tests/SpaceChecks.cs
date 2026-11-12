@@ -238,7 +238,7 @@ public partial class ExportChecks
         var panel=(OperationsPanel)app.FindChild("operations",true,false); var scene=(ScenePanel)app.FindChild("space-scene",true,false);
         if(phase=="m2-fresh") {
             await CreationTarget(panel,human,"create");
-            Check(panel.FormPanel.Draft["space_name"]=="Space" && panel.FormPanel.Draft["space_length(width)"]=="100","normal creation presents the authored default name and100 metre extent");
+            Check(panel.FormPanel.Draft["space_name"]=="Space" && panel.FormPanel.Draft["space_length(width)"]=="10","normal creation presents the authored default name and ten metre extent");
             await Keyboard(panel,panel.Current!); Check(!panel.FormPanel.Validate(),"invalid creation draft remains local");
             await Type((LineEdit)panel.FormPanel.Input("space_length(width)")!,"101");
             await ClickSubmit(panel);
@@ -257,7 +257,7 @@ public partial class ExportChecks
         var first=SpaceResults(recovered); var firstSpace=Result(first,"space");
         Check(Actor.FromTerm(firstSpace).Namespace==human.Namespace && Result(first,"owner").ToString()==setup[0].ToString(),"recovered generated reference and owner retain selected storage and distinct U identity");
         Check(Result(first,"location").Require("placed",2)[0].ToString()==s0.ToString(),"original result contains exact containing space and placement");
-        Check(scene.Count==2,"original S1 appears in S0 through the selected shared exterior recipe");
+        Check(scene.Count==3,"original S1 appears in S0 through the shared marker: its group, sides and corners");
         string firstId=scene.SubjectIds(firstSpace).Single();
         await PickSpace(scene,firstId,Vector3.Zero,firstSpace);
         await Until(()=>panel.Available);
@@ -306,16 +306,21 @@ public partial class ExportChecks
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"normal mouse creation commits through the current generic binder");
         Gone(panel,"Create space");
         var defaultResult=SpaceResults(panel.LastOutcome!); Check(Result(defaultResult,"owner").ToString()==setup[0].ToString(),"default creation result reports actual U ownership");
-        await Until(()=>scene.Count>=4); Check(scene.Count==4,"creation remains in S0 and adds only the new exterior occurrence");
+        await Until(()=>scene.Count>=6); Check(scene.Count==6,"creation remains in S0 and adds only the new marker");
         await CreationTarget(panel,human,"create");
-        await FieldChoice(panel,"space_exterior(finite)",Term.Atom("wireframe"));
-        await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"normal GUI selects the real finite wireframe recipe");
-        var wire=Result(SpaceResults(panel.LastOutcome!),"space");
-        await Until(()=>scene.Count>=6);
-        string wireId=scene.SubjectIds(wire).Single();
-        var corners=scene.WorldCorners(wireId);
-        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-100)<.0001f,"actual created default wireframe has100 metre width");
-        Check(scene.Pick(scene.Project(wireId,new Vector3(0,-50,-50)))?.Subject.ToString()==wire.ToString(),"picking the created wireframe resolves its actual generated reference");
+        Check(panel.Current!.Form.Tree.Leaves.All(c=>!c.Role.StartsWith("space_exterior")),"the creation form offers no outside choice");
+        // Near-agent placement would put this marker exactly on the first one; give it its own place to be picked at.
+        await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Call("at",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))));
+        await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"a second default space creates through the same form");
+        var second=Result(SpaceResults(panel.LastOutcome!),"space");
+        await Until(()=>scene.Count>=9);
+        string secondId=scene.SubjectIds(second).Single();
+        var corners=scene.WorldCorners(secondId+"/corners");
+        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-.5f)<.0001f,"a default ten metre space is shown by the half metre marker");
+        // The camera re-frames a changed scene on later frames and announces nothing; look again each frame.
+        bool Picked()=>scene.Pick(scene.Project(secondId,Vector3.Zero))?.Subject.ToString()==second.ToString();
+        for(int frames=0;frames<600&&!Picked();frames++)await Frame();
+        Check(Picked(),"picking the marker through its see-through side resolves its actual generated reference");
         for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent()) if(parent is ScrollContainer scroll) scroll.EnsureControlVisible(scene);
         await Frame();
         if(System.Environment.GetEnvironmentVariable("M2_SCREENSHOT") is string screenshot) {
@@ -326,39 +331,48 @@ public partial class ExportChecks
             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
             var rendered=scene.GetChildren().OfType<SubViewport>().Single();
             using var pixels=rendered.GetTexture().GetImage();
-            var face=scene.Project(wireId,new Vector3(50,0,0));
+            var face=scene.Project(secondId,Vector3.Zero);
             var pixel=pixels.GetPixel((int)face.X,(int)face.Y);
-            Check(pixels.SavePng(screenshot+".scene.png")==Error.Ok,"actual created wireframe viewport raster retained");
+            Check(pixels.SavePng(screenshot+".scene.png")==Error.Ok,"actual created marker viewport raster retained");
             Console.WriteLine($"M2_RASTER face={face} pixel={pixel} camera={rendered.GetChildren().OfType<Camera3D>().Single().Position}");
             foreach(var mesh in scene.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>()) {
                 var surface=RenderingServer.MeshGetSurface(mesh.Mesh.GetRid(),0);
                 Console.WriteLine($"M2_RASTER_MESH kind={mesh.Mesh.GetClass()} primitive={surface["primitive"]} vertices={surface["vertex_count"]} position={mesh.GlobalPosition}");
             }
-            Check(pixel.R<.01f && pixel.G<.01f && pixel.B<.01f,"actual created wireframe leaves its projected face centre empty");
+            Check(pixel.Luminance<.2f,"actual created marker keeps its sides see-through");
             // The parent composites the SubViewport's completed texture on its
             // next rendered frame; capture that explicit completion as well.
             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
             Check(GetViewport().GetTexture().GetImage().SavePng(screenshot)==Error.Ok,"actual created space and generic GUI rendered to evidence image");
         }
-        await PickSpace(scene,wireId,new Vector3(0,-50,-50),wire);
+        await PickSpace(scene,secondId,Vector3.Zero,second);
         await Until(()=>panel.Available);
         Check(!panel.FindChild("operation-targeting",true,false).Get("visible").AsBool(),"an exact picked instance hides the unrelated class/storage chooser");
+        // Each shown thing has a mode. Editing this one space draws its edition Eidolon where it stands.
+        var modes=(EidolonPanel)app.FindChild("representations",true,false);
+        await Until(()=>modes.Available);
+        bool SizeLine()=>scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Any(l=>l.Text=="10 m × 10 m × 10 m");
+        int displayed=scene.Count;
+        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="edition"&&e.Style=="solid"));
+        await Until(SizeLine);
+        Check(scene.Count==displayed+1 && !modes.Preview.Visible,"editing a space adds its real size in place in the world, with no side picture");
+        Check(scene.SubjectIds(second).Single()==secondId && scene.WorldCorners(secondId+"/corners").Length==8,"the edited space is the same shown thing, still drawn by the marker");
+        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="playing"&&e.Style=="solid"));
+        Check(!SizeLine() && scene.Count==displayed,"leaving edition returns that space to display at once");
         await CreationTarget(panel,human,"create_exact");
         foreach(var (role,value) in new[] { ("space_length(width)","1"),("space_divisor(width)","3"),("space_length(height)","1001"),("space_divisor(height)","1"),("space_length(depth)","1001"),("space_divisor(depth)","2") })
             await Type((LineEdit)panel.FormPanel.Input(role)!,value);
         await FieldChoice(panel,"space_unit",Term.Text("mm"));
         await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Call("at",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))));
-        await FieldChoice(panel,"space_exterior(exact)",Term.Atom("wireframe"));
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"rational lengths create through the same authored generic form and constructor");
         Check(Result(SpaceResults(panel.LastOutcome!),"location").ToString()==Term.Call("placed",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))).ToString(),"normal GUI explicit placement preserves the selected exact destination and pose");
-        var rational=Result(SpaceResults(panel.LastOutcome!),"space"); await Until(()=>scene.Count>=8);
+        var rational=Result(SpaceResults(panel.LastOutcome!),"space"); await Until(()=>scene.Count>=12);
         string rationalId=scene.SubjectIds(rational).Single();
-        corners=scene.WorldCorners(rationalId);
-        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-1f/3000)<.000001f &&
-            Math.Abs(corners.Max(v=>v.Y)-corners.Min(v=>v.Y)-1.001f)<.000001f,"actual Prolog rational millimetres reach engine geometry without integer rounding");
+        corners=scene.WorldCorners(rationalId+"/corners");
+        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-.5f)<.0001f &&
+            Math.Abs(corners.Max(v=>v.Y)-corners.Min(v=>v.Y)-.5f)<.0001f,"the marker keeps its one size whatever the space measures inside");
         await CreationTarget(panel,human,"create_infinite");
-        var exterior=panel.Current!.Form.Tree.Leaves.Single(c=>c.Role=="space_exterior(infinite)");
-        Check(exterior.Options.All(o=>o.Value.Name!="wireframe") && exterior.Properties["help"].TextValue.Contains("no finite wireframe"),"infinite form explicitly explains wireframe unavailability and offers the real solid recipe");
+        Check(panel.Current!.Form.Tree.Leaves.All(c=>!c.Role.StartsWith("space_exterior")),"the infinite form offers no outside choice either");
         await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Atom("unplaced"));
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!) && Result(SpaceResults(panel.LastOutcome!),"location").Name=="unplaced","normal GUI supports explicit infinite unplaced creation without placement fallback");
         var foreign=await SpaceControl(new() { ["m2_foreign_storage"]=JsonSerializer.SerializeToNode(human) });
@@ -372,7 +386,7 @@ public partial class ExportChecks
         var foreignResults=SpaceResults(panel.LastOutcome!); var foreignSpace=Result(foreignResults,"space");
         Check(Actor.FromTerm(foreignSpace).Namespace==target.Namespace && Result(foreignResults,"owner").ToString()==setup[0].ToString() &&
             Result(foreignResults,"location").Args[0].ToString()==s0.ToString(),"foreign storage, U ownership and S0 placement remain distinct exact references");
-        await Until(()=>scene.Count>=10); Check(scene.Count==10,"foreign-storage source appears through its authorized exact exterior recipe");
+        await Until(()=>scene.Count>=15); Check(scene.Count==15,"foreign-storage source appears through the same shared marker");
         await CreationTarget(panel,human,"create");
         Check(panel.FormPanel.Draft["space_name"]=="Space","a form left for another storing ontology is gone; returning opens the offered form");
         var ids=scene.Ids.Order().ToArray();
@@ -390,7 +404,7 @@ public partial class ExportChecks
             "reconnect writes only its new HUD receiver selection and submits no creation instruction");
         var navigation=Json.Binding(await app.ActiveSession.Read(human,"<<\"quod:user\">>::account_navigation(Space,Modes).",CancellationToken.None),"Space");
         Check(navigation.ToString()==s0.ToString(),"all creations leave the same A inside original parentless S0");
-        await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,checks,original=first.Select(t=>t.ToString()).ToArray(),wire=wire.ToString(),rational=rational.ToString(),foreign=foreignSpace.ToString() }));
+        await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,checks,original=first.Select(t=>t.ToString()).ToArray(),second=second.ToString(),rational=rational.ToString(),foreign=foreignSpace.ToString() }));
         await Press("disconnect"); await app.ViewsDisposed; Check(SignedView.LiveSockets==0,"M2 view and operation consumers dispose all sockets");
         Console.WriteLine("M2_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
     }
@@ -421,7 +435,7 @@ public partial class ExportChecks
         var detail=panel.FindChild("operation-exact-details",true,false).FindChildren("*","TextEdit",true,false).OfType<TextEdit>().Last();
         Check(!detail.Editable && detail.WrapMode==TextEdit.LineWrappingMode.None &&
             JsonNode.DeepEquals(JsonNode.Parse(detail.Text),panel.LastOutcome),"exact refusal details remain complete and selectable without whole-response wrapping");
-        Check(await StateOfSpaces()==before && scene.Count==10,"denied construction leaves no generated space owner or assignment");
+        Check(await StateOfSpaces()==before && scene.Count==15,"denied construction leaves no generated space owner or assignment");
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({space},space_admit,deny)).",timeout.Token);
         await OpenExactTarget(panel);
         await Type((LineEdit)panel.FindChild("exact-storage-namespace",true,false),human.Namespace);

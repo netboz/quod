@@ -650,13 +650,9 @@ menu_choice_label(eidolon(Purpose, Style, _), Label) :- menu_caption(Purpose, St
 menu_choice_label(eidolon(Purpose, _, _), Label) :- menu_purpose_caption(Purpose, Label), !.
 menu_choice_label(_, <<"Open">>).
 menu_caption(playing, solid, <<"Solid">>).
-menu_caption(playing, wireframe, <<"Wire box">>).
 menu_caption(playing, contents, <<"Permitted contents">>).
-menu_caption(playing, matrix, <<"Matrix walls">>).
 menu_caption(edition, solid, <<"Edit as solid">>).
-menu_caption(edition, wireframe, <<"Edit as wire box">>).
 menu_caption(edition, contents, <<"Edit permitted contents">>).
-menu_caption(edition, matrix, <<"Edit as matrix walls">>).
 menu_caption(prolog, source, <<"Source">>).
 menu_caption(inspection, policy, <<"Policy">>).
 menu_caption(inspection, interfaces, <<"Interfaces">>).

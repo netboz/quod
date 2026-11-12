@@ -28,7 +28,6 @@ space_query(space_contents_projection(_, _)).
 space_query(world_view(_, _, _)).
 space_query(space_exposure_projection(_, _, _, _)).
 space_query(space_simulation_domain(_, _, _, _)).
-space_query(space_exterior_fits(_, _, _)).
 space_query(space_creator_owner(_, _)).
 space_query(space_dimensions(_)).
 space_query(space_owner(_)).
@@ -47,21 +46,14 @@ isa(space, thing).
 isa(physical_space, space).
 class_permission(space, Operation, allow) :-
     member(Operation, [create,space_enter,space_admit,space_leave,space_remove,space_visit,space_represent]).
-class_requirement(space, create, space_exterior_fits).
 have_attribute(space, name, binary, default(<<"Space">>)).
 have_attribute(space, dimensions, space_dimensions,
-    default(box(q(100, <<"m">>), q(100, <<"m">>), q(100, <<"m">>)))).
+    default(box(q(10, <<"m">>), q(10, <<"m">>), q(10, <<"m">>)))).
 have_attribute(space, owner, space_owner, default_from(space_creator_owner)).
 have_attribute(space, transform, space_transform, default(transform(0,0,0,0,0,0))).
 have_attribute(space, exterior, space_exterior, default(solid)).
 have_attribute(space, interior, space_interior, default(none)).
 
-space_exterior_fits(_, _, create(Inputs)) :-
-    (member(attribute(exterior, Exterior), Inputs) -> true
-    ; have_attribute(space, exterior, _, default(Exterior))),
-    (member(attribute(dimensions, Dimensions), Inputs) -> true
-    ; have_attribute(space, dimensions, _, default(Dimensions))),
-    space_exterior_available(Exterior, Dimensions).
 space_dimensions(infinite).
 space_dimensions(box(Width, Height, Depth)) :-
     unique_solution(measure_vocabulary(Ns,Anchor)),
@@ -86,25 +78,16 @@ space_location(Subject, Location) :-
       space_transform(Transform), Location = placed(Destination, Transform)).
 
 %% An omitted pose is resolved relative to the acting personal agent, at
-%% Yan's chosen two metres plus half the new space's depth along negative Z.
-placement_pose(Destination, Subject, Pose) :-
+%% Yan's chosen two metres plus half the shared marker's depth along negative
+%% Z. The marker stands for the space outside, whatever it measures inside.
+placement_pose(Destination, Pose) :-
     (nonvar(Pose) -> space_transform(Pose)
     ; quod:user::personal_agent(Agent, _),
       Agent = agent_instance_ref(Ns,A,Entity),
-      space_location(entity_ref(Ns,A,Entity), placed(Destination,At)),
-      Subject = entity_ref(Store,History,Id),
-      in_ontology(Store,History,unique_solution(attribute(Id,dimensions,Dimensions))),
-      space_near_location(placed(Destination,At),Dimensions,placed(Destination,Pose))).
-space_near_location(unplaced, _, unplaced).
-space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)), Dimensions,
-                   placed(Destination, transform(X,Y,NearZ,RX,RY,RZ))) :-
-    space_half_depth(Dimensions, HalfDepth), NearZ is Z - 2000 - HalfDepth.
-space_half_depth(infinite, 0).
-space_half_depth(box(_, _, q(Value, Unit)), HalfDepth) :-
-    unique_solution(measure_vocabulary(Ns, Anchor)),
-    in_ontology(Ns, Anchor, convert(Value, Unit, <<"m">>, Metres)),
-    (integer(Metres) -> HalfDepth is Metres * 500
-    ; Metres = N / D, HalfDepth is (N * 500) // D).
+      space_location(entity_ref(Ns,A,Entity), placed(Destination,transform(X,Y,Z,RX,RY,RZ))),
+      unique_solution(scene_vocabulary(Scene,Anchor)),
+      in_ontology(Scene,Anchor,marker_size(Size)),
+      NearZ is Z - 2000 - Size // 2, Pose = transform(X,Y,NearZ,RX,RY,RZ)).
 
 space_subject(entity_ref(Ns, Anchor, Entity), Subject) :-
     in_ontology(Ns,Anchor,
@@ -127,7 +110,7 @@ inside(Space, Entity, Pose) :-
     in_ontology(Ns,A,attribute(Id,transform,Pose)).
 unplaced(Entity) :- space_assignment(Entity, _, none).
 action(place(Space, Entity, Pose),
-       [goal(unplaced(Entity)), placement_pose(Space, Entity, Pose),
+       [goal(unplaced(Entity)), placement_pose(Space, Pose),
         space_authorized(Entity, space_enter, Space, placement),
         space_authorized(Space, space_admit, Entity, placement)],
        inside(Space, Entity, Pose)).
@@ -186,12 +169,13 @@ space_physical_change(entity_ref(Ns,A,Space),Subject,Change) :-
 space_represent(Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior) :-
     term_variables([Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior],[]),
     Subject = entity_ref(Ns,A,Space),
-    transaction((space_instance(Subject,space),space_transform(Pose),space_exterior(Style),space_interior(Interior),
+    transaction((space_instance(Subject,space),space_transform(Pose),space_interior(Interior),
+        (Style == BeforeStyle -> true; space_exterior(Style)),
         space_authorized_representation(Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior),
         in_ontology(Ns,A,unique_solution((attribute(Space,exterior,BeforeStyle),attribute(Space,transform,BeforePose)))),
         space_interior_of(Subject,BeforeInterior),
         in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)),
-        space_exterior_available(Style,Dimensions),space_exterior_available(Interior,Dimensions),
+        space_interior_available(Interior,Dimensions),
         (BeforeInterior == Interior -> true
         ; in_ontology(Ns,A,((BeforeInterior == none -> true; retract(attribute(Space,interior,BeforeInterior))),
                            (Interior == none -> true; assertz(attribute(Space,interior,Interior)))))),
@@ -210,7 +194,7 @@ space_interior_of(entity_ref(Ns,A,Space),Interior) :-
     ; Rows = [Interior] -> true
     ; fail_with_reason(ambiguous_space_interior(Space))).
 space_interior_boundary(Space,Recipe) :-
-    space_interior_of(Space,Interior), Interior \== none, space_exterior_recipe(Interior,Recipe).
+    space_interior_of(Space,Interior), space_interior_recipe(Interior,Recipe).
 space_representation_changed(Space,Subject) :-
     Space = entity_ref(Ns,A,Id), in_ontology(Ns,A,space_placement(Id,Subject,Assignment)),
     space_assignment(Subject,Assignment,Space), space_change_physics(Space,Subject,represented).
@@ -251,15 +235,6 @@ attribute(space_placement(ontology_ref(Ns,A)), options, Options) :-
         (space_instance(entity_ref(Ns,A,S),space),in_ontology(Ns,A,attribute(S,name,Label))), Destinations),
     append([option(near_agent, <<"Near my agent, or unplaced when my agent is unplaced">>),
             option(unplaced, <<"Unplaced">>)], Destinations, Options).
-instance_of(quod:gui:selection, space_exterior(Extent)) :- member(Extent,[finite,exact,infinite]).
-attribute(space_exterior(_), label, <<"Exterior representation">>).
-attribute(space_exterior(Extent), options,
-    [option(solid,<<"Small solid cube">>),option(wireframe,<<"Full-size finite wireframe">>),
-     option(contents,<<"Permitted contents">>)]) :- member(Extent,[finite,exact]).
-attribute(space_exterior(infinite), options,
-    [option(solid,<<"Small solid cube">>),option(contents,<<"Permitted contents">>) ]).
-attribute(space_exterior(Extent), help, <<"Wireframe shows the exact interior dimensions without collision. Contents exposes permitted sources in their authored frames.">>) :- member(Extent,[finite,exact]).
-attribute(space_exterior(infinite), help, <<"Infinite extent has no finite wireframe. Solid and permitted contents representations are available.">>).
 attribute(space_length(width), label, <<"Width (X)">>).
 attribute(space_length(height), label, <<"Height (Y)">>).
 attribute(space_length(depth), label, <<"Depth (Z)">>).
@@ -275,10 +250,9 @@ attribute(space_create_submit, label, <<"Create">>).
 gui_children(space_create(Store,Extent), Children) :-
     space_form_lengths(Extent,Fields,_),
     findall(Role,member(field(Role,_),Fields),Lengths),
-    append([space_name|Lengths], [space_placement(Store),space_exterior(Extent),space_create_submit], Children).
+    append([space_name|Lengths], [space_placement(Store),space_create_submit], Children).
 gui_initial(space_create(_,_), space_name, Name) :- have_attribute(space,name,binary,default(Name)).
 gui_initial(space_create(Store,_), space_placement(Store), near_agent).
-gui_initial(space_create(_,_), space_exterior(_), solid).
 gui_initial(space_create(_,Extent), space_unit, Unit) :-
     member(Extent,[finite,exact]),
     have_attribute(space,dimensions,space_dimensions,default(box(q(_,Unit),q(_,Unit),q(_,Unit)))).
@@ -295,8 +269,8 @@ gui_form(space_create(Store,Extent), Fields,
         operation(create(Inputs), [result(space,entity_ref(Ns,A,Space)),result(location,Location),result(owner,Owner)]))) :-
     Store = ontology_ref(Ns,A),
     space_form_lengths(Extent,Lengths,Dimensions),
-    append([field(space_name,Name)|Lengths], [field(space_placement(Store),Placement),field(space_exterior(Extent),Exterior)], Fields),
-    Inputs = [attribute(name,Name),attribute(dimensions,Dimensions),attribute(exterior,Exterior)].
+    append([field(space_name,Name)|Lengths], [field(space_placement(Store),Placement)], Fields),
+    Inputs = [attribute(name,Name),attribute(dimensions,Dimensions)].
 %% The form's choice selects the same ordinary placement action as any caller.
 %% The instance was asserted by the form goal in its selected storing ontology.
 space_form_placement(Subject, Requested, Location) :-
@@ -405,7 +379,7 @@ eidolon(Recipe,subject(ontology_ref(Ns,A),instance(Space)),operation(space_show_
     space_show_recipe(_,Recipe,Interior), space_instance(entity_ref(Ns,A,Space),space),
     in_ontology(Ns,A,unique_solution((attribute(Space,exterior,Style),attribute(Space,transform,Pose)))),
     space_interior_of(entity_ref(Ns,A,Space),Before), Before \== Interior,
-    in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)), space_exterior_available(Interior,Dimensions).
+    in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)), space_interior_available(Interior,Dimensions).
 instance_of(quod:gui:form,space_show_form(_,_,_,_,_)).
 instance_of(quod:gui:button,space_show_submit).
 attribute(space_show_form(_,_,_,_,none),label,<<"No walls inside">>).
@@ -423,50 +397,59 @@ gui_form(space_show_form(Space,Style,Pose,Before,After),[],
 
 %% Pure space depiction, composed with the space vocabulary and ordinary
 %% entity Eidolons. Membership and physical bindings stay with their owners.
+%% Seen from outside, a space is its permitted contents or the shared
+%% fixed-size marker; its inner size never changes what stands for it.
 class_eidolon(space,Mode,contents,recipe(Ns,A,space_contents)) :-
     member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
-class_eidolon(space,Mode,Style,recipe(Ns,Anchor,Recipe)) :-
-    member(Mode,[playing,edition]), space_exterior_recipe(Style,Recipe),
-    current_ontology_identity(Ns,Anchor).
-space_exterior_recipe(solid,space).
-space_exterior_recipe(wireframe,space_wireframe).
-space_exterior_recipe(matrix,space_matrix).
-space_interior(none).
-space_interior(wireframe).
-space_interior(matrix).
+class_eidolon(space,playing,solid,recipe(Ns,A,marker)) :- scene_vocabulary(Ns,A).
+class_eidolon(space,edition,solid,recipe(Ns,A,space_edition)) :- current_ontology_identity(Ns,A).
 space_exterior(solid).
-space_exterior(wireframe).
 space_exterior(contents).
-space_exterior_available(solid,_).
-space_exterior_available(contents,_).
-space_exterior_available(wireframe,box(_,_,_)).
-space_exterior_available(wireframe,infinite) :- fail_with_reason(space_exterior_unavailable(wireframe,infinite)).
-space_exterior_available(none,_).
-space_exterior_available(matrix,box(_,_,_)).
-space_exterior_available(matrix,infinite) :- fail_with_reason(space_exterior_unavailable(matrix,infinite)).
-%% A half-metre exterior depicts even an infinite interior with finite geometry.
-eidolon(space, subject(ontology_ref(Ns,A),Space),
-    [part(<<"space">>, box(500,500,500), transform(0,0,0,0,0,0),
-          surface(<<"#6A90D9">>, 0, 700, 0, 1000, []), Label, depicts_nothing)]) :-
-    in_ontology(Ns,A,client_subject_label(Space,Label)).
-eidolon(space_wireframe, subject(ontology_ref(Store,History),Space),
-    [part(<<"extent">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
-          surface(<<"#6A90D9">>,0,700,1000,1000,[]),Label,depicts_nothing)]) :-
-    in_ontology(Store,History,(client_subject_label(Space,Label),attribute(Space,dimensions,box(X,Y,Z)))),
+space_interior(none).
+space_interior(Walls) :- space_interior_recipe(Walls,_).
+space_interior_recipe(wireframe,space_wireframe).
+space_interior_recipe(matrix,space_matrix).
+%% Walls stand at the space's real size, so they need a finite one.
+space_interior_available(none,_).
+space_interior_available(Walls,Dimensions) :-
+    space_interior_recipe(Walls,_),
+    (Dimensions = box(_,_,_) -> true
+    ; fail_with_reason(space_interior_unavailable(Walls,Dimensions))).
+eidolon(space_wireframe, Subject, Walls) :-
+    space_extent(Subject,W,H,D), unique_solution(scene_vocabulary(Ns,A)),
+    in_ontology(Ns,A,eidolon(extent(W,H,D),Subject,Walls)).
+%% Matrix walls: the outline in emissive green over translucent near-black
+%% faces, drawn from both sides so they read from in and out.
+eidolon(space_matrix, Subject,
+    [part(<<"walls">>, box(WI,HI,DI), transform(0,0,0,0,0,0),
+          surface(<<"#030F08">>,0,900,80,220,[]), unlabelled, depicts_nothing) | Outline]) :-
+    space_extent(Subject,W,H,D), unique_solution(scene_vocabulary(Ns,A)),
+    in_ontology(Ns,A,eidolon(extent(W,H,D,<<"#3CFF7A">>),Subject,Outline)),
+    space_whole_mm(W,WI), space_whole_mm(H,HI), space_whole_mm(D,DI).
+%% Editing shows the marker with the real size written beneath it, as authored.
+eidolon(space_edition, Subject, Parts) :-
+    Subject = subject(ontology_ref(Store,History),Space),
+    unique_solution(scene_vocabulary(Ns,A)),
+    in_ontology(Ns,A,eidolon(marker,Subject,Marker)), in_ontology(Ns,A,marker_size(Size)),
+    in_ontology(Store,History,attribute(Space,dimensions,Dimensions)),
+    space_size_text(Dimensions,Text), Beneath is -(Size // 2),
+    append(Marker,[part(<<"size">>,group,transform(0,Beneath,0,0,0,0),no_surface,
+                        label(Text,<<"below">>),depicts_nothing)],Parts).
+space_size_text(infinite,<<"Infinite">>).
+space_size_text(box(W,H,D),Text) :-
+    space_length_codes(W,WC), space_length_codes(H,HC), space_length_codes(D,DC),
+    Times = [32,195,151,32],
+    append(HC,Times,H1), append(H1,DC,Tail), append(WC,Times,W1), append(W1,Tail,Codes),
+    binary_codes(Text,Codes).
+space_length_codes(q(Value,Unit),Codes) :-
+    '$quod_program_source'([Value],Source), binary_codes(Source,Written),
+    append(Spaced,[46,10],Written), findall(Code,(member(Code,Spaced),Code =\= 32),Digits),
+    binary_codes(Unit,UnitCodes), append(Digits,[32|UnitCodes],Codes).
+space_extent(subject(ontology_ref(Store,History),Space),W,H,D) :-
+    in_ontology(Store,History,attribute(Space,dimensions,box(X,Y,Z))),
     unique_solution(measure_vocabulary(Ns,Anchor)),
     space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D).
-%% Matrix walls: the exact wire box in emissive green over translucent
-%% near-black faces, drawn from both sides so they read from in and out.
-eidolon(space_matrix, subject(ontology_ref(Store,History),Space),
-    [part(<<"walls">>, box(WI,HI,DI), transform(0,0,0,0,0,0),
-          surface(<<"#030F08">>,0,900,80,220,[]), unlabelled, depicts_nothing),
-     part(<<"grid">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
-          surface(<<"#3CFF7A">>,0,700,1000,1000,[]), Label, depicts_nothing)]) :-
-    in_ontology(Store,History,(client_subject_label(Space,Label),attribute(Space,dimensions,box(X,Y,Z)))),
-    unique_solution(measure_vocabulary(Ns,Anchor)),
-    space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D),
-    space_whole_mm(W,WI), space_whole_mm(H,HI), space_whole_mm(D,DI).
-space_whole_mm(N/D,Whole) :- !, Whole is max(1,(N + D // 2) // D).
+space_whole_mm(N/D,Whole) :- !, Rounded is (N + D // 2) // D, (Rounded < 1 -> Whole = 1; Whole = Rounded).
 space_whole_mm(Length,Length).
 space_millimetres(Ns,Anchor,q(Value,Unit),Length) :-
     in_ontology(Ns,Anchor,convert(Value,Unit,<<"mm">>,Length)).
@@ -627,5 +610,6 @@ space_eidolon_status(Text,
 entity_scene(subject(ontology_ref(Ns,A),Space), Mode,
         appearance(Space, Style, subject(ontology_ref(Ns,A),Space), Transform, Eidolons)) :-
     space_instance(entity_ref(Ns,A,Space), space), member(Mode, [playing, edition]),
-    in_ontology(Ns,A,(attribute(Space,transform,Transform),attribute(Space,exterior,Style),
+    in_ontology(Ns,A,(attribute(Space,transform,Transform),attribute(Space,exterior,Stored),
+                     (Stored == contents -> Style = contents; Style = solid),
                      entity_eidolons(Space,Mode,Style,Eidolons))).

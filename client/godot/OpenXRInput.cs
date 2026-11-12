@@ -410,8 +410,8 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         // Only the controller that opened the pie steers it with its ray.
         // Only the controller that opened the pie steers it; a strip-opened pie has none yet.
         if(pie.IsOpen){rayLabel.Visible=false;if((pieSource==null||input==pieSource)&&(pieQuad.Visible ? PieHit(input) : hit?.Point) is {} on)pie.PointerAt(on);return;}
-        if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.Outline(null);return;}
-        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.Outline(null);}
+        if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.PointAt(null);return;}
+        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.PointAt(null);}
         if(hit is {} at){gui.Move(at.Point,gui.PresentationSurface);PadScroll(source,at.Point);}
         else {source.PadRest=null;if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();}
     }
@@ -433,12 +433,12 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
             gui.PresentationSurface.PushInput(new InputEventMouseButton { Position=at,GlobalPosition=at,ButtonIndex=button,Pressed=false,Factor=1 },true);
         }
     }
-    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.Outline(null);}
-    // Feedback before the press: outline the pointed mark and name the target
+    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.PointAt(null);}
+    // Feedback before the press: the pointed thing shows its pointed-at look, and the target is named
     // (the occurrence, else the containing space) at the ray tip.
     void PointTarget(IControllerSource input)
     {
-        var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.Outline(hit);
+        var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.PointAt(hit);
         string? text=TargetLabel(hit);rayLabel.Visible=text!=null;if(text==null)return;
         float distance=hit?.Pose is Transform3D pose ? Math.Max(.3f,(pose.Origin-ray.Origin).Dot(ray.Direction)) : 2;
         rayLabel.Text=text;rayLabel.GlobalPosition=ray.Origin+ray.Direction*distance+Vector3.Up*.06f;
@@ -514,7 +514,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
             gui.EndTextInput();var ray=Ray(input);
             var hit=GuiHit(input)!=null ? null : scene.PickRay(ray.Origin,ray.Direction);
             if(!openPie(hit))return false;
-            pieSource=input;rayLabel.Visible=false;scene.Outline(null);if(gui.Spatial)PlacePie(input,hit);
+            pieSource=input;rayLabel.Visible=false;scene.PointAt(null);if(gui.Spatial)PlacePie(input,hit);
         }
         pie.Threshold=threshold;pie.MoveAxes(axes);return true;
     }

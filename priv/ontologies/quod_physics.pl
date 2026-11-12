@@ -239,7 +239,7 @@ physics_component_definition(body(_,_),geometry(_,_)).
 
 physics_inert_frame(entity_ref(Ns,A,Space)) :-
     quod:space::space_instance(entity_ref(Ns,A,Space),space),
-    in_ontology(Ns,A,attribute(Space,exterior,Style)), member(Style,[solid,wireframe]).
+    in_ontology(Ns,A,attribute(Space,exterior,Style)), Style \== contents.
 
 physics_component_body(W,Frame,Subject,Kind,Pose) :-
     current_ontology_identity(Ns,A), Frame = entity_ref(Ns,A,W),

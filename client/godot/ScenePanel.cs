@@ -6,16 +6,22 @@ using BigInteger = System.Numerics.BigInteger;
 // local simulation. Picking resolves the occurrence's exact depicted subject.
 public partial class ScenePanel : SubViewportContainer
 {
-    sealed record Occurrence(SceneMark Mark, Node3D Node, Vector3[] Corners, long Identity);
-    // A pick keeps its installed occurrence, not merely the depicted subject.
+    // Lines are the drawn segments of an edge-only box; Looks its materials:
+    // one, or display, pointed at and selected.
+    sealed record Occurrence(SceneMark Mark, Node3D Node, Vector3[] Corners, (Vector3 A,Vector3 B)[] Lines, long Identity, MeshInstance3D? Shape, Material[] Looks) { public int Look; }
+    // A pick keeps its installed thing, not merely the depicted subject: the
+    // mark that names the subject, with the marks beneath it that name none.
     // Placement is always resolved from this owner; a removed/reused ID cannot
     // revive a previous selection or confer authority to an operation.
     public sealed record Selection(ScenePanel Owner,string Id,long Identity,Term Subject)
     {
         public Transform3D? Pose=>Owner.Resolve(this)?.Node.GlobalTransform;
-        public Vector3[] Corners=>Owner.Resolve(this) is {} current ? current.Corners.Select(p=>current.Node.GlobalTransform*p).ToArray() : [];
-        public string? Label=>Owner.Resolve(this) is {} current && current.Mark.Label.Name=="label" ? current.Mark.Label.Args[0].TextValue : null;
+        public Vector3[] Corners=>Owner.Resolve(this) is {} thing ? Owner.Parts(thing).SelectMany(p=>p.Corners.Select(c=>p.Node.GlobalTransform*c)).ToArray() : [];
+        public string? Label=>Owner.Resolve(this) is {} thing ? Owner.Parts(thing).Select(p=>p.Mark.Label).FirstOrDefault(l=>l.Name=="label")?.Args[0].TextValue : null;
     }
+    // The marks last given, and the marks drawn once any thing's other mode has taken its place.
+    SceneMark[] source=[],drawn=[];
+    readonly Dictionary<string,SceneMark[]> modes=[];
     long occurrenceIdentity;
     readonly Dictionary<string, Occurrence> occurrences = [];
     readonly SubViewport viewport = new() { Name = "scene-viewport", Size = new(1000, 400), OwnWorld3D = true, TransparentBg = false, HandleInputLocally = false };
@@ -92,10 +98,10 @@ public partial class ScenePanel : SubViewportContainer
     // The cursor's target before any press: the occurrence under it, or none.
     public event Action<Selection?,Vector2>? Hovered;
     bool menuHeld;
-    Occurrence? highlighted;
-    // A local tint on the pointed mark; it reads and changes no domain state.
-    static readonly StandardMaterial3D Highlight=new() { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,
-        AlbedoColor=new(0xF9/255f,0xC8/255f,0x0E/255f,.28f),Transparency=BaseMaterial3D.TransparencyEnum.Alpha };
+    // The pointed-at and selected things show the looks their marks carry;
+    // switching reads and changes no domain state.
+    Selection? pointed,selected;
+    Occurrence? pointedThing,selectedThing;
     public event Action? PresentationChanged;
     public int Rebuilt { get; private set; }
     public int Count => occurrences.Count;
@@ -121,6 +127,23 @@ public partial class ScenePanel : SubViewportContainer
         new Vector3(-size.X,-size.Y,size.Z)/2,new Vector3(size.X,-size.Y,size.Z)/2,
         new Vector3(-size.X,size.Y,size.Z)/2,new Vector3(size.X,size.Y,size.Z)/2];
     static readonly (int A, int B)[] Edges = [(0,1),(2,3),(4,5),(6,7),(0,2),(1,3),(4,6),(5,7),(0,4),(1,5),(2,6),(3,7)];
+    // A wire box draws its edges whole; a corner box draws a third of each edge from both corners.
+    static (Vector3 A,Vector3 B)[] Lines(string kind,Vector3[] c) => kind switch {
+        "wire_box" => Edges.Select(e=>(c[e.A],c[e.B])).ToArray(),
+        "corner_box" => Edges.SelectMany(e=>new[]{(c[e.A],c[e.A].Lerp(c[e.B],1/3f)),(c[e.B],c[e.B].Lerp(c[e.A],1/3f))}).ToArray(),
+        _ => [] };
+    static StandardMaterial3D Look(SceneMark mark,SceneSurface surface)
+    {
+        // Below full opacity a surface is translucent; both sides already draw.
+        // A corner line fades along its length through its vertex alpha.
+        var colour=new Color(surface.Colour) with {A=surface.Opacity/1000f};bool fading=mark.Kind=="corner_box";
+        return new() {
+            ShadingMode = mark.Edges ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel,
+            AlbedoColor=colour,Metallic=surface.Metallic/1000f,Roughness=surface.Roughness/1000f,
+            EmissionEnabled=surface.Emission>0,Emission=colour,EmissionEnergyMultiplier=surface.Emission/1000f,
+            Transparency=fading||surface.Opacity<1000 ? BaseMaterial3D.TransparencyEnum.Alpha : BaseMaterial3D.TransparencyEnum.Disabled,
+            VertexColorUseAsAlbedo=fading,CullMode = BaseMaterial3D.CullModeEnum.Disabled };
+    }
     static float Finite(double value)
     { float result = (float)value; if (!float.IsFinite(result)) throw new FormatException("Scene coordinate exceeds the engine's numeric range."); return result; }
     static Basis RotationBasis(float x,float y,float z) => new Basis(Vector3.Back,z)*new Basis(Vector3.Up,y)*new Basis(Vector3.Right,x);
@@ -177,7 +200,53 @@ public partial class ScenePanel : SubViewportContainer
         if(world?.Advance(message)!=true)return false;
         ApplyFrame();processed(world.Acknowledgement());return true;
     }
-    void Apply(SceneMark[] marks,WorldProjection? projection)
+    void Apply(SceneMark[] marks,WorldProjection? projection){source=marks;Install(InMode(marks),projection);}
+    // Each shown thing has a mode, display by default. Another mode's model of
+    // one thing takes the place of that thing's own parts, where it stands,
+    // until it is withdrawn with null. Returns whether the model is drawn here.
+    public bool ShowMode(Selection thing,Term? model)
+    {
+        if(Resolve(thing) is not {} shown)return false;
+        if(model==null){if(modes.Remove(shown.Mark.Id))Install(InMode(source),world);return true;}
+        if(ModeParts(shown.Mark,model) is not {} parts)return false;
+        var before=modes.GetValueOrDefault(shown.Mark.Id);modes[shown.Mark.Id]=parts;
+        var next=InMode(source);var seen=new HashSet<string>();
+        // A thing whose other marks hang from a replaced part keeps its display.
+        if(next.All(m=>(m.Parent==null||seen.Contains(m.Parent))&&seen.Add(m.Id))){Install(next,world);return true;}
+        if(before==null)modes.Remove(shown.Mark.Id);else modes[shown.Mark.Id]=before;
+        return false;
+    }
+    // The model of one thing arrives under its own root group, which depicts
+    // it. Its parts move under the shown thing; the root's own pose is unused.
+    static SceneMark[]? ModeParts(SceneMark thing,Term model)
+    {
+        var marks=SceneMark.Decode(model);
+        if(marks.Length==0||marks[0].Kind!="group"||marks[0].Parent!=null||marks[0].Subject?.ToString()!=thing.Subject!.ToString())return null;
+        string root=marks[0].Id;
+        bool Inside(string? id)=>id!=null&&(id==root||id.StartsWith(root+"/"));
+        if(marks.Skip(1).Any(m=>m.Subject!=null||m.Id==root||!Inside(m.Id)||!Inside(m.Parent)))return null;
+        Term Moved(Term id)=>Term.Text(thing.Id+id.TextValue[root.Length..]);
+        var stand=Term.Call("mark",Term.Text(thing.Id),Term.Text("group"),Term.List(),Term.Parse("transform(0,0,0,0,0,0)"),Term.Atom("no_surface"),Term.Atom("unlabelled"),Term.Atom("depicts_nothing"));
+        // Decoding the moved terms keeps one validation and makes an unchanged part compare equal to the one already drawn.
+        return SceneMark.Decode(Term.List(model.Items.Skip(1).Select(term=>{
+            var a=term.Require("mark",7);var at=a[3].Require("relative",2);
+            return Term.Call("mark",Moved(a[0]),a[1],a[2],Term.Call("relative",Moved(at[0]),at[1]),a[4],a[5],a[6]);
+        }).Prepend(stand).ToArray())).Skip(1).ToArray();
+    }
+    SceneMark[] InMode(SceneMark[] marks)
+    {
+        if(modes.Count==0)return marks;
+        var byId=marks.ToDictionary(m=>m.Id);
+        foreach(var gone in modes.Keys.Where(id=>!byId.ContainsKey(id)).ToArray())modes.Remove(gone);
+        string? ThingOf(SceneMark mark){while(mark.Subject==null){if(mark.Parent==null)return null;mark=byId[mark.Parent];}return mark.Id;}
+        var shown=new List<SceneMark>();
+        foreach(var mark in marks) {
+            if(mark.Subject==null&&ThingOf(mark) is {} thing&&modes.ContainsKey(thing))continue;
+            shown.Add(mark);if(modes.TryGetValue(mark.Id,out var parts))shown.AddRange(parts);
+        }
+        return shown.ToArray();
+    }
+    void Install(SceneMark[] marks,WorldProjection? projection)
     {
         var next = new Dictionary<string, Occurrence>();
         // Validate and convert the complete candidate before changing the scene.
@@ -193,22 +262,22 @@ public partial class ScenePanel : SubViewportContainer
             if (occurrences.TryGetValue(mark.Id, out var old) && old.Mark.Signature == mark.Signature && Subject(old)?.ToString()==NextSubject(mark)?.ToString()) { next.Add(mark.Id, old); continue; }
             changed = true; var node = new Node3D { Name = "occurrence" }; root.AddChild(node);
             var corners = mark.Kind == "group" ? [] : Corners(sizes[mark.Id]);
+            var lines = Lines(mark.Kind,corners);MeshInstance3D? shape=null;
+            var looks = mark.Looks.Select(surface=>(Material)Look(mark,surface)).ToArray();
             if (mark.Kind != "group") {
                 Mesh mesh;
-                if (mark.Kind == "wire_box") {
-                    var lines = new ImmediateMesh(); lines.SurfaceBegin(Mesh.PrimitiveType.Lines);
-                    foreach (var edge in Edges) { lines.SurfaceAddVertex(corners[edge.A]); lines.SurfaceAddVertex(corners[edge.B]); }
-                    lines.SurfaceEnd(); mesh = lines;
+                if (mark.Edges) {
+                    var drawn = new ImmediateMesh(); drawn.SurfaceBegin(Mesh.PrimitiveType.Lines);
+                    foreach (var line in lines) {
+                        if(mark.Kind=="corner_box")drawn.SurfaceSetColor(Colors.White);
+                        drawn.SurfaceAddVertex(line.A);
+                        if(mark.Kind=="corner_box")drawn.SurfaceSetColor(new Color(1,1,1,0));
+                        drawn.SurfaceAddVertex(line.B);
+                    }
+                    drawn.SurfaceEnd(); mesh = drawn;
                 } else if (mark.Kind=="sphere") mesh=new SphereMesh { Radius=sizes[mark.Id].X/2,Height=sizes[mark.Id].X };
                 else mesh = new BoxMesh { Size = sizes[mark.Id] };
-                // Below full opacity a surface is translucent; both sides already draw.
-                var colour=new Color(mark.Colour) with {A=mark.Opacity/1000f};
-                node.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = new StandardMaterial3D {
-                    ShadingMode = mark.Kind=="wire_box" ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel,
-                    AlbedoColor=colour,Metallic=mark.Metallic/1000f,Roughness=mark.Roughness/1000f,
-                    EmissionEnabled=mark.Emission>0,Emission=colour,EmissionEnergyMultiplier=mark.Emission/1000f,
-                    Transparency=mark.Opacity<1000 ? BaseMaterial3D.TransparencyEnum.Alpha : BaseMaterial3D.TransparencyEnum.Disabled,
-                    CullMode = BaseMaterial3D.CullModeEnum.Disabled } });
+                shape=new MeshInstance3D { Mesh = mesh, MaterialOverride = looks[0] };node.AddChild(shape);
             }
             if(mark.Label.Kind!="atom" || mark.Label.Name!="unlabelled") {
                 var label=mark.Label.Require("label",2);float y=label[1].TextValue switch {"above"=>sizes[mark.Id].Y/2+.15f,"below"=>-sizes[mark.Id].Y/2-.15f,_=>0};
@@ -216,7 +285,7 @@ public partial class ScenePanel : SubViewportContainer
                     Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Modulate=new Color("#F5F1EB"),Shaded=false});
             }
             long identity=old!=null && Subject(old)?.ToString()==NextSubject(mark)?.ToString() ? old.Identity : ++occurrenceIdentity;
-            next.Add(mark.Id, new(mark, node, corners,identity)); Rebuilt++;
+            next.Add(mark.Id, new(mark, node, corners,lines,identity,shape,looks)); Rebuilt++;
         }
         foreach (var item in next.Values) {
             var parent = item.Mark.Parent == null ? root : next[item.Mark.Parent].Node;
@@ -227,8 +296,9 @@ public partial class ScenePanel : SubViewportContainer
         }
         foreach (var old in occurrences.Values) if (!next.TryGetValue(old.Mark.Id, out var current) || old.Node != current.Node) { old.Node.GetParent()?.RemoveChild(old.Node); old.Node.QueueFree(); changed = true; }
         occurrences.Clear(); foreach (var pair in next) occurrences.Add(pair.Key, pair.Value);
-        world = projection;
+        world = projection;drawn=marks;
         available=true;
+        ShowLooks(true);
         if (changed) RequestFraming();
         MountCamera();
         if(changed||availabilityChanged)PresentationChanged?.Invoke();
@@ -236,7 +306,7 @@ public partial class ScenePanel : SubViewportContainer
     public void ApplyFrame()
     {
         if (world == null) return;
-        var transforms = Transforms(world.Marks,world);
+        var transforms = Transforms(drawn,world);
         bool changed=false;
         foreach (var item in occurrences.Values) {
             var pose=item.Mark.Parent == null ? transforms[item.Mark.Id] : transforms[item.Mark.Parent].AffineInverse() * transforms[item.Mark.Id];
@@ -303,9 +373,9 @@ public partial class ScenePanel : SubViewportContainer
         direction=direction.Normalized();
         Occurrence? hit = null; float nearest = float.PositiveInfinity;
         foreach (var item in occurrences.Values.Where(o => o.Corners.Length > 0)) {
-            if (item.Mark.Kind == "wire_box") {
-                foreach (var edge in Edges) {
-                    var a = item.Node.GlobalTransform * item.Corners[edge.A]; var b = item.Node.GlobalTransform * item.Corners[edge.B];
+            if (item.Mark.Edges) {
+                foreach (var line in item.Lines) {
+                    var a = item.Node.GlobalTransform * line.A; var b = item.Node.GlobalTransform * line.B;
                     if(screenPoint is not Vector2 point) {
                         var closest=Geometry3D.GetClosestPointsBetweenSegments(origin,origin+direction*camera.Far,a,b);
                         float distance=(closest[0]-origin).Dot(direction);
@@ -337,11 +407,12 @@ public partial class ScenePanel : SubViewportContainer
                 if (near <= far && near < nearest) { nearest = near; hit = item; }
             }
         }
-        return hit!=null && Subject(hit) is {} subject ? new(this,hit.Mark.Id,hit.Identity,subject) : null;
+        return Thing(hit) is {} thing ? new(this,thing.Mark.Id,thing.Identity,thing.Mark.Subject!) : null;
     }
     Term? Subject(Occurrence? item)
     { while (item!=null) { if (item.Mark.Subject!=null) return item.Mark.Subject; item=item.Mark.Parent==null ? null : occurrences[item.Mark.Parent]; } return null; }
-    public string[] SubjectIds(Term subject) => occurrences.Values.Where(o=>o.Corners.Length>0 && Subject(o)?.ToString()==subject.ToString()).Select(o=>o.Mark.Id).ToArray();
+    // One id per shown thing: the mark that names the subject, whatever parts its recipe draws beneath.
+    public string[] SubjectIds(Term subject) => occurrences.Values.Where(o=>o.Mark.Subject?.ToString()==subject.ToString()).Select(o=>o.Mark.Id).ToArray();
     public string? SubjectLabel(Term subject)
     {
         if(!available)return null;
@@ -394,18 +465,27 @@ public partial class ScenePanel : SubViewportContainer
             AcceptEvent();
         }
     }
-    public void Suspend(){framing++;bool was=available;available=false;ReleaseInput();Controlled=false;world=null;HideForm();if(was)PresentationChanged?.Invoke();}
+    public void Suspend(){framing++;bool was=available;available=false;ReleaseInput();Controlled=false;world=null;HideForm();ShowLooks();if(was)PresentationChanged?.Invoke();}
     public void Withdraw()
-    { Suspend();foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) { item.Node.GetParent()?.RemoveChild(item.Node); item.Node.QueueFree(); } occurrences.Clear(); }
+    { Suspend();foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) { item.Node.GetParent()?.RemoveChild(item.Node); item.Node.QueueFree(); } occurrences.Clear();source=drawn=[];modes.Clear(); }
     internal void Select(Selection selected){if(Resolve(selected)!=null)Selected?.Invoke(selected);}
-    public void Outline(Selection? selected)
+    public void PointAt(Selection? target){pointed=target;ShowLooks();}
+    public void ShowSelected(Selection? target){selected=target;ShowLooks();}
+    // A shown thing is the mark naming a subject, with the marks beneath it
+    // that name none. All of them change look together; selected wins.
+    Occurrence? Thing(Occurrence? item)
+    { while(item!=null&&item.Mark.Subject==null)item=item.Mark.Parent==null ? null : occurrences[item.Mark.Parent]; return item; }
+    Occurrence? Thing(Selection? target)=>target==null ? null : Resolve(target);
+    IEnumerable<Occurrence> Parts(Occurrence thing)=>occurrences.Values.Where(o=>ReferenceEquals(Thing(o),thing));
+    void ShowLooks(bool rebuilt=false)
     {
-        var next=selected==null ? null : Resolve(selected);
-        if(ReferenceEquals(next,highlighted))return;
-        foreach(var item in new[]{highlighted,next})
-            if(item!=null&&IsInstanceValid(item.Node))
-                foreach(var mesh in item.Node.FindChildren("*","GeometryInstance3D",true,false).OfType<GeometryInstance3D>().Prepend(item.Node as GeometryInstance3D).OfType<GeometryInstance3D>())
-                    mesh.MaterialOverlay=item==next ? Highlight : null;
-        highlighted=next;
+        var point=Thing(pointed);var chosen=Thing(selected);
+        if(!rebuilt&&ReferenceEquals(point,pointedThing)&&ReferenceEquals(chosen,selectedThing))return;
+        pointedThing=point;selectedThing=chosen;
+        foreach(var item in occurrences.Values.Where(o=>o.Looks.Length==3)) {
+            var thing=Thing(item);int look=thing==null ? 0 : ReferenceEquals(thing,chosen) ? 2 : ReferenceEquals(thing,point) ? 1 : 0;
+            if(item.Look!=look){item.Look=look;item.Shape!.MaterialOverride=item.Looks[look];}
+        }
     }
+    internal int ShownLook(string id)=>occurrences[id].Look;
 }

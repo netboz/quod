@@ -41,8 +41,21 @@ public sealed record ScenePose(BigInteger[]? Transform, ulong? Body, ulong Revis
         return new(values, null, 0, false);
     }
 }
-public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, ScenePose Pose, string Colour, int Metallic, int Roughness, int Emission, int Opacity, Term Label, Term? Subject, string Signature)
+public sealed record SceneSurface(string Colour, int Metallic, int Roughness, int Emission, int Opacity)
 {
+    public static SceneSurface Decode(Term term)
+    {
+        var surface = term.Require("surface", 6); string colour = surface[0].TextValue;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(colour, "^#[0-9A-F]{6}$") ||
+            surface.Skip(1).Take(4).Any(v => v.Integer < 0 || v.Integer > 1000) || surface[5].Items.Length != 0)
+            throw new FormatException("Unsupported or invalid scene surface.");
+        return new(colour, (int)surface[1].Integer, (int)surface[2].Integer, (int)surface[3].Integer, (int)surface[4].Integer);
+    }
+}
+// Looks holds one surface, or three: display, pointed at, selected. A group has none.
+public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, ScenePose Pose, SceneSurface[] Looks, Term Label, Term? Subject, string Signature)
+{
+    public bool Edges => Kind is "wire_box" or "corner_box";
     public static SceneMark[] Decode(Term scene)
     {
         scene.Ground(); var seen = new HashSet<string>();
@@ -56,26 +69,19 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
             }
             var transform = ScenePose.Decode(pose);
             string[] fields = kind switch {
-                "box" or "wire_box" => ["width", "height", "depth"],
+                "box" or "wire_box" or "corner_box" => ["width", "height", "depth"],
                 "sphere" => ["diameter"],
                 "group" => [], _ => throw new FormatException("Unsupported scene geometry: " + kind) };
             if (a[2].Items.Length != fields.Length) throw new FormatException("Wrong geometry field count.");
             var sizes = a[2].Items.Select((row, i) => {
                 var f = row.Require("f", 2);
                 if (f[0].TextValue != fields[i]) throw new FormatException("Wrong geometry field order.");
-                return Length.Decode(f[1], kind == "wire_box");
+                return Length.Decode(f[1], kind is "wire_box" or "corner_box");
             }).ToArray();
-            string colour = "#6A90D9";
-            int metallic=0,roughness=0,emission=0,opacity=1000;
+            SceneSurface[] looks = [];
             if (kind == "group") {
                 if (a[4].Kind != "atom" || a[4].Name != "no_surface") throw new FormatException("Group has a surface.");
-            } else {
-                var surface = a[4].Require("surface", 6); colour = surface[0].TextValue;
-                if (!System.Text.RegularExpressions.Regex.IsMatch(colour, "^#[0-9A-F]{6}$") ||
-                    surface.Skip(1).Take(4).Any(v => v.Integer < 0 || v.Integer > 1000) || surface[5].Items.Length != 0)
-                    throw new FormatException("Unsupported or invalid scene surface.");
-                metallic=(int)surface[1].Integer;roughness=(int)surface[2].Integer;emission=(int)surface[3].Integer;opacity=(int)surface[4].Integer;
-            }
+            } else looks = a[4].Name == "surfaces" ? a[4].Require("surfaces", 3).Select(SceneSurface.Decode).ToArray() : [SceneSurface.Decode(a[4])];
             var label = a[5];
             if (label.Kind != "atom" || label.Name != "unlabelled") {
                 var l = label.Require("label", 2); _ = l[0].TextValue;
@@ -91,7 +97,7 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
                     ? local : Term.Call("entity_ref", depicts);
             }
             if (transform.Body != null && subject == null) throw new FormatException("A body occurrence requires an exact subject.");
-            return new SceneMark(id, kind, sizes, parent, transform, colour, metallic, roughness, emission, opacity, label, subject, term.ToString());
+            return new SceneMark(id, kind, sizes, parent, transform, looks, label, subject, term.ToString());
         }).ToArray();
     }
 }

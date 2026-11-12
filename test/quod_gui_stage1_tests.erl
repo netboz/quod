@@ -2,27 +2,31 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([with_forms/1]).
 
-selected_exterior_uses_exact_shared_scene_test_() ->
+created_spaces_show_the_shared_marker_test_() ->
     {timeout,90,fun() -> with_forms(fun(C=#{namespace:=Ns}) ->
         Subject=subject(<<"quod:space">>,class_ref,space), Room=subject(Ns,entity_ref,room),
         Pose={transform,1000,2000,3000,15,35,75}, Placement={at,Room,Pose},
         replace_placement_options(Ns,[{option,near_agent,<<"Near agent">>},
             {option,unplaced,<<"Unplaced">>},{option,Placement,<<"Rotated room">>}]),
         [Finite,Exact,Infinite]=views(C,Ns,Subject),
-        Defaults=fields(element(7,Finite),[{placement_field(Ns),Placement},{{space_exterior,finite},wireframe}]),
+        Defaults=fields(element(7,Finite),[{placement_field(Ns),Placement}]),
         {Reply,Bytes}=submit(C,Ns,Finite,Defaults),{Ref,_}=created(C,Reply,Bytes,space),
         holds(Ns,{attribute,element(4,Ref),dimensions,default_dimensions()}),
+        holds(Ns,{attribute,element(4,Ref),exterior,solid}),
         quod_space_creation_tests:with_models(C,fun() ->
-            Marks=scene(C,Ns,room), assert_wire(Marks,Ref,Pose,[100000,100000,100000]),
+            assert_marker(scene(C,Ns,room),Ref,Pose,{label,<<"Space">>,<<"above">>}),
             Values=fields(element(7,Exact),[{space_name,<<>>},{space_unit,<<"mm">>},
                 {{space_length,width},1},{{space_divisor,width},3},
                 {{space_length,height},1001},{{space_divisor,height},1},
                 {{space_length,depth},1001},{{space_divisor,depth},2},
-                {placement_field(Ns),Placement},{{space_exterior,exact},wireframe}]),
+                {placement_field(Ns),Placement}]),
             {Rational,RationalBytes}=submit(C,Ns,Exact,Values),
             {RationalRef,_}=created(C,Rational,RationalBytes,space),
             holds(Ns,{attribute,element(4,RationalRef),name,<<>>}),
-            assert_wire(scene(C,Ns,room),RationalRef,Pose,[{'/',1,3},1001,{'/',1001,2}]),
+            holds(Ns,{attribute,element(4,RationalRef),dimensions,
+                {box,{q,{'/',1,3},<<"mm">>},{q,{'/',1001,1},<<"mm">>},{q,{'/',1001,2},<<"mm">>}}}),
+            %% The marker keeps one size whatever the space measures inside.
+            assert_marker(scene(C,Ns,room),RationalRef,Pose,unlabelled),
             %% Explicit unplaced creation succeeds even though an ordinary
             %% near-agent location read is unavailable, without admission.
             edit(Ns,{assertz,{space_assignment_state,personal,1,Room}}),
@@ -31,11 +35,12 @@ selected_exterior_uses_exact_shared_scene_test_() ->
             {UnplacedRef,_}=created(C,Unplaced,UnplacedBytes,space),
             ?assertEqual(unplaced,read(C,space({space_location,UnplacedRef,{'Location'}})))
         end),
-        {operation_view,create_infinite,_,_,Tree,_,_,_,_,_}=Infinite,
-        ?assertEqual([{option,solid,<<"Small solid cube">>},{option,contents,<<"Permitted contents">>}],
-            tree_property(Tree,{space_exterior,infinite},options)),
+        %% No form offers an outside choice, and a direct request for the
+        %% retired full-size one is refused.
+        [?assertEqual(undefined,tree_property(element(5,View),{space_exterior,Extent},options))
+            || {View,Extent} <- [{Finite,finite},{Exact,exact},{Infinite,infinite}]],
         Before=instances(Ns),
-        Goal={with_build_plan,[{attribute,dimensions,infinite},{attribute,exterior,wireframe}],{assert,{instance_of,space_class(),{'Space'}}}},
+        Goal={with_build_plan,[{attribute,exterior,wireframe}],{assert,{instance_of,space_class(),{'Space'}}}},
         {Instruction,_}=quod_personal_agent_tests:instruction(C,Goal),
         quod_personal_agent_tests:await_runtime_ready(Ns),
         ?assertMatch({ok,_,{normalized,{failed,_}}},quod_personal_agent_tests:instruct(C,submit,Instruction)),
@@ -44,17 +49,18 @@ selected_exterior_uses_exact_shared_scene_test_() ->
 
 fields(Values,Changes) ->
     lists:foldl(fun({Id,Value},Acc)->lists:keyreplace(Id,2,Acc,{field,Id,Value}) end,Values,Changes).
-default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
+default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
 instances(Ns) ->
     {ok,[#{'Rows':=Rows}],_}=quod_prolog:prove_ro(Ns,{findall,{'I'},{instance_of,space_class(),{'I'}},{'Rows'}}),Rows.
 scene(C,Ns,Space) ->
     read(C,space({world_view,subject(Ns,entity_ref,Space),playing,{'Marks'}})).
-assert_wire(Marks,{entity_ref,Ns,Anchor,Id},Pose,[W,H,D]) ->
+assert_marker(Marks,{entity_ref,Ns,Anchor,Id},Pose,Label) ->
     [Root]=[M||M={mark,_,<<"group">>,[],Pose0,_,_,{depicts,N,A,I}}<-Marks,
         {N,A,I,Pose0}=:={Ns,Anchor,Id,Pose}],
-    RootId=element(2,Root),
-    ?assertMatch([{mark,_,<<"wire_box">>,[{f,<<"width">>,W},{f,<<"height">>,H},{f,<<"depth">>,D}],
-        {relative,RootId,{transform,0,0,0,0,0,0}},_,_,_}],
+    RootId=element(2,Root), At={relative,RootId,{transform,0,0,0,0,0,0}},
+    Size=[{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
+    ?assertMatch([{mark,_,<<"box">>,Size,At,{surfaces,_,_,_},unlabelled,depicts_nothing},
+                  {mark,_,<<"corner_box">>,Size,At,{surfaces,_,_,_},Label,depicts_nothing}],
         [M||M={mark,_,_,_,{relative,Parent,_},_,_,_}<-Marks,Parent=:=RootId]).
 tree_property({component,Id,_,Properties,_},Id,Key) -> proplists:get_value(Key,[{K,V}||{property,K,V}<-Properties]);
 tree_property({component,_,_,_,Children},Id,Key) ->
@@ -88,7 +94,7 @@ authored_creation_recovery_test_() ->
         {Ref,Outcome} = created(C,Reply,Bytes,space),
         {entity_ref,Ns,_,Id} = Ref,
         holds(Ns,{attribute,Id,name,<<"Space">>}),
-        holds(Ns,{attribute,Id,dimensions,{box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}}),
+        holds(Ns,{attribute,Id,dimensions,default_dimensions()}),
         holds(Ns,{attribute,Id,owner,maps:get(human,C)}),
         fails(Ns,{gui_pending_question,{'_'},{'_'}}),
         %% Losing the first result, clearing browser journals and a new device

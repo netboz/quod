@@ -24,7 +24,7 @@ attribute(example_name, label, <<"Name">>).
 attribute(example_name, required, true).
 attribute(space_extent, label, <<"Interior">>).
 attribute(space_extent, options, [option(infinite, <<"Infinite">>),
-    option(box(q(100, <<"m">>), q(100, <<"m">>), q(100, <<"m">>)), <<"100 metres">>)]).
+    option(box(q(10, <<"m">>), q(10, <<"m">>), q(10, <<"m">>)), <<"10 metres">>)]).
 attribute(create, label, <<"Create">>).
 gui_children(space_create, [example_name, space_extent, create]).
 gui_initial(space_create, example_name, Name) :-

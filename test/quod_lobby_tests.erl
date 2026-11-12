@@ -1180,10 +1180,11 @@ assert_ontology_choices(Choices, {ontology_ref, TargetNs, TargetAnchor}) ->
                [{eidolon, Mode, contents,
                  {recipe, TargetNs, TargetAnchor, ontology_contents}}
                 || Mode <- [playing, edition]] ++
-               [{eidolon, Mode, Style,
-                 {recipe, Space, SpaceAnchor,
-                  case Style of solid -> space; wireframe -> space_wireframe; matrix -> space_matrix end}}
-                || Mode <- [playing, edition], Style <- [solid,wireframe,matrix]] ++
+               %% The space class names the shared marker of its pinned scene
+               %% vocabulary, and its own edition recipe built on it.
+               [{eidolon, playing, solid, {recipe, <<"lobby-test-modelling">>,
+                                           quod_simplex:genesis_hash(<<"lobby-test-modelling">>), marker}},
+                {eidolon, edition, solid, {recipe, Space, SpaceAnchor, space_edition}}] ++
                [{eidolon, menu, default, {recipe, Space, SpaceAnchor, space_menu}} |
                 [{eidolon, {operation, instance}, Name, {recipe, Space, SpaceAnchor, Recipe}}
                  || {Name, Recipe} <- [{enter, space_enter}, {leave, space_leave},

@@ -51,10 +51,13 @@ explicit_and_near_agent_placement_test_() ->
                                                destination := Dest}) ->
         Room = ref(Dest, room), Local = ref(Ns, room),
         signed(C, inside(Room, ref(Ns,personal), {transform,200,300,400,0,45,0})),
+        %% Near the agent is two metres plus half the shared marker's depth,
+        %% read from the scene vocabulary: 400 - 2000 - 250.
+        with_models(C, fun() ->
         {Bindings, _, _} = create(C, Target, []),
         [{_, Space = {entity_ref, Target, _, Id}}, _] = Bindings,
         assignment(C, Target, Id, 1, Room),
-        holds(Target, {attribute, Id, transform, {transform, 200,300,-51600,0,45,0}}),
+        holds(Target, {attribute, Id, transform, {transform, 200,300,-1850,0,45,0}}),
         holds(Dest, {space_placement, room, Space, 1}),
         {Explicit, _, _} = create(C, Target, [], placement(Local)),
         [{_, ExplicitRef = {entity_ref, Target, _, ExplicitId}}, _] = Explicit,
@@ -62,18 +65,18 @@ explicit_and_near_agent_placement_test_() ->
         holds(Ns, {space_placement, room, ExplicitRef, 1}),
         fails(Dest, {space_placement, room, ExplicitRef, {'_'}}),
         %% Execute the complete existing scene/recipe/modelling/rendering path.
-        with_models(C, fun() ->
-            Marks = read(C, space({world_view,ref(Ns,room),playing,{'Marks'}})),
-            ?assertMatch([{mark,_,<<"group">>,[],{transform,10,20,30,0,0,0},
-                          no_surface,unlabelled,{depicts,Target,_,ExplicitId}},
-                         {mark,_,<<"box">>,[{f,<<"width">>,500},{f,<<"height">>,500},
-                            {f,<<"depth">>,500}],_,_,_,_}], Marks)
-        end),
+        Marks = read(C, space({world_view,ref(Ns,room),playing,{'Marks'}})),
+        Size = [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
+        ?assertMatch([{mark,_,<<"group">>,[],{transform,10,20,30,0,0,0},
+                      no_surface,unlabelled,{depicts,Target,_,ExplicitId}},
+                     {mark,_,<<"box">>,Size,_,{surfaces,_,_,_},unlabelled,_},
+                     {mark,_,<<"corner_box">>,Size,_,{surfaces,_,_,_},{label,<<"Space">>,<<"above">>},_}], Marks),
         %% Placement is one-time, not a subscription following A.
         edit(Ns, {retract, {attribute,personal,transform,{'_'}}}),
-        holds(Target, {attribute, Id, transform, {transform,200,300,-51600,0,45,0}}),
+        holds(Target, {attribute, Id, transform, {transform,200,300,-1850,0,45,0}}),
         denied_creation(C, Target, []),
         create(C, Target, [], placement(Local))
+        end)
     end) end}.
 
 explicit_owner_and_class_defaults_test_() ->
@@ -219,7 +222,7 @@ placement(Ref) -> {at,Ref,{transform,10,20,30,0,0,0}}.
 space_class() -> {':',quod,{':',space,space}}.
 space(Goal) -> {'::',<<"quod:space">>,Goal}.
 inside(Destination,Entity,Pose) -> space({goal,{inside,Destination,Entity,Pose}}).
-default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
+default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
 mixed_dimensions() -> {box,{q,{'/',1,3},<<"ft">>},{q,200,<<"cm">>},{q,3,<<"km">>}}.
 creation_goal(Inputs,Placement) ->
     {creation_result,Inputs,Placement,{'Ref'},{'Name'}}.

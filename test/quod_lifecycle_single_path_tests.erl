@@ -1625,7 +1625,15 @@ enrollment_crash_custody(Stage) ->
                     {node_identity_allocation, Key, {'Ref'}, {'_'}}),
                 {ok, Blob} = quod_wire_term:encode_canonical(Ref),
                 case Stage of
-                    after_allocation -> ok = quod_identity:retain_node_allocation(Dir, Blob);
+                    after_allocation ->
+                        ok = quod_identity:retain_node_allocation(Dir, Blob),
+                        %% An application start reads this pointer before the
+                        %% root's storage is configured. The allocation stays
+                        %% pending for enrollment to resume; the node starts.
+                        {ok, Desired} = application:get_env(quod, namespace_desired),
+                        application:set_env(quod, namespace_desired, #{content => #{}, brahms => #{}}),
+                        try ?assertEqual({pending, Blob}, quod_node_actor:bootstrap())
+                        after application:set_env(quod, namespace_desired, Desired) end;
                     after_commit -> ok
                 end
         end,

@@ -231,6 +231,10 @@ pending_bootstrap(Blob) ->
                     end;
                 _ -> {pending, Blob}
             end;
+        %% An application start reads the pointer before root's storage is
+        %% configured. The allocation stays pending; enrollment resumes it
+        %% through this same function once root is up.
+        {error, root_unavailable} -> {pending, Blob};
         {error, _} = Error -> Error
     end.
 

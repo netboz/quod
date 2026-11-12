@@ -67,7 +67,9 @@ waiting, refused, unresolved, awaiting route/identity, complete, and errors.
 A missing pointer with an existing allocation is an explicit data-loss error;
 operator recovery must verify and bind that original reference using the
 existing `quod_node_actor:bind/4` seam. A completed unchanged restart creates nothing and rewrites no
-identity file. Readiness uses existing owner notifications and absolute
+identity file. A restart with an allocation still awaiting activation reads
+the pointer before root's storage is configured: the allocation stays pending,
+the node starts, and enrollment resumes it once root is up. Readiness uses existing owner notifications and absolute
 request deadlines; it does not authorize replay of an uncertain write.
 
 ## Advertisements

@@ -105,7 +105,13 @@ public sealed class Accounts(SignedSession session, LocalStore store)
         Prepared = null; setupOffer = null; StorageDescription = "";
     }
     public List<JsonNode> Outcomes { get; } = [];
+    // Original outcomes were read again; what was unknown may now be known.
+    public event Action? Resolved;
     public async Task Resolve(CancellationToken cancellation)
+    {
+        try { await ResolveOriginals(cancellation); } finally { Resolved?.Invoke(); }
+    }
+    async Task ResolveOriginals(CancellationToken cancellation)
     {
         foreach (var work in Pending().ToArray()) {
             var reply = await session.Resolve(work, cancellation); Outcomes.Add(reply.DeepClone()); Apply(reply, work);

@@ -152,7 +152,8 @@ quoted_symbol(Name) ->
 source_bytes(Bytes, request) -> [source_hex(B) || <<B>> <= Bytes];
 source_bytes(Bytes, value) -> [source_character(B, $") || <<B>> <= Bytes].
 
-source_character(C, Quote) when C =:= Quote; C =:= $\\ -> [$\\, C];
+source_character(C, Quote) when C =:= Quote -> source_hex(C);
+source_character($\\, _Quote) -> "\\\\";
 source_character(C, _Quote) when C >= 32, C =< 126 -> C;
 source_character(C, _Quote) -> source_hex(C).
 

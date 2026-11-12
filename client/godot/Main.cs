@@ -32,7 +32,7 @@ public partial class Main : Control
     readonly PanelContainer subjectPanel=new() {Name="subject-panel",Visible=false},attentionPanel=new() {Name="attention-panel",Visible=false},
         localPanel=new() {Name="local-panel",Visible=false};
     // Plain opaque text on tinted glass, the house panel tokens.
-    readonly StyleBoxFlat glass=new() {BgColor=new(0x19/255f,0x2B/255f,0x32/255f,.92f),BorderColor=new(0x84/255f,0x8F/255f,0xA5/255f,.5f),
+    readonly StyleBoxFlat glass=new() {BgColor=new(0x19/255f,0x2B/255f,0x32/255f,SpatialGui.TintedPanel),BorderColor=new(0x84/255f,0x8F/255f,0xA5/255f,.5f),
         BorderWidthLeft=1,BorderWidthTop=1,BorderWidthRight=1,BorderWidthBottom=1,CornerRadiusTopLeft=12,CornerRadiusTopRight=12,
         CornerRadiusBottomLeft=12,CornerRadiusBottomRight=12,ContentMarginLeft=16,ContentMarginRight=16,ContentMarginTop=12,ContentMarginBottom=12};
     bool dockLeft;
@@ -44,6 +44,7 @@ public partial class Main : Control
     readonly PanelContainer loginView=new() {Name="login"};
     readonly StyleBoxFlat loginBackdrop=new() {BgColor=new(11f/255,57f/255,84f/255),ExpandMarginLeft=28,ExpandMarginRight=28,ExpandMarginTop=22,ExpandMarginBottom=22};
     readonly Label loginStatus=new() {Name="login-status",HorizontalAlignment=HorizontalAlignment.Center,AutowrapMode=TextServer.AutowrapMode.WordSmart};
+    readonly Label controllerNotice=new() {Name="controller-notice",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     readonly Label endpointLabel=new() {Text="Node address"};
     Control workspaceShell=null!;
     readonly VBoxContainer connectionDetails=new() { Visible=false };
@@ -53,8 +54,6 @@ public partial class Main : Control
     bool home=true;
     // How long the last pie took from opening to its authored contents; qualification telemetry.
     long? pieReadyMs;
-    // A headset present at launch means VR after sign-in, until the user leaves it.
-    bool vrLeft;
     readonly Label connectionTitle=new() {Name="connection-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     readonly Label connectionHelp=new() {Name="connection-help",AutowrapMode=TextServer.AutowrapMode.WordSmart};
     bool showConnection;
@@ -66,14 +65,16 @@ public partial class Main : Control
     CancellationTokenSource? action;
     Task activeAction = Task.CompletedTask;
     Task backupWork = Task.CompletedTask;
-    Window? backupDialog;
+    VBoxContainer? backupDialog;
     CancellationTokenSource? backupCancellation;
     long incarnation;
     bool disposed, closing, released;
-    bool busy, worldAccepted;
-    string state = "offline";
+    bool busy=true, worldAccepted;
+    string state = "starting";
     // The last status sentence; the HUD strip and the login card show it.
-    string statusText = "";
+    string statusText = "Starting Quod…";
+    // The space view's own sentence; an accepted space clears that one only.
+    string worldSentence = "";
     readonly Label identityLabel = new() { Name = "identity", AutowrapMode = TextServer.AutowrapMode.WordSmart };
     readonly Label location = new() { Name = "location", AutowrapMode = TextServer.AutowrapMode.WordSmart };
     readonly Label controllers = new() { Name = "controllers", AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -111,10 +112,13 @@ public partial class Main : Control
             StretchMode=TextureRect.StretchModeEnum.KeepAspectCentered,MouseFilter=MouseFilterEnum.Ignore});
         place.AddChild(placeTitle);
         foreach(var panel in new[]{subjectPanel,attentionPanel,localPanel})panel.AddThemeStyleboxOverride("panel",glass);
+        gui.AppearancePreferencesChanged+=()=>glass.BgColor=glass.BgColor with {A=gui.PanelOpacity};
         subjectPanel.AddChild(panelColumn);panelColumn.AddChild(visualHost);panelColumn.AddChild(subjectHost);
         attentionPanel.AddChild(attentionHost);localPanel.AddChild(body);
         loginView.AddThemeStyleboxOverride("panel",loginBackdrop);margin.AddChild(loginView);
-        var centre=new CenterContainer();loginView.AddChild(centre);
+        var scroll=new ScrollContainer { Name="login-scroll",HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true };
+        loginView.AddChild(scroll);
+        var centre=new CenterContainer { SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill };scroll.AddChild(centre);
         var card=new PanelContainer {Name="login-card",CustomMinimumSize=new(400,0)};centre.AddChild(card);
         card.AddThemeStyleboxOverride("panel",new StyleBoxFlat {BgColor=new(1,1,1,.06f),BorderColor=new(1,1,1,.14f),
             BorderWidthLeft=1,BorderWidthTop=1,BorderWidthRight=1,BorderWidthBottom=1,
@@ -126,6 +130,15 @@ public partial class Main : Control
         connectionTitle.ThemeTypeVariation="Title";connectionTitle.HorizontalAlignment=HorizontalAlignment.Center;
         connectionHelp.HorizontalAlignment=HorizontalAlignment.Center;connectionHelp.Modulate=new(1,1,1,.8f);
         connectionShell.AddChild(connectionTitle);connectionShell.AddChild(connectionHelp);
+        connectionShell.AddChild(controllerNotice);
+        AddLocal(connectionShell,"retry-controllers","Retry controller models",()=>xr.RetryAppearances());
+        AddLocal(connectionShell,"connection-details","Options",()=>connectionDetails.Visible=!connectionDetails.Visible);
+        buttons["connection-details"].CustomMinimumSize=new(0,48);
+        connectionShell.AddChild(connectionDetails);connectionDetails.AddChild(identityLabel);
+        connectionDetails.AddChild(new Label { Text="Your own key stays on this device. Trust this server only if you expected it to change.",AutowrapMode=TextServer.AutowrapMode.WordSmart });
+        Add(connectionDetails, "forget-node-key", "Trust this server", ForgetNodeKey);
+        Add(connectionDetails, "export-backup", "Export encrypted backup", () => { BackupDialog(true); return Task.CompletedTask; });
+        connectionDetails.AddChild(location);connectionDetails.AddChild(controllers);
         connectionShell.AddChild(endpointLabel);connectionShell.AddChild(endpoint);
         var primary=new VBoxContainer();connectionShell.AddChild(primary);
         Add(primary, "create-key", "Create my key", CreateKey); Add(primary, "connect", "Sign in", Connect);
@@ -133,16 +146,10 @@ public partial class Main : Control
         loginStatus.Modulate=new(1,1,1,.85f);connectionShell.AddChild(loginStatus);
         var links=new HBoxContainer {Alignment=BoxContainer.AlignmentMode.Center};connectionShell.AddChild(links);
         Add(links, "import-backup", "Import a backup", () => { BackupDialog(false); return Task.CompletedTask; });
-        Add(links, "disconnect", "Disconnect", () => { Disconnect(); return Task.CompletedTask; });
-        Add(links, "close-account", "Close", () => { showConnection=false; UpdateWorkspace(); return Task.CompletedTask; });
-        Add(links,"connection-details","Details",()=>{connectionDetails.Visible=!connectionDetails.Visible;return Task.CompletedTask;});
+        AddLocal(links, "disconnect", "Disconnect", Disconnect);
+        AddLocal(links, "close-account", "Close", () => { showConnection=false; UpdateWorkspace(); });
         foreach(var link in links.GetChildren().OfType<Button>())link.Flat=true;
         foreach(var step in primary.GetChildren().OfType<Button>())step.CustomMinimumSize=new(0,42);
-        connectionShell.AddChild(connectionDetails);connectionDetails.AddChild(identityLabel);
-        connectionDetails.AddChild(new Label { Text="Active keys use private local files, not a backup passphrase. Encrypted backups have a separate passphrase.",AutowrapMode=TextServer.AutowrapMode.WordSmart });
-        Add(connectionDetails, "forget-node-key", "Forget this node's key", ForgetNodeKey);
-        Add(connectionDetails, "export-backup", "Export encrypted backup", () => { BackupDialog(true); return Task.CompletedTask; });
-        connectionDetails.AddChild(location);connectionDetails.AddChild(controllers);
         Add(accountSetup, "register", "Create my account", Register);
         Add(accountSetup, "prepare", "Review my starting space", Prepare);
         Add(accountSetup, "setup", "Create my starting space", Setup);
@@ -150,6 +157,8 @@ public partial class Main : Control
         foreach(var step in accountSetup.GetChildren().OfType<Button>())step.CustomMinimumSize=new(0,42);
         scene = new() { Name = "space-scene" };
         models=new(async (asset,cancellation)=> {
+            var bundled="res://assets/models/"+asset.Digest+".bin";
+            if(Godot.FileAccess.FileExists(bundled))return Godot.FileAccess.GetFileAsBytes(bundled);
             var consumer=session??throw new InvalidOperationException("Connect before requesting controller resources.");
             using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
             ulong until=consumer.Deadline;if(until<=SignedSession.Now)throw new TimeoutException("Asset deadline expired.");
@@ -158,6 +167,7 @@ public partial class Main : Control
         });
         xr=new() { Name="openxr-input" };scene.Viewport.AddChild(xr);
         xr.Configure(scene,gui,models,()=>controls,()=>GuiOpen || gui.NativePressed,pie,hit=>OpenPie(hit,null));
+        xr.Install(ControllerMapping.SignIn);
         pie.Selected+=chosen=>{var occurrence=pieOccurrence;var at=pieAt;var source=pieView?.Target;ClosePie();Activate(chosen,occurrence,at,source);};
         gui.Surface.AddChild(hud);hud.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
         hud.Activated+=(command,control)=>{
@@ -200,6 +210,16 @@ public partial class Main : Control
         gui.Appearance.Changed+=UpdateWorkspace;
         shell.Resized+=UpdateWorkspace;
         endpoint.TextChanged += _ => SettingsChanged();
+        UpdateButtons(); Notify();
+        // Present the shared opening surface before accessing identity storage.
+        if(xr.Available)xr.Start();
+        activeAction=OpenProfile();
+    }
+    async Task OpenProfile()
+    {
+        if(DisplayServer.GetName()!="headless")await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
+        if(disposed || closing)return;
+        state="offline";
         try {
             string profile = Argument("--profile") ?? ProjectSettings.GlobalizePath("user://identity");
             store = new LocalStore(profile);
@@ -209,11 +229,13 @@ public partial class Main : Control
             } else statusText = "";
             if (Argument("--node") is string node) endpoint.Text = node;
         } catch (Exception error) { state = "storage-error"; statusText = error.Message; }
+        busy=false;
         UpdateButtons(); Notify();
-        if(key!=null)activeAction=Run(Connect);
+        var connecting=key!=null ? Run(Connect) : Task.CompletedTask;
         if (OS.GetCmdlineUserArgs().Contains("--qualification")) {
             var checks = new ExportChecks(); AddChild(checks); checks.Begin(this);
         }
+        await connecting;
     }
     static string? Argument(string name)
     {
@@ -274,7 +296,7 @@ public partial class Main : Control
     // placed in, else the agent itself. What each offers comes from its menu.
     bool OpenPie(ScenePanel.Selection? hit,Vector2? at,Term? target=null,MenuNode? local=null)
     {
-        if(session is not {IsExpired:false} consumer||accounts?.Human is not Actor human||accounts.Setup is not Term setup||operations?.IsWorking==true)return false;
+        if(backupDialog!=null||session is not {IsExpired:false} consumer||accounts?.Human is not Actor human||accounts.Setup is not Term setup||operations?.IsWorking==true)return false;
         Term subject;string name;
         if(local!=null){subject=Term.Atom("this_device");name=local.Label;}
         else if(target!=null){subject=target;name="this";}
@@ -329,10 +351,12 @@ public partial class Main : Control
     void Add(Godot.Container row, string name, string text, Func<Task> operation)
     {
         var button = SpatialGui.ActionButton(text,name); buttons.Add(name, button); row.AddChild(button);
-        button.Pressed += () => {
-            if (name == "disconnect") { Disconnect(); return; }
-            activeAction = Run(operation);
-        };
+        button.Pressed += () => activeAction = Run(operation);
+    }
+    void AddLocal(Godot.Container row, string name, string text, Action operation)
+    {
+        var button = SpatialGui.ActionButton(text,name); buttons.Add(name, button); row.AddChild(button);
+        button.Pressed += operation;
     }
     async Task Run(Func<Task> operation)
     {
@@ -369,8 +393,8 @@ public partial class Main : Control
         try {
             try { await connecting.Authenticate(Cancellation); }
             catch (HttpRequestException) when (connecting.Transport.KeyChanged) {
-                throw new InvalidOperationException("This node's key is not the one remembered for " + origin +
-                    ". If the node was deliberately re-founded, use \"Forget this node's key\" and connect again.");
+                throw new InvalidOperationException("This server looks different from the one you used before. Your own key is safe. " +
+                    "If you expected the rebuild, open Options and choose Trust this server, then Sign in.");
             }
             if (disposed || expected != incarnation) return;
             if (pinned.Length == 0) store.Update(s => s.NodeKeys[origin] = connecting.Transport.NodeKey);
@@ -413,9 +437,10 @@ public partial class Main : Control
     }
     void RequireSession()
     { if (session == null || accounts == null) throw new InvalidOperationException("Connect first."); }
-    async Task PresentAccount()
+    Task PresentAccount()
     {
         RequireSession(); var human = accounts!.Human!;
+        if(!accounts.Uncertain)statusText=worldSentence="Opening your space…";
         var setup = accounts.Setup!.Require("account", 6); var space = Actor.FromTerm(setup[2]);
         var personal = Actor.FromTerm(setup[1]);
         string Reference(Actor a) => $"{a.Namespace} / {a.InstanceText} @ {a.Anchor}";
@@ -432,6 +457,7 @@ public partial class Main : Control
                 throw new FormatException("Conflicting committed location.");
             bool same = navigation?.Revision == next.Revision && navigation.Location.ToString() == next.Location.ToString();
             bool wasAvailable = navigationAvailable; navigation = next; navigationAvailable=true;
+            scene.Stand(next.Space == null ? null : ScenePose.Decode(next.Location.Args[1]));
             location.Text = $"U: {Reference(human)}\nA: {Reference(personal)}\nS0: {Reference(space)}\nCurrent location: {next.Location} (assignment {next.Revision})";
             if (!same || !wasAvailable || (next.Space != null && worldView == null)) OpenWorld(consumer,human,next.Space);
             UpdateButtons(); Notify();
@@ -459,8 +485,7 @@ public partial class Main : Control
         if(representations?.Resume(consumer,accounts,store!)!=true)home=true;
         else home=returnHome;
         UpdateWorkspace();
-        if(xr.Available&&!xr.Running&&!vrLeft)ToggleVr();
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
     void RetireWorld()
     {
@@ -497,7 +522,7 @@ public partial class Main : Control
                 if (!navigationAvailable || navigation?.Space != view.Target) { WithdrawWorld("Committed location changed."); return; }
                 var next = scene.ApplyProjection(message,view.Target,human,ack=>_ = view.Send(ack)); projection=next; worldAccepted=true;
                 controls?.Present(next);
-                statusText="";
+                if(statusText==worldSentence)statusText="";
             } catch (Exception error) { WithdrawWorld(error.Message); }
             UpdateButtons(); Notify();
         };
@@ -519,29 +544,31 @@ public partial class Main : Control
         catch (Exception error) { if (!disposed && !closing) { WithdrawWorld(error.Message); Notify(); } }
     }
     void WithdrawWorld(string reason,bool refreshing=false)
-    { projection=null; controls?.Withdraw();xr.InvalidateWorld();if(refreshing)scene.Suspend();else scene.Withdraw();worldAccepted=false; statusText="Space unavailable: " + reason; UpdateButtons(); }
+    { projection=null; controls?.Withdraw();xr.InvalidateWorld();if(refreshing)scene.Suspend();else scene.Withdraw();worldAccepted=false; if(!refreshing)statusText=worldSentence="Space unavailable: " + reason; UpdateButtons(); }
     bool GuiOpen=>pie.IsOpen || representations?.IsVisibleInTree()==true || backupDialog!=null || (localControllers?.IsVisibleInTree()??false) || questions?.Expanded==true;
+    bool OpeningSpace=>accounts?.Setup!=null && !accounts.Uncertain && session is {IsExpired:false} && !worldAccepted &&
+        (!navigationAvailable || navigation?.Space!=null) && worldView?.Updating!=true;
     void UpdateWorkspace()
     {
-        workspaceContent.Visible=!gui.Spatial || xr.WorkspaceVisible;
         // In VR the strip lives on its own body-locked surface.
         var strip=gui.Spatial ? (Node)xr.HudSurface : gui.Surface;
         if(hud.GetParent()!=strip){hud.GetParent()?.RemoveChild(hud);strip.AddChild(hud);}
         bool ready=accounts?.Setup!=null&&session is {IsExpired:false};
-        loginView.Visible=showConnection || accounts?.Setup==null || accounts.Uncertain || session?.IsExpired==true;
+        loginView.Visible=backupDialog!=null || showConnection || OpeningSpace || accounts?.Setup==null || accounts.Uncertain || session?.IsExpired==true;
+        connectionShell.Visible=backupDialog==null;
         loginBackdrop.BgColor=loginBackdrop.BgColor with {A=ready ? .6f : 1};
         loginStatus.Text=statusText;loginStatus.Visible=statusText.Length>0;
         location.Visible=controllers.Visible=loginView.Visible;
         accountSetup.Visible=accounts!=null;
         // Status is one plain sentence in the HUD strip, never a permanent panel.
-        hud.Visible=ready&&!loginView.Visible;hud.Status=statusText;hud.AutoDim=!gui.Spatial;
+        hud.Visible=ready&&!loginView.Visible;hud.Status=statusText.Length>0 ? statusText : xr.AppearanceStatus;hud.AutoDim=!gui.Spatial;
         hud.Attention=System.Text.RegularExpressions.Regex.Match(questions?.Caption??"",@"\d+").Value;
         bool attention=ready&&questions?.Expanded==true;
         bool form=!attention&&!home&&ready&&representations!=null;
         bool subjectOnly=gui.Spatial&&form;
         bool preview=form&&representations!.Preview.Visible;
         bool previewNear=subjectOnly&&representations!.NearOccurrence&&ReferenceEquals(representations.Occurrence?.Owner,representations.Preview);
-        loginView.Visible&=!subjectOnly;
+        loginView.Visible&=!subjectOnly || backupDialog!=null;
         attentionPanel.Visible=attention;
         place.Visible=ready&&!gui.Spatial;
         placeTitle.Text=!navigationAvailable ? "Verifying where you are…" : navigation?.Space==null ? "You are nowhere yet"
@@ -551,6 +578,8 @@ public partial class Main : Control
         subjectPanel.Visible=subjectHost.Visible=form&&!previewNear;
         visualHost.Visible=preview&&(!gui.Spatial||previewNear||representations!.Selected?.Operation!=true);
         localPanel.Visible=!subjectOnly&&body.GetChildren().OfType<Control>().Any(c=>c.Visible);
+        bool workspaceVisible=loginView.Visible||attentionPanel.Visible||subjectPanel.Visible||visualHost.Visible||localPanel.Visible;
+        workspaceContent.Visible=!gui.Spatial || xr.WorkspaceVisible&&workspaceVisible;
         if(representations!=null){representations.Visible=form&&workspaceContent.Visible;representations.Preview.CustomMinimumSize=new(0,260);}
         Layout();
         xr.PresentForm(form&&!previewNear&&(!preview||representations!.Selected?.Operation==true));
@@ -602,7 +631,8 @@ public partial class Main : Control
             SubjectLabel=exact=>navigationAvailable&&navigation?.Space?.Entity.ToString()==exact.ToString() ? projection?.Name : scene.SubjectLabel(exact) };
         visualHost.AddChild(representations.Preview);gui.SetForm(representations);
         gui.PreviewFormHit=point=>representations?.NearOccurrence==true&&gui.Spatial&&ReferenceEquals(representations.Occurrence?.Owner,representations.Preview) ? representations.Preview.FormHit(point) : null;
-        operations=representations.Operations;operations.ClassChosen+=subject=>OpenSubjectPie(subject);representations.Changed+=Notify;representations.HiddenByUser+=ShowHome;return representations;
+        operations=representations.Operations;operations.ClassChosen+=subject=>OpenSubjectPie(subject);representations.Changed+=Notify;representations.HiddenByUser+=ShowHome;
+        operations.Closed+=validated=>{if(validated!=null){statusText="Done: "+validated;Notify();}};return representations;
     }
     void SettingsChanged()
     { if (session != null) Disconnect(); }
@@ -611,7 +641,7 @@ public partial class Main : Control
         if (store == null) throw new InvalidOperationException("Local identity storage is unavailable.");
         string origin = Transport.NodeOrigin(endpoint.Text);
         Disconnect(); store.Update(s => s.NodeKeys.Remove(origin));
-        statusText = "Forgot the key remembered for " + origin + ". The next connection trusts the key that node presents.";
+        statusText = "You can sign in now. Your own key is unchanged. Quod will accept the server at this address.";
         return Task.CompletedTask;
     }
     void CloseSession(bool retainDrafts=true)
@@ -619,10 +649,9 @@ public partial class Main : Control
         bool returnHome=home;
         incarnation++;
         ClosePie();
-        xr?.Install(null);xr?.StopSession();gui?.Cancel();
-        RetireWorld(); navigation=null; navigationAvailable=false;
+        xr?.Install(retainDrafts ? ControllerMapping.SignIn : null);gui?.Cancel();
+        RetireWorld(); navigation=null; navigationAvailable=false; scene?.Stand(null);
         var completions = views.Select(v => v.Completion ?? Task.CompletedTask).ToList();
-        if(xr!=null)completions.Add(xr.Completion);
         completions.Add(retiredWorld);
         completions.Add(retiredPie);
         completions.Add(worldChanges);
@@ -685,8 +714,7 @@ public partial class Main : Control
     // Entering or leaving VR always says what happened, in the HUD status.
     void ToggleVr()
     {
-        if (accounts?.Human == null) statusText = "Sign in before entering VR.";
-        else if (xr.Running) { xr.StopSession(); vrLeft = true; statusText = "Back in 3D."; }
+        if (xr.Running) { xr.StopSession(); statusText = "Back in 3D."; }
         else if (xr.Start()) statusText = "In VR. F9 or Escape returns to 3D.";
         else statusText = xr.Status;
         Notify();
@@ -701,7 +729,8 @@ public partial class Main : Control
         }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { ClosePie();GetViewport().SetInputAsHandled();return; }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
-            if (representations?.Visible == true) { representations.Cancel();ShowHome(); }
+            if (backupDialog!=null) CloseBackup();
+            else if (representations?.Visible == true) { representations.Cancel();ShowHome(); }
             else if (xr.Running) { ToggleVr(); }
             else action?.Cancel();
             GetViewport().SetInputAsHandled(); Notify();
@@ -718,6 +747,8 @@ public partial class Main : Control
             (accounts?.StorageDescription is {Length:>0} storage ? "\n"+storage : "");
         if (buttons.Count == 0) return;
         foreach (var button in buttons.Values) button.Disabled = busy;
+        buttons["connection-details"].Disabled = false;
+        buttons["retry-controllers"].Disabled=false;
         buttons["disconnect"].Disabled = session == null && !busy;
         buttons["create-key"].Disabled |= key != null || store == null;
         buttons["import-backup"].Disabled |= key != null || store == null;
@@ -736,9 +767,9 @@ public partial class Main : Control
         bool uncertain=signed&&accounts!.Uncertain;
         string? next=store==null ? null : key==null ? "create-key" : !signed ? "connect" : uncertain ? "resolve" :
             accounts!.CanRegister ? "register" : accounts.Human!=null&&accounts.Setup==null ? (accounts.Prepared==null ? "prepare" : "setup") : null;
-        connectionTitle.Text=key==null ? "Welcome to Quod" : !signed ? "Welcome back" : uncertain ? "Check your earlier action" :
+        connectionTitle.Text=state=="starting" ? "Starting Quod" : OpeningSpace ? "Opening your space" : key==null ? "Welcome to Quod" : !signed ? "Welcome back" : uncertain ? "Check your earlier action" :
             accounts!.CanRegister ? "Create your account" : accounts.Human==null ? "Account unavailable" : !ready ? "Set up your starting space" : "Your account";
-        connectionHelp.Text=store==null ? "Local identity storage is unavailable. Your files have not been replaced." : key==null ?
+        connectionHelp.Text=state=="starting" ? "" : store==null ? "Local identity storage is unavailable. Your files have not been replaced." : OpeningSpace ? "Your key is ready. Waiting for your space." : key==null ?
             "Your key stays on this device." : !signed ?
             "Sign in with the key saved on this device." : uncertain ?
             "An earlier action has no confirmed outcome. Check it; do not submit it again." : accounts!.CanRegister ?
@@ -748,7 +779,12 @@ public partial class Main : Control
             "This creates your agent (you, in Quod) and your empty starting space." :
             "You are signed in.";
         endpointLabel.Visible=endpoint.Visible=store!=null && !signed;
-        buttons["close-account"].Visible=ready;
+        buttons["close-account"].Visible=ready&&!OpeningSpace;
+        controllerNotice.Text=xr.AppearanceStatus.Length>0 ? xr.AppearanceStatus : xr.Router.Count==0 ? "Turn on your controllers to use Quod." :
+            xr.Router.SourceChoices.All(s=>s.Profile=="unsupported") ? "Controllers are not ready. Open Options for details." :
+            xr.Router.SourceChoices.All(s=>!s.Tracked) ? "Waiting for controller tracking or SteamVR focus." : "";
+        controllerNotice.Visible=gui.Spatial&&controllerNotice.Text.Length>0;
+        buttons["retry-controllers"].Visible=gui.Spatial&&xr.AppearanceFailed;
         buttons["connect"].Text=state=="sign-in-expired" || session?.IsExpired==true ? "Sign in again" : "Sign in";
         foreach(string name in new[]{"create-key","import-backup","connect","disconnect","register","prepare","setup","resolve"}) {
             var button=buttons[name];button.ThemeTypeVariation=name==next ? "PrimaryAction" : "";
@@ -773,14 +809,18 @@ public partial class Main : Control
         OverlayChanging();
         if (backupDialog != null && IsInstanceValid(backupDialog) && !backupDialog.IsQueuedForDeletion()) { backupDialog.GrabFocus(); return; }
         var cancelled = new CancellationTokenSource();
-        var dialog = new Window { Name = "backup-dialog", Title = export ? "Export encrypted backup" : "Import encrypted backup", Size = new(620, 250), Transient = true, Exclusive = true };
+        var dialog = new VBoxContainer { Name = "backup-dialog" };
         backupDialog = dialog; backupCancellation = cancelled;
-        AddChild(dialog); var pane = new VBoxContainer(); dialog.AddChild(pane); pane.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        connectionShell.GetParent().AddChild(dialog);var pane=dialog;
+        pane.AddChild(new Label {Text=export ? "Export encrypted backup" : "Import encrypted backup",ThemeTypeVariation="Heading"});
         pane.AddChild(new Label { Text = export ? "Backup passphrase (at least 12 characters). Active key storage is separate." : "Import into this empty local profile. A wrong passphrase never replaces an identity.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        pane.AddChild(new Label {Text="Backup file path"});
         var path = new LineEdit { Name = "backup-path", PlaceholderText = "Backup file path" }; pane.AddChild(path);
+        pane.AddChild(new Label {Text="Backup passphrase"});
         var phrase = new LineEdit { Name = "backup-passphrase", Secret = true, PlaceholderText = "Backup passphrase" }; pane.AddChild(phrase);
         var result = new Label { Name = "backup-result", AutowrapMode = TextServer.AutowrapMode.WordSmart }; pane.AddChild(result);
         var apply = new Button { Name = "backup-apply", Text = export ? "Export" : "Import" }; pane.AddChild(apply);
+        var close=SpatialGui.ActionButton("Close","backup-close");pane.AddChild(close);close.Pressed+=CloseBackup;
         async Task Apply()
         {
             apply.Disabled = true;
@@ -808,15 +848,17 @@ public partial class Main : Control
         dialog.TreeExiting += () => cancelled.Cancel();
         dialog.TreeExited += () => {
             if (ReferenceEquals(backupDialog, dialog)) backupDialog = null;
+            if(!disposed && !closing)Notify();
             if (!export && key!=null && session==null && !closing && !disposed) activeAction=Run(Connect);
         };
-        dialog.CloseRequested += () => { cancelled.Cancel(); dialog.QueueFree(); }; dialog.PopupCentered(); phrase.GrabFocus();
+        Notify();SpatialGui.Reveal(path,()=>IsInstanceValid(dialog)&&!dialog.IsQueuedForDeletion(),()=>path.GrabFocus());
     }
+    void CloseBackup() { backupCancellation?.Cancel();backupDialog?.QueueFree(); }
     void ReleaseIdentity()
     { if (released) return; released = true; key?.Dispose(); store?.Dispose(); }
     internal async Task CloseApplication(int exitCode=0)
     {
-        if (closing) return; closing = true; action?.Cancel(); backupCancellation?.Cancel(); backupDialog?.QueueFree(); CloseSession(false);
+        if (closing) return; closing = true; action?.Cancel(); backupCancellation?.Cancel(); backupDialog?.QueueFree(); xr.StopSession(); CloseSession(false);
         await Task.WhenAll(ViewsDisposed, activeAction, backupWork,xr.Completion);
         models.Dispose();await models.Completion;
         bool xrStopped=await xr.Shutdown(SignedSession.Now+5000);
@@ -849,9 +891,9 @@ public partial class Main : Control
     }
     void UpdateControllerStatus()
     {
-        controllers.Text="Keyboard/mouse available. "+xr.Status+"\n"+xr.Router.Description;
+        controllers.Text="Keyboard/mouse available. "+xr.Status+"\n"+xr.Router.Description+"\n"+xr.AppearanceDetails;
         if(localControllerStatus!=null) {
-            localControllerStatus.Text=xr.Status+"\n"+xr.Router.Description;
+            localControllerStatus.Text=controllers.Text;
             var sources=xr.Router.SourceChoices;string schema=string.Join(',',sources.Select(s=>s.Id));
             foreach(var choice in sourceChoices.Values) {
                 if(schema!=sourceSchema || choice.ItemCount==0) {

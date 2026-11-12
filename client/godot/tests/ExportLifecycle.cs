@@ -59,7 +59,6 @@ public partial class ExportChecks
             } finally { control.Toggled -= Changed; }
         }
         Check(control.ButtonPressed != before && operations.FormPanel.Draft[role] == (!before ? "true" : "false"), "native mouse click edits offered boolean");
-        operations.Defaults();
     }
     async Task Transition(JsonObject command)
     {
@@ -289,7 +288,7 @@ public partial class ExportChecks
     async Task BackupWidget(bool export, string file, string passphrase, bool expectSuccess)
     {
         await Press(export ? "export-backup" : "import-backup");
-        var dialog = app.FindChild("backup-dialog", true, false) as Window ?? throw new Exception("Backup dialog");
+        var dialog = app.FindChild("backup-dialog", true, false) as Control ?? throw new Exception("Backup dialog");
         var path = (LineEdit)dialog.FindChild("backup-path", true, false); path.Text = file;
         var phrase = (LineEdit)dialog.FindChild("backup-passphrase", true, false); phrase.Text = passphrase;
         var apply = (Button)dialog.FindChild("backup-apply", true, false);
@@ -298,8 +297,7 @@ public partial class ExportChecks
         Console.WriteLine("BACKUP_STATUS " + result); Console.Out.Flush();
         Check(expectSuccess == (result is "Encrypted backup saved." or "Original key and account references restored."), expectSuccess ? "actual encrypted-backup widget succeeded" : "actual encrypted-backup widget refused invalid input");
         var removed = new TaskCompletionSource(); dialog.TreeExited += () => removed.TrySetResult();
-        if(DisplayServer.GetName()=="headless")dialog.EmitSignal(Window.SignalName.CloseRequested);
-        else { Console.WriteLine("M2_NATIVE_CLOSE "+JsonSerializer.Serialize(new { title=dialog.Title })); Console.Out.Flush(); }
+        await NativePress((Button)dialog.FindChild("backup-close",true,false));
         await removed.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
     async Task LocalQualification(string phase)
@@ -331,7 +329,7 @@ public partial class ExportChecks
         if (phase == "backup-cancel") {
             await File.WriteAllTextAsync(browserBackup, Json.S(corpus, "bundle"));
             await Press("import-backup");
-            var dialog = (Window)app.FindChild("backup-dialog", true, false);
+            var dialog = (Control)app.FindChild("backup-dialog", true, false);
             ((LineEdit)dialog.FindChild("backup-path", true, false)).Text = browserBackup;
             ((LineEdit)dialog.FindChild("backup-passphrase", true, false)).Text = phrase;
             var apply = (Button)dialog.FindChild("backup-apply", true, false); await NativePress(apply);

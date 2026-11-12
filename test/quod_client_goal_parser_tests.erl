@@ -38,6 +38,10 @@ readable_clause_formatter_preserves_program_semantics_test() ->
         {ok, [#{goal := Parsed}]} = quod_client_goal_parser:parse_program(Source, 2),
         ?assertEqual(canonical(Clause), canonical(Parsed))
     end, Terms),
+    {ok, QuoteSource} = quod_client_goal_parser:format_clause({payload, <<$">>}),
+    ?assertEqual(<<"payload(<<\"\\x22\\\">>).">>, QuoteSource),
+    ?assertEqual({ok, [{payload, <<$">>}]},
+                 erlog_io:read_string_terms(unicode:characters_to_list(QuoteSource))),
     ?assertEqual({ok, <<"p(V0) :- q(V0) , !.">>},
         quod_client_goal_parser:format_clause({':-', {p, {0}}, {',', {q, {0}}, '!'}})),
     ?assertEqual({ok, <<"payload((-3)).">>}, quod_client_goal_parser:format_clause({payload, -3})).

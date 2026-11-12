@@ -31,9 +31,11 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
             Pointer.Mesh=line;Pointer.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoColor=Colors.Gold };Aim.AddChild(Pointer);
         }
         // Godot translates the authored OpenXR grip_pose action to tracker pose grip.
-        public bool Current(ulong frame)=>Alive && XRServer.GetTracker(Tracker.Name)?.GetInstanceId()==Tracker.GetInstanceId() && Tracker.HasPose("aim") && Tracker.HasPose("grip") &&
-            Tracker.GetPose("aim").HasTrackingData && Tracker.GetPose("grip").HasTrackingData &&
-            Tracker.GetPose("aim").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None && Tracker.GetPose("grip").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
+        public bool GripTracked=>Alive && XRServer.GetTracker(Tracker.Name)?.GetInstanceId()==Tracker.GetInstanceId() &&
+            Tracker.HasPose("grip") && Tracker.GetPose("grip").HasTrackingData &&
+            Tracker.GetPose("grip").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
+        public bool Current(ulong frame)=>GripTracked && Tracker.HasPose("aim") &&
+            Tracker.GetPose("aim").HasTrackingData && Tracker.GetPose("aim").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
         public void UpdatePose()
         { if(!Alive)return;if(Tracker.HasPose("aim"))Aim.Transform=Tracker.GetPose("aim").GetAdjustedTransform();if(Tracker.HasPose("grip"))Grip.Transform=Tracker.GetPose("grip").GetAdjustedTransform(); }
         public ComponentSample? Read(string id)
@@ -57,6 +59,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         public string? Asset;
         public RenderModels.Lease? Lease;
         public Node3D? Model;
+        public string? Failure;
         public long Incarnation;
         public Task Loading=Task.CompletedTask;
     }
@@ -112,6 +115,16 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     public string Status { get; private set; }="OpenXR is stopped.";
     public event Action? Changed;
     public Task Completion=>Task.WhenAll(loading);
+    public bool AppearanceFailed=>visuals.Values.Any(v=>v.Profile!=null && v.Failure!=null);
+    public string AppearanceDetails=>string.Join('\n',visuals.Values.Where(v=>v.Profile!=null && v.Failure!=null).Select(v=>v.Failure));
+    public string AppearanceStatus=>AppearanceFailed ? "Controller models could not load." :
+        visuals.Values.Any(v=>v.Profile!=null && v.Asset!=null && v.Model==null) ? "Loading controllers…" : "";
+    public void RetryAppearances()
+    {
+        foreach(var (source,visual) in visuals.ToArray())if(visual.Profile!=null && visual.Failure!=null) {
+            visual.Asset=null;Appearance(source,visual.Profile);
+        }
+    }
     public object Metrics=>new { Running,Subscriptions,sources=sources.Count,appearances=visuals.Count,MenuRedraws,LateCallbacks,captures=gui.Captures,DriveRequests,StopRequests,SnapRequests,TeleportRequests,resources=models.Metrics };
     internal MeshInstance3D GuiSurface=>panel;
     internal ScenePanel.Selection? BoundOccurrence=>occurrence;
@@ -217,7 +230,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(occurrence==null&&selected!=null)personalPose=panel.GlobalTransform;
         occurrence=selected;
         if(selected==null){panel.GlobalTransform=personalPose;placeRequested=true;}
-        else {occurrenceBasis=selected.Owner.CameraPose.Basis;selected.Owner.PresentationChanged+=RefreshOccurrence;
+        else {occurrenceBasis=selected.Owner.ViewerPose.Basis;selected.Owner.PresentationChanged+=RefreshOccurrence;
             if(!ReferenceEquals(selected.Owner,scene)){panel.GlobalTransform=personalPose;placeRequested=true;}}
         RefreshOccurrence();
     }
@@ -239,12 +252,12 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         float height=size.Y*gui.FormSize.Y/pixels.Y;
         var next=new Transform3D(occurrenceBasis,pose.Origin+occurrenceBasis*new Vector3(0,top+.15f+height/2,front+.15f));
         if(!ReferenceEquals(occurrence.Owner,scene)) {
-            if(gui.Spatial&&workspaceShown){if(occurrence.Owner.PresentForm(gui.FormSurface.GetTexture(),size,pixels,new(0,-(size.Y-height)/2,0),next))CancelPresentation();panel.Visible=true;}
+            if(gui.Spatial&&workspaceShown&&gui.PresentationVisible){if(occurrence.Owner.PresentForm(gui.FormSurface.GetTexture(),size,pixels,new(0,-(size.Y-height)/2,0),next))CancelPresentation();panel.Visible=true;}
             else occurrence.Owner.HideForm();
             return;
         }
         if(panel.GlobalTransform!=next){CancelPresentation();panel.GlobalTransform=next;}
-        panel.Visible=gui.Spatial&&workspaceShown;
+        panel.Visible=gui.Spatial&&workspaceShown&&gui.PresentationVisible;
     }
     public void ShowWorkspace() { CancelPresentation();StopMovingWorkspace();workspaceShown=true;placeRequested=true;Changed?.Invoke(); }
     public void HideWorkspace() { gui.EndTextInput();CancelPresentation();CancelMenu();workspaceShown=false;movingWorkspace=false;placeRequested=false;panel.Visible=false;Changed?.Invoke(); }
@@ -284,11 +297,15 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         InputEventMouse e=pressed is bool down ? new InputEventMouseButton { ButtonIndex=MouseButton.Left,Pressed=down } : new InputEventMouseMotion();
         e.Position=e.GlobalPosition=at;hudViewport.PushInput(e,true);
     }
-    void PlaceWorkspace(bool interactive)
+    void PlaceWorkspace(bool presentable,bool interactive)
     {
-        if(!interactive) { if(StopMovingWorkspace())Changed?.Invoke();return; }
+        if(!interactive && StopMovingWorkspace())Changed?.Invoke();
+        bool shown=workspaceShown&&gui.PresentationVisible;
+        if(occurrence==null&&!shown)panel.Visible=false;
+        if(!presentable)return;
         if(occurrence!=null&&ReferenceEquals(occurrence.Owner,scene))return;
-        if(!gui.Spatial || (!placeRequested && !movingWorkspace))return;
+        if(!gui.Spatial)return;
+        if(!placeRequested&&!movingWorkspace){if(occurrence==null)panel.Visible=shown;return;}
         var head=XRServer.GetTracker("head") as XRPositionalTracker;
         if(head?.HasPose("default")!=true)return;
         var pose=head.GetPose("default");
@@ -299,7 +316,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         forward=forward.Normalized();
         var target=new Transform3D(Basis.LookingAt(forward,Vector3.Up),headWorld.Origin+forward*workspaceDistance);
         if(panel.GlobalTransform!=target)panel.GlobalTransform=target;
-        placeRequested=false;panel.Visible=workspaceShown;
+        placeRequested=false;panel.Visible=shown;
     }
     void ResizePanel()
     {
@@ -336,13 +353,14 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     internal void Advance(ulong frame,bool focused,bool running,bool tracked)
     {
         ControlChanged();
-        origin.Transform=scene.CameraPose*(calibration??Transform3D.Identity);
+        origin.Transform=scene.ViewerPose*(calibration??Transform3D.Identity);
         bool interactive=focused && running && tracked && visible;
         if(!interactive)gui.EndTextInput();
         foreach(var source in sources.Values)source.UpdatePose();
-        PlaceWorkspace(interactive);PlaceHud();
+        // A visible session can show the workspace before it owns input focus.
+        PlaceWorkspace(running && tracked && visible,interactive);PlaceHud();
         Router.Frame(frame,interactive);
-        foreach(var (source,visual) in visuals)if(visual.Model!=null)visual.Model.Visible=interactive && visual.Profile!=null && source.Current(frame);
+        foreach(var (source,visual) in visuals)if(visual.Model!=null)visual.Model.Visible=running && tracked && visible && visual.Profile!=null && ((Source)source).GripTracked;
     }
     void HideVisuals() { foreach(var visual in visuals.Values)if(visual.Model!=null)visual.Model.Visible=false; }
     public void Appearance(IControllerSource input,ControllerProfile? profile)
@@ -353,17 +371,19 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(visual.Asset==profile.Model.Identity)return;
         loading.RemoveAll(task=>task.IsCompleted);
         visual.Incarnation++;if(visual.Model!=null){models.ReleaseInstance(visual.Model);visual.Model=null;}visual.Lease?.Dispose();
-        visual.Asset=profile.Model.Identity;visual.Lease=models.Acquire(profile.Model);long expected=visual.Incarnation;
+        visual.Failure=null;visual.Asset=profile.Model.Identity;visual.Lease=models.Acquire(profile.Model);long expected=visual.Incarnation;
         async Task Load()
         {
             try {
                 var node=await visual.Lease.Instantiate();if(node==null)return;
                 if(disposed || !visuals.ContainsKey(input) || visual.Incarnation!=expected) { models.ReleaseInstance(node);return; }
                 visual.Model=node;node.Visible=false;((Source)input).Grip.AddChild(node);
-            } catch(OperationCanceledException) { }
-            catch(Exception error) { if(!disposed && visual.Incarnation==expected){Status="Controller appearance unavailable: "+error.Message;Changed?.Invoke();} }
+            } catch(OperationCanceledException) when(disposed || visual.Incarnation!=expected) { }
+            catch(Exception error) { if(!disposed && visual.Incarnation==expected)visual.Failure=error.Message; }
+            finally { if(!disposed && visual.Incarnation==expected)Changed?.Invoke(); }
         }
         visual.Loading=Load();loading.Add(visual.Loading);
+        Changed?.Invoke();
     }
     public void Remove(IControllerSource input)
     {

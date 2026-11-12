@@ -6,7 +6,7 @@ using Quod.Client;
 public partial class SpatialGui : TextureRect
 {
     public SubViewport Surface { get; }=new() { Name="gui-viewport",Size=new(1200,800),TransparentBg=false,HandleInputLocally=true };
-    public SubViewport FormSurface { get; }=new() { Name="form-viewport",Size=new(1200,800),TransparentBg=false,HandleInputLocally=true,GuiEmbedSubwindows=true };
+    public SubViewport FormSurface { get; }=new() { Name="form-viewport",Size=new(1200,800),TransparentBg=true,HandleInputLocally=true,GuiEmbedSubwindows=true };
     public TextureRect FormMirror { get; }=new() {Name="form-mirror",ExpandMode=ExpandModeEnum.IgnoreSize,StretchMode=StretchModeEnum.Scale,MouseFilter=MouseFilterEnum.Ignore,SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill};
     readonly MarginContainer formHost=new() {Name="form-content",Position=new(16,12),ClipContents=true};
     readonly AtlasTexture formTexture=new(),keyboardTexture=new();
@@ -18,6 +18,7 @@ public partial class SpatialGui : TextureRect
     internal Func<Vector2,Vector2?>? PreviewFormHit { get; set; }
     internal bool FormOnly { get; set; }
     internal SubViewport PresentationSurface=>FormOnly ? FormSurface : Surface;
+    internal bool PresentationVisible=>FormOnly || content?.Visible==true;
     internal Vector2I FormSize=>formSize;
     bool pressed;
     bool surfaceInside,formInside;
@@ -27,9 +28,18 @@ public partial class SpatialGui : TextureRect
     Control? content;
     readonly Control workspace=new() { Name="workspace-content",MouseFilter=MouseFilterEnum.Ignore };
     int desktopTextSize=20,spatialTextSize=26;
-    float spatialOpacity=.78f;
+    // Panels are translucent by default: the lowest backing that keeps the
+    // shared text colour at 4.5:1 over a white scene. Controls stay opaque.
+    internal const float TintedPanel=.7f;
+    float panelOpacity=TintedPanel;
+    internal float PanelOpacity=>panelOpacity;
     readonly Theme workspaceTheme=SharedAppearance();
-    readonly StyleBoxFlat background=new() { BgColor=new(25f/255,43f/255,50f/255,.78f),CornerRadiusTopLeft=10,CornerRadiusTopRight=10,CornerRadiusBottomLeft=10,CornerRadiusBottomRight=10 };
+    // The desktop window backs its own scene; a docked desktop form is backed
+    // by its glass panel. In space each surface carries the tinted backing.
+    readonly StyleBoxFlat background=new() { BgColor=new(25f/255,43f/255,50f/255,1),CornerRadiusTopLeft=10,CornerRadiusTopRight=10,CornerRadiusBottomLeft=10,CornerRadiusBottomRight=10 };
+    readonly StyleBoxFlat formBacking=new() { BgColor=new(25f/255,43f/255,50f/255,0),CornerRadiusTopLeft=10,CornerRadiusTopRight=10,CornerRadiusBottomLeft=10,CornerRadiusBottomRight=10 };
+    void PaintBacking() { background.BgColor=background.BgColor with {A=Spatial ? panelOpacity : 1};formBacking.BgColor=formBacking.BgColor with {A=Spatial ? panelOpacity : 0}; }
+
     readonly Panel tint=new() { MouseFilter=MouseFilterEnum.Ignore,Visible=false };
     public bool Spatial { get; private set; }
     public Vector2I WorkspaceSize=>Spatial ? new(1200,800) : new(Math.Max(1,(int)Size.X),Math.Max(1,(int)Size.Y));
@@ -40,7 +50,7 @@ public partial class SpatialGui : TextureRect
     public event Action? NativeCaptureChanged;
     public event Action? LayoutChanging;
     public event Action? AppearancePreferencesChanged;
-    internal bool OpaquePanels=>!Spatial||spatialOpacity==1;
+    internal bool OpaquePanels=>panelOpacity==1;
     internal void AppearanceLayoutChanging() { LayoutChanging?.Invoke();Cancel(); }
     internal static Button ActionButton(string text,string name="")
     {
@@ -58,7 +68,7 @@ public partial class SpatialGui : TextureRect
                 foreach(var clip in clips)width=Math.Min(width,clip.GetGlobalRect().End.X-layout.GlobalPosition.X);
                 var font=button.GetThemeFont("font");int size=button.GetThemeFontSize("font_size");
                 float preferred=button.Text.Split('\n').Max(line=>font.GetStringSize(line,HorizontalAlignment.Left,-1,size).X)+button.GetThemeStylebox("normal").GetMinimumSize().X;
-                var next=new Vector2(Math.Max(0,Math.Min(width,Mathf.Ceil(preferred))),44);
+                var next=new Vector2(Math.Max(0,Math.Min(width,Mathf.Ceil(preferred))),Math.Max(44,button.CustomMinimumSize.Y));
                 if(button.CustomMinimumSize!=next)button.CustomMinimumSize=next;
             }
             layout.Resized+=Fit;foreach(var clip in clips)if(clip!=layout)clip.Resized+=Fit;
@@ -118,7 +128,7 @@ public partial class SpatialGui : TextureRect
         }
         Box("PanelContainer","panel",panel,edge);
         theme.SetTypeVariation("AuthoredPanel","PanelContainer");
-        Box("AuthoredPanel","panel",new Color(panel,opaque ? 1 : Extent("panel_opacity",780)/1000f),edge);
+        Box("AuthoredPanel","panel",new Color(panel,opaque ? 1 : Extent("panel_opacity",(int)(TintedPanel*1000))/1000f),edge);
         Box("PopupMenu","panel",well,edge);Box("PopupMenu","hover",hover,accent);
         theme.SetTypeVariation("ErrorText","Label");theme.SetColor("font_color","ErrorText",Colour("error","#FFB8BD"));
         theme.SetTypeVariation("CompletionText","Label");theme.SetColor("font_color","CompletionText",Colour("success","#C5E7A0"));
@@ -164,13 +174,12 @@ public partial class SpatialGui : TextureRect
         FocusMode=FocusModeEnum.None;MouseFilter=MouseFilterEnum.Stop;AddChild(Surface);Texture=Surface.GetTexture();
         AddChild(FormSurface);pointerViewport=Surface;
         FormSurface.RenderTargetUpdateMode=SubViewport.UpdateMode.Always;
-        var formTint=new Panel {MouseFilter=MouseFilterEnum.Ignore};FormSurface.AddChild(formTint);formTint.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);formTint.AddThemeStyleboxOverride("panel",background);
+        var formTint=new Panel {MouseFilter=MouseFilterEnum.Ignore};FormSurface.AddChild(formTint);formTint.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);formTint.AddThemeStyleboxOverride("panel",formBacking);
         FormSurface.AddChild(formHost);formHost.Theme=workspaceTheme;formHost.MinimumSizeChanged+=ResizeSurface;
         formTexture.Atlas=FormSurface.GetTexture();FormMirror.Texture=formTexture;FormMirror.Resized+=ResizeSurface;
         keyboardTexture.Atlas=FormSurface.GetTexture();keyboardMirror.Texture=keyboardTexture;
         Surface.RenderTargetUpdateMode=SubViewport.UpdateMode.Always;Resized+=ResizeSurface;ResizeSurface();
         tint.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);tint.AddThemeStyleboxOverride("panel",background);Surface.AddChild(tint);tint.Show();
-        background.BgColor=new(background.BgColor,1);
         Surface.AddChild(workspace);workspace.Size=WorkspaceSize;InitializeKeyboard();Surface.AddChild(keyboardMirror);
     }
     public void SetContent(Control next) { content=next;next.Theme??=workspaceTheme;workspace.AddChild(next); }
@@ -179,18 +188,18 @@ public partial class SpatialGui : TextureRect
     internal bool Owns(SubViewport viewport)=>viewport==Surface||viewport==FormSurface;
     public void PresentSpatial(bool next)
     {
-        if(Spatial==next)return;EndTextInput();LayoutChanging?.Invoke();Cancel();Spatial=next;Surface.TransparentBg=FormSurface.TransparentBg=next;
+        if(Spatial==next)return;EndTextInput();LayoutChanging?.Invoke();Cancel();Spatial=next;Surface.TransparentBg=next;
         workspaceTheme.DefaultFontSize=next ? spatialTextSize : desktopTextSize;
         workspaceTheme.SetFontSize("font_size","Heading",workspaceTheme.DefaultFontSize+4);
         workspaceTheme.SetFontSize("font_size","Title",workspaceTheme.DefaultFontSize+8);
-        background.BgColor=new(background.BgColor,next ? spatialOpacity : 1);
+        PaintBacking();
         AppearancePreferencesChanged?.Invoke();
         ResizeSurface();
     }
     public void TextSize(int change)
     { int next=Math.Clamp(workspaceTheme.DefaultFontSize+change,16,48);if(next==workspaceTheme.DefaultFontSize)return;LayoutChanging?.Invoke();Cancel();workspaceTheme.DefaultFontSize=next;workspaceTheme.SetFontSize("font_size","Heading",next+4);workspaceTheme.SetFontSize("font_size","Title",next+8);if(Spatial)spatialTextSize=next;else desktopTextSize=next; }
-    public void Opaque(bool value) { float next=value ? 1 : .78f;if(spatialOpacity==next)return;spatialOpacity=next;background.BgColor=new(25f/255,43f/255,50f/255,Spatial ? spatialOpacity : 1);AppearancePreferencesChanged?.Invoke(); }
-    public void ToggleOpacity()=>Opaque(spatialOpacity<1);
+    public void Opaque(bool value) { float next=value ? 1 : TintedPanel;if(panelOpacity==next)return;panelOpacity=next;PaintBacking();AppearancePreferencesChanged?.Invoke(); }
+    public void ToggleOpacity()=>Opaque(panelOpacity<1);
     void ResizeSurface()
     {
         if(mirrorSize!=Size) { LayoutChanging?.Invoke();Cancel();mirrorSize=Size; }

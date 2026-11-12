@@ -27,6 +27,11 @@ public partial class ExportChecks
     {
         var pane=(EidolonPanel)app.FindChild("representations",true,false);
         await Until(()=>pane.Available&&panel.Available);
+        // An action without fields runs at once and its validated form is gone
+        // again; observe the selection where it happens.
+        bool chosen=false;void Seen(){chosen|=panel.Current?.Name==name;}
+        panel.Changed+=Seen;
+        try {
         var pie=(PieMenu)app.FindChild("pie-menu",true,false);
         if(!pie.IsOpen)Check(app.OpenSubjectPie(subject??pane.Current!.Exact),"the subject's pie opens");
         await Until(()=>pie.Navigator!=null||!pie.IsOpen);
@@ -40,7 +45,8 @@ public partial class ExportChecks
             if(step.Leaf&&step.Confirm)pie.Commit();
             pie.Commit();
         }
-        await Until(()=>panel.Current?.Name==name);
+        await Until(()=>chosen);
+        } finally { panel.Changed-=Seen; }
     }
     async Task ChooseNativeOption(OptionButton control,int index)
     {
@@ -223,11 +229,8 @@ public partial class ExportChecks
         await Choose((OptionButton)panel.FormPanel.Input(role)!,Array.FindIndex(field.Options,o=>o.Value.ToString()==value.ToString()));
         Check(panel.FormPanel.Draft[role]==value.ToString(),"offered choice binds exact typed value: "+role);
     }
-    void NewDraft(OperationsPanel panel)
-    {
-        panel.Defaults();
-        if(((Button)panel.FormPanel.Input(panel.Current!.Form.Submit.ToString())!).Disabled) panel.Defaults();
-    }
+    void Gone(OperationsPanel panel,string? said=null)=>Check(panel.Current==null && panel.FormPanel.Descriptor==null && !panel.IsVisibleInTree() &&
+        (said==null || State["status"]!.ToString()=="Done: "+said),"a validated form disappears"+(said==null ? "" : " and the strip says: Done: "+said));
     async Task SpaceCreation(string phase,JsonObject original)
     {
         var human=JsonSerializer.Deserialize<Actor>(original["human"]!.ToJsonString())!;
@@ -282,26 +285,29 @@ public partial class ExportChecks
             Check(store.Snapshot!.Pending.Count==0 && recoveredResults.Length>0 && recoveredResults.All(o=>Json.Committed(o) && Json.Binding(o,"Results").ToString()==Term.List(first).ToString()),"another authorized device with no journal recovers exact generated space owner and location bindings");
             Check(await Writes()==writes,"cross-device original-result discovery issues zero writes");
         }
-        await CreationTarget(panel,human,"create"); panel.Defaults();
+        await CreationTarget(panel,human,"create");
         long before=await Writes(); await Keyboard(panel,panel.Current!); await panel.Submit();
-        Check(await Writes()==before,"invalid normal creation fields dispatch no instruction"); panel.Defaults();
-        await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Preserved draft");
-        Check(panel.FormPanel.Draft["space_name"]=="Preserved draft","typed name is retained in the active draft: "+panel.FormPanel.Draft["space_name"]);
-        panel.Cancel(); await CreationTarget(panel,human,"create");
-        Check(panel.FormPanel.Draft["space_name"]=="Preserved draft","local cancel and reopen preserve unsent input: "+panel.FormPanel.Draft["space_name"]);
+        Check(await Writes()==before && panel.Current!=null,"invalid normal creation fields dispatch no instruction and keep the form");
+        await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Cancelled name");
+        await NativePress((Button)app.FindChild("hide-subject-form",true,false));
+        Check(panel.Current==null && panel.FormPanel.Descriptor==null && !panel.IsVisibleInTree(),"a cancelled form disappears");
+        await CreationTarget(panel,human,"create");
+        Check(panel.FormPanel.Draft.OrderBy(p=>p.Key).SequenceEqual(panel.Current!.Form.Defaults.OrderBy(p=>p.Key)),"reopening after cancel starts from the offered form, not from what was typed");
         long reopenedWrites=await Writes();
         Check(reopenedWrites==before,$"local cancel and reopen submit no work: before={before} after={reopenedWrites}");
+        await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Preserved draft");
         var prior=panel.Current!.Revision.ToString();
         using(var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(30))) {
             await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"transaction((retract(attribute({s0.Args[2]},name,Name)),assertz(attribute({s0.Args[2]},name,<<\"Updated starting space\">>)))).",timeout.Token);
         }
         await Until(()=>panel.Current!.Revision.ToString()!=prior);
-        before=await Writes(); await panel.Submit(); Check(await Writes()==before,"changed offered revision locks and retains the old creation draft");
-        panel.Defaults(); Check(panel.FormPanel.Draft["space_name"]=="Preserved draft","explicit current-revision adoption retains compatible edited fields");
+        Check(panel.FormPanel.Draft["space_name"]=="Preserved draft" && panel.FormPanel.Descriptor.Tree.Semantic.ToString()==panel.Current!.Form.Tree.Semantic.ToString(),
+            "a renewed offer replaces the open form and keeps what was typed in a field it still offers");
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"normal mouse creation commits through the current generic binder");
+        Gone(panel,"Create space");
         var defaultResult=SpaceResults(panel.LastOutcome!); Check(Result(defaultResult,"owner").ToString()==setup[0].ToString(),"default creation result reports actual U ownership");
         await Until(()=>scene.Count>=4); Check(scene.Count==4,"creation remains in S0 and adds only the new exterior occurrence");
-        await CreationTarget(panel,human,"create"); NewDraft(panel);
+        await CreationTarget(panel,human,"create");
         await FieldChoice(panel,"space_exterior(finite)",Term.Atom("wireframe"));
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"normal GUI selects the real finite wireframe recipe");
         var wire=Result(SpaceResults(panel.LastOutcome!),"space");
@@ -337,7 +343,7 @@ public partial class ExportChecks
         await PickSpace(scene,wireId,new Vector3(0,-50,-50),wire);
         await Until(()=>panel.Available);
         Check(!panel.FindChild("operation-targeting",true,false).Get("visible").AsBool(),"an exact picked instance hides the unrelated class/storage chooser");
-        await CreationTarget(panel,human,"create_exact"); NewDraft(panel);
+        await CreationTarget(panel,human,"create_exact");
         foreach(var (role,value) in new[] { ("space_length(width)","1"),("space_divisor(width)","3"),("space_length(height)","1001"),("space_divisor(height)","1"),("space_length(depth)","1001"),("space_divisor(depth)","2") })
             await Type((LineEdit)panel.FormPanel.Input(role)!,value);
         await FieldChoice(panel,"space_unit",Term.Text("mm"));
@@ -350,25 +356,25 @@ public partial class ExportChecks
         corners=scene.WorldCorners(rationalId);
         Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-1f/3000)<.000001f &&
             Math.Abs(corners.Max(v=>v.Y)-corners.Min(v=>v.Y)-1.001f)<.000001f,"actual Prolog rational millimetres reach engine geometry without integer rounding");
-        await CreationTarget(panel,human,"create_infinite"); NewDraft(panel);
+        await CreationTarget(panel,human,"create_infinite");
         var exterior=panel.Current!.Form.Tree.Leaves.Single(c=>c.Role=="space_exterior(infinite)");
         Check(exterior.Options.All(o=>o.Value.Name!="wireframe") && exterior.Properties["help"].TextValue.Contains("no finite wireframe"),"infinite form explicitly explains wireframe unavailability and offers the real solid recipe");
         await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Atom("unplaced"));
         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!) && Result(SpaceResults(panel.LastOutcome!),"location").Name=="unplaced","normal GUI supports explicit infinite unplaced creation without placement fallback");
         var foreign=await SpaceControl(new() { ["m2_foreign_storage"]=JsonSerializer.SerializeToNode(human) });
         var target=new Actor(Json.S(foreign,"namespace"),Json.S(foreign,"anchor"),"me.");
-        await CreationTarget(panel,human,"create"); NewDraft(panel);
+        await CreationTarget(panel,human,"create");
         await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Local unsent name");
         await CreationTarget(panel,target,"create");
-        Check(panel.FormPanel.Draft["space_name"]=="Space","another storing ontology has its own unsent draft for the same class");
-        NewDraft(panel); await ClickSubmit(panel);
+        Check(panel.FormPanel.Draft["space_name"]=="Space","another storing ontology opens its own offered form for the same class");
+        await ClickSubmit(panel);
         Check(Json.Committed(panel.LastOutcome!),"authorized existing foreign storage commits through the ordinary selected-target route");
         var foreignResults=SpaceResults(panel.LastOutcome!); var foreignSpace=Result(foreignResults,"space");
         Check(Actor.FromTerm(foreignSpace).Namespace==target.Namespace && Result(foreignResults,"owner").ToString()==setup[0].ToString() &&
             Result(foreignResults,"location").Args[0].ToString()==s0.ToString(),"foreign storage, U ownership and S0 placement remain distinct exact references");
         await Until(()=>scene.Count>=10); Check(scene.Count==10,"foreign-storage source appears through its authorized exact exterior recipe");
         await CreationTarget(panel,human,"create");
-        Check(panel.FormPanel.Draft["space_name"]=="Local unsent name","returning to the original storing ontology restores its own unsent draft");
+        Check(panel.FormPanel.Draft["space_name"]=="Space","a form left for another storing ontology is gone; returning opens the offered form");
         var ids=scene.Ids.Order().ToArray();
         await SpaceRefusals(panel,human,s0,scene);
         await Until(()=>State["question_receiver_ready"]?.GetValue<bool>()==true);
@@ -396,7 +402,7 @@ public partial class ExportChecks
             "findall(state(S,Owner,Location),(current_ontology_identity(Ns,A),<<\"quod:space\">>::space_instance(entity_ref(Ns,A,S),space),attribute(S,owner,Owner),<<\"quod:space\">>::space_location(entity_ref(Ns,A,S),Location)),Spaces).",timeout.Token),"Spaces").ToString();
         string before=await StateOfSpaces();
         Check(before!="[]","refusal checks observe the existing spaces through their class owner");
-        await CreationTarget(panel,human,"create"); NewDraft(panel);
+        await CreationTarget(panel,human,"create");
         var offer=panel.Current!;
         using(var key=Identity.Create())
         using(var store=new LocalStore(profile+"-m2-stranger")) {
@@ -409,8 +415,9 @@ public partial class ExportChecks
         }
         string space=Actor.FromTerm(s0).InstanceText.TrimEnd('.');
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"assertz(instance_permission({space},space_admit,deny)).",timeout.Token);
-        await CreationTarget(panel,human,"create"); NewDraft(panel); await ClickSubmit(panel);
-        Check(Json.Terminal(panel.LastOutcome!) && !Json.Committed(panel.LastOutcome!),"normal mouse creation displays definitive destination-admission refusal");
+        await CreationTarget(panel,human,"create"); await ClickSubmit(panel);
+        Check(Json.Terminal(panel.LastOutcome!) && !Json.Committed(panel.LastOutcome!) && panel.StatusText.StartsWith("Refused:"),"normal mouse creation displays definitive destination-admission refusal");
+        Check(panel.Current!=null && panel.IsVisibleInTree() && !((Button)panel.FormPanel.Input(panel.Current.Form.Submit.ToString())!).Disabled,"a refused form stays open for correction");
         var detail=panel.FindChild("operation-exact-details",true,false).FindChildren("*","TextEdit",true,false).OfType<TextEdit>().Last();
         Check(!detail.Editable && detail.WrapMode==TextEdit.LineWrappingMode.None &&
             JsonNode.DeepEquals(JsonNode.Parse(detail.Text),panel.LastOutcome),"exact refusal details remain complete and selectable without whole-response wrapping");

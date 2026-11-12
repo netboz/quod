@@ -120,6 +120,8 @@ command(#{<<"type">> := <<"ack">>, <<"view">> := View, <<"tick">> := Tick,<<"ori
 command(#{<<"type">> := <<"ack">>}, S) -> {ok, S};
 command(_, S) -> {reply, {close, 1008, <<"invalid view command">>}, S}.
 
+open_request(_,_,_,_,_,_,S = #{pending := refresh}) ->
+    reply(#{type => unavailable,reason => dependency_recovering},S);
 open_request(Session,Bytes,Signature,Ns,Anchor,Kind,S) ->
     case quod_client_goal:decode(Bytes) of
         {ok, #{mode := read, agent_namespace := Source, agent_genesis_anchor := SourceAnchor,
@@ -420,12 +422,16 @@ snapshot_response(Message,S = #{snapshots := Requests}) ->
                  quod_simplex:genesis_hash(Ns) =:= maps:get(Ns,maps:get(anchors,S)) of
                 true ->
                     case Readiness of
-                        ready -> dependency_height(Ns,Height,Next);
+                        ready -> case maps:get(pending,Next,none) of
+                            refresh -> resume_projection(Next#{local_ready :=
+                                (maps:get(local_ready,Next))#{Ns => true}});
+                            _ -> dependency_height(Ns,Height,Next)
+                        end;
                         {recovering,Recovery} -> dependency_recovering(Recovery,Next)
                     end;
-                false -> refresh(Next,dependency_owner_changed)
+                false -> local_dependency_lost(Pid,Next)
             end;
-        {{error,_},_,Remaining} -> refresh(S#{snapshots := Remaining},dependency_owner_changed);
+        {{error,_},{Pid,_},Remaining} -> local_dependency_lost(Pid,S#{snapshots := Remaining});
         _ -> {ok,S}
     end;
 snapshot_response(_,S) -> {ok,S}.
@@ -435,6 +441,12 @@ resume_projection(S = #{pending := {Digest, Expiry, Outcome}}) ->
         {false,_} -> reply(#{type => unavailable,reason => expired},release(S));
         {true,true} -> open_view(Outcome,Digest,Expiry,maps:remove(pending,S));
         {true,false} -> {ok,S}
+    end;
+resume_projection(S = #{pending := refresh}) ->
+    case dependencies_ready(S) andalso not maps:is_key(opening,S)
+         andalso dependency_owners_current(S) of
+        true -> refresh(maps:remove(pending,S),dependency_recovered);
+        false -> {ok,S}
     end;
 resume_projection(S) -> {ok,S}.
 
@@ -644,6 +656,8 @@ websocket_info({timeout, Timer, {gui_resource, Token}}, S) ->
 
 websocket_info({view_opened,Ref,Result},S = #{opening := {Ref,_,_},timer := _}) ->
     {ok,S#{opening_result => Result}};
+websocket_info({'DOWN',M,process,Pid,_},S = #{opening := {_,Pid,M},pending := refresh}) ->
+    resume_projection(maps:without([opening,opening_result],S));
 websocket_info({'DOWN',M,process,Pid,_},S = #{opening := {_,Pid,M}}) ->
     Clean = maps:without([opening,opening_result],S),
     case maps:find(opening_result,S) of
@@ -671,19 +685,25 @@ websocket_info({timeout, Timer, expired}, S = #{timer := Timer}) ->
     reply(#{type => unavailable, reason => expired}, release(S));
 websocket_info({timeout,Timer,expired},S = #{candidate_timer := Timer}) ->
     reply(#{type => unavailable,reason => expired},release(S));
-websocket_info({'DOWN', M, process, _, _}, S = #{dependency_monitors := Monitors})
-  when is_map_key(M,Monitors) -> refresh(S,dependency_owner_changed);
+websocket_info({'DOWN', M, process, Pid, _}, S = #{dependency_monitors := Monitors})
+  when is_map_key(M,Monitors) ->
+    case maps:is_key(Pid,maps:get(owners,S)) of
+        true -> local_dependency_lost(Pid,S);
+        false -> refresh(S,dependency_owner_changed)
+    end;
 websocket_info({quod_foreign_follow, Ref, NoticeRef, {Ns,Anchor}, Notice},
                S = #{follows := Follows}) ->
     quod_foreign_log:ack(Ref,NoticeRef),
     case maps:get(Ref,Follows,none) of
         {Ns,Anchor,Height,Ready} ->
             case Notice of
+                {certified,H,_} when H >= Height, map_get(pending,S) =:= refresh ->
+                    resume_projection(S#{follows := Follows#{Ref => {Ns,Anchor,H,true}}});
                 {certified,H,_} when H > Height -> refresh(S,durable_gap);
                 {certified,Height,_} when Ready =:= false ->
                     resume_projection(S#{follows := Follows#{Ref => {Ns,Anchor,Height,true}}});
                 {certified,Height,_} -> {ok,S};
-                _ when Ready -> refresh(S,dependency_recovering);
+                _ when Ready -> suspend_projection(S#{follows := Follows#{Ref => {Ns,Anchor,Height,false}}});
                 _ -> {ok,S}
             end;
         _ -> {ok,S}
@@ -694,7 +714,8 @@ websocket_info({replay_started, Recovery = {_,_}, _}, S = #{owners := _}) ->
     dependency_recovering(Recovery,S);
 websocket_info({replay_ready, Recovery = {Owner, _}, _}, S = #{owners := Owners,local_ready := Ready}) ->
     case maps:find(Owner,Owners) of
-        {ok,Ns} when map_get(Ns,Ready) =:= {recovering,Recovery} -> refresh(S,dependency_recovered);
+        {ok,Ns} when map_get(Ns,Ready) =:= {recovering,Recovery} ->
+            resume_projection(S#{local_ready := Ready#{Ns => true}});
         _ -> {ok,S}
     end;
 websocket_info({gproc,registered,M,_},S = #{dependency_names := Names})
@@ -717,9 +738,33 @@ dependency_recovering(Recovery = {Owner,_},S = #{owners := Owners,local_ready :=
     case maps:find(Owner,Owners) of
         {ok,Ns} when map_get(Ns,Ready) =:= {recovering,Recovery} -> {ok,S};
         {ok,Ns} ->
-            Next = (detach(S))#{local_ready := Ready#{Ns => {recovering,Recovery}}},
-            reply(#{type => unavailable,reason => dependency_recovering},Next);
+            suspend_projection(S#{local_ready := Ready#{Ns => {recovering,Recovery}}});
         error -> {ok,S}
+    end.
+
+%% Recovery retires the answer, not its subscriptions or original deadline.
+%% A fresh signed read is requested only after every retained dependency is ready
+%% and a cancelled opening worker has actually exited.
+suspend_projection(S) ->
+    case S of #{opening := {_,Worker,_}} -> exit(Worker,kill); _ -> ok end,
+    _ = case S of #{candidate_timer := Timer} -> erlang:cancel_timer(Timer); _ -> ok end,
+    Next = maps:without([opening_result,candidate_timer,installed],detach(S)),
+    reply(#{type => unavailable,reason => dependency_recovering},Next#{pending => refresh}).
+
+local_dependency_lost(Pid,S = #{owners := Owners,dependency_monitors := Monitors}) ->
+    case maps:take(Pid,Owners) of
+        {Ns,Remaining} ->
+            Retained = maps:filter(fun(M,Owner) ->
+                case Owner =:= Pid of true -> demonitor(M,[flush]),false; false -> true end
+            end,Monitors),
+            Name = quod_reg:monitor_name({quod_prolog,Ns},follow),
+            %% Registration may precede the loss notice. Subscribe first, then
+            %% inspect through the same handler used by the name notification.
+            self() ! {gproc,registered,Name,quod_reg:name({quod_prolog,Ns})},
+            suspend_projection(S#{owners := Remaining,dependency_monitors := Retained,
+                dependency_names := (maps:get(dependency_names,S))#{Name => Ns},
+                local_ready := (maps:get(local_ready,S))#{Ns => false}});
+        error -> resume_projection(S)
     end.
 
 local_dependency_registered(M,S = #{dependency_names := Names}) ->
@@ -736,9 +781,11 @@ local_dependency_registered(M,S = #{dependency_names := Names}) ->
                         Pid,get_stats,{Pid,Ns},maps:get(snapshots,Next))}};
                 _ -> {ok,Next}
             end;
+        {undefined,_} -> {ok,S};
         _ -> reply(#{type => unavailable,reason => dependency_unavailable},release(S))
     end.
 
+dependency_height(_,_,S = #{pending := refresh}) -> {ok,S};
 dependency_height(Ns,Height,S = #{heights := Heights,local_ready := Ready}) ->
     case {maps:find(Ns,Heights),maps:get(Ns,Ready,false)} of
         {{ok,_},{recovering,_}} -> {ok,S};

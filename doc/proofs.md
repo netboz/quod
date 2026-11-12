@@ -51,6 +51,11 @@ in browser clients. These whole-ontology dependencies support view invalidation;
 they do not replace per-predicate transaction read checks or certify native
 installation.
 
+A retained signed view withdraws its projection during dependency recovery but
+keeps its existing subscriptions and original deadline. It requests a fresh
+signed read only after all retained dependencies are ready and any cancelled
+opening worker has exited; recovery never reuses the withdrawn authorization.
+
 A single writer uses its ordinary transaction; a signed foreign-only writer
 also retains a source claim under the existing operation lifecycle. The
 [multiwrite contract](multiwrite-architecture.md) covers these routes, several

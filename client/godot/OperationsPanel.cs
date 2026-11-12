@@ -17,7 +17,8 @@ public partial class OperationsPanel : VBoxContainer
     public event Action<Actor,Term>? SubjectOpened;
     // A kind of thing was chosen in the storage catalogue: its pie chooses the action.
     public event Action<Term>? ClassChosen;
-    public event Action? Cancelled;
+    // A form ends once: validated, it reports its authored label; cancelled, nothing.
+    public event Action<string?>? Closed;
     SignedSession session = null!;
     Accounts accounts = null!;
     Actor human = null!, target = null!;
@@ -25,14 +26,6 @@ public partial class OperationsPanel : VBoxContainer
     SignedView? view;
     Task retired = Task.CompletedTask, working = Task.CompletedTask;
     public Task Completion => Task.WhenAll(working, retired, view?.Completion ?? Task.CompletedTask);
-    sealed class Buffer(string revision, Form form)
-    {
-        public string Revision = revision;
-        public Form Form = form;
-        public Dictionary<string, string> Draft = new(form.Defaults);
-        public bool Settled;
-    }
-    readonly Dictionary<string, Buffer> drafts = [];
     readonly List<Actor> targets = [];
     Offer[] offers = [];
     Term[] classes = [];
@@ -43,21 +36,24 @@ public partial class OperationsPanel : VBoxContainer
     readonly VBoxContainer exactTargeting = new() { Name="operation-advanced-target",Visible=false };
     readonly OptionButton storage = FormPanel.Choice("operation-storage");
     readonly OptionButton classSelector = FormPanel.Choice("operation-class");
-    readonly VBoxContainer results = new() { Name = "operation-results" };
-    readonly HFlowContainer actions = new() { Name="operation-recovery" };
     readonly ScrollContainer details = new() { Name = "operation-exact-details", CustomMinimumSize = new(0,220), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, Visible = false };
     readonly VBoxContainer detailContents = new() { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+    // An exact answer can be large: selectable and scrollable, never one wrapped label.
+    readonly TextEdit answer = new() { Name="operation-outcome-details",Editable=false,CustomMinimumSize=new(0,220),Visible=false };
     readonly LineEdit exactNamespace = new() { Name = "exact-storage-namespace", PlaceholderText = "Existing storage namespace" };
     readonly LineEdit exactAnchor = new() { Name = "exact-storage-anchor", PlaceholderText = "Exact genesis anchor (base64url)" };
     readonly LineEdit exactEntity = new() { Name="exact-subject-instance",PlaceholderText="Existing entity (functional term)",Text="me" };
-    Button defaults = null!, exactTarget = null!;
+    Button exactTarget = null!, resolve = null!;
     CancellationTokenSource? work;
     long generation;
     bool disposed, busy;
+    // The presented form was sent and its outcome is not known yet: it stays
+    // as sent. Whether anything may be sent is the accounts owner's answer.
+    bool sent;
+    int answered;
+    const string Unknown = "The answer did not arrive. Check what happened before sending anything else.";
     string? requested;
     bool revealPending,submitPending;
-    string DraftKey(Offer offer) => string.Join("\n",session.Network,session.Key.PublicText,human.Entity,target.Ontology,offer.Subject,offer.Name);
-    Buffer Draft(Offer offer) => drafts[DraftKey(offer)];
     public override void _Ready()
     {
         AddChild(targeting);
@@ -93,26 +89,24 @@ public partial class OperationsPanel : VBoxContainer
             var chosen = classes[(int)index - 1];
             PresentSubject(target, chosen, true); ClassChosen?.Invoke(chosen);
         };
-        AddChild(status);AddChild(results);
+        AddChild(status);
         FormPanel = new() { Name = "offered-form" }; AddChild(FormPanel);
         FormPanel.Invoked += role => { if (Current != null && role == Current.Form.Submit.ToString()) _ = Submit(); };
         FormPanel.Edited += () => Changed?.Invoke();
-        Button(this,"operation-details-toggle","Exact identity / outcome details",()=>{details.Visible=!details.Visible;Reveal(details.Visible ? details : results);Changed?.Invoke();});
-        AddChild(details);details.AddChild(detailContents);detailContents.AddChild(context);detailContents.AddChild(scope);
-        AddChild(actions);
-        defaults = Button(actions, "current-defaults", "Use current fields and defaults", Defaults);
-        Button(actions, "resolve-original", "Check original outcomes", () => _ = Resolve());
-        Button(actions, "cancel-operation", "Cancel / close", Cancel);
+        resolve = Button(this, "resolve-original", "Check what happened", () => _ = Resolve());resolve.Hide();
+        AddChild(details);details.AddChild(detailContents);detailContents.AddChild(context);detailContents.AddChild(scope);detailContents.AddChild(answer);
     }
+    // The enclosing panel's one Details control also opens the exact storing
+    // ontology, subject and last answer.
+    internal void ShowDetails(bool visible) { details.Visible=visible;if(visible)Reveal(details); }
     static Button Button(Godot.Container row, string name, string text, Action action)
     { var button = SpatialGui.ActionButton(text,name); row.AddChild(button); button.Pressed += action; return button; }
     void Initialize(SignedSession session, Accounts accounts)
     {
         if(this.session!=null && (this.session.Network!=session.Network || this.session.Key.PublicText!=session.Key.PublicText || human!=accounts.Human)) {
-            LastOutcome=null;status.Text=scope.Text=context.Text="";details.Hide();
-            foreach(var child in results.GetChildren()){results.RemoveChild(child);child.QueueFree();}
-            foreach(var child in detailContents.GetChildren())if(child!=scope&&child!=context){detailContents.RemoveChild(child);child.QueueFree();}
+            LastOutcome=null;status.Text=scope.Text=context.Text=answer.Text="";answer.Hide();details.Hide();
         }
+        if(!ReferenceEquals(this.accounts,accounts)) { if(this.accounts!=null)this.accounts.Resolved-=Settle;accounts.Resolved+=Settle; }
         this.session = session; this.accounts = accounts; human = accounts.Human!; Show();
     }
     void SetBusy(bool value)
@@ -140,7 +134,7 @@ public partial class OperationsPanel : VBoxContainer
     {
         if (targets.Contains(chosen)) return;
         targets.Add(chosen);
-        storage.AddItem(chosen.Namespace==human.Namespace && chosen.Anchor==human.Anchor ? "Your account storage" : chosen.Namespace);
+        storage.AddItem(chosen.Namespace==human.Namespace && chosen.Anchor==human.Anchor ? "Your ontology" : chosen.Namespace);
         storage.SetItemTooltip(storage.ItemCount-1,chosen.Namespace+" @ "+chosen.Anchor);
     }
     async Task ChooseStorage(Actor chosen)
@@ -185,7 +179,7 @@ public partial class OperationsPanel : VBoxContainer
             Available = true; FormPanel.Show();
             var selected = next.FirstOrDefault(o => o.Name == (requested??previous)) ?? (next.Length == 1 ? next[0] : null);
             if (selected != null) Select(selected);
-            else { Current = null; FormPanel.Clear(); status.Text = next.Length == 0 ? "No offered operations for this subject." : "Choose an offered operation."; }
+            else if (!sent) { Current = null; FormPanel.Clear(); status.Text = next.Length == 0 ? "Nothing can be done here." : "Choose an action."; }
             Changed?.Invoke();
         };
         view.Withdrawn += reason => { if (expected != generation) return; Available = false; FormPanel.Lock(true); FormPanel.Hide(); status.Text = reason; Changed?.Invoke(); };
@@ -198,121 +192,103 @@ public partial class OperationsPanel : VBoxContainer
     void Select(Offer offer)
     {
         targeting.Hide();
-        string key = DraftKey(offer), revision = offer.Revision.ToString();
-        bool changedSelection = Current == null || DraftKey(Current) != key;
-        bool same = !changedSelection && Current!.Revision.ToString() == revision;
-        Current = offer;
-        if (!drafts.TryGetValue(key, out var draft)) { draft = new(revision, offer.Form); drafts[key] = draft; }
-        if(draft.Revision==revision)draft.Form=draft.Form with {Tree=offer.Form.Tree};
-        if (!same || FormPanel.Descriptor == null) FormPanel.Present(draft.Form, draft.Draft);
-        else if(draft.Revision==revision)FormPanel.RefreshAppearance(offer.Form.Tree);
-        bool stale = draft.Revision != revision;
-        defaults.Text = stale ? "Adopt current fields, keeping draft" : "Use current fields and defaults";
-        // Discovery is a U read; the existing U-to-A instruction evaluates the
-        // executing actor's guard. Advisory availability cannot replace it.
-        FormPanel.Lock(stale || busy || draft.Settled || accounts.Uncertain);
-        status.Text = stale ? "The offered schema changed. Your draft is retained. Adopt current fields explicitly before submitting."
-            : accounts.Uncertain ? "Original work is unresolved. Check its outcome; do not submit again."
-            : draft.Settled ? "This draft was submitted. Choose current defaults explicitly for another operation." : "Unsubmitted local draft";
+        bool shown = FormPanel.Descriptor != null && Current?.Name == offer.Name;
+        if (!(shown && sent)) {
+            if (!shown) { sent = false; status.Text = accounts.Uncertain ? Unknown : ""; FormPanel.Present(offer.Form); }
+            else if (Current!.Revision.ToString() != offer.Revision.ToString()) FormPanel.Present(offer.Form, Carry(Current.Form, FormPanel.Draft, offer.Form));
+            else FormPanel.RefreshAppearance(offer.Form.Tree);
+            Current = offer;
+        }
+        Refresh();
         if(revealPending)Reveal(FormPanel);
         revealPending=false;
         bool submit=submitPending&&offer.Name==requested;submitPending=false;
-        if(submit&&!stale&&!draft.Settled&&!accounts.Uncertain&&!offer.Form.Tree.Leaves.Any(c=>c.Input))_=Submit();
+        if(submit&&!offer.Form.Tree.Leaves.Any(c=>c.Input))_=Submit();
         Changed?.Invoke();
     }
-    public void Defaults()
+    // A renewed offer replaces the open form. What the user typed stays where
+    // the same field is still offered and still accepts it.
+    static Dictionary<string, string>? Carry(Form old, IReadOnlyDictionary<string, string> typed, Form next)
     {
-        if (Current == null || !Available || busy || accounts.Uncertain) return;
-        var old = Draft(Current); bool stale = old.Revision != Current.Revision.ToString();
-        var next = new Buffer(Current.Revision.ToString(), Current.Form);
-        if (stale) {
-            var previous = old.Form.Tree.Leaves.Where(c => c.Input).ToDictionary(c => c.Role);
-            foreach (var field in next.Form.Tree.Leaves.Where(c => c.Input && !c.Flag("readonly")))
-                if (previous.TryGetValue(field.Role, out var prior) && prior.Family == field.Family && old.Draft.TryGetValue(field.Role, out var value)) next.Draft[field.Role] = value;
-            next.Settled = old.Settled;
+        Dictionary<string, string>? draft = null;
+        var fields = old.Tree.Leaves.Where(c => c.Input).ToDictionary(c => c.Role);
+        foreach (var field in next.Tree.Leaves.Where(c => c.Input && !c.Flag("readonly"))) {
+            if (!fields.TryGetValue(field.Role, out var prior) || prior.Family != field.Family || typed[field.Role] == old.Defaults[field.Role]) continue;
+            try { field.Draft(typed[field.Role], initial: true); } catch (Exception) { continue; }
+            (draft ??= new(next.Defaults))[field.Role] = typed[field.Role];
         }
-        drafts[DraftKey(Current)] = next; FormPanel.Present(next.Form, next.Draft); Select(Current);
+        return draft;
+    }
+    // Discovery is a U read; the existing U-to-A instruction evaluates the
+    // executing actor's guard. Advisory availability cannot replace it.
+    void Refresh()
+    {
+        resolve.Visible = accounts.Uncertain;
+        if (Current != null) FormPanel.Lock(busy || sent || !Available || accounts.Uncertain);
     }
     public Task Submit() => busy ? working : working = SubmitWork();
     async Task SubmitWork()
     {
-        if (Current == null || !Available || busy || Draft(Current).Settled || accounts.Uncertain || !FormPanel.Validate() ||
-            Draft(Current).Revision != Current.Revision.ToString()) return;
-        var offered = Current; var buffer = Draft(offered); string goal = offered.Goal(FormPanel.Draft); long expected = generation;
-        LastOutcome=null;
+        if (Current == null || !Available || busy || sent || accounts.Uncertain || !FormPanel.Validate()) return;
+        var offered = Current; string goal = offered.Goal(FormPanel.Draft); long expected = generation;
+        LastOutcome=null; answered = accounts.Outcomes.Count;
         var consumer = session; var owner = human; var selectedTarget = target;
-        SetBusy(true); work = new(); var running = work; FormPanel.Lock(true); status.Text = "Checking the governed personal agent…"; Changed?.Invoke();
+        SetBusy(true); work = new(); var running = work; sent = true; Refresh(); status.Text = "Sending…"; Changed?.Invoke();
         try {
             var personal = await consumer.Read(owner, "<<\"quod:user\">>::personal_agent(Agent,Key).", running.Token);
             var agent = Actor.FromTerm(Json.Binding(personal, "Agent")); var key = Json.Binding(personal, "Key");
-            running.Token.ThrowIfCancellationRequested(); buffer.Settled = true;
+            running.Token.ThrowIfCancellationRequested();
             var reply = await consumer.Personal(owner, agent, key.Bytes, selectedTarget, goal, running.Token);
             if (disposed || expected != generation) return;
             ShowOutcome(reply);
-            if (Json.Terminal(reply)) Renew(offered, buffer);
-        } catch (Exception error) { if (!disposed && expected == generation) status.Text = error.Message + (accounts.Uncertain ? " Original work retained; check its outcome." : ""); }
+        } catch (Exception error) { if (!disposed && expected == generation) status.Text = error.Message + (accounts.Uncertain ? " " + Unknown : ""); }
         finally { SetBusy(false); running.Dispose(); if (ReferenceEquals(work, running)) work = null;
-            if (!disposed && Current != null) {
-                if (expected != generation) Select(Current);
-                else { FormPanel.Lock(!Available || accounts.Uncertain || Draft(Current).Settled || Draft(Current).Revision != Current.Revision.ToString()); Changed?.Invoke(); }
-            } }
+            if (!disposed) { if (expected == generation) Settle(); else Changed?.Invoke(); } }
     }
-    // A settled draft protects an unknown outcome from a blind resubmission.
-    // Once the outcome is known, the same fields stand ready for another
-    // operation; nobody has to hunt for a reset.
-    void Renew(Offer offer, Buffer settled)
+    // Once nothing is uncertain the sent form's outcome is known. Validated,
+    // the form disappears; refused, it returns on the current offer.
+    void Settle()
     {
-        var next = new Buffer(settled.Revision, settled.Form) { Draft = new(settled.Draft) };
-        drafts[DraftKey(offer)] = next;
-        if (Current != null && DraftKey(Current) == DraftKey(offer)) FormPanel.Present(next.Form, next.Draft);
+        if (disposed || busy) return;
+        if (!sent || accounts.Uncertain) { Refresh(); Changed?.Invoke(); return; }
+        sent = false;
+        if (LastOutcome == null || !Json.Terminal(LastOutcome)) {
+            // Recovered later, by this panel or by the sign-in card.
+            var recovered = accounts.Outcomes.Skip(answered).Where(Json.Terminal).ToArray();
+            if ((recovered.FirstOrDefault(reply => !Json.Committed(reply)) ?? recovered.LastOrDefault()) is {} known) ShowOutcome(known);
+        }
+        if (LastOutcome is {} outcome && Json.Committed(outcome)) { Close(Current!.Form.Tree.Label); return; }
+        if (offers.FirstOrDefault(o => o.Name == Current!.Name) is Offer latest) Select(latest);
+        else { Current = null; FormPanel.Clear(); Refresh(); Changed?.Invoke(); }
     }
     void ShowOutcome(System.Text.Json.Nodes.JsonNode reply)
     {
         LastOutcome = reply.DeepClone();
-        status.Text = Json.Committed(reply) ? "Operation committed. Open a returned subject to inspect its offered operations."
-            : Json.Terminal(reply) ? "Operation finished without a commit. Inspect the exact outcome details."
-            : "Outcome unknown. Check the original operation; do not resubmit.";
-        var outcome=new Label { Text="Received outcome · "+status.Text,Name="operation-outcome",AutowrapMode=TextServer.AutowrapMode.WordSmart };
-        results.AddChild(outcome);results.MoveChild(outcome,0);
-        // Exact proof failures can be large. Keep them selectable and scrollable
-        // without laying out the whole response as one wrapped label.
-        detailContents.AddChild(new TextEdit { Text = reply.ToJsonString(new() { WriteIndented=true }),
-            Editable=false, CustomMinimumSize=new(0,220), Name="operation-outcome-details" });
-        if (!Json.Committed(reply)) { Reveal(outcome);return; }
-        foreach (var bindings in reply["bindings"]!.AsArray()) {
-            if (bindings?["Results"] is not System.Text.Json.Nodes.JsonValue value) continue;
-            foreach (var row in Term.Parse(value.GetValue<string>()).Items) {
-                var result = row.Require("result", 2);
-                if (result[1].Kind != "compound" || result[1].Name != "entity_ref") continue;
-                var returned = Actor.FromTerm(result[1]);
-                var open = Button(results, "open-returned-subject", "View result: " + result[0], () => PresentSubject(returned, returned.Entity,false,"Result · "+result[0]));
-                open.TooltipText = result[1].ToString();
-                results.MoveChild(open,1);
-                Reveal(open);
-            }
-        }
+        answer.Text = reply.ToJsonString(new() { WriteIndented=true }); answer.Show();
+        if (Json.Committed(reply)) return;
+        status.Text = Json.Terminal(reply) ? "Refused: nothing was changed. Details shows the full answer." : Unknown;
+        Reveal(status);
     }
     void Reveal(Control control)
     {long expected=generation;SpatialGui.Reveal(control,()=>!disposed&&generation==expected);}
-    string StorageTitle(Actor chosen)=>chosen.Namespace==human.Namespace && chosen.Anchor==human.Anchor ? "Your account storage" : "Selected storage";
+    string StorageTitle(Actor chosen)=>chosen.Namespace==human.Namespace && chosen.Anchor==human.Anchor ? "Your ontology" : "Selected storage";
     Task Resolve() => busy ? working : working = ResolveWork();
     async Task ResolveWork()
     {
         if (busy || disposed) return; SetBusy(true); work = new(); var running = work;
         long expected = generation; var owner = accounts;
-        try { await owner.Resolve(running.Token); if (!disposed && expected == generation) {
-            foreach (var reply in owner.Outcomes) ShowOutcome(reply);
-            status.Text = owner.Uncertain ? "Original outcome remains unknown." : "Original outcomes recovered without submission."; }
-        } catch (Exception error) { if (!disposed && expected == generation) status.Text = error.Message; }
-        finally { SetBusy(false); running.Dispose(); if (ReferenceEquals(work, running)) work = null; if (!disposed) { if (Current != null) FormPanel.Lock(!Available || accounts.Uncertain || Draft(Current).Settled || Draft(Current).Revision != Current.Revision.ToString()); Changed?.Invoke(); } }
+        try { await owner.Resolve(running.Token); if (!disposed && expected == generation) status.Text = owner.Uncertain ? "Still unknown. Nothing was sent again." : "Checked. Nothing was sent again."; }
+        catch (Exception error) { if (!disposed && expected == generation) status.Text = error.Message; }
+        finally { SetBusy(false); running.Dispose(); if (ReferenceEquals(work, running)) work = null; Settle(); }
     }
     void RetireView()
     { var completion = view?.Completion ?? Task.CompletedTask; view?.Dispose(); view = null; retired = retired.IsCompleted ? completion : Task.WhenAll(retired, completion); }
     void Invalidate()
-    { generation++;revealPending=false;submitPending=false; RetireView(); Available = false; Current = null; subject = null; offers = []; FormPanel.Clear(); }
+    { generation++;revealPending=false;submitPending=false; RetireView(); Available = false; sent = false; Current = null; subject = null; offers = []; FormPanel.Clear(); }
     public void Suspend() { if(busy)return;Invalidate();Hide(); }
-    public void Cancel() { generation++;revealPending=false; work?.Cancel(); RetireView(); Available = false; Hide(); Cancelled?.Invoke();Changed?.Invoke(); }
+    void Close(string? validated) { work?.Cancel(); Invalidate(); requested = null; status.Text = ""; Hide(); Closed?.Invoke(validated); Changed?.Invoke(); }
+    public void Cancel() => Close(null);
     public void DisposeView()
-    { if (disposed) return; disposed = true; generation++; work?.Cancel(); RetireView(); Available = false; FormPanel.Clear(); }
+    { if (disposed) return; disposed = true; generation++; work?.Cancel(); RetireView(); Available = false; FormPanel.Clear(); if (accounts != null) accounts.Resolved -= Settle; }
     public override void _ExitTree() => DisposeView();
 }

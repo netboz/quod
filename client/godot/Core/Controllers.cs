@@ -12,6 +12,14 @@ public sealed record ControllerProfile(string Class, string[] Names, ControllerC
 public sealed record ControllerBinding(string Id, string Role, string Component, string Gesture, string? Modifier, string? Sector, float Threshold, float Fraction);
 public sealed record ControllerMapping(BigInteger Revision, string Digest, Dictionary<string,string> Roles, ControllerBinding[] Bindings, ControllerProfile[] Profiles)
 {
+    // Local sign-in uses only native GUI selection. Signed settings replace it
+    // after setup; they alone can assign menu and movement gestures.
+    public static ControllerMapping SignIn { get; }=new(0,"local-sign-in",
+        new() { ["navigation"]="none",["menu"]="none" },
+        [new("select","any","trigger","press_release",null,null,0,0)],
+        [new("htc_vive_controller",["htc-vive"],[new("trigger","xr-standard-trigger","trigger",["press"])],
+            new("bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94","gltf2-static-v1",
+                [-59,-70,-117,59,23,106],[1114152,665696,17551,17344,37,1,4194304]))]);
     static string Atom(Term t) => t.Kind == "atom" ? t.Name : throw new FormatException("Expected controller atom.");
     static T[] Unique<T>(IEnumerable<T> values, Func<T,string> key)
     { var rows=values.ToArray(); if(rows.Select(key).Distinct().Count()!=rows.Length) throw new FormatException("Duplicate controller description."); return rows; }

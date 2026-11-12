@@ -54,7 +54,6 @@ public partial class ExportChecks
         await Until(()=>State["controller_status"]?["available"]?.GetValue<bool>()==false && operations.Current?.Form.Submit.Name=="controller_restore" && operations.Available);
         Check(view.Completion?.IsCompleted==false && adapter.Router.Count==1,"authorized invalid-settings state retains its original signed subscription and source consumer");
         await Renew();Check(view.Completion?.IsCompleted==false,"ordinary invalid-state renewal retains the repair subscription");
-        operations.Defaults();
         var repair=operations.Current!;
         Console.WriteLine("M4_REPAIR_OFFER "+repair.Availability+" "+repair.Form.Submit+" "+repair.Revision);
         Check(repair.Form.Submit.Name=="controller_restore" && repair.Form.Defaults.Count==0,"actual generic offered operation supplies explicit Reset with exact invalid-value/revision fence");

@@ -33,9 +33,23 @@ public partial class ExportChecks
         Check(form.Draft["note"]=="unsent exact draft","fixture delivers the native editor change into the existing form owner before measuring retention");
         var draft=form.Draft;ulong editorId=editor.GetInstanceId();int submits=0;form.Invoked+=_=>submits++;
         var actual=(OpenXRInput)app.FindChild("openxr-input",true,false);
+        Check(actual.Router.Description.StartsWith("Saved mapping revision 0"),
+            "the opening application installs local GUI-only Vive controls before sign-in");
         actual.PresentWorkspace(true);await Frame();await Frame();
         Check(gui.Surface.Size==new Vector2I(1200,800) && form.GetThemeDefaultFontSize()==26,"XR uses the actual shared controls with a readable-density layout profile");
         Check(!((Control)app.FindChild("location",true,false)).IsVisibleInTree() && !((Control)app.FindChild("controllers",true,false)).IsVisibleInTree() && ((Button)app.FindChild("create-key",true,false)).IsVisibleInTree() && ((Button)app.FindChild("create-key",true,false)).ThemeTypeVariation=="PrimaryAction","offline spatial presentation retains its required key action while collapsing raw identity/controller detail");
+        var options=(Button)app.FindChild("connection-details",true,false);
+        var busy=typeof(Main).GetField("busy",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+        var update=typeof(Main).GetMethod("UpdateButtons",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+        busy.SetValue(app,true);update.Invoke(app,null);
+        Console.WriteLine($"M4_OPTIONS_TARGET text={options.Text} disabled={options.Disabled} flat={options.Flat} min={options.CustomMinimumSize} rect={options.GetGlobalRect()} visible={gui.Surface.GetVisibleRect()}");Console.Out.Flush();
+        Check(options.Text=="Options" && !options.Disabled && !options.Flat && options.CustomMinimumSize.Y>=48 && gui.Surface.GetVisibleRect().Encloses(options.GetGlobalRect()),
+            "the visible VR Options target remains available during a connection attempt");
+        await NativePress(options);await Frame();
+        var trust=(Button)app.FindChild("forget-node-key",true,false);
+        Check(trust.Text=="Trust this server" && trust.IsVisibleInTree() && gui.Surface.GetVisibleRect().Encloses(trust.GetGlobalRect()),
+            "Options reveals the explicit server-trust action within the VR workspace");
+        await NativePress(options);busy.SetValue(app,false);update.Invoke(app,null);
         await Device("text_larger");await Frame();
         Check(form.Input("note")!.GetInstanceId()==editorId && ReferenceEquals(form.Draft,draft) && draft["note"]=="unsent exact draft" && form.GetThemeDefaultFontSize()==30,$"larger text preserves the actual control/draft: identity={form.Input("note")!.GetInstanceId()==editorId}, sameDraft={ReferenceEquals(form.Draft,draft)}, value={draft["note"]}, font={form.GetThemeDefaultFontSize()}");
         var desktopUpdate=scene.Viewport.RenderTargetUpdateMode;
@@ -46,6 +60,20 @@ public partial class ExportChecks
         scene.Viewport.RenderTargetUpdateMode=desktopUpdate;
         actual.ShowWorkspace();actual.PresentWorkspace(false);await Frame();await Frame();
         Check(gui.Surface.Size==desktopPixels && form.Input("note")!.GetInstanceId()==editorId && ReferenceEquals(form.Draft,draft) && form.IsVisibleInTree(),"leaving spatial presentation restores desktop size and the same working controls");
+
+        actual.PresentWorkspace(true);await Press("import-backup");
+        var backup=(Control)app.FindChild("backup-dialog",true,false);
+        var backupPath=(LineEdit)backup.FindChild("backup-path",true,false);
+        Check(backup.GetViewport()==gui.Surface && backup.IsVisibleInTree() && !((Control)app.FindChild("login-steps",true,false)).IsVisibleInTree(),
+            "backup import replaces the login controls inside the same visible VR surface");
+        var keyboard=(Control)gui.FindChild("spatial-keyboard",true,false);
+        var shown=ToSignal(keyboard,CanvasItem.SignalName.VisibilityChanged);backupPath.GrabFocus();
+        if(!keyboard.Visible)await shown;
+        Check(gui.TextEntryActive,"the existing spatial keyboard can edit a backup path");
+        await NativePress((Button)backup.FindChild("backup-close",true,false));await Frame();
+        Check(!gui.TextEntryActive && ((Control)app.FindChild("login-steps",true,false)).IsVisibleInTree(),
+            "closing backup releases text input and restores the retained sign-in controls");
+        actual.PresentWorkspace(false);
 
         Check(XRServer.GetTracker("head")==null,"qualification owns an unused local head tracker identity");
         var head=new XRPositionalTracker { Name="head",Type=XRServer.TrackerType.Head };
@@ -66,7 +94,17 @@ public partial class ExportChecks
         Advance(tracked:false);
         Check(!adapter.GuiSurface.Visible,"a missing tracked head cannot invent an initial panel placement");
         void Head(Vector3 position,float yaw)=>head.SetPose("default",new(new Basis(Vector3.Up,yaw),position),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
-        head.SetPose("default",new(Basis.FromEuler(new(.8f,.4f,.9f)),new(1.2f,1.4f,-.7f)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
+        head.SetPose("default",new(Basis.FromEuler(new(.8f,.4f,.9f)),new(1.2f,1.4f,-.7f)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance(focused:false);
+        Check(adapter.GuiSurface.Visible && adapter.DriveRequests==0,"a tracked visible XR session presents the workspace before input focus without dispatching travel");
+        var workspace=(Control)app.FindChild("workspace-content",true,false).GetChild(0);
+        workspace.Hide();Advance();
+        Check(!adapter.GuiSurface.Visible,"an XR workspace with no visible application content shows no blank panel");
+        workspace.Show();Advance();
+        Check(adapter.GuiSurface.Visible,"visible application content restores the same XR workspace");
+        var loginLogo=(TextureRect)app.FindChild("login-logo",true,false);
+        Check(loginLogo.IsVisibleInTree() && loginLogo.Texture?.ResourcePath=="res://assets/quod-icon.png",
+            "the first visible XR workspace contains the bundled Quod icon before sign-in or input focus");
+        Advance();
         var openingHead=((Node3D)adapter.FindChild("xr-origin",true,false)).GlobalTransform*head.GetPose("default").GetAdjustedTransform();
         var openingPanel=adapter.GuiSurface.GlobalTransform;var flatForward=-openingHead.Basis.Z;flatForward.Y=0;flatForward=flatForward.Normalized();
         Check(openingPanel.Basis.Y.Dot(Vector3.Up)>.9999f && Mathf.Abs(openingPanel.Origin.Y-openingHead.Origin.Y)<.0001f &&
@@ -200,9 +238,24 @@ public partial class ExportChecks
             var opaque=await Background("opaque");
             Check(tinted.A>.7f && tinted.A<.9f && opaque.A>.99f,"real renderer applies translucency to the background and keeps an opaque option");
         }
+        scene.Apply(Term.Parse("[mark(<<\"new\">>,<<\"box\">>,[f(<<\"width\">>,500),f(<<\"height\">>,500),f(<<\"depth\">>,500)],transform(0,0,-2250,0,0,0),surface(<<\"#6A90D9\">>,0,700,0,1000,[]),unlabelled,depicts_nothing)]"));
+        await Frame();await Frame();Advance();
+        var framed=origin.GlobalTransform.Origin;
+        scene.Stand(ScenePose.Decode(Term.Parse("transform(0,0,0,0,0,0)")));Advance();
+        Check(framed.DistanceTo(new(0,0,-2.25f))<1 && origin.GlobalTransform.IsEqualApprox(Transform3D.Identity),
+            $"a headset stands where the agent is placed, two metres from a new half-metre space, not at the desktop camera that frames it from {framed.DistanceTo(new(0,0,-2.25f)):0.00} m");
+        scene.Stand(null);scene.Withdraw();
         adapter.StopSession();await adapter.Completion;
         Check(adapter.Subscriptions==0 && models.LiveLeases==0 && models.LiveTemplates==0 && gui.Captures==0,"workspace retirement releases real input/render consumers and captures");
         XRServer.RemoveTracker(left);XRServer.RemoveTracker(right);XRServer.RemoveTracker(head);adapter.GetParent().RemoveChild(adapter);adapter.Free();form.Free();
+        await NativePress((Button)app.FindChild("create-key",true,false));await Until(()=>!Busy);
+        var identity=State["public_key"]!.ToString();
+        var endpoint=(LineEdit)app.FindChild("endpoint",true,false);endpoint.Text="https://server.invalid";
+        app.ActiveStore.Update(saved=>saved.NodeKeys[endpoint.Text]=new string('0',64));
+        await NativePress(options);await NativePress(trust);await Until(()=>!Busy);
+        Check(app.ActiveStore.Snapshot!.NodeKey(endpoint.Text)=="" && State["public_key"]!.ToString()==identity &&
+            !((Button)app.FindChild("connect",true,false)).Disabled,
+            "native Options choice removes only disposable server trust and keeps the saved key and Sign in ready");
         await File.WriteAllTextAsync(Env("M1B_RESULT"),System.Text.Json.JsonSerializer.Serialize(new { passed=true,reports,checks,coverage="real Main/native GUI layout and injected XRServer consumers; no native runtime or physical readability claim" }));
         Console.WriteLine("M4_WORKSPACE_OBSERVED");Console.Out.Flush();Console.WriteLine("M4_WORKSPACE_PASS");Console.Out.Flush();await app.CloseApplication();
     }

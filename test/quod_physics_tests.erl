@@ -2728,6 +2728,9 @@ renewal_worker_cancellation_test_() ->
                     expired -> Socket ! {timeout,Old,expired}, {<<"refresh">>,<<"expired">>};
                     candidate_expired -> Socket ! {timeout,Candidate,expired}, {<<"unavailable">>,<<"expired">>};
                     proof_failed -> exit(Worker,kill), {<<"unavailable">>,<<"proof_unavailable">>};
+                    recovering ->
+                        Socket ! {replay_started,{quod_reg:where({quod_prolog,Ns}),make_ref()},0},
+                        {<<"unavailable">>,<<"dependency_recovering">>};
                     revoked -> ok = sys:suspend(Pid),
                         commit(Ns,{retract,{can_view_physics,room,{'_'}}}), {<<"refresh">>,<<"durable_gap">>}
                 end,
@@ -2738,12 +2741,20 @@ renewal_worker_cancellation_test_() ->
                 after 5000 -> error(renewal_proof_not_cancelled) end,
                 receive {simulation_opening_down,Socket,Worker} -> ok
                 after 5000 -> error(renewal_cleanup_missing) end,
+                case Reason of
+                    recovering ->
+                        ?assert(is_integer(erlang:read_timer(Old))),
+                        ?assertEqual(refresh,maps:get(pending,simulation_state(Socket))),
+                        Socket ! {client,<<"{\"type\":\"close\"}">>},
+                        ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket));
+                    _ -> ok
+                end,
                 ?assertEqual(false,erlang:read_timer(Old)),
                 ?assertEqual(false,erlang:read_timer(Candidate)),
                 Socket ! {view_opened,Ref,retired_result},
                 ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket))
             after catch sys:resume(Pid), Socket ! stop end
-        end,[expired,candidate_expired,proof_failed,revoked])
+        end,[expired,candidate_expired,proof_failed,recovering,revoked])
         after gproc:unreg(quod_reg:name({host_test,local_proof})) end
     end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}}] end) end}.
 
@@ -2829,6 +2840,92 @@ registered_view_dependency_waits_for_replay_test_() ->
             ?assert(quod_prolog:applied(Ns) >= Height)
         after
             _ = catch sys:resume(Simplex),
+            Socket ! stop,
+            receive {'DOWN',Monitor,process,Socket,_} -> ok
+            after 1000 -> error(dependency_socket_not_stopped) end
+        end
+    end) end}.
+
+retained_view_dependency_waits_for_restart_test_() ->
+    [{atom_to_list(Mode),retained_view_restart(Mode)} || Mode <- [replay,ready,expired,closed]].
+
+retained_view_restart(Mode) ->
+    {timeout,30,fun() -> with_world(fun(F = #{namespace := Ns}) ->
+        Sup = quod_reg:where({quod_ns,Ns}),
+        Simplex = quod_reg:where({quod_simplex,Ns}),
+        Engine = quod_reg:where({quod_prolog,Ns}),
+        Anchor = quod_simplex:genesis_hash(Ns), Height = quod_prolog:applied(Ns),
+        Parent = self(),
+        Socket = spawn_link(fun() ->
+            true = quod_reg:subscribe({runtime,Ns}),
+            M = monitor(process,Engine),
+            Timer = erlang:start_timer(10000,self(),expired),
+            State = #{peer => {127,0,0,1},timer => Timer,installed => true,
+                heights => #{Ns => Height},anchors => #{Ns => Anchor},owners => #{Engine => Ns},
+                local_ready => #{Ns => true},dependency_monitors => #{M => Engine},
+                dependency_names => #{},follows => #{},
+                follow_requests => gen_server:reqids_new(),snapshots => gen_server:reqids_new()},
+            Parent ! {dependency_following,self()},
+            simulation_socket(Parent,State)
+        end),
+        Monitor = monitor(process,Socket),
+        try
+            receive {dependency_following,Socket} -> ok
+            after 1000 -> error(dependency_follow_not_installed) end,
+            case Mode of ready -> true = erlang:suspend_process(Socket); _ -> ok end,
+            ok = sys:suspend(Simplex),
+            [ok = supervisor:terminate_child(Sup,Child) ||
+                Child <- [quod_runtime,quod_feed,quod_catchup,quod_prolog]],
+            case Mode of
+                ready ->
+                    true = quod_reg:subscribe({runtime,Ns}),
+                    {ok,Fresh} = supervisor:restart_child(Sup,quod_prolog),
+                    ok = sys:resume(Simplex),
+                    receive {replay_ready,{Fresh,_},_} -> ok
+                    after 10000 -> error(replacement_not_ready) end,
+                    true = quod_reg:unsubscribe({runtime,Ns}),
+                    true = erlang:resume_process(Socket);
+                _ -> ok
+            end,
+            Paused = simulation_reply(Socket,<<"unavailable">>),
+            ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,Paused)),
+            case Mode of
+                ready -> _ = simulation_reply(Socket,<<"refresh">>);
+                _ ->
+                Waiting = simulation_state(Socket),
+                ?assertEqual(false,maps:get(Ns,maps:get(local_ready,Waiting))),
+                ?assertEqual(1,map_size(maps:get(dependency_names,Waiting))),
+                {ok,Next} = supervisor:restart_child(Sup,quod_prolog),
+                _ = simulation_reply(Socket,<<"unavailable">>),
+                Rebuilding = simulation_state(Socket),
+                ?assertEqual(#{Next => Ns},maps:get(owners,Rebuilding)),
+                ?assertEqual(maps:get(timer,Waiting),maps:get(timer,Rebuilding)),
+                Socket ! {replay_ready,{Engine,boot},Height},
+                ?assertEqual(Rebuilding,simulation_state(Socket)),
+                case Mode of
+                    expired ->
+                        Socket ! {timeout,maps:get(timer,Waiting),expired},
+                        ?assertMatch(#{<<"reason">> := <<"expired">>},simulation_reply(Socket,<<"unavailable">>));
+                    closed -> Socket ! {client,<<"{\"type\":\"close\"}">>};
+                    replay ->
+                        %% A concurrent renewal cannot discard recovery interest.
+                        Socket ! {client,simulation_open(F,simulation_session(
+                            maps:get(identity,F)),maps:get(node,F))},
+                        ?assertMatch(#{<<"reason">> := <<"dependency_recovering">>},
+                            simulation_reply(Socket,<<"unavailable">>)),
+                        ?assertEqual(Rebuilding,simulation_state(Socket))
+                end,
+                ok = sys:resume(Simplex),
+                case Mode of
+                    replay -> _ = simulation_reply(Socket,<<"unavailable">>),
+                        _ = simulation_reply(Socket,<<"refresh">>);
+                    _ -> ok
+                end
+            end,
+            ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket))
+        after
+            _ = catch sys:resume(Simplex),
+            _ = catch erlang:resume_process(Socket),
             Socket ! stop,
             receive {'DOWN',Monitor,process,Socket,_} -> ok
             after 1000 -> error(dependency_socket_not_stopped) end

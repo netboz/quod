@@ -7,7 +7,6 @@ boot_splash/show_image=true
 boot_splash/image="res://assets/quod-splash.png"
 boot_splash/fullsize=false
 boot_splash/use_filter=true
-boot_splash/minimum_display_time=1200
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 [display]
 window/size/viewport_width=1200

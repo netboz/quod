@@ -2043,7 +2043,9 @@ t_replay_reentry({Ns, Engine}) ->
         %% The real publication feeds the socket's existing receive handler.
         %% A different owner and duplicate starts cannot invalidate this view.
         View = #{peer => {127,0,0,1},owners => #{Engine => Ns},
-                 heights => #{Ns => 1},local_ready => #{Ns => true}},
+                 heights => #{Ns => 1},local_ready => #{Ns => true},follows => #{},
+                 anchors => #{Ns => quod_simplex:genesis_hash(Ns)},dependency_monitors => #{},
+                 follow_requests => gen_server:reqids_new(),snapshots => gen_server:reqids_new()},
         ?assertEqual({ok,View},quod_client_view:websocket_info(
             {replay_started,{self(),make_ref()},1},View)),
         {reply,{text,Paused},Recovering} = quod_client_view:websocket_info(Started,View),

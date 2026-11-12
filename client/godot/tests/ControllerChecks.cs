@@ -15,13 +15,20 @@ public partial class ExportChecks
         // Frames are injected through real XRServer trackers. GUI events,
         // scene nodes and GLB decode are the production engine consumers.
         await Frame();
-        byte[] model=await File.ReadAllBytesAsync(Env("M4_MODEL"));
+        var startupAsset=ControllerMapping.SignIn.Profiles.Single().Model;
+        var modelPath="res://assets/models/"+startupAsset.Digest+".bin";
+        Check(Godot.FileAccess.FileExists(modelPath),"the exported application contains the startup Vive model bytes");
+        byte[] model=Godot.FileAccess.GetFileAsBytes(modelPath);
+        Check(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(model)).Equals(startupAsset.Digest,StringComparison.OrdinalIgnoreCase),
+            "the bundled startup model matches its admitted digest");
         var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
         var gui=(SpatialGui)app.FindChild("shared-gui",true,false);
         var scene=(ScenePanel)app.FindChild("space-scene",true,false);
         var adapter=new OpenXRInput();scene.Viewport.AddChild(adapter);
         int fetched=0,clicked=0,menuActivated=0;bool overlay=false,menuEnabled=true;
-        using var resources=new RenderModels((asset,cancellation)=> { fetched++;return Task.FromResult(model); });
+        var firstLoad=new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondLoad=new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var resources=new RenderModels((asset,cancellation)=>++fetched==1 ? firstLoad.Task : fetched==2 ? secondLoad.Task : Task.FromResult(model));
         var pie=new PieMenu();gui.Surface.AddChild(pie);pie.Selected+=_=>menuActivated++;
         adapter.Configure(scene,gui,resources,()=>null,()=>overlay,pie,_=>{
             pie.Open(gui.Surface.Size/2,300,"Reading…");pie.Present(QualificationPie((1,"Test existing menu consumer",menuEnabled)),"");return true;});
@@ -34,7 +41,7 @@ public partial class ExportChecks
             t.SetPose("aim",new(Basis.Identity,new(0,0,1)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
             t.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);XRServer.AddTracker(t);return t;
         }
-        adapter.Install(mapping);adapter.AttachSources();
+        adapter.Install(ControllerMapping.SignIn);adapter.AttachSources();
         var left=Tracker("m4_left",XRPositionalTracker.TrackerHand.Left);var right=Tracker("m4_right",XRPositionalTracker.TrackerHand.Right);
         ulong frame=0;
         void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked);
@@ -45,9 +52,25 @@ public partial class ExportChecks
         }
         void Held(XRControllerTracker t,string name,bool down) { t.SetInput(name,down);Advance(); }
         await Frame();Pose(left,button.GetGlobalRect().GetCenter());Pose(right,button.GetGlobalRect().GetCenter());
+        Check(adapter.AppearanceStatus=="Loading controllers…","pending appearance loading has visible progress without blocking input initialization");
+        firstLoad.SetException(new IOException("Injected model transfer failure"));await adapter.Completion;
+        Check(adapter.AppearanceFailed,"failed appearance remains available for an explicit retry");
+        for(int i=0;i<20;i++){adapter.Router.SourceChanged();Advance();}
+        Check(fetched==1 && resources.Decodes==0,"unchanged frames and source notices never retry failed model transfers");
+        adapter.RetryAppearances();secondLoad.SetCanceled();await adapter.Completion;
+        Check(adapter.AppearanceFailed,"a cancelled transfer for a still-current source is reported and can be retried");
+        adapter.RetryAppearances();await adapter.Completion;Advance(focused:false);
+        Check(!adapter.AppearanceFailed && adapter.AppearanceStatus=="" && fetched==3,
+            "explicit retry replaces failed leases and shares one successful model transfer");
+        Check(adapter.Sources.All(s=>s.Grip.GetChildren().OfType<Node3D>().Any(n=>n.Visible)) && adapter.DriveRequests==0,
+            "startup Vive models are visible before input focus without enabling travel");
+        Advance();Held(left,"trigger_press",true);Held(left,"trigger_press",false);
+        Check(clicked==1 && adapter.DriveRequests==0 && adapter.SnapRequests==0 && adapter.TeleportRequests==0,
+            "startup Vive trigger activates the native sign-in control only");
+        clicked=0;adapter.Install(mapping);
         left.SetInput("trigger_press",true);await adapter.Completion;Advance();Held(left,"trigger_press",false);
         Check(clicked==0 && gui.Captures==0,"already-held source connection requires neutral before selection can arm");Advance();
-        Check(fetched==1 && resources.Decodes==1 && resources.LiveLeases==2 && resources.InstancesCreated==2,"two tracked sources share verified bytes/template with independent engine appearances");
+        Check(fetched==3 && resources.Decodes==1 && resources.LiveLeases==2 && resources.InstancesCreated==2,"two tracked sources share verified bytes/template with independent engine appearances");
         Held(left,"trigger_press",true);
         Console.WriteLine($"M4_CAPTURE captures={gui.Captures} clicks={clicked} mouse={gui.Surface.GetMousePosition()} hover={gui.Surface.GuiGetHoveredControl()?.Name} button={button.GetGlobalRect()} pressed={button.ButtonPressed} source={adapter.Sources[0].Aim.GlobalTransform} raw={left.GetPose("aim").Transform} panel={adapter.GuiSurface.GlobalTransform} size={gui.Surface.Size} disabled={gui.Surface.GuiDisableInput} local={gui.Surface.HandleInputLocally} visible={gui.Visible}");
         Check(gui.Captures==1 && clicked==0,"mapped press acquires the real native GUI capture without activation");
@@ -72,7 +95,8 @@ public partial class ExportChecks
         Check(ModelsVisible() && System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==focusResources,"repeated desktop focus loss and unchanged XR frames retain model leases templates instances and textures");
         foreach(var gate in new[]{(Focused:false,Running:true,Tracked:true),(Focused:true,Running:false,Tracked:true),(Focused:true,Running:true,Tracked:false)}) {
             Advance();Held(left,"trigger_press",true);Advance(gate.Focused,gate.Running,gate.Tracked);
-            Check(ModelsHidden() && gui.Captures==0 && clicked==expectedClicks,"native focus/running/head gate cancels input and withholds controller models: "+gate);
+            Check((gate.Running && gate.Tracked ? ModelsVisible() : ModelsHidden()) && gui.Captures==0 && clicked==expectedClicks,
+                "native focus/running/head gate cancels input while tracked visible models remain present: "+gate);
             left.SetInput("trigger_press",false);Advance(gate.Focused,gate.Running,gate.Tracked);Advance();
             Check(ModelsVisible() && clicked==expectedClicks,"restored native gate rearms only from neutral without a cancelled release: "+gate);
         }
@@ -118,9 +142,11 @@ public partial class ExportChecks
         left.SetInput("squeeze_press",false);left.SetInput("pad_axes",Vector2.Zero);Advance();
         Check(adapter.DriveRequests==cancelledDrives,"neutral release does not resume cancelled travel");
         Advance();Held(left,"trigger_press",true);left.InvalidatePose("aim");Advance();Held(left,"trigger_press",false);
-        Check(clicked==expectedClicks && gui.Captures==0,"lost current ray cancels while an old engine transform remains");
+        Check(clicked==expectedClicks && gui.Captures==0 && adapter.Sources.Single(s=>s.Tracker==left).Grip.GetChildren().OfType<Node3D>().Any(n=>n.Visible),
+            "lost current ray cancels input while the independently tracked wand stays visible");
         Pose(left,button.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);left.InvalidatePose("grip");Advance();Held(left,"trigger_press",false);
-        Check(clicked==expectedClicks,"lost grip pose cannot select through a retained ray");
+        Check(clicked==expectedClicks && adapter.Sources.Single(s=>s.Tracker==left).Grip.GetChildren().OfType<Node3D>().All(n=>!n.Visible),
+            "lost grip pose hides that wand and cannot select through a retained ray");
         left.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
         Held(left,"trigger_press",true);adapter.Advance(frame,true,true,true);Held(left,"trigger_press",false);
         Check(clicked==expectedClicks,"duplicate stale frame cancels pending selection");

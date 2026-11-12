@@ -52,20 +52,21 @@ public partial class EidolonPanel : VBoxContainer
         near=SpatialGui.ActionButton("Near this object","form-near-object");placementActions.AddChild(near);near.Pressed+=PlaceNear;
         personal=SpatialGui.ActionButton("Personal workspace","form-personal-workspace");placementActions.AddChild(personal);personal.Pressed+=PlacePersonal;
         near.ToggleMode=personal.ToggleMode=true;
-        var close=SpatialGui.ActionButton("Close","hide-subject-form");close.TooltipText="Return to current space; keep this form and its draft.";placementActions.AddChild(close);close.Pressed+=()=>HiddenByUser?.Invoke();
+        var close=SpatialGui.ActionButton("Close","hide-subject-form");close.TooltipText="Close this and return to the current space.";placementActions.AddChild(close);close.Pressed+=Cancel;
         var scroll=new ScrollContainer {Name="subject-task-scroll",HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true,SizeFlagsVertical=SizeFlags.ExpandFill};
         AddChild(scroll);scroll.AddChild(content);content.SizeFlagsHorizontal=SizeFlags.ExpandFill;
         content.AddChild(status);content.AddChild(Operations);content.AddChild(workbench);content.AddChild(source);
         // The pie is the chooser; the panel keeps the opened content, its
         // placement toggle, Close and the exact identity on request.
-        var details=SpatialGui.ActionButton("Details");content.AddChild(details);details.Pressed+=()=>exact.Visible=!exact.Visible;
+        var details=SpatialGui.ActionButton("Details");content.AddChild(details);details.Pressed+=()=>{exact.Visible=!exact.Visible;Operations.ShowDetails(exact.Visible);};
         content.AddChild(exact);
         Operations.SubjectOpened+=SubjectOpened;Operations.Changed+=()=>{
             if(Selected?.Operation==true&&(!Operations.Available||Operations.Current?.Name!=Selected.Style)) {
                 WithdrawRepresentation(KeepVisual);Operations.Hide();status.Text="The selected action is unavailable. Choose a current view or action.";
             }
             RefreshContext();Changed?.Invoke();};
-        Operations.Cancelled+=()=>{Retire();Hide();HiddenByUser?.Invoke();Changed?.Invoke();};
+        // Validated or cancelled, the form is gone: the next opening starts from the subject's default.
+        Operations.Closed+=validated=>{if(validated!=null)preferred=null;Retire();exact.Hide();Hide();HiddenByUser?.Invoke();Changed?.Invoke();};
         source.Changed+=()=>{workbench.UpdateAccess();Changed?.Invoke();};
         preview.Selected+=s=>{if(workbench.Visible)workbench.Select(s.Subject);else OpenOccurrence(session,accounts,store,s);};
         workbench.CanEdit=()=>source.CanEdit;
@@ -242,7 +243,7 @@ public partial class EidolonPanel : VBoxContainer
     void Retire(bool retainVisual=false)
     {generation++;Available=false;workbenchSource=false;Offered=[];WithdrawRepresentation(retainVisual);var prior=discovery;discovery=null;prior?.Dispose();Keep(prior?.Completion??Task.CompletedTask);}
     public void DisposeView(){if(disposed)return;disposed=true;SetOccurrence(null);Retire();source.DisposeView();Operations.DisposeView();}
-    public void Cancel()=>Operations.Cancel();
+    public void Cancel(){preferred=null;Operations.Cancel();}
     public override void _ExitTree()=>DisposeView();
     // The host places the preview elsewhere in its layout; it still lives and
     // dies with this panel.

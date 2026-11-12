@@ -105,7 +105,10 @@ public partial class SpatialGui
     void CheckTextTarget() {if(!TextCurrent(textTarget,textGeneration))EndTextInput();}
     void RefreshKeyboard()
     {
-        if(pressed || !TextCurrent(textTarget,textGeneration))return;
+        if(pressed)return;
+        if(!TextCurrent(textTarget,textGeneration)) {
+            if(keyboard.Visible){keyboard.Hide();ResizeKeyboard();}return;
+        }
         if(!keyboard.Visible){keyboard.Show();ResizeKeyboard();}
     }
     void ResizeKeyboard()
@@ -121,8 +124,8 @@ public partial class SpatialGui
             previous.FocusExited-=EndTextInput;previous.TreeExiting-=EndTextInput;previous.VisibilityChanged-=CheckTextTarget;
             previous.MinimumSizeChanged-=CheckTextTarget;previous.Draw-=CheckTextTarget;if(previous is LineEdit line)line.EditingToggled-=EditingToggled;
         }
-        // Hiding a captured key invokes the existing visibility cancellation.
-        // Do not cancel a new press that moved focus to another native control.
-        if(keyboard?.Visible==true){keyboard.Hide();ResizeSurface();}
+        // Revoke the target immediately, but retain geometry until the native
+        // press that changed focus ends. Its release must use the same surface.
+        if(keyboard!=null)RefreshKeyboard();
     }
 }

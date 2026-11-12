@@ -76,7 +76,11 @@ public partial class ScenePanel : SubViewportContainer
         viewport.RenderTargetUpdateMode=active ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.WhenVisible;
     }
     internal Node3D SceneRoot=>root;
-    internal Transform3D CameraPose=>camera.GlobalTransform;
+    // Where the principal's own agent is placed in the viewed space. A headset
+    // stands there; the desktop observer camera frames the whole view instead.
+    Transform3D? standpoint;
+    internal void Stand(ScenePose? placed)=>standpoint=placed?.Transform is BigInteger[] p ? Pose(p) : null;
+    internal Transform3D ViewerPose=>Controlled||standpoint is not Transform3D placed ? camera.GlobalTransform : placed;
     internal Basis DomainBasis {
         get { var basis=Basis.Identity;foreach(var frame in world?.ViewFrames??[])basis*=RotationBasis(frame.Transform!);return basis; }
     }

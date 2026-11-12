@@ -128,7 +128,7 @@ public partial class ExportChecks : Node
             }
             if (phase == "input") {
                 await Keyboard(operations, offered);
-                operations.Defaults(); await Mouse(operations, offered);
+                await Mouse(operations, offered);
                 if (Environment.GetEnvironmentVariable("M1B_SCREENSHOT") is string screenshot) {
                     Check(DisplayServer.GetName() != "headless", "rendered capture uses actual desktop display");
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -140,7 +140,6 @@ public partial class ExportChecks : Node
                 if (phase == "fresh") {
                     await File.WriteAllTextAsync(Env("M1B_OLD_OFFER"), JsonSerializer.Serialize(new { revision = offered.Revision.ToString(), fields = offered.Form.Fields(offered.Form.Defaults).ToString() }));
                     await Keyboard(operations, offered);
-                    operations.Defaults();
                     await Mouse(operations, offered);
                     var choice = offered.Form.Tree.Leaves.FirstOrDefault(c => c.Family == "choice");
                     if (choice != null && operations.FormPanel.Input(choice.Role) is OptionButton selection) {
@@ -148,11 +147,12 @@ public partial class ExportChecks : Node
                         selection.Select(index); selection.EmitSignal(OptionButton.SignalName.ItemSelected, index);
                         Check(operations.FormPanel.Draft[choice.Role] == choice.Options[index].Value.ToString(), "offered selection edits exact typed value");
                     }
-                    operations.Defaults();
                     // Cancellation is local and never dispatches an unsent form.
                     int pending = State["pending"]!.GetValue<int>(); operations.Cancel();
-                    await Device("account_controls"); await Until(() => State["operation_available"]?.GetValue<bool>() == true);
+                    Check(operations.Current == null && operations.FormPanel.Descriptor == null, "a cancelled form disappears");
+                    await Device("account_controls"); await Until(() => State["operation_available"]?.GetValue<bool>() == true && operations.Current != null);
                     Check(State["pending"]!.GetValue<int>() == pending, "unsent cancel/reopen does not dispatch");
+                    Check(operations.FormPanel.Draft.OrderBy(p => p.Key).SequenceEqual(operations.Current!.Form.Defaults.OrderBy(p => p.Key)), "reopening after cancel starts from the offered form, not from what was typed");
                 } else {
                     var reset = operations.FormPanel.Input("controller_reset") as CheckButton ?? throw new Exception("Offered Reset checkbox");
                     reset.ButtonPressed = true;
@@ -202,6 +202,12 @@ public partial class ExportChecks : Node
             Check(State["status"]!.ToString()!="Signing in…", "startup attempts authentication without a click");
             Check(!((Button)app.FindChild("connect",true,false)).Disabled && State["pending"]!.GetValue<int>()==0,
                 "failed sign-in leaves retry and no signed domain work");
+            var options=(Button)app.FindChild("connection-details",true,false);
+            Check(options.Text=="Options" && !options.Disabled && options.IsVisibleInTree(),
+                "failed sign-in leaves the native Options control available");
+            await NativePress(options);
+            Check(((Button)app.FindChild("forget-node-key",true,false)).IsVisibleInTree(),
+                "Options reveals the explicit server-trust action after failed sign-in");
             await Capture("sign-in-failed");
             await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true, key=State["public_key"]!.ToString(), checks }));
         }

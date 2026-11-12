@@ -41,13 +41,15 @@ public partial class ExportChecks
             await new TaskCompletionSource().Task;
         }
         Check(panel.LastOutcome!=null && Json.Committed(panel.LastOutcome),"ordinary offered "+label+" commits through U to the same A");
+        Gone(panel);
         var expected=leave ? Term.Atom("unplaced") : Term.Call("placed",subject,Term.Parse("transform(0,0,0,0,0,0)"));
         await Until(()=>State["current_location"]?.ToString()==expected.ToString() && (leave || State["world_accepted"]!.GetValue<bool>()));
     }
     async Task<Term> CreateNested(OperationsPanel panel,Actor storage)
     {
-        await CreationTarget(panel,storage,"create"); NewDraft(panel); await ClickSubmit(panel);
+        await CreationTarget(panel,storage,"create"); await ClickSubmit(panel);
         Check(panel.LastOutcome!=null && Json.Committed(panel.LastOutcome),"ordinary selected-storage creation works in the current nested space");
+        Gone(panel,"Create space");
         return Result(SpaceResults(panel.LastOutcome!),"space");
     }
     async Task SpaceNavigation(string phase,JsonObject original)

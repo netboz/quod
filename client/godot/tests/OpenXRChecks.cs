@@ -11,6 +11,9 @@ public partial class ExportChecks
         using var api=new OpenXRApiExtension();
         var cycles=new List<object>();
         var calibration=typeof(OpenXRInput).GetField("calibration",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+        Check(adapter.Running && scene.Viewport.UseXR,"native startup presents XR before sign-in");
+        app.Disconnect();
+        Check(adapter.Running && scene.Viewport.UseXR,"ending a network session leaves XR presentation running");
         for(int cycle=1;cycle<=3;cycle++) {
             Check(adapter.Start(),"installed OpenXR interface starts cycle "+cycle);
             if(cycle==1 && Env("M1B_PHASE")=="openxr-input")await ObserveOpenXRControls(adapter);

@@ -38,7 +38,10 @@ the current consumer. An imported key without an account reference first checks
 its retained signup receipt; lookup failure cannot provision a replacement.
 The setup description names the policy-selected existing account storage for S0.
 
-The Quod logo appears on the opening screen. On first run, **Create my key**
+The shared opening surface renders the Quod logo before opening local identity storage.
+The launcher starts the engine directly, without process polling or fixed startup waits.
+The sign-in card remains visible while the initial space is being opened; an
+accepted space or a confirmed unplaced location completes that transition. On first run, **Create my key**
 stores a local identity and connects; **Import encrypted backup** restores an
 existing key and connects when its dialog closes. Returning users with a saved
 active key connect automatically. The current capability determines the
@@ -47,19 +50,23 @@ highlighted next action:
 and starting space**. Storage review is a read, and setup remains a separate
 explicit action. Existing accounts skip completed provisioning. An imported key
 with no recovered account cannot register a replacement. Server, public identity,
-storage details and encrypted backup controls remain explicitly inspectable.
+storage details and encrypted backup controls remain inspectable in **Options**
+near the top of the sign-in card. If the server's identity changes, sign-in
+stops and explains that the user's key is unchanged; **Trust this server** is
+an explicit choice in **Options** before signing in again.
 
 The authenticated session's absolute expiry retires its signed views and input.
 **Sign in again** explicitly authenticates the same key and checks original work;
-it never renews silently or replays a submission. Unsent operation drafts stay in
-their existing native owner for this window, separated by network, principal and
-exact offered subject. Changing that identity also clears prior displayed outcomes
-and returned-subject actions; it never deletes their original stored work.
+it never renews silently or replays a submission. An operation form lives until
+it is validated or closed; what was typed in it is not kept afterwards. Changing
+network or principal also clears the last displayed answer; it never deletes
+original stored work.
 Invalid numeric text remains visible with its error instead
 of acquiring a guessed slider value. Source drafts retain their existing durable
 store. A process restart restores those durable drafts and original work, not an
-unwritten generic form. Signing in after mapping withdrawal, and backup/import
-through the separate modal window, remain desktop actions.
+unwritten generic form. Network-session cleanup does not wait for controller artwork.
+Encrypted backup import/export uses the same sign-in card and native text
+controls on desktop and in VR; Close returns to the retained sign-in controls.
 
 Native controls support keyboard focus/editing and mouse interaction. Closing a
 form cancels local/opening work and retains uncertain signed work. Only explicit
@@ -99,8 +106,8 @@ In spatial presentation, its authored action form appears above that occurrence.
 **Personal workspace** moves the same form there; **Near this object** returns it
 to the still-current occurrence. Native controls, unsent draft, caret/selection,
 operation revision and received original outcome stay with the existing owner.
-Choosing either placement performs no domain action. **Close** returns to current
-space while retaining the form. Desktop presents it as a floating glass panel
+Choosing either placement performs no domain action. **Close** ends the form and
+returns to the current space. Desktop presents it as a floating glass panel
 docked to the side of the window farther from its target.
 
 This also applies to an occurrence selected inside an offered visual preview.
@@ -194,12 +201,13 @@ shared mark adapter draws solid boxes, exact finite edge boxes and groups,
 and picking opens operations on the exact depicted subject. It creates no
 collision or local simulation. Creation leaves A in the current space.
 
-Submitted drafts stay locked; explicit defaults start another operation after
-the original outcome is known. Changed schemas retain compatible draft fields
-but require explicit adoption. Recovery displays original result bindings and
-returned subjects through the existing signed outcome owners. **View result**
-opens the exact returned subject for inspection without entering it; the received
-original outcome remains distinct from any subsequently selected local draft.
+A validated form disappears and the HUD strip says **Done** with its authored
+title. A cancelled form disappears too; selecting the action again opens the
+currently offered form. A refused form stays open with its reason for
+correction. Only a sent form whose answer did not arrive stays visible and
+locked, until **Check what happened** reads the original outcome; nothing is
+sent again. A renewed offer replaces the open form and keeps what was typed in
+the fields it still offers.
 
 Current location comes from the committed assignment's live navigation view;
 the original account/S0 results stay unchanged. Current-space operations and
@@ -211,16 +219,19 @@ Recursive parent-first marks, absolute body poses and decorative source-frame
 poses share the scene adapter. Native samples retain world/run/structure and
 registration fences; missing or unavailable sources withdraw presentation and
 control. Physical WASD/QE positions move an observer camera; middle-drag changes its viewing angle.
+Without a controlled body a headset stands where the user's agent is placed in
+the current space, not at that framing camera.
 An explicitly selected controlled body instead uses the signed native control
 lane and authoritative viewpoint. Focus loss releases local input. No collision
 or domain simulation runs in the client.
 The normal build renders with Vulkan (Godot's Mobile renderer) on desktop and
 in VR alike: SteamVR's OpenXR runtime on Linux accepts Vulkan or OpenGL 4.3+,
-and the engine's OpenGL path only offers 3.3. OpenXR is enabled at start; if no
-supported runtime or headset initializes, the desktop client continues without
-VR. After account sign-in, **F9** or **This device ▸ Enter VR** enters VR while
-the client is focused; **F9**, **Escape** (once nothing else is open) or
-**This device ▸ Return to 3D** leaves it. Each attempt reports its outcome in
+and the engine's OpenGL path only offers 3.3. OpenXR is enabled at start; when
+a supported runtime and headset initialize, the client opens in VR before
+sign-in. Otherwise it continues in 3D. **F9** enters VR while the client is
+focused; after sign-in, **This device ▸ Enter VR** does too. **F9**, **Escape**
+(once nothing else is open) or **This device ▸ Return to 3D** leaves it.
+Each attempt reports its outcome in
 the HUD status, including why VR could not start.
 These actions change local presentation, not the current agent or space.
 The runtime and headset must be available when Quod opens: on Linux,
@@ -235,11 +246,17 @@ client/godot/dist/quod.x86_64 -- --profile /absolute/private/profile
 ```
 
 After entering VR, the client attaches the runtime's current controller
-trackers. The signed controller projection supplies descriptions, roles,
-bindings and appearance admission. Only the explicitly described Vive profile
-and named facilities are mapped. Unknown profiles, missing facilities and
+trackers. Before signed settings arrive, the bundled Vive model and a local
+trigger selection let either wand use the native sign-in and setup controls;
+menu and travel gestures remain unavailable. The signed controller projection
+then replaces those startup controls with its descriptions, roles, bindings
+and appearance admission. Controller model loading and failure appear on the
+sign-in card; **Retry controller models** explicitly retries failed appearances.
+Unchanged source notices do not retry failed transfers, and successful appearances
+continue to reuse their verified bytes and template. Only the explicitly described Vive profile and
+named facilities are mapped. Unknown profiles, missing facilities and
 ambiguous roles remain visible and disabled. **Tools ▸ Connected controllers** offers
-session-only source choices; saved preferences still use ordinary account forms.
+session-only source choices; saved preferences still use ordinary offered forms.
 No source IDs or per-frame poses are written to an ontology.
 
 Desktop and XR point at the same native Control tree and exact-subject scene
@@ -249,14 +266,17 @@ hover, focus, pressed and disabled states. The actual authored submission role
 receives the primary-action treatment; its label and authority remain authored.
 Completed account setup is collapsed behind **Account and keys**. Required
 first-run controls remain visible on the login card. Status and refusals appear
-as one sentence in the HUD strip. Text size and opacity adjust the same
+as one sentence in the HUD strip; an accepted space clears only its own sentence. Text size and opacity adjust the same
 controls without replacing their drafts.
 Authored forms may also select a renderer-neutral `appearance(1, Tokens)` on
 their container. The anchored GUI vocabulary validates unique RGB colour,
 integer spacing/padding/corner and permille panel-opacity tokens. `inherit`
 uses the enclosing appearance or the offline adapter defaults. Only panel
 backgrounds may be translucent; text, controls, status and the keyboard stay
-opaque. Local text size and Opaque preferences retain precedence.
+opaque. Panels are translucent by default on desktop and in VR, at the lowest
+backing that keeps the shared text colour at 4.5:1 over a white scene;
+**Opaque panels** in **This device** switches both. Local text size and Opaque
+preferences retain precedence.
 
 An appearance update preserves native controls, draft values, caret/selection
 and the semantic submission revision. Reauthorization still revokes input and
@@ -270,9 +290,12 @@ consumer retirement clears the presentation.
 The existing browser adapters support `inherit` and explicitly refuse authored
 themes requiring this native adapter. They do not silently discard appearance.
 The XR workspace uses the same controls and drafts in a reflowing 1200×800
-surface, with connection/identity details collapsed behind a local action.
-Verbose identity/controller references and retired setup controls remain in
-that detail view; the working form keeps the primary surface.
+surface, with connection and identity options behind a visible control near
+the top of the sign-in card. That control stays available during connection;
+its server-trust action remains an explicit choice. Verbose identity/controller
+references and retired setup controls remain in **Options**; the working form
+keeps the primary surface. The sign-in card scrolls vertically when enlarged
+text or a smaller window would otherwise hide its controls.
 Its initial 26px text retains approximately the former 16px/496px nominal
 angular size at the same 1m height and 2m distance. These are presentation trial
 defaults, not physical readability or comfort qualification. Larger/smaller
@@ -308,13 +331,10 @@ messages consume space when present. Native form targets have a 44px minimum
 height and choice items retain spacing at small text sizes.
 Choice menus open on a completed press/release, so that opening release cannot
 select a newly opened item under the ray. Storage captions name the actual
-namespace (or the exact current account); their tooltip retains the full anchor.
-Operation context and outcome status stay concise. Each received outcome stays
-with its returned actions when a renewed offer updates the current draft status.
-Returned-subject actions are
-shown before the form; full exact identities and replies remain inspectable in
-the bounded **Exact identity / outcome details** view. Opening details or a newly
-returned subject action reveals it through the same native scroll owner.
+namespace (or **Your ontology**); their tooltip retains the full anchor.
+Operation status stays one sentence. The panel's single **Details** control
+shows the exact storing ontology, subject, recipe and last full answer in a
+bounded, selectable view, revealed through the same native scroll owner.
 The desktop mirror converts pointer positions/relative motion into that surface
 once; XR ray hits already use surface coordinates.
 
@@ -344,16 +364,19 @@ and never means Save. Shift also selects text with the arrow keys. Hide/Escape
 closes this local surface while retaining the draft; clicking the field recalls
 it. The keyboard extends downward at the workspace's existing text scale,
 without moving the active field or duplicating its text, including masked text.
+Focus loss revokes text input immediately; a pointer press in progress retains
+the keyboard geometry until its release.
 Focus/consumer replacement, read-only state, native popups, workspace hiding and
 input eligibility loss revoke queued keys and captured presses. Unchanged focus
 reuses the same controls. The fixed AZERTY subset follows the existing browser
 adapter; hardware/platform input remains available for other characters and
-locales. This is not a general locale/IME implementation. Main's separate
-backup-file/passphrase window remains desktop-only. Software layout/ray checks
+locales. This is not a general locale/IME implementation. Backup paths and passphrases use this same keyboard and native editor ownership. Software layout/ray checks
 do not establish headset typing comfort or reachability for a particular user.
 The black scene supplies neutral ambient illumination for authored shaded models.
-XR input and controller models require a running, Focused OpenXR session,
-current head/controller tracking, the visible desktop window and signed mapping.
+XR input requires a running, Focused OpenXR session, current head/controller
+tracking and the visible desktop window; before sign-in, it can select only
+native GUI controls. Tracked controller models remain visible without input
+focus while the XR session is running and the desktop window is visible.
 Desktop focus loss cancels current pointer, menu and travel work without activation;
 it does not keep XR input or models paused. Held controls cannot replay or resume:
 neutral is required before a new gesture, even while desktop focus stays elsewhere.

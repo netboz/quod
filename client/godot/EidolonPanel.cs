@@ -11,7 +11,7 @@ public partial class EidolonPanel : VBoxContainer
     readonly Label status=new() { Name="representation-status",AutowrapMode=TextServer.AutowrapMode.WordSmart };
     readonly VBoxContainer content=new() {Name="representation-content"};
     readonly Label placement=new() {Name="representation-placement",AutowrapMode=TextServer.AutowrapMode.WordSmart};
-    Button near=null!,personal=null!;
+    Button near=null!,personal=null!,close=null!;
     readonly Label exact=new() { Name="representation-identity",Visible=false,AutowrapMode=TextServer.AutowrapMode.WordSmart };
     readonly ScenePanel preview=new() { Name="representation-scene",Visible=false };
     public ScenePanel Preview=>preview;
@@ -55,7 +55,7 @@ public partial class EidolonPanel : VBoxContainer
         near=SpatialGui.ActionButton("Near this object","form-near-object");placementActions.AddChild(near);near.Pressed+=PlaceNear;
         personal=SpatialGui.ActionButton("Personal workspace","form-personal-workspace");placementActions.AddChild(personal);personal.Pressed+=PlacePersonal;
         near.ToggleMode=personal.ToggleMode=true;
-        var close=SpatialGui.ActionButton("Close","hide-subject-form");close.TooltipText="Close this and return to the current space.";placementActions.AddChild(close);close.Pressed+=Cancel;
+        close=SpatialGui.ActionButton("Close","hide-subject-form");close.TooltipText="Close this and return to the current space.";placementActions.AddChild(close);close.Pressed+=Cancel;
         var scroll=new ScrollContainer {Name="subject-task-scroll",HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true,SizeFlagsVertical=SizeFlags.ExpandFill};
         AddChild(scroll);scroll.AddChild(content);content.SizeFlagsHorizontal=SizeFlags.ExpandFill;
         content.AddChild(status);content.AddChild(Operations);content.AddChild(workbench);content.AddChild(source);
@@ -95,7 +95,7 @@ public partial class EidolonPanel : VBoxContainer
             : string.IsNullOrEmpty(name) ? Operations.SubjectLabel : "Selected · "+name;
         title.Text=Selected==null ? Operations.Current?.Form.Tree.Label??"Views & actions" : Caption(Selected);
         Operations.FormPanel.TitleVisible=Selected?.Operation!=true&&Operations.Current==null;
-        status.Visible=status.Text.Length>0;
+        status.Visible=status.Text.Length>0;close.Disabled=Operations.Pending;
         RefreshPlacement();
     }
     void SetOccurrence(ScenePanel.Selection? next)
@@ -256,7 +256,8 @@ public partial class EidolonPanel : VBoxContainer
     void Retire(bool retainVisual=false)
     {generation++;Available=false;workbenchSource=false;Offered=[];WithdrawRepresentation(retainVisual);var prior=discovery;discovery=null;prior?.Dispose();Keep(prior?.Completion??Task.CompletedTask);}
     public void DisposeView(){if(disposed)return;disposed=true;SetOccurrence(null);Retire();source.DisposeView();Operations.DisposeView();}
-    public void Cancel(){preferred=null;Operations.Cancel();}
+    // Closing gives the form up. A form that was sent stays until its result is known.
+    public void Cancel(){if(Operations.Pending)return;preferred=null;Operations.Cancel();}
     public override void _ExitTree()=>DisposeView();
     // The host places the preview elsewhere in its layout; it still lives and
     // dies with this panel.

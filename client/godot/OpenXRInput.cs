@@ -88,6 +88,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     Func<bool> blocked=null!;
     PieMenu pie=null!;
     Func<ScenePanel.Selection?,bool> openPie=null!;
+    Func<bool> dismissForm=null!;
     bool attached,presentationSubscribed,active,lifecycleSubscribed,shuttingDown,visible=true,disposed,pointingGui,pointingPie;
     bool workspaceShown=true,placeRequested,movingWorkspace;
     float workspaceDistance=2;
@@ -134,13 +135,13 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     internal SubViewport HudSurface=>hudViewport;
     internal MeshInstance3D HudQuad=>hudQuad;
     internal MeshInstance3D PieQuad=>pieQuad;
-    // Plain words naming the pointed target before any press, from Main.
-    public Func<ScenePanel.Selection?,string?> TargetLabel { get; set; }=_=>null;
     public DeviceProfile Profile { get; set; }=DeviceProfile.Vive;
-    // The caller resolves the pointed target and starts its signed menu read.
-    public void Configure(ScenePanel scene,SpatialGui gui,RenderModels models,Func<PhysicsInput?> controls,Func<bool> blocked,PieMenu pie,Func<ScenePanel.Selection?,bool> openPie)
+    // The caller resolves the pointed target and starts its signed menu read;
+    // it also answers a press that lands outside an open form, saying whether
+    // that press was used.
+    public void Configure(ScenePanel scene,SpatialGui gui,RenderModels models,Func<PhysicsInput?> controls,Func<bool> blocked,PieMenu pie,Func<ScenePanel.Selection?,bool> openPie,Func<bool> dismissForm)
     {
-        this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.pie=pie;this.openPie=openPie;
+        this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.pie=pie;this.openPie=openPie;this.dismissForm=dismissForm;
         pie.Selected+=_=>MenuClosed();pie.Dismissed+=MenuClosed;
         AddChild(origin);origin.AddChild(camera);AddChild(panel);AddChild(pieViewport);AddChild(pieQuad);AddChild(hudViewport);AddChild(hudQuad);AddChild(rayLabel);
         // The strip and the pie are the hand's own tools: they draw over any
@@ -407,9 +408,14 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(pointerSource!=null && pointerSource!=input)return;
         ((Source)input).Pointer.Visible=true;
         var source=(Source)input;var hit=GuiHit(input);source.Pointer.Scale=new(1,1,(hit?.Distance??2)/2);
-        // Only the controller that opened the pie steers it with its ray.
-        // Only the controller that opened the pie steers it; a strip-opened pie has none yet.
-        if(pie.IsOpen){rayLabel.Visible=false;if((pieSource==null||input==pieSource)&&(pieQuad.Visible ? PieHit(input) : hit?.Point) is {} on)pie.PointerAt(on);return;}
+        // Only the controller that opened the pie steers it; once its ray
+        // leaves the pie's surface it points nothing.
+        if(pie.IsOpen) {
+            rayLabel.Visible=false;
+            if(PiePoint(input) is {} on){if(pieSource==null||input==pieSource)pie.PointerAt(on);}
+            else if(input==pieSource)pie.PointerAway();
+            return;
+        }
         if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.PointAt(null);return;}
         if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.PointAt(null);}
         if(hit is {} at){gui.Move(at.Point,gui.PresentationSurface);PadScroll(source,at.Point);}
@@ -434,14 +440,14 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         }
     }
     public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.PointAt(null);}
-    // Feedback before the press: the pointed thing shows its pointed-at look, and the target is named
-    // (the occurrence, else the containing space) at the ray tip.
+    // Feedback before the press: the pointed thing shows its pointed-at look
+    // and its authored label at the ray tip. Pointing at nothing shows nothing.
     void PointTarget(IControllerSource input)
     {
         var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.PointAt(hit);
-        string? text=TargetLabel(hit);rayLabel.Visible=text!=null;if(text==null)return;
-        float distance=hit?.Pose is Transform3D pose ? Math.Max(.3f,(pose.Origin-ray.Origin).Dot(ray.Direction)) : 2;
-        rayLabel.Text=text;rayLabel.GlobalPosition=ray.Origin+ray.Direction*distance+Vector3.Up*.06f;
+        if(hit?.Label is not string text||hit.Pose is not Transform3D pose){rayLabel.Visible=false;return;}
+        float distance=Math.Max(.3f,(pose.Origin-ray.Origin).Dot(ray.Direction));
+        rayLabel.Text=text;rayLabel.GlobalPosition=ray.Origin+ray.Direction*distance+Vector3.Up*.06f;rayLabel.Visible=true;
     }
     // World-locked placement, never following the head: in front of the
     // pointed object (pulled in to reading distance), or along the ray at
@@ -473,9 +479,10 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         pieQuad.GlobalTransform=new(facing.LengthSquared()>1e-6f ? Basis.LookingAt(facing.Normalized(),Vector3.Up) : head.Basis,at);
         pieQuad.Visible=true;
     }
+    // Where a controller's ray meets the surface that shows the pie.
+    Vector2? PiePoint(IControllerSource source)=>pieQuad.Visible ? PieHit(source) : GuiHit(source)?.Point;
     Vector2? PieHit(IControllerSource source)
     {
-        if(!pieQuad.Visible)return null;
         var ray=Ray(source);var inverse=pieQuad.GlobalTransform.AffineInverse();var start=inverse*ray.Origin;var direction=inverse.Basis*ray.Direction;
         if(Math.Abs(direction.Z)<0.000001f)return null;float distance=-start.Z/direction.Z;if(distance<0)return null;
         var size=((QuadMesh)pieQuad.Mesh).Size;var point=start+direction*distance;
@@ -488,13 +495,14 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(pie.IsOpen){pointingPie=true;return;}
         if(HudHit(input) is {} onHud){pointingHud=true;HudPointer(onHud,true);return;}
         if(GuiHit(input) is {} hit) { pointingGui=true;gui.Move(hit.Point,gui.PresentationSurface);gui.Press(); }
-        else { pointingGui=false;if(!Blocked && Router.MenuOwner==null){var ray=Ray(input);pressedSubject=scene.PickRay(ray.Origin,ray.Direction);} }
+        else { pointingGui=false;if(!dismissForm() && !Blocked && Router.MenuOwner==null){var ray=Ray(input);pressedSubject=scene.PickRay(ray.Origin,ray.Direction);} }
     }
     public void Release(IControllerSource input)
     {
         if(pointerSource!=input)return;pointerSource=null;
-        if(pointingPie){pointingPie=false;if(pie.IsOpen)pie.Commit();return;}
-        if(pointingHud){pointingHud=false;HudPointer(HudHit(input)??new(-1,-1),false);return;}
+        if(pointingPie){pointingPie=false;if(pie.IsOpen)pie.CommitAt(PiePoint(input));return;}
+        // A strip command that opens a pie hands it to the controller that pressed it.
+        if(pointingHud){pointingHud=false;HudPointer(HudHit(input)??new(-1,-1),false);if(pie.IsOpen)pieSource=input;return;}
         if(pointingGui) { gui.Release();return; }
         var before=pressedSubject;pressedSubject=null;
         if(before!=null && !Blocked && Router.MenuOwner==null) { var ray=Ray(input);if(scene.PickRay(ray.Origin,ray.Direction)==before)scene.Select(before); }
@@ -525,7 +533,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         pie.MoveAxes(axes);
     }
     public void CommitMenu(){if(pie.IsOpen)pie.Commit();}
-    public void CancelMenu(){if(!pie.IsOpen)return;pie.Close();MenuClosed();}
+    public void CancelMenu()=>pie.Dismiss();
     void MenuClosed(){Router.MenuSelected();pieQuad.Visible=false;pieSource=null;}
     public void Drive(IControllerSource source,NumericsVector2 axes)
     {

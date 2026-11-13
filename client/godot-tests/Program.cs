@@ -86,15 +86,15 @@ static class Tests
             "the HUD strip keeps its heading until the head turns past 35°, across north");
         var nav = new PieNavigator(root, .24f, 300);
         Check(nav.Commit() == PieOutcome.Cancelled, "commit in the centre cancels");
-        nav.Move(new(0, 1), 0); Check(nav.Caption == "Leave space" && nav.Commit() == PieOutcome.Open && nav.Caption == "Press again · Leave space", "a confirmed item asks for a second press");
-        nav.Move(new(0, -1), 10); Check(nav.Armed == null && nav.Hovered == 0, "moving off an armed wedge disarms it; empty wedges count as centre");
+        nav.Move(new(0, 1), 0); Check(nav.Title == "Leave space" && nav.Note == "" && nav.Commit() == PieOutcome.Open && nav.Title == "Leave space" && nav.Note == "Press again", "a confirmed item asks for a second press");
+        nav.Move(new(0, -1), 10); Check(nav.Armed == null && nav.Hovered == 0 && nav.Title == "Workshop" && nav.Note == "", "moving off an armed wedge disarms it; empty wedges count as centre, which names the menu");
         nav.Move(new(.7f, -.7f), 20); nav.Move(new(.7f, -.7f), 200); Check(nav.Level == root, "a short rest does not open the sub-pie");
         nav.Move(new(.71f, -.7f), 400); Check(nav.Level.Label == "Show as" && nav.Hovered == 0, "resting on a sub-pie opens it (marking mode)");
         nav.Move(new(.71f, -.7f), 405); nav.Move(new(.7f, -.71f), 800);
         Check(nav.Hovered == 0 && nav.Level.Label == "Show as", "the still-held pad direction points nothing in the new level, however long it rests");
         nav.Move(new(0, 0), 810); nav.Move(new(.71f, -.7f), 820); Check(nav.Hovered == 0, "wedge 2 of the sub-pie is empty, so that direction is the centre");
-        nav.Move(new(1, 0), 410); Check(nav.Hovered == 3 && !nav.HoveredItem!.Enabled && nav.Caption == "Wire box · Not here." && nav.Commit() == PieOutcome.Open, "a disabled wedge stays visible with its reason and never selects");
-        nav.Move(new(-.7f, .7f), 420); Check(nav.HoveringBack && nav.Caption == "Back · Workshop" && nav.Commit() == PieOutcome.Open && nav.Level == root, "the reserved back wedge returns to the parent");
+        nav.Move(new(1, 0), 410); Check(nav.Hovered == 3 && !nav.HoveredItem!.Enabled && nav.Title == "Wire box" && nav.Note == "Not here." && nav.Commit() == PieOutcome.Open, "a disabled wedge stays visible with its reason and never selects");
+        nav.Move(new(-.7f, .7f), 420); Check(nav.HoveringBack && nav.Title == "Back" && nav.Note == "Workshop" && nav.Commit() == PieOutcome.Open && nav.Level == root, "the reserved back wedge returns to the parent");
         Check(nav.Choose(2) && nav.Commit() == PieOutcome.Open && nav.Choose(1) && nav.Commit() == PieOutcome.Selected && nav.Selection!.Choice.ToString().Contains("solid"), "click and keyboard choice open sub-pies and select a leaf");
     }
     static void Icons(string repo)

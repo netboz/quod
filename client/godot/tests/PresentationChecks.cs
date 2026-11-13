@@ -58,7 +58,7 @@ public partial class ExportChecks
         var gui=(SpatialGui)app.FindChild("shared-gui",true,false);
         var actualScene=(ScenePanel)app.FindChild("space-scene",true,false);
         var adapter=new OpenXRInput();actualScene.Viewport.AddChild(adapter);
-        adapter.Configure(actualScene,gui,models,()=>null,()=>false,new PieMenu(),_=>false);adapter.AttachSources();
+        adapter.Configure(actualScene,gui,models,()=>null,()=>false,new PieMenu(),_=>false,()=>false);adapter.AttachSources();
         gui.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft);
         foreach(var dimensions in new[]{new Vector2(1850,496),new Vector2(800,800),new Vector2(600,900)}) {
             gui.Size=dimensions;await Frame();

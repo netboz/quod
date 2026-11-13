@@ -9,6 +9,8 @@ public partial class OperationsPanel : VBoxContainer
     public Actor? SelectedStorage => target;
     public bool Available { get; private set; }
     public bool IsWorking => busy;
+    // Sent, with the result not known yet: this form may not be closed.
+    public bool Pending => sent;
     public IReadOnlyList<Offer> Offered=>offers;
     public string SubjectLabel { get; private set; }="Selected subject";
     public string StatusText => status.Text;

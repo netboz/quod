@@ -52,7 +52,7 @@ No deployment, refound or data wipe is authorized by this plan.
   - [x] Pointing at an occurrence targets it; pointing at nothing targets the containing space; unplaced targets your own agent.
     The agent's pie is `personal_menu` in `user_instance.pl` (Enter a known space, Create a space, Your account); the human, also an agent, keeps the default pie. "Your attention" stays a HUD command (Phase 5).
   - [x] Pre-press feedback: ray tip / cursor label naming the target; outline on the hovered occurrence.
-    Outline is a local gold overlay tint (`ScenePanel.Outline`). The VR label sits at the pointed occurrence's depth along the ray, not the exact surface hit. No ring is drawn when nothing is hit; the label alone names the space.
+    Outline is a local gold overlay tint (`ScenePanel.Outline`). The VR label sits at the pointed occurrence's depth along the ray, not the exact surface hit. Nothing is shown when nothing is hit (the label naming the space was removed on 2026-11-13 at Yan's request).
   - [x] Placement, dismissal and desktop equivalents (right-click, Esc, Menu key).
     VR pie has its own world-locked quad (`pie-viewport`), sized with the workspace's existing text density; `DeviceProfile.Vive` holds the two decided numbers (1.5 m, 15°). Not built: the pie following the controller while held, and the thin line to a pulled-in object. Space does not open the pie (it types in fields); the Menu key does.
 - [x] **Phase 4 — Fullscreen layout**
@@ -140,9 +140,7 @@ chain is the only client rule; what each target offers comes from Prolog.
 - Hovered occurrence: a thin gold outline on its mark (local emission tint in
   `ScenePanel`, no domain read) and a small label at the ray tip or beside the
   cursor with the occurrence's authored label ("Workshop", "likes/2").
-- Nothing hit: the ray tip becomes a small ring and the label reads the space
-  name ("Space · Home"). On desktop the same label follows the cursor.
-- Unplaced: the ring and "You are nowhere yet".
+- Nothing hit: nothing is shown (Yan, 2026-11-13: no label naming the space).
 
 Labels come from `attribute(Subject, name, _)` via the existing `client_subject_label/2`
 and from the occurrence's `label/2`; the client never shows a Prolog term.

@@ -94,11 +94,13 @@ public sealed class PieNavigator(MenuNode root, float threshold, double markingD
     public MenuTarget? Selection { get; private set; }
     public bool HoveringBack => Hovered != 0 && Hovered == Level.Back;
     public MenuNode? HoveredItem => HoveringBack ? null : Level.At(Hovered);
-    public string Caption => HoveringBack ? "Back · " + path[^2].Label
-        : HoveredItem is not { } item ? Level.Label
-        : !item.Enabled ? item.Label + " · " + item.Help
-        : Armed?.ToString() == item.Id.ToString() ? "Press again · " + item.Label
-        : item.Label;
+    // What the centre says: the pointed wedge's label, or the level's name
+    // when nothing is pointed; beneath it, the one thing to know before pressing.
+    public string Title => HoveringBack ? "Back" : HoveredItem?.Label ?? Level.Label;
+    public string Note => HoveringBack ? path[^2].Label
+        : HoveredItem is not { } item ? ""
+        : !item.Enabled ? item.Help
+        : Armed?.ToString() == item.Id.ToString() ? "Press again" : "";
 
     // Returns whether anything visible changed.
     public bool Move(Vector2 direction, double now)

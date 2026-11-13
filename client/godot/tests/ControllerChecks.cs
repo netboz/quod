@@ -31,7 +31,7 @@ public partial class ExportChecks
         using var resources=new RenderModels((asset,cancellation)=>++fetched==1 ? firstLoad.Task : fetched==2 ? secondLoad.Task : Task.FromResult(model));
         var pie=new PieMenu();gui.Surface.AddChild(pie);pie.Selected+=_=>menuActivated++;
         adapter.Configure(scene,gui,resources,()=>null,()=>overlay,pie,_=>{
-            pie.Open(gui.Surface.Size/2,300,"Reading…");pie.Present(QualificationPie((1,"Test existing menu consumer",menuEnabled)),"");return true;});
+            pie.Open(gui.Surface.Size/2,300,"Reading…");pie.Present(QualificationPie((1,"Test existing menu consumer",menuEnabled)),"");return true;},()=>false);
         adapter.GuiSurface.Visible=true;adapter.GuiSurface.Transform=Transform3D.Identity;
         var button=new Button { Text="Controller capture qualification",Position=new(430,310),Size=new(300,80),MouseFilter=Control.MouseFilterEnum.Stop };
         gui.Surface.AddChild(button);button.Pressed+=()=>clicked++;
@@ -184,9 +184,9 @@ public partial class ExportChecks
         int beforeRedraw=adapter.MenuRedraws;
         right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);int menuDraw=adapter.MenuRedraws;
         for(int i=0;i<20;i++)Advance();Check(adapter.MenuRedraws==menuDraw && menuDraw>beforeRedraw,"unchanged radial selection does not redraw the pie");
-        Check(pie.Navigator!.Hovered==1 && pie.Caption=="Test existing menu consumer","pad direction and the pie centre name the same wedge");
+        Check(pie.Navigator!.Hovered==1 && pie.Title=="Test existing menu consumer" && pie.Note=="","pad direction and the pie centre name the same wedge");
         menuEnabled=false;pie.Present(QualificationPie((1,"Test existing menu consumer",false)),"");
-        Check(pie.Navigator!.Hovered==1 && !pie.Navigator.HoveredItem!.Enabled && adapter.MenuRedraws==menuDraw+1 && pie.Caption=="Test existing menu consumer · Not here.",
+        Check(pie.Navigator!.Hovered==1 && !pie.Navigator.HoveredItem!.Enabled && adapter.MenuRedraws==menuDraw+1 && pie.Title=="Test existing menu consumer" && pie.Note=="Not here.",
             "changed availability keeps the pointed wedge and shows its reason with one redraw");
         int disabledDraw=adapter.MenuRedraws;string disabledResources=System.Text.Json.JsonSerializer.Serialize(resources.Metrics);
         for(int i=0;i<20;i++)Advance();
@@ -195,7 +195,7 @@ public partial class ExportChecks
         adapter.CancelMenu();right.SetInput("pad_axes",Vector2.Zero);Advance();menuEnabled=true;
         right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);
         right.SetInput("pad_axes",Vector2.Zero);Advance();
-        Check(pie.Navigator!.Hovered==0 && pie.Caption=="Qualification","the centre clears the pad choice and names the menu");
+        Check(pie.Navigator!.Hovered==0 && pie.Title=="Qualification","the centre clears the pad choice and names the menu");
         Held(right,"pad_press",false);Check(menuActivated==0 && adapter.Router.MenuOwner==null && !pie.IsOpen,"centre release cancels without a menu callback");
         Advance();right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);adapter.Router.CancelMenu();Advance();
         Check(adapter.Router.MenuOwner==null && menuActivated==0 && !pie.IsOpen,"cancelled held pad cannot reopen without a neutral release");
@@ -206,8 +206,26 @@ public partial class ExportChecks
         menuDraw=adapter.MenuRedraws;pie.Present(QualificationPie((1,"Test existing menu consumer",true)),"");
         Check(adapter.MenuRedraws==menuDraw,"an unchanged menu projection retains the pie and selection without redraw");
         right.SetInput("pad_axes",Vector2.Zero);Advance();Check(pie.Navigator!.Hovered==0,"returning the thumb to the pad centre points no wedge");
-        Pose(right,gui.Surface.Size/2-new Vector2(0,300*.66f));Advance();
+        var onWedge=gui.Surface.Size/2-new Vector2(0,300*.66f);var offSurface=new Vector2(-600,400);
+        Pose(right,onWedge);Advance();
         Check(pie.Navigator!.Hovered==1,"the controller ray on the pie surface points the same wedge as the pad");
+        Pose(right,gui.Surface.Size/2-new Vector2(0,300*.3f));Advance();
+        Check(pie.Navigator!.Hovered==0 && pie.Title=="Qualification","the ray on the hub points no wedge");
+        Pose(right,onWedge);Advance();Pose(right,gui.Surface.Size/2-new Vector2(0,300*1.3f));Advance();
+        Check(pie.Navigator!.Hovered==0,"the ray past the pie's drawn edge points no wedge, though it keeps that wedge's direction");
+        Pose(right,onWedge);Advance();Pose(right,offSurface);Advance();
+        Check(pie.Navigator!.Hovered==0,"the ray off the pie's surface points no wedge");
+        Pose(right,onWedge);Advance();Check(pie.Navigator!.Hovered==1,"the returning ray points its wedge again");
+        Held(right,"trigger_press",true);Pose(right,offSurface);Held(right,"trigger_press",false);
+        Check(menuActivated==1 && !pie.IsOpen && adapter.Router.MenuOwner==null,"releasing the trigger with the ray off the pie cancels it and chooses nothing");
+        Held(right,"pad_press",false);right.SetInput("pad_axes",Vector2.Zero);Advance();
+        right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);right.SetInput("pad_axes",Vector2.Zero);Advance();
+        Pose(right,gui.Surface.Size/2);Advance();Pose(right,onWedge);Advance();
+        Held(right,"trigger_press",true);Pose(right,gui.Surface.Size/2-new Vector2(0,300*1.3f));Held(right,"trigger_press",false);
+        Check(menuActivated==1 && !pie.IsOpen,"releasing the trigger past the pie's drawn edge cancels it too");
+        Held(right,"pad_press",false);right.SetInput("pad_axes",Vector2.Zero);Advance();
+        right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);right.SetInput("pad_axes",Vector2.Zero);Advance();
+        Pose(right,gui.Surface.Size/2);Advance();Pose(right,onWedge);Advance();
         Held(right,"trigger_press",true);Held(right,"trigger_press",false);Held(right,"pad_press",false);
         Check(menuActivated==2 && adapter.Router.MenuOwner==null,"trigger wedge choice consumes its later pad release exactly once");
         right.SetInput("pad_axes",Vector2.Zero);Advance();right.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();beforeRedraw=adapter.MenuRedraws;Held(right,"pad_press",true);

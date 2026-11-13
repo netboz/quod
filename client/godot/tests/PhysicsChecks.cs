@@ -125,7 +125,7 @@ public partial class ExportChecks
         var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
         var gui=(SpatialGui)app.FindChild("shared-gui",true,false);var mapped=new OpenXRInput();scene.Viewport.AddChild(mapped);
         using var models=new RenderModels((asset,cancel)=>session.Transport.Model(asset.Digest,asset.Allowed[0],cancel));
-        mapped.Configure(scene,gui,models,()=>input,()=>false,new PieMenu(),_=>false);mapped.Install(mapping);mapped.AttachSources();
+        mapped.Configure(scene,gui,models,()=>input,()=>false,new PieMenu(),_=>false,()=>false);mapped.Install(mapping);mapped.AttachSources();
         var tracker=new XRControllerTracker { Name="m4_native_motion",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
         tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
         tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);

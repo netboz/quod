@@ -60,6 +60,7 @@ public partial class ExportChecks : Node
             if (phase is "startup-new" or "startup-saved") { await Startup(phase); return; }
             if (phase == "menu") { await NativeMenu(); return; }
             if (phase == "icons") { await IconAllowances(); return; }
+            if (phase == "pie") { await PieRender(); return; }
             if (phase == "scene") { await SceneAdapter(); return; }
             if (phase == "controller-input") { await ControllerAdapter(); return; }
             if (phase == "presentation") { await PresentationAdapter(); return; }

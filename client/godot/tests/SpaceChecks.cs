@@ -139,8 +139,13 @@ public partial class ExportChecks
         var picked=new TaskCompletionSource<ScenePanel.Selection>(); void Selected(ScenePanel.Selection value)=>picked.TrySetResult(value); scene.Selected+=Selected;
         try {
             var viewport=scene.GetChildren().OfType<SubViewport>().Single();
-            var point=((SpatialGui)app.FindChild("shared-gui",true,false)).WindowPoint(scene.GetViewport(),scene.GlobalPosition+scene.Project(id,local)*scene.Size/(Vector2)viewport.Size);
-            NativeClick(point);
+            Vector2 Point()=>((SpatialGui)app.FindChild("shared-gui",true,false)).WindowPoint(scene.GetViewport(),scene.GlobalPosition+scene.Project(id,local)*scene.Size/(Vector2)viewport.Size);
+            if(app.FindChild("representations",true,false) is Control {Visible:true} form) {
+                // This press lands outside the open form: it closes the form and picks nothing.
+                NativeClick(Point());await Until(()=>!form.Visible);
+                Check(!picked.Task.IsCompleted,"a press outside the open form closes it and selects nothing behind it");
+            }
+            NativeClick(Point());
             Check((await picked.Task.WaitAsync(TimeSpan.FromSeconds(5))).Subject.ToString()==expected.ToString(),"normal mouse picking opens the exact rendered subject and anchor");
         } finally { scene.Selected-=Selected; }
     }
@@ -213,6 +218,10 @@ public partial class ExportChecks
         Check(!button.Disabled,"current offered Submit is enabled");
         button.GrabFocus();
         await NativePress(button);
+        // Sent with its result unknown: neither Close nor a press outside the form can drop it.
+        Check(panel.Pending && ((Button)app.FindChild("hide-subject-form",true,false)).Disabled &&
+            ((ScenePanel)app.FindChild("space-scene",true,false)).OutsidePress!() && panel.Pending && panel.IsVisibleInTree(),
+            "a sent form stays until its result is known");
         Check(panel.IsWorking && ((OptionButton)panel.FindChild("operation-storage",true,false)).Disabled &&
             ((OptionButton)panel.FindChild("operation-class",true,false)).Disabled &&
             !app.OpenSubjectPie() &&
@@ -293,6 +302,15 @@ public partial class ExportChecks
         Check(panel.Current==null && panel.FormPanel.Descriptor==null && !panel.IsVisibleInTree(),"a cancelled form disappears");
         await CreationTarget(panel,human,"create");
         Check(panel.FormPanel.Draft.OrderBy(p=>p.Key).SequenceEqual(panel.Current!.Form.Defaults.OrderBy(p=>p.Key)),"reopening after cancel starts from the offered form, not from what was typed");
+        // The same ending without the button: a press on the space, outside the form.
+        await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Dropped name");
+        var formPanel=((Control)app.FindChild("subject-panel",true,false)).GetGlobalRect();var view=scene.GetGlobalRect();
+        var outside=new Vector2(formPanel.GetCenter().X>view.GetCenter().X ? (view.Position.X+formPanel.Position.X)/2 : (formPanel.End.X+view.End.X)/2,view.Position.Y+view.Size.Y*.4f);
+        NativeClick(((SpatialGui)app.FindChild("shared-gui",true,false)).WindowPoint(scene.GetViewport(),outside));
+        await Until(()=>!panel.IsVisibleInTree());
+        Check(panel.Current==null && panel.FormPanel.Descriptor==null,"a press outside the open form cancels it and it disappears");
+        await CreationTarget(panel,human,"create");
+        Check(panel.FormPanel.Draft.OrderBy(p=>p.Key).SequenceEqual(panel.Current!.Form.Defaults.OrderBy(p=>p.Key)),"reopening after an outside press starts from the offered form too");
         long reopenedWrites=await Writes();
         Check(reopenedWrites==before,$"local cancel and reopen submit no work: before={before} after={reopenedWrites}");
         await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Preserved draft");

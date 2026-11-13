@@ -357,15 +357,19 @@ once; XR ray hits already use surface coordinates.
 Menus are pies read from the pointed target's authored `menu` Eidolon
 (`client_menu/2`): the pointed occurrence, else the space the agent is placed
 in, else the agent itself. Right-click on desktop or the pad on the menu hand
-opens it; direction, not distance, picks a wedge. Holding and releasing selects
-(turbo), resting on a sub-pie opens it where its item was, the reserved back
-wedge returns to the parent, and releasing in the centre cancels. Unavailable
-wedges stay visible with their reason; a confirmed wedge asks for a second
-press. On desktop, Backspace goes back, Enter commits, digits pick wedges and
+opens it. The pie shows icons only; the hub in its centre names the pointed
+wedge. On the pad, direction picks a wedge. A cursor or ray picks the wedge it
+is on, and points nothing on the hub or beyond the pie's drawn edge. Holding and
+releasing selects (turbo), resting on a sub-pie opens it where its item was,
+the reserved back wedge returns to the parent, and a click or trigger release
+anywhere but on a wedge cancels. Unavailable wedges stay visible with their
+reason in the hub; a confirmed wedge asks for a second press. On desktop, Backspace goes back, Enter commits, digits pick wedges and
 the Menu key opens the pointed target's pie. In VR the pie has its own
 world-locked surface at the device profile's reading distance; only the
 controller that opened it steers it with its ray. A chosen action without
-input fields runs at once; one with fields opens its form. The HUD strip
+input fields runs at once; one with fields opens its form. A press outside the
+open form closes and cancels it, as its Close button does; a form that was sent
+stays until its result is known. The HUD strip
 shows the human's `hud_commands/1` view, the one local "This device" command
 and the last status sentence: along the bottom edge on desktop, and in VR on
 its own surface 25° below eye level that follows the body only after a 35°

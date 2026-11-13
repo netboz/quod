@@ -82,11 +82,12 @@ public partial class ExportChecks
         var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
         using var models=new RenderModels((asset,cancellation)=>Task.FromResult(bytes));
         var adapter=new OpenXRInput();scene.Viewport.AddChild(adapter);
-        bool fullMenu=false;var pie=new PieMenu();gui.Surface.AddChild(pie);
+        bool fullMenu=false,formOpen=false;int dismissed=0;var pie=new PieMenu();gui.Surface.AddChild(pie);
         var full=QualificationPie(Enumerable.Range(1,8).Select(i=>(i,"Long authored wedge label "+i,i%3!=0)).ToArray());
         pie.Selected+=_=>{if(!fullMenu)adapter.ShowWorkspace();};
         adapter.Configure(scene,gui,models,()=>null,()=>form.IsVisibleInTree(),pie,_=>{
-            pie.Open(gui.Surface.Size/2,300,"Reading…");pie.Present(fullMenu ? full : QualificationPie((1,"Show retained workspace",true)),"");return true;});
+            pie.Open(gui.Surface.Size/2,300,"Reading…");pie.Present(fullMenu ? full : QualificationPie((1,"Show retained workspace",true)),"");return true;},
+            ()=>{if(formOpen)dismissed++;return formOpen;});
         void PresentForm()=>form.Visible=adapter.WorkspaceVisible;
         adapter.Changed+=PresentForm;form.TreeExiting+=()=>adapter.Changed-=PresentForm;
         adapter.AttachSources();adapter.Install(mapping);adapter.PresentWorkspace(true);
@@ -158,6 +159,14 @@ public partial class ExportChecks
         Check(clicks==1 && gui.Captures==0,"text reflow cancels through the attached input owner and cannot release a stale click");
         Advance();Aim();Trigger(true);Trigger(false);
         Check(clicks==2 && gui.Captures==0,"neutral rearms the real GUI after text reflow");
+        // A press that misses the panel is offered to the open form's owner; one on the panel never is.
+        formOpen=true;var onPanel=left.GetPose("aim").Transform;
+        left.SetPose("aim",onPanel.Translated(onPanel.Basis.X*10),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
+        Trigger(true);Trigger(false);
+        Check(dismissed==1 && clicks==2 && gui.Captures==0,"a trigger press outside the panel reaches the open form's owner once and nothing else");
+        Advance();Aim();Advance();Trigger(true);Trigger(false);
+        Check(dismissed==1 && clicks==3 && gui.Captures==0,"a trigger press on the panel stays the panel's own");
+        formOpen=false;
         adapter.HideWorkspace();right.SetInput("pad_axes",new Vector2(0,1));right.SetInput("pad_press",true);Advance();
         Check(adapter.Router.MenuOwner==null,"Hide disarms an already-held menu until a released frame");
         right.SetInput("pad_press",false);right.SetInput("pad_axes",Vector2.Zero);Advance();
@@ -204,13 +213,13 @@ public partial class ExportChecks
         Probe(pie.IsOpen && pie.Navigator!.Level.Children.Length==8 && new Rect2(Vector2.Zero,gui.Surface.Size).Encloses(reach),
             "the full eight-wedge pie fits the surface at largest supported text");
         right.SetInput("pad_axes",new Vector2(1,0));Advance();await Frame();await Frame();
-        Probe(pie.Navigator!.Hovered==3 && pie.Caption==full.At(3)!.Label+" · Not here.",
+        Probe(pie.Navigator!.Hovered==3 && pie.Title==full.At(3)!.Label && pie.Note=="Not here.",
             "actual right-pad selection points wedge 3 and the centre names it with its reason");
         right.SetInput("pad_axes",new Vector2(-.71f,.7f));Advance();
-        Probe(pie.Navigator!.Hovered==8 && pie.Caption==full.At(8)!.Label,"the last wedge is reachable by direction without scrolling");
+        Probe(pie.Navigator!.Hovered==8 && pie.Title==full.At(8)!.Label,"the last wedge is reachable by direction without scrolling");
         Probe(ReferenceEquals(form.Draft,draft) && form.Input("note")!.GetInstanceId()==editorId && submits==0,
             "the pie over the panel preserves the same unsent native form and draft beneath it");
-        reports.Add(new { maximumFont=gui.Appearance.DefaultFontSize,reach=reach.ToString(),caption=pie.Caption });
+        reports.Add(new { maximumFont=gui.Appearance.DefaultFontSize,reach=reach.ToString(),title=pie.Title });
         if(DisplayServer.GetName()!="headless") {
             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);using var image=gui.Surface.GetTexture().GetImage();
             string directory=Env("M4_PRESENTATION_IMAGES");System.IO.Directory.CreateDirectory(directory);

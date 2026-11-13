@@ -97,6 +97,9 @@ public partial class ScenePanel : SubViewportContainer
     public event Action<MenuStep,Selection?,Vector2>? MenuGesture;
     // The cursor's target before any press: the occurrence under it, or none.
     public event Action<Selection?,Vector2>? Hovered;
+    // Asked first on a left press here: the host may use it up, as it does to
+    // close an open form the press landed outside of.
+    public Func<bool>? OutsidePress { get; set; }
     bool menuHeld;
     // The pointed-at and selected things show the looks their marks carry;
     // switching reads and changes no domain state.
@@ -438,6 +441,7 @@ public partial class ScenePanel : SubViewportContainer
     }
     public override void _GuiInput(InputEvent @event)
     {
+        if(@event is InputEventMouseButton { ButtonIndex: MouseButton.Left,Pressed: true } && OutsidePress?.Invoke()==true){GrabFocus();pressedSubject=null;AcceptEvent();return;}
         if(!available)return;
         if (@event is InputEventKey key && key.PhysicalKeycode is Key.W or Key.A or Key.S or Key.D or Key.Q or Key.E) {
             if (key.Echo) return;

@@ -166,7 +166,8 @@ public partial class Main : Control
             return await consumer.Transport.Model(asset.Digest,asset.Allowed[0],deadline.Token);
         });
         xr=new() { Name="openxr-input" };scene.Viewport.AddChild(xr);
-        xr.Configure(scene,gui,models,()=>controls,()=>GuiOpen || gui.NativePressed,pie,hit=>OpenPie(hit,null));
+        xr.Configure(scene,gui,models,()=>controls,()=>GuiOpen || gui.NativePressed,pie,hit=>OpenPie(hit,null),DismissForm);
+        scene.OutsidePress=DismissForm;
         xr.Install(ControllerMapping.SignIn);
         pie.Selected+=chosen=>{var occurrence=pieOccurrence;var at=pieAt;var source=pieView?.Target;ClosePie();Activate(chosen,occurrence,at,source);};
         gui.Surface.AddChild(hud);hud.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
@@ -180,11 +181,13 @@ public partial class Main : Control
             var at=point+scene.GlobalPosition;
             if(step==ScenePanel.MenuStep.Open){if(!pie.IsOpen)OpenPie(hit,at);}
             else if(step==ScenePanel.MenuStep.Move){if(pie.IsOpen)pie.PointerAt(at);}
-            else if(pie.IsOpen&&pie.Navigator?.Hovered>0)pie.Commit();
+            // Held right button: releasing where it was pressed, or on the hub,
+            // leaves the pie open for clicks; elsewhere the release decides.
+            else if(pie.IsOpen&&pie.PointerMoved&&!pie.OnHub(at))pie.CommitAt(at);
         };
         scene.Hovered+=(hit,point)=>{
             hovered=hit;scene.PointAt(hit);
-            string? text=float.IsNaN(point.X)||pie.IsOpen ? null : TargetLabel(hit);
+            string? text=float.IsNaN(point.X)||pie.IsOpen ? null : hit?.Label;
             pointerLabel.Visible=text!=null;if(text==null)return;
             pointerLabel.Text=text;pointerLabel.Position=point+scene.GlobalPosition+new Vector2(18,18);hoverPoint=point+scene.GlobalPosition;
         };
@@ -192,7 +195,7 @@ public partial class Main : Control
         scene.PresentationChanged+=()=>{
             if(pie.IsOpen&&pieOccurrence!=null&&pieOccurrence.Pose==null){ClosePie();statusText="That thing is no longer here.";Notify();}
         };
-        xr.Changed+=UpdateControllerStatus;xr.TargetLabel=TargetLabel;
+        xr.Changed+=UpdateControllerStatus;
         gui.NativeCaptureChanged+=()=>{if(gui.NativePressed){xr.Router.Cancel();scene.ReleaseInput();}xr.ContextChanged();};
         GetWindow().VisibilityChanged+=()=>xr.Visibility(GetWindow().Visible);
         scene.Drive += (direction,_) => controls?.Drive(direction.X,direction.Y,direction.Z);
@@ -307,7 +310,6 @@ public partial class Main : Control
         var surface=gui.Spatial ? xr.PieSurface : gui.Surface;
         if(pie.GetParent()!=surface){pie.GetParent()?.RemoveChild(pie);surface.AddChild(pie);}else surface.MoveChild(pie,-1);
         var size=(Vector2)surface.Size;
-        pie.ShowDigits=!gui.Spatial;
         pie.Open(at??size/2,gui.Spatial ? 300 : Math.Clamp(Math.Min(size.X,size.Y)*.22f,130,240),"Reading "+name+"…");
         pieOccurrence=hit;pieAt=gui.Spatial ? null : at;long expected=++pieGeneration;
         var opened=System.Diagnostics.Stopwatch.StartNew();
@@ -333,12 +335,14 @@ public partial class Main : Control
         };
         _=view.Start();Notify();return true;
     }
-    // The occurrence's authored label, else the containing space; nothing for
-    // an unlabelled mark. Never a Prolog term.
-    string? TargetLabel(ScenePanel.Selection? hit)=>hit!=null ? hit.Label
-        : !navigationAvailable||accounts?.Setup==null ? null
-        : navigation?.Space==null ? "You are nowhere yet"
-        : "Space · "+(projection?.Name is {Length:>0} name ? name : "unnamed");
+    // A press that lands outside the open form, or Escape, closes it as its
+    // own Close button does. Answers whether a form was open to take the press:
+    // one whose sent result is still unknown takes it and stays.
+    bool DismissForm()
+    {
+        if(representations?.Visible!=true)return false;
+        representations.Cancel();return true;
+    }
     // A subject's own pie, centred; with no subject, the target rule's.
     internal bool OpenSubjectPie(Term? subject=null)=>OpenPie(null,null,subject);
     void ClosePie()
@@ -729,12 +733,10 @@ public partial class Main : Control
         if (@event is InputEventKey { Pressed:true, Echo:false, Keycode:Key.Menu } && !pie.IsOpen) {
             if(OpenPie(hovered,hovered==null ? null : hoverPoint))GetViewport().SetInputAsHandled();return;
         }
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { ClosePie();GetViewport().SetInputAsHandled();return; }
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { pie.Dismiss();GetViewport().SetInputAsHandled();return; }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
             if (backupDialog!=null) CloseBackup();
-            else if (representations?.Visible == true) { representations.Cancel();ShowHome(); }
-            else if (xr.Running) { ToggleVr(); }
-            else action?.Cancel();
+            else if (!DismissForm()) { if (xr.Running) ToggleVr(); else action?.Cancel(); }
             GetViewport().SetInputAsHandled(); Notify();
         }
     }

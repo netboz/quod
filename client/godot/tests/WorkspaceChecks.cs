@@ -108,15 +108,20 @@ public partial class ExportChecks
         Advance();
         var openingHead=((Node3D)adapter.FindChild("xr-origin",true,false)).GlobalTransform*head.GetPose("default").GetAdjustedTransform();
         var openingPanel=adapter.GuiSurface.GlobalTransform;var flatForward=-openingHead.Basis.Z;flatForward.Y=0;flatForward=flatForward.Normalized();
-        Check(openingPanel.Basis.Y.Dot(Vector3.Up)>.9999f && Mathf.Abs(openingPanel.Origin.Y-openingHead.Origin.Y)<.0001f &&
-            (openingPanel.Origin-openingHead.Origin).DistanceTo(flatForward*2)<.0001f,
-            "the actual first tilted tracked head opens an upright workspace at eye height in its horizontal forward view");
+        var toPanel=openingPanel.Origin-openingHead.Origin;float tilt=Mathf.RadToDeg(Mathf.Atan2(-toPanel.Y,new Vector2(toPanel.X,toPanel.Z).Length()));
+        Check(Math.Abs(tilt-adapter.Profile.BelowEyeDegrees)<.01f && Math.Abs(toPanel.Length()-2)<.0001f &&
+            new Vector3(toPanel.X,0,toPanel.Z).Normalized().DistanceTo(flatForward)<.0001f && (-openingPanel.Basis.Z).DistanceTo(toPanel.Normalized())<.0001f,
+            "the actual first tilted tracked head opens the workspace in its level forward heading, 2 m away, the profile's angle below eye level, facing the eye");
         adapter.PresentWorkspace(false);adapter.PresentWorkspace(true);
         head.SetPose("default",new(Basis.FromEuler(new(Mathf.Pi/2,0,0)),new(1.2f,1.4f,-.7f)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
         Check(!adapter.GuiSurface.Visible,"a vertical-only head direction waits for a measurable horizontal heading rather than inventing one");
         adapter.ShowWorkspace();Head(new(1.2f,1.4f,-.7f),.4f);Advance();
         var origin=(Node3D)adapter.FindChild("xr-origin",true,false);
-        Transform3D Expected(float distance)=>origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()*new Transform3D(Basis.Identity,new(0,0,-distance));
+        Transform3D Expected(float distance) {
+            var eye=origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform();var level=-eye.Basis.Z;level.Y=0;level=level.Normalized();
+            float angle=Mathf.DegToRad(adapter.Profile.BelowEyeDegrees);var at=eye.Origin+level*distance*Mathf.Cos(angle)-Vector3.Up*distance*Mathf.Sin(angle);
+            return new(Basis.LookingAt((at-eye.Origin).Normalized(),Vector3.Up),at);
+        }
         bool Same(Transform3D a,Transform3D b)=>a.Origin.DistanceTo(b.Origin)<.0001f && a.Basis.IsEqualApprox(b.Basis);
         Check(adapter.GuiSurface.Visible && Same(adapter.GuiSurface.GlobalTransform,Expected(2)),"the real frame owner opens the panel from the current adjusted tracked head");
         var fixedPose=adapter.GuiSurface.GlobalTransform;

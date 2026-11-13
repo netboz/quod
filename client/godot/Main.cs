@@ -605,7 +605,8 @@ public partial class Main : Control
             panel.Size=new(Math.Min(size.X-2*edge,Math.Clamp(size.X*.34f,360,560)),Math.Max(1,size.Y-edge-corner-strip));
         }
     }
-    void OverlayChanging() { gui.Cancel();xr.Router.Cancel();scene.ReleaseInput();if(gui.Spatial&&!xr.WorkspaceVisible)xr.ShowWorkspace(); }
+    // In VR an opening panel is placed in front of where you look now.
+    void OverlayChanging() { gui.Cancel();xr.Router.Cancel();scene.ReleaseInput();if(gui.Spatial)xr.ShowWorkspace(); }
     void ShowHome(){questions?.Close();OverlayChanging();home=true;UpdateWorkspace();}
     void ShowInspector(){questions?.Close();OverlayChanging();home=false;UpdateWorkspace();}
     void SelectSubject(Term exact)

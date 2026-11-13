@@ -277,12 +277,16 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         var forward=-headWorld.Basis.Z;forward.Y=0;if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
         float yaw=Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z));
         hudYaw=Profile.FollowYaw(hudYaw,yaw);float heading=Mathf.DegToRad(hudYaw!.Value);
-        var direction=new Vector3(-Mathf.Sin(heading),0,-Mathf.Cos(heading));float reading=Profile.ReadingDistance;
-        var at=headWorld.Origin+direction*reading*Mathf.Cos(Mathf.DegToRad(Profile.HudBelowEyeDegrees))
-            -Vector3.Up*reading*Mathf.Sin(Mathf.DegToRad(Profile.HudBelowEyeDegrees));
+        float reading=Profile.ReadingDistance;
         // The workspace's own angular text density: 1600 surface pixels per metre of distance.
         ((QuadMesh)hudQuad.Mesh).Size=new(hudViewport.Size.X*reading/1600,hudViewport.Size.Y*reading/1600);
-        hudQuad.GlobalTransform=new(Basis.LookingAt((at-headWorld.Origin).Normalized(),Vector3.Up),at);
+        hudQuad.GlobalTransform=BelowEye(headWorld.Origin,new(-Mathf.Sin(heading),0,-Mathf.Cos(heading)),reading,Profile.HudBelowEyeDegrees);
+    }
+    // A surface along a level heading, the given angle below eye level, turned to face the eye.
+    static Transform3D BelowEye(Vector3 eye,Vector3 heading,float distance,float degrees)
+    {
+        float below=Mathf.DegToRad(degrees);var at=eye+heading*distance*Mathf.Cos(below)-Vector3.Up*distance*Mathf.Sin(below);
+        return new(Basis.LookingAt((at-eye).Normalized(),Vector3.Up),at);
     }
     Vector2? HudHit(IControllerSource source)
     {
@@ -314,8 +318,8 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         var headWorld=origin.GlobalTransform*pose.GetAdjustedTransform();
         var forward=-headWorld.Basis.Z;forward.Y=0;
         if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
-        forward=forward.Normalized();
-        var target=new Transform3D(Basis.LookingAt(forward,Vector3.Up),headWorld.Origin+forward*workspaceDistance);
+        // In front of where the head looks now, below eye level as the profile says; then world-locked.
+        var target=BelowEye(headWorld.Origin,forward.Normalized(),workspaceDistance,Profile.BelowEyeDegrees);
         if(panel.GlobalTransform!=target)panel.GlobalTransform=target;
         placeRequested=false;panel.Visible=shown;
     }

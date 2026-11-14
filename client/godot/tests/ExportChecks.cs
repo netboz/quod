@@ -63,6 +63,7 @@ public partial class ExportChecks : Node
             if (phase == "menu") { await NativeMenu(); return; }
             if (phase == "icons") { await IconAllowances(); return; }
             if (phase == "pie") { await PieRender(); return; }
+            if (phase == "signin") { await SignInRender(); return; }
             if (phase == "scene") { await SceneAdapter(); return; }
             if (phase == "controller-input") { await ControllerAdapter(); return; }
             if (phase == "presentation") { await PresentationAdapter(); return; }

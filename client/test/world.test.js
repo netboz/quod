@@ -341,3 +341,13 @@ test('source workspace binding is authored data for ordinary subjects and exact 
     }
   }
 })
+
+test('a viewer pose field is never drawn by a browser and is submitted as none', async () => {
+  const { readGuiForm, guiDraftFields } = await import('../src/world.js')
+  const tree = readTerm('component(f,form,[property(label,<<"Make">>)],[component(v,viewer_pose,[property(label,<<"Where you look">>),property(required,false),property(readonly,false)],[]),component(save,button,[property(label,<<"Save">>)],[])])')
+  const { view, values } = readGuiForm(tree, readTerm('[field(v,none)]'), atom('save'))
+  assert.deepEqual({ ...values }, { v: 'none' })
+  assert.equal(renderTerm(guiDraftFields(view, values)), '[field(v,none)]')
+  assert.throws(() => guiDraftFields(view, { v: 'view(transform(0,0,0,0,0,0),forward(0,0,-1000))' }), /no viewer pose/)
+  assert.throws(() => readGuiForm(tree, readTerm('[field(v,view(transform(0,0,0,0,0,0),forward(0,0,-1000)))]'), atom('save')), /viewer pose/)
+})

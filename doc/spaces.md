@@ -153,15 +153,23 @@ After assertion, `quod:space::goal(inside(DestinationRef, Ref, Pose))` chooses a
 exact destination and transform, using existing integer millimetres/degrees.
 The action stores the pose in the instance's `transform` slot. The creation
 form's placement choice is an input to this action, not a stored slot.
-`near_agent` reads A's exact location at `quod:space`; a successful `unplaced`
-result leaves the new space unplaced. A `placed(Destination, Transform)` result
-places it in front of A along that frame's −Z axis: 2 m from A's position plus
-half the shared marker's depth, read from the scene vocabulary's
-`marker_size/1`. With the 0.5 m marker the new space appears 2.25 m away,
-whatever it measures inside (Yan, 2026-11-12). On that line it takes the
-first free place: straight ahead, then alternately one and a half markers to
-the right and to the left, until no placed thing whose location can be read
-stands within one marker of it on every axis. Things already placed are never
+`near_agent` ("In front of me") reads A's exact location at `quod:space`; a
+successful `unplaced` result leaves the new space unplaced. A
+`placed(Destination, Transform)` result places it in front of the viewer. The
+form's `space_view` field is a `viewer_pose` the client fills itself: in a
+headset, where the eyes are and the level direction they look along
+(`view(transform(…), forward(FX, 0, FZ))`, the direction in thousandths). The
+space then stands that near distance along the look, at A's floor height,
+turned to face the viewer (Yan, 2026-11-14). Without a viewer pose (`none`,
+any client without a head) it stands in front of A along that frame's −Z
+axis, with A's turn. The near distance is 2 m plus half the shared marker's
+depth, read from the scene vocabulary's `marker_size/1`: with the 0.5 m
+marker the new space appears 2.25 m away, whatever it measures inside (Yan,
+2026-11-12). On the line across that point it takes the first free place:
+straight ahead, then alternately one and a half markers to the viewer's right
+and left, until no placed thing whose location can be read stands within one
+marker of it on every axis. A viewer pose whose direction is not a level unit
+vector is refused. Things already placed are never
 moved. This is one-time placement, not following A. A denied, unavailable, ambiguous or incomplete location read
 fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
 Transform)`; missing pose does not prove absence. Physical-pilot entry and live

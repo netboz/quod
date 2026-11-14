@@ -40,7 +40,7 @@ space_query(goal(unplaced(_))).
 space_query(goal(shown_in(_, _))).
 space_query(goal(not_shown_in(_, _))).
 space_query(space_represent(_, _, _, _, _, _, _)).
-space_query(space_form_placement(_, _, _)).
+space_query(space_form_placement(_, _, _, _)).
 space_query(Goal) :- public_source_query(Goal).
 
 isa(space, thing).
@@ -90,13 +90,9 @@ placement_pose(Destination, Pose) :-
     ; quod:user::personal_agent(Agent, _),
       Agent = agent_instance_ref(Ns,A,Entity),
       space_location(entity_ref(Ns,A,Entity), placed(Destination,transform(X,Y,Z,RX,RY,RZ))),
-      space_near(Size, Near),
+      space_near(_, Near),
       NearZ is Z - Near,
-      Destination = entity_ref(DNs,DA,D),
-      in_ontology(DNs,DA,findall(Subject,space_placement(D,Subject,_),Placed)),
-      findall(Taken,(member(Subject,Placed),space_location(Subject,placed(Destination,Taken))),Poses),
-      space_free_place(0,X,Y,NearZ,Size,Poses,FreeX),
-      Pose = transform(FreeX,Y,NearZ,RX,RY,RZ)).
+      space_free_pose(Destination, transform(X,Y,NearZ,RX,RY,RZ), 1000, 0, Pose)).
 %% Near: Yan's chosen two metres plus half the shared marker's depth, between
 %% an agent and a thing in front of it. The marker stands for the space
 %% outside, whatever it measures inside.
@@ -104,16 +100,36 @@ space_near(Size, Near) :-
     unique_solution(scene_vocabulary(Scene,Anchor)),
     in_ontology(Scene,Anchor,marker_size(Size)),
     Near is 2000 + Size // 2.
-%% Candidates run straight ahead, then alternately right and left, one and a
-%% half markers apart. A place is free when no placed thing whose location
-%% can be read stands within one marker of it on every axis.
-space_free_place(Index, X, Y, Z, Size, Poses, Free) :-
+%% The first free place for a new thing at Base, never on a thing already
+%% placed in Destination. Candidates run through Base, then alternately one
+%% and a half markers to the right and to the left along (SX, SZ), a level
+%% direction in thousandths. A place is free when no placed thing whose
+%% location can be read stands within one marker of it on every axis.
+space_free_pose(Destination, transform(X,Y,Z,RX,RY,RZ), SX, SZ, transform(FX,Y,FZ,RX,RY,RZ)) :-
+    space_near(Size, _),
+    Destination = entity_ref(DNs,DA,D),
+    in_ontology(DNs,DA,findall(Subject,space_placement(D,Subject,_),Placed)),
+    findall(Taken,(member(Subject,Placed),space_location(Subject,placed(Destination,Taken))),Poses),
+    space_free_place(0, X, Y, Z, SX, SZ, Size, Poses, FX, FZ).
+space_free_place(Index, X, Y, Z, SX, SZ, Size, Poses, FX, FZ) :-
     Side is (Index + 1) // 2 * (Size * 3 // 2),
-    (Index mod 2 =:= 1 -> Candidate is X + Side; Candidate is X - Side),
+    (Index mod 2 =:= 1 -> Sign = 1; Sign = -1),
+    CX is X + Sign * Side * SX // 1000, CZ is Z + Sign * Side * SZ // 1000,
     (member(transform(TX,TY,TZ,_,_,_), Poses),
-     abs(TX - Candidate) < Size, abs(TY - Y) < Size, abs(TZ - Z) < Size ->
-        Next is Index + 1, space_free_place(Next, X, Y, Z, Size, Poses, Free)
-    ; Free = Candidate).
+     abs(TX - CX) < Size, abs(TY - Y) < Size, abs(TZ - CZ) < Size ->
+        Next is Index + 1, space_free_place(Next, X, Y, Z, SX, SZ, Size, Poses, FX, FZ)
+    ; FX = CX, FZ = CZ).
+
+%% In front of the viewer's eyes: the near distance along the level direction
+%% they look, at the agent's floor height, turned to face them. Off to the
+%% sides is the direction to their right.
+space_view_pose(Destination, Floor, view(transform(X,_,Z,_,RY,_), forward(FX,0,FZ)), Pose) :-
+    integer(X), integer(Z), integer(RY), integer(FX), integer(FZ),
+    %% A unit vector in thousandths, up to its rounding.
+    Length is FX * FX + FZ * FZ, Length >= 998001, Length =< 1002001,
+    space_near(_, Near),
+    BX is X + FX * Near // 1000, BZ is Z + FZ * Near // 1000, RightX is -FZ,
+    space_free_pose(Destination, transform(BX,Floor,BZ,0,RY,0), RightX, FX, Pose).
 
 space_subject(entity_ref(Ns, Anchor, Entity), Subject) :-
     in_ontology(Ns,Anchor,
@@ -241,6 +257,7 @@ space_creation_recipe(create_infinite,space_create_infinite,infinite).
 instance_of(quod:gui:form, space_create(ontology_ref(_, _),Extent)) :- member(Extent, [finite, exact, infinite]).
 instance_of(quod:gui:text_box, space_name).
 instance_of(quod:gui:selection, space_placement(ontology_ref(_, _))).
+instance_of(quod:gui:viewer_pose, space_view).
 instance_of(quod:gui:number_input, space_length(Axis)) :- member(Axis, [width,height,depth]).
 instance_of(quod:gui:number_input, space_divisor(Axis)) :- member(Axis, [width,height,depth]).
 instance_of(quod:gui:selection, space_unit).
@@ -259,8 +276,10 @@ attribute(space_placement(_), label, <<"Placement">>).
 attribute(space_placement(ontology_ref(Ns,A)), options, Options) :-
     findall(option(at(entity_ref(Ns,A,S),transform(0,0,0,0,0,0)), Label),
         (space_instance(entity_ref(Ns,A,S),space),in_ontology(Ns,A,attribute(S,name,Label))), Destinations),
-    append([option(near_agent, <<"Near my agent, or unplaced when my agent is unplaced">>),
+    append([option(near_agent, <<"In front of me, or unplaced when my agent is unplaced">>),
             option(unplaced, <<"Unplaced">>)], Destinations, Options).
+attribute(space_view, label, <<"Where you look">>).
+attribute(space_view, help, <<"Filled by the device that shows the form: in front of you is where your eyes look.">>).
 attribute(space_length(width), label, <<"Width (X)">>).
 attribute(space_length(height), label, <<"Height (Y)">>).
 attribute(space_length(depth), label, <<"Depth (Z)">>).
@@ -276,9 +295,10 @@ attribute(space_create_submit, label, <<"Create">>).
 gui_children(space_create(Store,Extent), Children) :-
     space_form_lengths(Extent,Fields,_),
     findall(Role,member(field(Role,_),Fields),Lengths),
-    append([space_name|Lengths], [space_placement(Store),space_create_submit], Children).
+    append([space_name|Lengths], [space_placement(Store),space_view,space_create_submit], Children).
 gui_initial(space_create(_,_), space_name, Name) :- quod:names::draw(<<"place">>, form, Name).
 gui_initial(space_create(Store,_), space_placement(Store), near_agent).
+gui_initial(space_create(_,_), space_view, none).
 gui_initial(space_create(_,Extent), space_unit, Unit) :-
     member(Extent,[finite,exact]),
     have_attribute(space,dimensions,space_dimensions,default(box(q(_,Unit),q(_,Unit),q(_,Unit)))).
@@ -291,21 +311,25 @@ gui_form(space_create(Store,Extent), Fields,
     submit(space_create_submit,
         (current_ontology_identity(Ns,A),
          with_build_plan(Inputs, assert(instance_of(quod:space:space, Space))),
-         quod:space::space_form_placement(entity_ref(Ns,A,Space),Placement,Location),attribute(Space,owner,Owner)),
+         quod:space::space_form_placement(entity_ref(Ns,A,Space),Placement,View,Location),attribute(Space,owner,Owner)),
         operation(create(Inputs), [result(space,entity_ref(Ns,A,Space)),result(location,Location),result(owner,Owner)]))) :-
     Store = ontology_ref(Ns,A),
     space_form_lengths(Extent,Lengths,Dimensions),
-    append([field(space_name,Name)|Lengths], [field(space_placement(Store),Placement)], Fields),
+    append([field(space_name,Name)|Lengths], [field(space_placement(Store),Placement),field(space_view,View)], Fields),
     Inputs = [attribute(name,Name),attribute(dimensions,Dimensions)].
 %% The form's choice selects the same ordinary placement action as any caller.
 %% The instance was asserted by the form goal in its selected storing ontology.
-space_form_placement(Subject, Requested, Location) :-
+%% "In front of me" uses where the viewer looks when the device gives it, and
+%% the agent's own place and facing when it does not.
+space_form_placement(Subject, Requested, View, Location) :-
     (Requested = unplaced -> goal(unplaced(Subject))
     ; Requested = at(Destination,Pose) -> goal(inside(Destination,Subject,Pose))
     ; Requested = near_agent, quod:user::personal_agent(agent_instance_ref(Ns,A,Agent),_),
       space_location(entity_ref(Ns,A,Agent),AgentLocation),
       (AgentLocation = unplaced -> goal(unplaced(Subject))
-      ; AgentLocation = placed(Destination,_), goal(inside(Destination,Subject,_)))),
+      ; AgentLocation = placed(Destination,transform(_,Floor,_,_,_,_)),
+        (View == none -> goal(inside(Destination,Subject,_))
+        ; space_view_pose(Destination,Floor,View,Pose), goal(inside(Destination,Subject,Pose))))),
     space_location(Subject,Location).
 space_form_lengths(finite,
     [field(space_length(width),W),field(space_length(height),H),field(space_length(depth),D),field(space_unit,Unit)],

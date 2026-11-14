@@ -92,6 +92,31 @@ explicit_and_near_agent_placement_test_() ->
         end)
     end) end}.
 
+%% "In front of me" with the viewer's pose from the device: the near distance
+%% along where the eyes look, at the agent's floor height, turned to face the
+%% viewer; the next one takes the next free place to the eyes' right. A pose
+%% that is not a level unit direction is refused and creates nothing.
+viewer_pose_placement_test_() ->
+    {timeout, 90, fun() -> with_spaces(fun(C = #{namespace := Ns, storage := Target, destination := Dest}) ->
+        Room = ref(Dest, room),
+        signed(C, inside(Room, ref(Ns,personal), {transform,200,300,400,0,45,0})),
+        %% Eyes at (1000, 1900, 0) looking along -X: yaw 90 degrees.
+        View = {view,{transform,1000,1900,0,0,90,0},{forward,-1000,0,0}},
+        with_models(C, fun() ->
+        [begin
+            {Made, _, _} = create(C, Target, [], {viewed,near_agent,View}),
+            [{_, {entity_ref, Target, _, Id}}, _] = Made,
+            assignment(C, Target, Id, 1, Room),
+            holds(Target, {attribute, Id, transform, Expected})
+         end || Expected <- [{transform,-1250,300,0,0,90,0},{transform,-1250,300,-750,0,90,0}]],
+        denied_creation(C, Target, [], {viewed,near_agent,{view,{transform,1000,1900,0,0,90,0},{forward,-700,0,0}}}),
+        %% Without a viewer pose the agent's own place and facing decide, as before.
+        {Plain, _, _} = create(C, Target, [], {viewed,near_agent,none}),
+        [{_, {entity_ref, Target, _, PlainId}}, _] = Plain,
+        holds(Target, {attribute, PlainId, transform, {transform,200,300,-1850,0,45,0}})
+        end)
+    end) end}.
+
 explicit_owner_and_class_defaults_test_() ->
     {timeout, 90, fun() -> with_spaces(fun(C = #{storage := Target, agent := Actor}) ->
         {Bindings, _, _} = create(C, Target, [{attribute, owner, Actor}]),
@@ -240,6 +265,8 @@ space(Goal) -> {'::',<<"quod:space">>,Goal}.
 inside(Destination,Entity,Pose) -> space({goal,{inside,Destination,Entity,Pose}}).
 default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
 mixed_dimensions() -> {box,{q,{'/',1,3},<<"ft">>},{q,200,<<"cm">>},{q,3,<<"km">>}}.
+creation_goal(Inputs,{viewed,Placement,View}) ->
+    {creation_result,Inputs,Placement,View,{'Ref'},{'Name'}};
 creation_goal(Inputs,Placement) ->
     {creation_result,Inputs,Placement,{'Ref'},{'Name'}}.
 at_target(#{namespace := Ns}, Ns, Goal) ->

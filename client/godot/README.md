@@ -52,8 +52,11 @@ explicit action. Existing accounts skip completed provisioning. An imported key
 with no recovered account cannot register a replacement. Server, public identity,
 storage details and encrypted backup controls remain inspectable in **Options**
 near the top of the sign-in card. If the server's identity changes, sign-in
-stops and explains that the user's key is unchanged; **Trust this server** is
-an explicit choice in **Options** before signing in again.
+stops, opens **Options** and explains that the user's key is unchanged;
+**Trust this server** is the explicit choice, and it signs in with the key on
+the device. Each new status sentence on the card is scrolled into view. In VR
+the card has no backing of its own: the workspace panel's translucent glass
+backs it, as it backs every panel.
 
 The authenticated session's absolute expiry retires its signed views and input.
 **Sign in again** explicitly authenticates the same key and checks original work;
@@ -102,13 +105,18 @@ scene adapter accepts their projection/frame. A depicted ontology keeps the
 catalogue's flat identity only when its namespace and history match the mark.
 
 A visible pick retains the exact selected occurrence as well as its subject.
-In spatial presentation, its authored action form appears above that occurrence.
+In spatial presentation, its authored action form stands beside that occurrence
+at the panel's distance and angle (see the workspace placement below).
 **Personal workspace** moves the same form there; **Near this object** returns it
 to the still-current occurrence. Native controls, unsent draft, caret/selection,
 operation revision and received original outcome stay with the existing owner.
 Choosing either placement performs no domain action. **Close** ends the form and
 returns to the current space. Desktop presents it as a floating glass panel
 docked to the side of the window farther from its target.
+A form may hold a viewer pose, a field the device fills itself: it is never
+drawn, and when the form is sent the headset fills it with where the eyes are
+and the level direction they look along; without a head it stays `none`. The
+space creation form uses it to place a new space in front of the eyes.
 
 This also applies to an occurrence selected inside an offered visual preview.
 Its signed visual consumer stays installed while that form uses it. The form has

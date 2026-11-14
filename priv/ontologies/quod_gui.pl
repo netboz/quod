@@ -88,6 +88,9 @@ isa(table, selectable_list).
 isa(slider, numeric_input).
 isa(rotary_knob, numeric_input).
 isa(bindings, gui_component).
+%% The viewer's pose in the space it stands in, filled by the client that
+%% shows the form and never drawn: `none` where the client has no head.
+isa(viewer_pose, input).
 isa(button, gui_component).
 isa(icon_button, button).
 isa(proof_workspace, form).
@@ -156,6 +159,7 @@ gui_kind(selection).
 gui_kind(slider).
 gui_kind(rotary_knob).
 gui_kind(button).
+gui_kind(viewer_pose).
 %% Existing proof/source controller capabilities are presentation components;
 %% they are not submitted fields in the common question binding API.
 gui_kind(editor).
@@ -450,6 +454,14 @@ gui_selected_values([], _, _).
 gui_selected_values([Value | Rest], Options, Seen) :-
     member(option(Value, _), Options), \+ member_eq(Value, Seen),
     gui_selected_values(Rest, Options, [Value | Seen]).
+%% Where the eyes are (integer millimetres and degrees, as transform/6) and
+%% the level direction they look along, in thousandths of a unit vector.
+gui_value(Kind, _, Value) :-
+    once(isa(Kind, viewer_pose)),
+    (Value == none -> true
+    ; Value = view(transform(X, Y, Z, RX, RY, RZ), forward(FX, FY, FZ)),
+      integer(X), integer(Y), integer(Z), integer(RX), integer(RY), integer(RZ),
+      integer(FX), integer(FY), integer(FZ)).
 gui_value(Kind, Properties, Value) :-
     once(isa(Kind, numeric_input)), integer(Value),
     member(property(range, range(Min, Max, Step)), Properties),
@@ -462,6 +474,7 @@ gui_initial_value(Kind, Properties, Value) :-
 
 gui_default_value(Kind, _, <<"">>) :- once(isa(Kind, text_box)).
 gui_default_value(Kind, _, false) :- once(isa(Kind, boolean_input)).
+gui_default_value(Kind, _, none) :- once(isa(Kind, viewer_pose)).
 gui_default_value(Kind, Properties, Value) :-
     once(isa(Kind, selection)),
     (member(property(multiple, true), Properties) -> Value = []

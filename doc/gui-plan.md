@@ -564,6 +564,7 @@ GUI milestone includes this common suite, rather than stopping at a textbox demo
 | Continuous input | Slider and rotary knob | Shared range, step, unit and numeric-entry alternative |
 | Structured display | Basic table/list view | Stable row IDs, selection, bounded data projection |
 | Transient UI | Menu and dialog | Open/close, cancel, focus restoration and accessible exit |
+| Device-filled input | Viewer pose | Never drawn; the client that shows the form fills it at submission with where the eyes are and the level direction they look along, or `none` without a head |
 
 Each supported class needs semantic schema, instance projection, desktop and
 spatial adaptation, and behavior tests. A selectable list, for example, must not

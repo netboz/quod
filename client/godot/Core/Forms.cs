@@ -20,9 +20,9 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
         "checkbox" or "toggle" => "boolean", "selection" or "radio_group" or "selectable_list" or "table" => "choice",
         "label" or "status" or "help" or "error" or "separator" or "progress" => "display",
         "editor"=>"editor", "catalogue_selection"=>"catalogue", "bindings"=>"bindings",
-        "button" => "button", _ => throw new FormatException("Unsupported GUI component: " + kind) };
+        "button" => "button", "viewer_pose" => "view", _ => throw new FormatException("Unsupported GUI component: " + kind) };
     public IEnumerable<Component> Leaves => Family == "container" ? Children.SelectMany(c => c.Leaves) : [this];
-    public bool Input => Family is "text" or "number" or "boolean" or "choice";
+    public bool Input => Family is "text" or "number" or "boolean" or "choice" or "view";
     public (BigInteger Min, BigInteger Max, BigInteger Step) Range
     {
         get { var a = Properties["range"].Require("range", 3); return (a[0].Integer, a[1].Integer, a[2].Integer); }
@@ -41,7 +41,7 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
             string kind = args[1].Name, family = FamilyOf(kind);
             var allowed = new HashSet<string>(["label", "help", "enabled"]);
             if (family == "container") allowed.UnionWith(["layout","appearance"]);
-            if (family is "text" or "number" or "boolean" or "choice") allowed.UnionWith(["required", "readonly"]);
+            if (family is "text" or "number" or "boolean" or "choice" or "view") allowed.UnionWith(["required", "readonly"]);
             if (family is "editor" or "catalogue")allowed.Add("readonly");
             if (family == "text") allowed.Add("max_bytes");
             if (family == "number") allowed.UnionWith(["range", "unit"]);
@@ -146,6 +146,15 @@ public sealed record Component(Term Id, string Kind, Dictionary<string, Term> Pr
                 if ((!initial && Flag("required") && choices.Length == 0) || choices.Select(x => x.ToString()).Distinct().Count() != choices.Length ||
                     choices.Any(c => !Options.Any(o => o.Value.ToString() == c.ToString()))) throw new FormatException("Choose an offered value.");
                 return selected;
+            case "view":
+                // Filled by this device, never typed: none, or where the eyes
+                // are and the level direction they look along.
+                var view = Term.Parse(text);
+                if (view.Kind == "atom" && view.Name == "none") return view;
+                var at = view.Require("view", 2);
+                if (at[0].Require("transform", 6).Concat(at[1].Require("forward", 3)).Any(n => n.Kind != "number"))
+                    throw new FormatException("Invalid viewer pose.");
+                return view;
             default: throw new FormatException("Control is not an input.");
         }
     }

@@ -273,6 +273,13 @@ static class Tests
         Reject(() => initial.Fields(edited), "empty required selection still refuses submission");
         edited["c"] = "[a]";
         Check(initial.Fields(edited).ToString() == "[field(b,true),field(c,[a])]", "edited required fields retain exact typed bindings");
+        // A viewer pose is filled by the device and submitted as given: none, or eyes plus look direction.
+        string viewed = "component(f,form,[property(label,f)],[component(v,viewer_pose,[property(label,v),property(required,false),property(readonly,false)],[]),component(save,button,[property(label,save)],[])])";
+        var pose = Form.Decode(Term.Parse(viewed), Term.Parse("[field(v,none)]"), Term.Atom("save"));
+        Check(pose.Tree.Leaves.Single(c => c.Role == "v").Input && pose.Fields(pose.Defaults).ToString() == "[field(v,none)]", "a viewer pose starts as none");
+        var looked = new Dictionary<string,string>(pose.Defaults) { ["v"] = "view(transform(1000,1600,0,0,90,0),forward(-1000,0,0))" };
+        Check(pose.Fields(looked).ToString() == "[field(v,view(transform(1000,1600,0,0,90,0),forward(-1000,0,0)))]", "a device's viewer pose is submitted exactly");
+        looked["v"] = "view(transform(1000,1600,0,0,90,0),forward(a,0,0))"; Reject(() => pose.Fields(looked), "a viewer pose holds integers only");
         Reject(() => Form.Decode(Term.Parse(required), Term.Parse("[field(b,<<\"false\">>),field(c,[])]"), Term.Atom("save")), "initial boolean type stays strict");
         Reject(() => Form.Decode(Term.Parse(required), Term.Parse("[field(b,false),field(c,[invented])]"), Term.Atom("save")), "initial choice membership stays strict");
     }

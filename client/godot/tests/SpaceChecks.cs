@@ -434,6 +434,14 @@ public partial class ExportChecks
         await Until(()=>scene.Count>=15); Check(scene.Count==15,"foreign-storage source appears through the same shared marker");
         await CreationTarget(panel,human,"create");
         Check(Suggested(panel),"a form left for another storing ontology is gone; returning opens the offered form");
+        // In the headset the device fills where the eyes are: the default placement
+        // puts the new space 2.25 m along the look, at the agent's floor, facing them.
+        var device=panel.ViewerPose;
+        panel.ViewerPose=()=>Term.Parse("view(transform(1000,1600,0,0,90,0),forward(-1000,0,0))");
+        await ClickSubmit(panel);panel.ViewerPose=device;
+        Check(Json.Committed(panel.LastOutcome!) && Result(SpaceResults(panel.LastOutcome!),"location").ToString()==
+            Term.Call("placed",s0,Term.Parse("transform(-1250,0,0,0,90,0)")).ToString(),"a headset's creation lands in front of the eyes, turned to face them");
+        await Until(()=>scene.Count>=18);
         var ids=scene.Ids.Order().ToArray();
         await SpaceRefusals(panel,human,s0,scene);
         await Until(()=>State["question_receiver_ready"]?.GetValue<bool>()==true);
@@ -459,7 +467,7 @@ public partial class ExportChecks
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(30));
         async Task<string> StateOfSpaces()=>Json.Binding(await app.ActiveSession.Read(human,
             "findall(state(S,Owner,Location),(current_ontology_identity(Ns,A),<<\"quod:space\">>::space_instance(entity_ref(Ns,A,S),space),attribute(S,owner,Owner),<<\"quod:space\">>::space_location(entity_ref(Ns,A,S),Location)),Spaces).",timeout.Token),"Spaces").ToString();
-        string before=await StateOfSpaces();
+        string before=await StateOfSpaces(); int marks=scene.Count;
         Check(before!="[]","refusal checks observe the existing spaces through their class owner");
         await CreationTarget(panel,human,"create");
         var offer=panel.Current!;
@@ -480,7 +488,7 @@ public partial class ExportChecks
         var detail=panel.FindChild("operation-exact-details",true,false).FindChildren("*","TextEdit",true,false).OfType<TextEdit>().Last();
         Check(!detail.Editable && detail.WrapMode==TextEdit.LineWrappingMode.None &&
             JsonNode.DeepEquals(JsonNode.Parse(detail.Text),panel.LastOutcome),"exact refusal details remain complete and selectable without whole-response wrapping");
-        Check(await StateOfSpaces()==before && scene.Count==15,"denied construction leaves no generated space owner or assignment");
+        Check(await StateOfSpaces()==before && scene.Count==marks,"denied construction leaves no generated space owner or assignment");
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({space},space_admit,deny)).",timeout.Token);
         await OpenExactTarget(panel);
         await Type((LineEdit)panel.FindChild("exact-storage-namespace",true,false),human.Namespace);

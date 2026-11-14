@@ -169,6 +169,12 @@ public partial class FormPanel : VBoxContainer
             var surface=new PanelContainer {ThemeTypeVariation="AuthoredPanel",SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill};
             surface.AddThemeStyleboxOverride("panel",transparent);surface.AddChild(section);surfaces[field.Role]=new(surface);return surface;
         }
+        // The device fills the viewer's pose itself at submission: nothing to draw or press.
+        if (field.Family == "view") {
+            var unseen = new Control { Name = "device-filled", Visible = false };
+            errors[field.Role] = Label(""); unseen.AddChild(errors[field.Role]); interactions[field.Role] = [];
+            return unseen;
+        }
         var row = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         if (field.Family is "text" or "number" or "choice" or "editor" or "bindings" or "catalogue") row.AddChild(Label(field.Label));
         Control control;

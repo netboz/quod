@@ -371,6 +371,8 @@ export function createWorkspacePanel(scene, appearanceSettings = { opacity: 0.78
         fields.set(role, { kind, active, control })
         return
       }
+      // The device fills the viewer's pose itself: nothing to draw.
+      if (guiValueKind(kind) === 'view') return
       const caption = new TextBlock(`${role}-label`, field.unit ? `${field.label} (${field.unit})` : field.label)
       caption.height = '36px'
       caption.fontSize = 22

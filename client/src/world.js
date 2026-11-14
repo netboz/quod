@@ -114,7 +114,7 @@ export function readGuiView(binding) {
   const contracts = {
     container: ['layout', 'appearance'], display: [], button: ['image'],
     text: ['required', 'readonly', 'max_bytes'], number: ['required', 'readonly', 'range', 'unit'],
-    boolean: ['required', 'readonly'], choice: ['required', 'readonly', 'options'],
+    boolean: ['required', 'readonly'], choice: ['required', 'readonly', 'options'], view: ['required', 'readonly'],
     editor: ['readonly'], bindings: [], catalogue_selection: ['readonly'],
   }
   const integer = term => {
@@ -274,6 +274,9 @@ export function guiDraftFields(view, draft) {
     } else if (guiValueKind(field.kind) === 'boolean') {
       if (!['true', 'false'].includes(value) || (field.required && value !== 'true')) throw new Error('Confirm this field.')
       parsed = atom(value)
+    } else if (guiValueKind(field.kind) === 'view') {
+      if (value !== 'none') throw new Error('This device has no viewer pose.')
+      parsed = atom('none')
     } else throw new Error('Unsupported form field.')
     return compound('field', [readTerm(field.role), parsed])
   })
@@ -340,6 +343,9 @@ export function readGuiForm(tree, fields, control) {
     } else if (guiValueKind(field.kind) === 'boolean') {
       if (value.type !== 'atom' || !['true', 'false'].includes(value.value)) throw new Error('invalid form boolean')
       values[role] = value.value
+    } else if (guiValueKind(field.kind) === 'view') {
+      if (value.type !== 'atom' || value.value !== 'none') throw new Error('invalid initial viewer pose')
+      values[role] = 'none'
     } else {
       if (value.type !== 'number' || value.literal || !Number.isSafeInteger(value.value)) throw new Error('unsupported GUI integer')
       values[role] = String(value.value)

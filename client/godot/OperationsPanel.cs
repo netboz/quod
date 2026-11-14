@@ -21,6 +21,8 @@ public partial class OperationsPanel : VBoxContainer
     public event Action<Term>? ClassChosen;
     // A form ends once: validated, it reports its authored label; cancelled, nothing.
     public event Action<string?>? Closed;
+    // Where the viewer's eyes are now, for a form field the device fills; null without a head.
+    public Func<Term?>? ViewerPose { get; set; }
     SignedSession session = null!;
     Accounts accounts = null!;
     Actor human = null!, target = null!;
@@ -232,7 +234,10 @@ public partial class OperationsPanel : VBoxContainer
     async Task SubmitWork()
     {
         if (Current == null || !Available || busy || sent || accounts.Uncertain || !FormPanel.Validate()) return;
-        var offered = Current; string goal = offered.Goal(FormPanel.Draft); long expected = generation;
+        var offered = Current; var draft = new Dictionary<string, string>(FormPanel.Draft);
+        foreach (var field in offered.Form.Tree.Leaves.Where(c => c.Family == "view"))
+            draft[field.Role] = (ViewerPose?.Invoke() ?? Term.Atom("none")).ToString();
+        string goal = offered.Goal(draft); long expected = generation;
         LastOutcome=null; answered = accounts.Outcomes.Count;
         var consumer = session; var owner = human; var selectedTarget = target;
         SetBusy(true); work = new(); var running = work; sent = true; Refresh(); status.Text = "Sending…"; Changed?.Invoke();

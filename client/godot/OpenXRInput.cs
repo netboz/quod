@@ -329,6 +329,19 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         hudGlide=Math.Min(1,hudGlide+(float)(seconds/Profile.HudGlideSeconds));
         hudQuad.GlobalTransform=hudFrom.InterpolateWith(hudPlaced.Value,Mathf.SmoothStep(0,1,hudGlide));
     }
+    // Where the eyes are in the viewed space's own frame (millimetres and
+    // degrees, as its marks are placed) and the level direction they look
+    // along in thousandths, for a form field the device fills.
+    internal Term? ViewerPose()
+    {
+        if(XRServer.GetTracker("head") is not XRPositionalTracker head||!head.HasPose("default")||!head.GetPose("default").HasTrackingData)return null;
+        var eye=scene.SceneRoot.GlobalTransform.AffineInverse()*(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform());
+        var forward=-eye.Basis.Z;forward.Y=0;if(Mathf.IsZeroApprox(forward.LengthSquared()))return null;forward=forward.Normalized();
+        static Term N(float value)=>Term.Number(((long)Mathf.Round(value)).ToString());
+        return Term.Call("view",
+            Term.Call("transform",N(eye.Origin.X*1000),N(eye.Origin.Y*1000),N(eye.Origin.Z*1000),N(0),N(Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z))),N(0)),
+            Term.Call("forward",N(forward.X*1000),N(0),N(forward.Z*1000)));
+    }
     // A surface along a level heading, the given angle below eye level, turned to face the eye.
     static Transform3D BelowEye(Vector3 eye,Vector3 heading,float distance,float degrees)
     {

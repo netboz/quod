@@ -28,6 +28,8 @@ export function guiValueKind(kind) {
   if (['slider', 'rotary_knob', 'number_input'].includes(kind)) return 'number'
   if (['checkbox', 'toggle'].includes(kind)) return 'boolean'
   if (['selection', 'radio_group', 'selectable_list', 'table'].includes(kind)) return 'choice'
+  // Filled by the device showing the form; a browser has no head, so it stays none.
+  if (kind === 'viewer_pose') return 'view'
   return null
 }
 

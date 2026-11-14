@@ -70,7 +70,9 @@ public partial class ExportChecks
         var shown=ToSignal(keyboard,CanvasItem.SignalName.VisibilityChanged);backupPath.GrabFocus();
         if(!keyboard.Visible)await shown;
         Check(gui.TextEntryActive,"the existing spatial keyboard can edit a backup path");
-        await NativePress((Button)backup.FindChild("backup-close",true,false));await Frame();
+        // Close frees the dialog at the end of a frame; its exit is what ends the text entry and restores sign-in.
+        var gone=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);backup.TreeExited+=()=>gone.TrySetResult();
+        await NativePress((Button)backup.FindChild("backup-close",true,false));await gone.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Check(!gui.TextEntryActive && ((Control)app.FindChild("login-steps",true,false)).IsVisibleInTree(),
             "closing backup releases text input and restores the retained sign-in controls");
         actual.PresentWorkspace(false);

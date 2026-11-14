@@ -44,7 +44,8 @@ public partial class Main : Control
     readonly PanelContainer loginView=new() {Name="login"};
     readonly StyleBoxFlat loginBackdrop=new() {BgColor=new(11f/255,57f/255,84f/255),ExpandMarginLeft=28,ExpandMarginRight=28,ExpandMarginTop=22,ExpandMarginBottom=22};
     readonly Label loginStatus=new() {Name="login-status",HorizontalAlignment=HorizontalAlignment.Center,AutowrapMode=TextServer.AutowrapMode.WordSmart};
-    readonly Label controllerNotice=new() {Name="controller-notice",AutowrapMode=TextServer.AutowrapMode.WordSmart};
+    readonly Label controllerNotice=new() {Name="controller-notice",HorizontalAlignment=HorizontalAlignment.Center,AutowrapMode=TextServer.AutowrapMode.WordSmart};
+    readonly PanelContainer loginCard=new() {Name="login-card"};
     readonly Label endpointLabel=new() {Text="Node address"};
     Control workspaceShell=null!;
     readonly VBoxContainer connectionDetails=new() { Visible=false };
@@ -119,7 +120,7 @@ public partial class Main : Control
         var scroll=new ScrollContainer { Name="login-scroll",HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true };
         loginView.AddChild(scroll);
         var centre=new CenterContainer { SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill };scroll.AddChild(centre);
-        var card=new PanelContainer {Name="login-card",CustomMinimumSize=new(400,0)};centre.AddChild(card);
+        var card=loginCard;centre.AddChild(card);
         card.AddThemeStyleboxOverride("panel",new StyleBoxFlat {BgColor=new(1,1,1,.06f),BorderColor=new(1,1,1,.14f),
             BorderWidthLeft=1,BorderWidthTop=1,BorderWidthRight=1,BorderWidthBottom=1,
             CornerRadiusTopLeft=16,CornerRadiusTopRight=16,CornerRadiusBottomLeft=16,CornerRadiusBottomRight=16,
@@ -405,8 +406,10 @@ public partial class Main : Control
         try {
             try { await connecting.Authenticate(Cancellation); }
             catch (HttpRequestException) when (connecting.Transport.KeyChanged) {
+                // The one way on is in Options: show it with the refusal.
+                connectionDetails.Visible=true;
                 throw new InvalidOperationException("This server looks different from the one you used before. Your own key is safe. " +
-                    "If you expected the rebuild, open Options and choose Trust this server, then Sign in.");
+                    "If you expected the rebuild, choose Trust this server.");
             }
             if (disposed || expected != incarnation) return;
             if (pinned.Length == 0) store.Update(s => s.NodeKeys[origin] = connecting.Transport.NodeKey);
@@ -568,9 +571,15 @@ public partial class Main : Control
         bool ready=accounts?.Setup!=null&&session is {IsExpired:false};
         loginView.Visible=backupDialog!=null || showConnection || OpeningSpace || accounts?.Setup==null || accounts.Uncertain || session?.IsExpired==true;
         connectionShell.Visible=backupDialog==null;
-        loginBackdrop.BgColor=loginBackdrop.BgColor with {A=ready ? .6f : 1};
+        // In space the workspace surface's own glass backs the card, as it backs
+        // every panel; a second backing layer would make it opaque.
+        loginBackdrop.BgColor=loginBackdrop.BgColor with {A=gui.Spatial ? 0 : ready ? .6f : 1};
+        // A new sentence is brought into view: the card can be taller than its panel.
+        bool said=statusText.Length>0&&loginStatus.Text!=statusText;
         loginStatus.Text=statusText;loginStatus.Visible=statusText.Length>0;
-        location.Visible=controllers.Visible=loginView.Visible;
+        if(said&&loginView.IsVisibleInTree())SpatialGui.Reveal(loginStatus,()=>IsInstanceValid(loginStatus)&&loginStatus.IsVisibleInTree());
+        // Raw references and controller diagnostics are for the desktop's Options only.
+        location.Visible=controllers.Visible=loginView.Visible&&!gui.Spatial;
         accountSetup.Visible=accounts!=null;
         // Status is one plain sentence in the HUD strip, never a permanent panel.
         hud.Visible=ready&&!loginView.Visible;hud.Status=statusText.Length>0 ? statusText : xr.AppearanceStatus;hud.AutoDim=!gui.Spatial;
@@ -604,6 +613,8 @@ public partial class Main : Control
     void Layout()
     {
         var size=workspaceShell.Size;const float edge=16,strip=HudBar.Height,corner=48;
+        // The sign-in card holds about 24 characters of the current text size a line.
+        loginCard.CustomMinimumSize=new(Math.Min(size.X-2*edge,24*gui.Appearance.DefaultFontSize),0);
         place.Position=new(edge+4,edge);
         float width=Math.Min(size.X-2*edge,Math.Clamp(size.X*.42f,420,760));
         subjectPanel.Position=new(dockLeft ? edge : size.X-width-edge,edge);
@@ -646,18 +657,20 @@ public partial class Main : Control
             SubjectLabel=exact=>navigationAvailable&&navigation?.Space?.Entity.ToString()==exact.ToString() ? projection?.Name : scene.SubjectLabel(exact) };
         visualHost.AddChild(representations.Preview);gui.SetForm(representations);
         gui.PreviewFormHit=point=>representations?.NearOccurrence==true&&gui.Spatial&&ReferenceEquals(representations.Occurrence?.Owner,representations.Preview) ? representations.Preview.FormHit(point) : null;
-        operations=representations.Operations;operations.ClassChosen+=subject=>OpenSubjectPie(subject);representations.Changed+=Notify;representations.HiddenByUser+=ShowHome;
+        operations=representations.Operations;operations.ViewerPose=()=>xr.Running ? xr.ViewerPose() : null;operations.ClassChosen+=subject=>OpenSubjectPie(subject);representations.Changed+=Notify;representations.HiddenByUser+=ShowHome;
         operations.Closed+=validated=>{if(validated!=null){statusText="Done: "+validated;Notify();}};return representations;
     }
     void SettingsChanged()
     { if (session != null) Disconnect(); }
+    // Trusting the server at this address is what signing in was waiting for:
+    // with a key on this device it signs in at once.
     Task ForgetNodeKey()
     {
         if (store == null) throw new InvalidOperationException("Local identity storage is unavailable.");
         string origin = Transport.NodeOrigin(endpoint.Text);
-        Disconnect(); store.Update(s => s.NodeKeys.Remove(origin));
-        statusText = "You can sign in now. Your own key is unchanged. Quod will accept the server at this address.";
-        return Task.CompletedTask;
+        Disconnect(); store.Update(s => s.NodeKeys.Remove(origin));connectionDetails.Visible=false;
+        statusText = "Quod will accept the server at this address. Your own key is unchanged.";
+        return key == null ? Task.CompletedTask : Connect();
     }
     void CloseSession(bool retainDrafts=true)
     {

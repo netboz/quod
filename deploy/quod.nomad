@@ -108,8 +108,14 @@ variable "cross_ontology_target_alloc_index" {
 
 variable "otel_exporter_otlp_endpoint" {
   type        = string
-  default     = "http://192.168.1.11:4318"
+  default     = "http://192.168.1.10:4318"
   description = "Reachable OTLP/HTTP endpoint for Tempo. Use an address routable from both home and cloud allocations; do not rely on host-local Consul DNS inside bridge containers."
+}
+
+variable "otel_traces_ratio" {
+  type        = string
+  default     = "1"
+  description = "Share of new traces each node keeps, from 0 to 1. Every trace is kept by default so one user action can always be read back; a load test passes a smaller share."
 }
 
 variable "client_edge_address" {
@@ -436,7 +442,7 @@ OTEL_TRACES_EXPORTER=otlp
 OTEL_EXPORTER_OTLP_ENDPOINT=${var.otel_exporter_otlp_endpoint}
 OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
-OTEL_TRACES_SAMPLER_ARG=0.05
+OTEL_TRACES_SAMPLER_ARG=${var.otel_traces_ratio}
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true
@@ -711,7 +717,7 @@ OTEL_TRACES_EXPORTER=otlp
 OTEL_EXPORTER_OTLP_ENDPOINT=${var.otel_exporter_otlp_endpoint}
 OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
-OTEL_TRACES_SAMPLER_ARG=0.05
+OTEL_TRACES_SAMPLER_ARG=${var.otel_traces_ratio}
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true

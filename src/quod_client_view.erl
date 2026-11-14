@@ -165,9 +165,11 @@ open_worker(Session,Bytes,Signature,Expiry,S = #{namespace := Ns}) ->
                     S#{timer => Timer}
             end,
             Owner = self(), Ref = make_ref(), Peer = maps:get(peer,S),
+            Trace = open_span_start(maps:get(kind,S)),
             {Pid,M} = spawn_monitor(fun() ->
                 receive {open,Ref} ->
-                    Result = quod_client_goal_ingress:submit(read,Session,Bytes,Signature,Peer),
+                    Result = quod_trace:with_context(Trace, fun() ->
+                        quod_client_goal_ingress:submit(read,Session,Bytes,Signature,Peer) end),
                     Owner ! {view_opened,Ref,Result}
                 end
             end),
@@ -439,7 +441,9 @@ snapshot_response(_,S) -> {ok,S}.
 resume_projection(S = #{pending := {Digest, Expiry, Outcome}}) ->
     case {Expiry > quod_time:now_ms() andalso candidate_live(S),dependencies_ready(S)} of
         {false,_} -> reply(#{type => unavailable,reason => expired},release(S));
-        {true,true} -> open_view(Outcome,Digest,Expiry,maps:remove(pending,S));
+        {true,true} ->
+            open_span_event(<<"dependencies_ready">>),
+            open_view(Outcome,Digest,Expiry,maps:remove(pending,S));
         {true,false} -> {ok,S}
     end;
 resume_projection(S = #{pending := refresh}) ->
@@ -661,7 +665,7 @@ websocket_info({'DOWN',M,process,Pid,_},S = #{opening := {_,Pid,M},pending := re
 websocket_info({'DOWN',M,process,Pid,_},S = #{opening := {_,Pid,M}}) ->
     Clean = maps:without([opening,opening_result],S),
     case maps:find(opening_result,S) of
-        {ok,Result} -> open_result(Result,Clean);
+        {ok,Result} -> open_span_event(<<"proof_returned">>), open_result(Result,Clean);
         error -> case maps:is_key(timer,Clean) of
             true -> reply(#{type => unavailable,reason => proof_unavailable},release(Clean));
             false -> finish_cleanup(Clean)
@@ -832,6 +836,7 @@ reply(Message0, S) ->
         _ -> Message0
     end,
     Encoded = iolist_to_binary(json:encode(Message)),
+    case Message of #{type := projection} -> open_span_end(ok); _ -> ok end,
     case Message of
         %% Allocation belongs to the admitted proof and authored resources.
         %% Quiet views retain their original signed lease.
@@ -849,7 +854,28 @@ detach(S) ->
         quod_physics:unwatch(Pid, Ref), demonitor(M, [flush]); _ -> ok end,
     maps:without([pid,ref,monitor,view,tick,origin_sequence,height,bodies,control],S).
 
+%% Tracing only. One span covers a view's opening, from its signed open to the
+%% projection that answers it or the release that gives it up. The proof
+%% worker's spans are its children and events mark the stages between. It
+%% lives beside the view's state, never in it.
+open_span_start(Kind) ->
+    open_span_end({error,superseded}),
+    {Ctx,Span} = quod_trace:start_span(quod_trace:context(),<<"quod.client.view_open">>,server,
+                                       #{'quod.view.kind' => atom_to_binary(Kind,utf8)}),
+    put(quod_view_open_span,{Ctx,Span}), Ctx.
+open_span_event(Name) ->
+    case get(quod_view_open_span) of
+        {Ctx,_} -> _ = quod_trace:add_event(Ctx,Name,#{}), ok;
+        undefined -> ok
+    end.
+open_span_end(Result) ->
+    case erase(quod_view_open_span) of
+        {_,Span} -> quod_trace:finish_span(Span,Result);
+        undefined -> ok
+    end.
+
 release(S) ->
+    open_span_end({error,released}),
     HasGui = map_size(maps:get(gui_resources,S,#{})) > 0,
     case {HasGui,maps:find(receiver_key,S)} of
         {false,{ok,Key}} -> true = gproc:unreg(quod_reg:name(Key));

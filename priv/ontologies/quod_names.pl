@@ -9,19 +9,25 @@
 %%   quod:names::name(<<"Ugbash">>, C, K, G)                       the selection(s) a name is in
 %%   quod:names::draw(<<"orc">>, <<"personal">>, <<"male">>, salt, N)   one name of the selection
 %%   quod:names::draw(salt, N)                                     one name from any pool
+%%   quod:names::draw(<<"place">>, salt, N)                        one name of that kind
 %% Unbound arguments are wildcards. A wider culture (<<"vile">>, <<"doughty">>,
 %% <<"fantastic">>) selects every culture under it in the isa tree. draw/5 and
 %% draw/2 are fixed by the running proof and the salt (proof_draw/3, a common
 %% primitive): same proof, same salt, same name; different agents use
 %% different salts.
 %%
-%% Data: the personal-name element tables and listed names below are Open Game Content used
-%% under the Open Game License v1.0a — see OGL-1.0a.txt beside this file for
-%% the licence and the required Section 15 notice: "The Extraordinary Book of
-%% Names, Copyright 2004, Trigee Enterprises Company, Author Malcolm Bowers."
-%% Only the pages that source designates as Open Game Content are used (its
-%% tables 5-3 to 5-7 and the myth lists on pp. 184-187); its title is Product
-%% Identity and appears only in that notice. The source repeats some entries
+%% Data: the personal-name element tables, the listed names and the strange
+%% syllables below are Open Game Content used under the Open Game License
+%% v1.0a — see OGL-1.0a.txt beside this file for the licence and the required
+%% Section 15 notice: "The Extraordinary Book of Names, Copyright 2004, Trigee
+%% Enterprises Company, Author Malcolm Bowers." They come from the pages that
+%% source designates as Open Game Content (168-192: its tables 5-2 to 5-7 and
+%% the myth lists on pp. 184-187). The place words under "places" below are
+%% NOT from those pages: they come from its fourth book (table 4-1 with its
+%% "Common" lists, table 4-2 and the examples around them, pp. 151-160),
+%% which the source does not designate as open. They are used on Yan's
+%% decision of 2026-11-13. The source's title is Product Identity and appears
+%% only in that notice. The source repeats some entries
 %% to weight dice; here each element counts once, and the few diaereses are
 %% dropped (roel, Kallirrhoe).
 %%
@@ -69,6 +75,7 @@ naming_query(count(_, _, _, _)).
 naming_query(name_nth(_, _, _, _, _)).
 naming_query(draw(_, _, _, _, _)).
 naming_query(draw(_, _, _, _)).
+naming_query(draw(_, _, _)).
 naming_query(draw(_, _)).
 naming_query(draw(_)).
 naming_query(Goal) :- public_source_query(Goal).
@@ -122,7 +129,18 @@ person_kind(<<"theophoric">>).
 draw(Salt, Name) :-
     findall(pool(Culture, Kind, Gender, Source),
             (pool(Culture, Kind, Gender, Source), person_kind(Kind)), Pools),
+    draw_pool(Pools, Salt, Name).
+
+%% draw(+Kind, +Salt, -Name): one name of that kind, chosen the same way among
+%% the pools that hold it. A kind no pool holds draws nothing.
+draw(Kind, Salt, Name) :-
+    binary(Kind),
+    findall(pool(Culture, Kind, Gender, Source), pool(Culture, Kind, Gender, Source), Pools),
+    draw_pool(Pools, Salt, Name).
+
+draw_pool(Pools, Salt, Name) :-
     length(Pools, Count),
+    Count > 0,
     proof_draw(pool(Salt), Count, K),
     nth(K, Pools, pool(Culture, Kind, Gender, Source)),
     pool_size(Culture, Kind, Gender, Source, Size),
@@ -417,6 +435,107 @@ elements(<<"world_quality">>,[<<"amber">>,<<"silver">>,<<"quiet">>,<<"verdant">>
 elements(<<"world_place">>,[<<"reach">>,<<"vale">>,<<"horizon">>,<<"haven">>,
     <<"expanse">>,<<"heights">>,<<"wilds">>,<<"realm">>,<<"isles">>,<<"frontier">>,
     <<"gardens">>,<<"shores">>]).
+
+%% --- places ------------------------------------------------------------------
+%% Kind <<"place">>: names for places, after the source's fourth book. A
+%% British habitation name joins a description, a feature and a town ending
+%% (table 4-1 and its "Common" lists, p. 153: Ashton, Greenhill, Brookham).
+%% A fantastic one follows table 4-2 (p. 160): a vivid word on such a base
+%% (Shadowton, Ravenford), a strange syllable on one (Targthorpe), or two
+%% strange syllables alone (Naldor). The syllables are table 5-2 (p. 183).
+%% The vivid words are those of the source's own examples (pp. 151, 159-160).
+%% The source's dice weights are not kept: every name of a pool is equally
+%% likely, and draw/3 gives every pool of a kind the same chance.
+
+isa(<<"british">>, <<"culture">>).
+isa(<<"vivid">>, <<"fantastic">>).
+pool(<<"british">>, <<"place">>, <<"neutral">>,
+     recipe(one_of([concat([element(<<"place_description">>),element(<<"place_town">>)]),
+                    concat([element(<<"place_description">>),element(<<"place_feature">>)]),
+                    concat([element(<<"place_feature">>),element(<<"place_town">>)])]))).
+pool(<<"vivid">>, <<"place">>, <<"neutral">>,
+     recipe(one_of([concat([element(<<"place_vivid">>),element(<<"place_feature">>)]),
+                    concat([element(<<"place_vivid">>),element(<<"place_town">>)])]))).
+pool(<<"fantastic">>, <<"place">>, <<"neutral">>,
+     recipe(one_of([concat([element(<<"syllable_harsh">>),element(<<"syllable_harsh">>)]),
+                    concat([element(<<"syllable_neutral">>),element(<<"syllable_neutral">>)]),
+                    concat([element(<<"syllable_smooth">>),element(<<"syllable_smooth">>)]),
+                    concat([element(<<"syllable_various">>),element(<<"syllable_various">>)]),
+                    concat([one_of([element(<<"syllable_harsh">>),element(<<"syllable_neutral">>),
+                                    element(<<"syllable_smooth">>),element(<<"syllable_various">>)]),
+                            one_of([element(<<"place_feature">>),element(<<"place_town">>)])])]))).
+elements(<<"place_description">>,[<<"ash">>,<<"black">>,<<"brom">>,<<"brun">>,<<"cam">>,
+    <<"dunn">>,<<"fair">>,<<"green">>,<<"high">>,<<"long">>,<<"nether">>,<<"north">>,
+    <<"oak">>,<<"sher">>,<<"stan">>,<<"stock">>,<<"thorn">>,<<"under">>,<<"west">>,
+    <<"win">>]).
+elements(<<"place_feature">>,[<<"beck">>,<<"bridge">>,<<"brook">>,<<"burn">>,
+    <<"combe">>,<<"dale">>,<<"dean">>,<<"dell">>,<<"dingle">>,<<"down">>,<<"field">>,
+    <<"ford">>,<<"grove">>,<<"heath">>,<<"hill">>,<<"holme">>,<<"how">>,<<"hurst">>,
+    <<"ley">>,<<"mead">>,<<"pool">>,<<"shaw">>,<<"stoke">>,<<"stone">>,<<"wood">>]).
+elements(<<"place_town">>,[<<"bury">>,<<"by">>,<<"cester">>,<<"ham">>,<<"ingham">>,
+    <<"ington">>,<<"stead">>,<<"thorpe">>,<<"ton">>,<<"well">>,<<"wick">>,<<"worth">>]).
+elements(<<"place_vivid">>,[<<"rune">>,<<"saber">>,<<"deep">>,<<"mage">>,<<"foam">>,
+    <<"dragon">>,<<"troll">>,<<"jewel">>,<<"satyr">>,<<"dagger">>,<<"lotus">>,
+    <<"snake">>,<<"unicorn">>,<<"shadow">>,<<"talon">>,<<"drake">>,<<"spider">>,
+    <<"silver">>,<<"raven">>,<<"thunder">>,<<"lion">>,<<"shatter">>,<<"dolphin">>,
+    <<"berry">>,<<"pebble">>,<<"boulder">>]).
+elements(<<"syllable_harsh">>,[<<"ad">>,<<"ak">>,<<"ar">>,<<"ax">>,<<"bact">>,
+    <<"chog">>,<<"chud">>,<<"dar">>,<<"derg">>,<<"dir">>,<<"dra">>,<<"drix">>,
+    <<"dutt">>,<<"erd">>,<<"gid">>,<<"glak">>,<<"gna">>,<<"gner">>,<<"gnild">>,
+    <<"gog">>,<<"grakk">>,<<"grux">>,<<"guz">>,<<"hatr">>,<<"hauk">>,<<"hdra">>,
+    <<"hex">>,<<"hust">>,<<"ig">>,<<"jask">>,<<"jax">>,<<"jeg">>,<<"ka">>,<<"kag">>,
+    <<"kank">>,<<"khur">>,<<"klut">>,<<"kolch">>,<<"kon">>,<<"kor">>,<<"kosk">>,
+    <<"kra">>,<<"krag">>,<<"kru">>,<<"lak">>,<<"lat">>,<<"lig">>,<<"lut">>,<<"makt">>,
+    <<"mlok">>,<<"mulk">>,<<"naax">>,<<"nabd">>,<<"nek">>,<<"nex">>,<<"nid">>,<<"nox">>,
+    <<"nub">>,<<"nud">>,<<"nux">>,<<"ok">>,<<"org">>,<<"osk">>,<<"pec">>,<<"pent">>,
+    <<"plag">>,<<"pyx">>,<<"rek">>,<<"sark">>,<<"ska">>,<<"skeg">>,<<"skek">>,
+    <<"skut">>,<<"strak">>,<<"sut">>,<<"szat">>,<<"tchad">>,<<"telg">>,<<"ter">>,
+    <<"thauc">>,<<"tog">>,<<"tok">>,<<"tor">>,<<"urg">>,<<"usk">>,<<"ust">>,<<"ux">>,
+    <<"vax">>,<<"vekk">>,<<"vog">>,<<"vurg">>,<<"xag">>,<<"xeg">>,<<"xug">>,<<"yawg">>,
+    <<"yed">>,<<"zet">>,<<"zixt">>,<<"zok">>,<<"zuk">>]).
+elements(<<"syllable_neutral">>,[<<"ald">>,<<"arn">>,<<"asth">>,<<"ba">>,<<"baad">>,
+    <<"bal">>,<<"banth">>,<<"bhur">>,<<"bol">>,<<"chun">>,<<"del">>,<<"din">>,
+    <<"djal">>,<<"dloth">>,<<"dole">>,<<"dom">>,<<"dor">>,<<"drul">>,<<"duhl">>,
+    <<"fen">>,<<"fer">>,<<"fith">>,<<"flar">>,<<"fren">>,<<"gaw">>,<<"ghaz">>,<<"gho">>,
+    <<"golm">>,<<"gren">>,<<"han">>,<<"harj">>,<<"harl">>,<<"harn">>,<<"hath">>,
+    <<"haz">>,<<"henj">>,<<"hsar">>,<<"ilb">>,<<"irb">>,<<"jad">>,<<"jos">>,<<"kan">>,
+    <<"kiz">>,<<"kho">>,<<"krell">>,<<"kull">>,<<"mar">>,<<"mox">>,<<"na">>,<<"nal">>,
+    <<"nath">>,<<"nau">>,<<"naz">>,<<"neb">>,<<"nen">>,<<"nind">>,<<"nuth">>,<<"ob">>,
+    <<"orn">>,<<"pand">>,<<"pulm">>,<<"ran">>,<<"saad">>,<<"sharn">>,<<"sheb">>,
+    <<"shenx">>,<<"shup">>,<<"silch">>,<<"snal">>,<<"taw">>,<<"teh">>,<<"tev">>,
+    <<"thad">>,<<"thang">>,<<"tild">>,<<"tine">>,<<"treen">>,<<"trell">>,<<"trogh">>,
+    <<"trilt">>,<<"trul">>,<<"tsanth">>,<<"tscho">>,<<"tsith">>,<<"tu">>,<<"tul">>,
+    <<"ur">>,<<"weft">>,<<"weng">>,<<"xal">>,<<"xin">>,<<"xun">>,<<"yahb">>,<<"yan">>,
+    <<"yest">>,<<"yos">>,<<"za">>,<<"zilx">>,<<"zon">>,<<"zor">>]).
+elements(<<"syllable_smooth">>,[<<"am">>,<<"az">>,<<"eesh">>,<<"ell">>,<<"erm">>,
+    <<"esh">>,<<"hoom">>,<<"hu">>,<<"ith">>,<<"izz">>,<<"leng">>,<<"lesh">>,<<"lim">>,
+    <<"lith">>,<<"lomb">>,<<"loal">>,<<"loor">>,<<"lor">>,<<"lull">>,<<"mai">>,
+    <<"mal">>,<<"mo">>,<<"mong">>,<<"mor">>,<<"morm">>,<<"moth">>,<<"moy">>,<<"mu">>,
+    <<"mul">>,<<"mung">>,<<"murr">>,<<"nam">>,<<"neesh">>,<<"om">>,<<"ong">>,<<"oob">>,
+    <<"oom">>,<<"oor">>,<<"ooth">>,<<"orth">>,<<"oth">>,<<"phal">>,<<"phol">>,
+    <<"rhan">>,<<"rohm">>,<<"ru">>,<<"ruum">>,<<"ruz">>,<<"sarm">>,<<"sha">>,<<"shai">>,
+    <<"shan">>,<<"shar">>,<<"shim">>,<<"sho">>,<<"shol">>,<<"shoth">>,<<"sile">>,
+    <<"smuu">>,<<"soom">>,<<"soor">>,<<"su">>,<<"suun">>,<<"syth">>,<<"thaa">>,
+    <<"thal">>,<<"thay">>,<<"theem">>,<<"thir">>,<<"thom">>,<<"thule">>,<<"thuu">>,
+    <<"um">>,<<"uth">>,<<"vehm">>,<<"vesh">>,<<"vho">>,<<"vil">>,<<"vith">>,<<"vooz">>,
+    <<"voth">>,<<"voum">>,<<"vur">>,<<"wush">>,<<"xool">>,<<"yah">>,<<"yath">>,<<"ye">>,
+    <<"yi">>,<<"yoh">>,<<"yom">>,<<"yoth">>,<<"yu">>,<<"zem">>,<<"zha">>,<<"zhai">>,
+    <<"zil">>,<<"zo">>,<<"zoi">>,<<"zuul">>]).
+elements(<<"syllable_various">>,[<<"an">>,<<"asf">>,<<"atht">>,<<"bau">>,<<"bel">>,
+    <<"besh">>,<<"boa">>,<<"chiv">>,<<"dal">>,<<"darth">>,<<"dith">>,<<"dos">>,
+    <<"drau">>,<<"drax">>,<<"dro">>,<<"elb">>,<<"faer">>,<<"faerl">>,<<"ferz">>,
+    <<"flaj">>,<<"foum">>,<<"ful">>,<<"fuln">>,<<"gath">>,<<"gen">>,<<"ghi">>,
+    <<"ghul">>,<<"goch">>,<<"gul">>,<<"ight">>,<<"inth">>,<<"jabb">>,<<"jal">>,
+    <<"jiv">>,<<"karg">>,<<"khal">>,<<"koh">>,<<"kraa">>,<<"kyor">>,<<"larn">>,
+    <<"leil">>,<<"lek">>,<<"lerr">>,<<"leth">>,<<"lil">>,<<"liv">>,<<"list">>,<<"lol">>,
+    <<"luss">>,<<"luth">>,<<"misk">>,<<"mour">>,<<"myrrh">>,<<"nlaa">>,<<"nluu">>,
+    <<"oast">>,<<"pan">>,<<"pancz">>,<<"pav">>,<<"pertz">>,<<"quin">>,<<"rath">>,
+    <<"reen">>,<<"rew">>,<<"rorn">>,<<"sarn">>,<<"sind">>,<<"skex">>,<<"slaur">>,
+    <<"snik">>,<<"sund">>,<<"tal">>,<<"tam">>,<<"tau">>,<<"tende">>,<<"thig">>,
+    <<"trip">>,<<"tsai">>,<<"ul">>,<<"vaed">>,<<"val">>,<<"vel">>,<<"veld">>,
+    <<"vitze">>,<<"vos">>,<<"vree">>,<<"wyx">>,<<"xan">>,<<"xem">>,<<"xin">>,
+    <<"xirth">>,<<"yimp">>,<<"yisb">>,<<"yisg">>,<<"yorn">>,<<"yss">>,<<"zent">>,
+    <<"zhar">>,<<"zorr">>,<<"zuze">>]).
 
 %% Vile & Crude: two elements of the size table; females add an ending.
 pool(<<"goblin">>, <<"personal">>, <<"male">>,

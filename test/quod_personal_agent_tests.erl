@@ -68,6 +68,7 @@ class_owner_setup_form_test_() ->
                 || {Owner, Terms} <- [
                     {<<"quod:user">>, quod_prolog:read_terms("priv/ontologies/quod_user.pl")},
                     {<<"quod:space">>, quod_prolog:read_terms("priv/ontologies/quod_space.pl")},
+                    {<<"quod:names">>, quod_prolog:read_terms("priv/ontologies/quod_names.pl")},
                     {<<"quod:gui">>, quod_ct:gui_terms()}]],
             try
                 Anchor = quod_simplex:genesis_hash(Ns),

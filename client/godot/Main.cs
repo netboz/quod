@@ -314,7 +314,7 @@ public partial class Main : Control
         pieOccurrence=hit;pieAt=gui.Spatial ? null : at;long expected=++pieGeneration;
         var opened=System.Diagnostics.Stopwatch.StartNew();
         // A HUD sub-pie or the device menu is already in hand; nothing to read.
-        if(local!=null){if(gui.Spatial&&at is Vector2 origin)xr.PlacePieAtHud(origin);pie.Present(local,"");Notify();return true;}
+        if(local!=null){if(gui.Spatial&&at is Vector2 origin)xr.PlacePieAtHud(origin);pie.Present(local,"");Quod.Client.Trace.Line("pie",$"name=\"{name}\" local");Notify();return true;}
         Subject exact;
         try{exact=Subject.Decode(subject);}catch(FormatException){pie.Close();return false;}
         var storing=exact.Exact.Name=="class_ref" && representations?.Current?.Exact.ToString()==subject.ToString()
@@ -322,10 +322,18 @@ public partial class Main : Control
         var selected=exact.Exact.Name=="class_ref" ? exact.Exact : exact.Local;
         var view=new SignedView(consumer,human,storing,"menu",SignedSession.ViewGoal(storing,Term.Call("client_menu",selected,Term.Variable("View"))));
         pieView=view;
+        // Where the opening time went: socket open, node's answer, first frame drawn.
+        long connected=-1;bool timed=false;
+        _=view.Connected.ContinueWith(_=>connected=opened.ElapsedMilliseconds,TaskContinuationOptions.OnlyOnRanToCompletion|TaskContinuationOptions.ExecuteSynchronously);
         view.Projection+=message=>{
             if(expected!=pieGeneration)return;
             try{pie.Present(MenuNode.Decode(Term.Parse(Json.S(message,"value"))),"Nothing is offered here.");pieReadyMs=opened.ElapsedMilliseconds;}
             catch(Exception error){ClosePie();statusText="This menu is unavailable: "+error.Message;}
+            if(!timed) {
+                timed=true;long answered=opened.ElapsedMilliseconds;
+                void Drawn(){RenderingServer.Singleton.FramePostDraw-=Drawn;Quod.Client.Trace.Line("pie",$"name=\"{name}\" connected_ms={connected} answered_ms={answered} drawn_ms={opened.ElapsedMilliseconds} wedges={pie.Navigator?.Level.Children.Length??0}");}
+                RenderingServer.Singleton.FramePostDraw+=Drawn;
+            }
             Notify();
         };
         view.Withdrawn+=reason=>{
@@ -548,7 +556,7 @@ public partial class Main : Control
         catch (Exception error) { if (!disposed && !closing) { WithdrawWorld(error.Message); Notify(); } }
     }
     void WithdrawWorld(string reason,bool refreshing=false)
-    { projection=null; controls?.Withdraw();xr.InvalidateWorld();if(refreshing)scene.Suspend();else scene.Withdraw();worldAccepted=false; if(!refreshing)statusText=worldSentence="Space unavailable: " + reason; UpdateButtons(); }
+    { projection=null; controls?.Withdraw();xr.InvalidateWorld(refreshing);if(refreshing)scene.Suspend();else scene.Withdraw();worldAccepted=false; if(!refreshing)statusText=worldSentence="Space unavailable: " + reason; UpdateButtons(); }
     bool GuiOpen=>pie.IsOpen || representations?.IsVisibleInTree()==true || backupDialog!=null || (localControllers?.IsVisibleInTree()??false) || questions?.Expanded==true;
     bool OpeningSpace=>accounts?.Setup!=null && !accounts.Uncertain && session is {IsExpired:false} && !worldAccepted &&
         (!navigationAvailable || navigation?.Space!=null) && worldView?.Updating!=true;
@@ -709,7 +717,9 @@ public partial class Main : Control
         try {
             string image=node.Image!;
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var fetching=System.Diagnostics.Stopwatch.StartNew();
             var bytes=await consumer.Icon(actor,image,node.Transfer,deadline.Token);
+            Quod.Client.Trace.Line("icon",$"file={image} ms={fetching.ElapsedMilliseconds} bytes={bytes.LongLength}");
             long pixels=StaticGlb.ImagePixels(bytes,image.EndsWith(".png") ? "image/png" : "image/jpeg");
             if(pixels>node.Pixels)throw new FormatException("Icon image pixels exceeded.");
             var picture=new Image();

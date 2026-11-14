@@ -29,6 +29,7 @@ space_query(world_view(_, _, _)).
 space_query(space_exposure_projection(_, _, _, _)).
 space_query(space_simulation_domain(_, _, _, _)).
 space_query(space_creator_owner(_, _)).
+space_query(space_name(_, _)).
 space_query(space_dimensions(_)).
 space_query(space_owner(_)).
 space_query(space_transform(_)).
@@ -46,7 +47,7 @@ isa(space, thing).
 isa(physical_space, space).
 class_permission(space, Operation, allow) :-
     member(Operation, [create,space_enter,space_admit,space_leave,space_remove,space_visit,space_represent]).
-have_attribute(space, name, binary, default(<<"Space">>)).
+have_attribute(space, name, binary, default_from(space_name)).
 have_attribute(space, dimensions, space_dimensions,
     default(box(q(10, <<"m">>), q(10, <<"m">>), q(10, <<"m">>)))).
 have_attribute(space, owner, space_owner, default_from(space_creator_owner)).
@@ -67,6 +68,9 @@ space_owner(agent_instance_ref(Ns, Anchor, Entity)) :-
     binary(Ns), binary(Anchor), term_variables(Entity, []).
 space_creator_owner(_, Owner) :-
     quod:user::personal_agent_owner(Owner).
+%% A space given no name takes a place name; quod:names owns the pools.
+space_name(Instance, Name) :-
+    quod:names::draw(<<"place">>, Instance, Name).
 space_transform(transform(X, Y, Z, RX, RY, RZ)) :-
     integer(X), integer(Y), integer(Z), integer(RX), integer(RY), integer(RZ).
 
@@ -80,6 +84,8 @@ space_location(Subject, Location) :-
 %% An omitted pose is resolved relative to the acting personal agent, at
 %% Yan's chosen two metres plus half the shared marker's depth along negative
 %% Z. The marker stands for the space outside, whatever it measures inside.
+%% On that line the new thing takes the first free place, so it never lands
+%% on a thing already placed there and never moves one.
 placement_pose(Destination, Pose) :-
     (nonvar(Pose) -> space_transform(Pose)
     ; quod:user::personal_agent(Agent, _),
@@ -87,7 +93,22 @@ placement_pose(Destination, Pose) :-
       space_location(entity_ref(Ns,A,Entity), placed(Destination,transform(X,Y,Z,RX,RY,RZ))),
       unique_solution(scene_vocabulary(Scene,Anchor)),
       in_ontology(Scene,Anchor,marker_size(Size)),
-      NearZ is Z - 2000 - Size // 2, Pose = transform(X,Y,NearZ,RX,RY,RZ)).
+      NearZ is Z - 2000 - Size // 2,
+      Destination = entity_ref(DNs,DA,D),
+      in_ontology(DNs,DA,findall(Subject,space_placement(D,Subject,_),Placed)),
+      findall(Taken,(member(Subject,Placed),space_location(Subject,placed(Destination,Taken))),Poses),
+      space_free_place(0,X,Y,NearZ,Size,Poses,FreeX),
+      Pose = transform(FreeX,Y,NearZ,RX,RY,RZ)).
+%% Candidates run straight ahead, then alternately right and left, one and a
+%% half markers apart. A place is free when no placed thing whose location
+%% can be read stands within one marker of it on every axis.
+space_free_place(Index, X, Y, Z, Size, Poses, Free) :-
+    Side is (Index + 1) // 2 * (Size * 3 // 2),
+    (Index mod 2 =:= 1 -> Candidate is X + Side; Candidate is X - Side),
+    (member(transform(TX,TY,TZ,_,_,_), Poses),
+     abs(TX - Candidate) < Size, abs(TY - Y) < Size, abs(TZ - Z) < Size ->
+        Next is Index + 1, space_free_place(Next, X, Y, Z, Size, Poses, Free)
+    ; Free = Candidate).
 
 space_subject(entity_ref(Ns, Anchor, Entity), Subject) :-
     in_ontology(Ns,Anchor,
@@ -227,7 +248,7 @@ attribute(space_create(_,exact), image, Icon) :- menu_icon(create_exact, Icon).
 attribute(space_create(_,infinite), image, Icon) :- menu_icon(create_infinite, Icon).
 attribute(space_create(_,_), help, <<"The personal agent's human is the default owner, independently of the selected storage and placement. Creation does not enter the new space.">>).
 attribute(space_name, label, <<"Name">>).
-attribute(space_name, help, <<"The class default is supplied. Change it to use your own name.">>).
+attribute(space_name, help, <<"A place name is suggested. Change it to use your own.">>).
 attribute(space_name, required, false).
 attribute(space_placement(_), label, <<"Placement">>).
 attribute(space_placement(ontology_ref(Ns,A)), options, Options) :-
@@ -251,7 +272,7 @@ gui_children(space_create(Store,Extent), Children) :-
     space_form_lengths(Extent,Fields,_),
     findall(Role,member(field(Role,_),Fields),Lengths),
     append([space_name|Lengths], [space_placement(Store),space_create_submit], Children).
-gui_initial(space_create(_,_), space_name, Name) :- have_attribute(space,name,binary,default(Name)).
+gui_initial(space_create(_,_), space_name, Name) :- quod:names::draw(<<"place">>, form, Name).
 gui_initial(space_create(Store,_), space_placement(Store), near_agent).
 gui_initial(space_create(_,Extent), space_unit, Unit) :-
     member(Extent,[finite,exact]),

@@ -26,6 +26,8 @@ public sealed class SignedView : IDisposable
     public event Action<string>? Withdrawn;
     public event Action<JsonNode>? Message;
     public Task? Completion { get; private set; }
+    // Completes once the socket to the node is open, before the signed read is sent.
+    public Task Connected => connected.Task;
     public Func<CancellationToken, Task<(Actor Target,string Goal)?>>? BeforeOpen { get; init; }
     public Actor Target { get; private set; }
     public static int LiveSockets { get; private set; }

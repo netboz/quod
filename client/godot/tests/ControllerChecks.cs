@@ -162,6 +162,8 @@ public partial class ExportChecks
         Check(System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==retained,"unchanged mapping/frame repeats perform zero render-resource work");
         Held(left,"trigger_press",true);adapter.InvalidateWorld();Held(left,"trigger_press",false);
         Check(clicked==expectedClicks && gui.Captures==0,"control or world invalidation cancels the old gesture before another frame");Advance();
+        Held(left,"trigger_press",true);adapter.InvalidateWorld(sameSpace:true);Held(left,"trigger_press",false);
+        Check(clicked==expectedClicks+1 && gui.Captures==0,"a re-read of the same space leaves a press on the panel alone: it completes");expectedClicks=clicked;Advance();
         Held(left,"trigger_press",true);left.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();Held(left,"trigger_press",false);
         Check(clicked==expectedClicks && gui.Captures==0,"changed handedness cancels a held source without committing");left.Hand=XRPositionalTracker.TrackerHand.Left;Advance();
         Held(left,"trigger_press",true);adapter.Install(mapping with { Digest="changed-contract" });Held(left,"trigger_press",false);

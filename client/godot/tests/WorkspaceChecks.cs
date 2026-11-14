@@ -109,9 +109,11 @@ public partial class ExportChecks
         var openingHead=((Node3D)adapter.FindChild("xr-origin",true,false)).GlobalTransform*head.GetPose("default").GetAdjustedTransform();
         var openingPanel=adapter.GuiSurface.GlobalTransform;var flatForward=-openingHead.Basis.Z;flatForward.Y=0;flatForward=flatForward.Normalized();
         var toPanel=openingPanel.Origin-openingHead.Origin;float tilt=Mathf.RadToDeg(Mathf.Atan2(-toPanel.Y,new Vector2(toPanel.X,toPanel.Z).Length()));
-        Check(Math.Abs(tilt-adapter.Profile.BelowEyeDegrees)<.01f && Math.Abs(toPanel.Length()-2)<.0001f &&
+        // 25° to the strip's centre, less half the strip (104 px of 1600 per metre) and half the panel (1 m at 2 m).
+        float panelBelow=25-Mathf.RadToDeg(Mathf.Atan(104f/1600/2))-Mathf.RadToDeg(Mathf.Atan(.25f));
+        Check(panelBelow<adapter.Profile.BelowEyeDegrees && Math.Abs(tilt-panelBelow)<.01f && Math.Abs(toPanel.Length()-2)<.0001f &&
             new Vector3(toPanel.X,0,toPanel.Z).Normalized().DistanceTo(flatForward)<.0001f && (-openingPanel.Basis.Z).DistanceTo(toPanel.Normalized())<.0001f,
-            "the actual first tilted tracked head opens the workspace in its level forward heading, 2 m away, the profile's angle below eye level, facing the eye");
+            "the actual first tilted tracked head opens the workspace in its level forward heading, 2 m away, facing the eye, its lower edge ending where the strip begins");
         adapter.PresentWorkspace(false);adapter.PresentWorkspace(true);
         head.SetPose("default",new(Basis.FromEuler(new(Mathf.Pi/2,0,0)),new(1.2f,1.4f,-.7f)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
         Check(!adapter.GuiSurface.Visible,"a vertical-only head direction waits for a measurable horizontal heading rather than inventing one");
@@ -119,7 +121,7 @@ public partial class ExportChecks
         var origin=(Node3D)adapter.FindChild("xr-origin",true,false);
         Transform3D Expected(float distance) {
             var eye=origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform();var level=-eye.Basis.Z;level.Y=0;level=level.Normalized();
-            float angle=Mathf.DegToRad(adapter.Profile.BelowEyeDegrees);var at=eye.Origin+level*distance*Mathf.Cos(angle)-Vector3.Up*distance*Mathf.Sin(angle);
+            float angle=Mathf.DegToRad(panelBelow);var at=eye.Origin+level*distance*Mathf.Cos(angle)-Vector3.Up*distance*Mathf.Sin(angle);
             return new(Basis.LookingAt((at-eye.Origin).Normalized(),Vector3.Up),at);
         }
         bool Same(Transform3D a,Transform3D b)=>a.Origin.DistanceTo(b.Origin)<.0001f && a.Basis.IsEqualApprox(b.Basis);
@@ -186,6 +188,13 @@ public partial class ExportChecks
         var hudPose=adapter.HudQuad.GlobalTransform;var eye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;
         var offset=hudPose.Origin-eye;float below=Mathf.RadToDeg(Mathf.Atan2(-offset.Y,new Vector2(offset.X,offset.Z).Length()));
         Check(adapter.HudQuad.Visible && Math.Abs(below-25)<.5f && Math.Abs(offset.Length()-1.5f)<.01f,"the HUD strip sits 25° below eye level at reading distance");
+        // The panel placed from this same head ends above the strip: no ray reaches both.
+        adapter.ShowWorkspace();Advance();
+        var panelMesh=(QuadMesh)adapter.GuiSurface.Mesh;var stripMesh=(QuadMesh)adapter.HudQuad.Mesh;
+        float Below(Vector3 point){var toward=point-eye;return Mathf.RadToDeg(Mathf.Atan2(-toward.Y,new Vector2(toward.X,toward.Z).Length()));}
+        float panelLowest=Below(adapter.GuiSurface.GlobalTransform*new Vector3(0,-gui.WorkspaceSize.Y*panelMesh.Size.Y/gui.PresentationSurface.Size.Y/2,0));
+        float stripHighest=Below(adapter.HudQuad.GlobalTransform*new Vector3(0,stripMesh.Size.Y/2,0));
+        Check(panelLowest<=stripHighest+.01f && stripHighest-panelLowest<.5f,$"the working panel's lower edge ({panelLowest:0.0}° below) ends where the strip begins ({stripHighest:0.0}° below)");
         Head(new(0,1.6f,0),Mathf.DegToRad(30));Advance();
         Check(Same(adapter.HudQuad.GlobalTransform,hudPose),"a head turn within 35° leaves the strip where it is");
         Head(new(0,1.6f,0),Mathf.DegToRad(40));Advance();
@@ -258,6 +267,12 @@ public partial class ExportChecks
         scene.Stand(ScenePose.Decode(Term.Parse("transform(0,0,0,0,0,0)")));Advance();
         Check(framed.DistanceTo(new(0,0,-2.25f))<1 && origin.GlobalTransform.IsEqualApprox(Transform3D.Identity),
             $"a headset stands where the agent is placed, two metres from a new half-metre space, not at the desktop camera that frames it from {framed.DistanceTo(new(0,0,-2.25f)):0.00} m");
+        // The headset keeps its place in a space whose view is only re-read.
+        adapter.Calibrate(new Transform3D(new Basis(Vector3.Up,.6f),new(.4f,1.5f,.2f)));Advance();var stood=origin.GlobalTransform;
+        adapter.InvalidateWorld(sameSpace:true);Advance();
+        Check(!stood.IsEqualApprox(Transform3D.Identity) && origin.GlobalTransform.IsEqualApprox(stood),"a re-read of the same space leaves the headset where it stands in it");
+        adapter.InvalidateWorld();Advance();
+        Check(origin.GlobalTransform.IsEqualApprox(Transform3D.Identity),"another world takes the headset's place again from the agent's");
         scene.Stand(null);scene.Withdraw();
         adapter.StopSession();await adapter.Completion;
         Check(adapter.Subscriptions==0 && models.LiveLeases==0 && models.LiveTemplates==0 && gui.Captures==0,"workspace retirement releases real input/render consumers and captures");

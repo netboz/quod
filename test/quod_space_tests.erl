@@ -8,6 +8,8 @@ class_owner_creation_and_action_chain_test_() ->
         {ok,[{class,SpaceClass}]} = erlog_io:read_string_terms("class(quod:space:space)."),
         Owner = <<"quod:space">>, Destination = <<"owned-space-destination">>,
         start(C,Owner,quod_prolog:read_terms("priv/ontologies/quod_space.pl"),#{}),
+        %% The space is asserted without a name: its class draws one here.
+        start(C,<<"quod:names">>,quod_prolog:read_terms("priv/ontologies/quod_names.pl"),#{}),
         start(C,Destination,[{can_invoke,{'_'},Node,{'_'},Destination},
             {instance_of,SpaceClass,first},{instance_of,SpaceClass,second}],#{}),
         try
@@ -44,7 +46,8 @@ class_owner_creation_and_action_chain_test_() ->
             holds(Store,{space_assignment_state,Id,4,none}),
             fails(Destination,{space_placement,second,Subject,{'_'}})
         after
-            stop(quod_reg:where({quod_ns,Destination})),stop(quod_reg:where({quod_ns,Owner}))
+            stop(quod_reg:where({quod_ns,Destination})),stop(quod_reg:where({quod_ns,<<"quod:names">>})),
+            stop(quod_reg:where({quod_ns,Owner}))
         end
     end) end}.
 

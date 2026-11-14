@@ -13,7 +13,7 @@
 
 -define(NS, <<"quod:names">>).
 -define(HALFLING_MALES, 48 * 8).
--define(POOLS, 22).
+-define(POOLS, 25).
 
 world_names_use_the_shared_recipe_and_stay_out_of_personal_draws_test() ->
     with_committed_names(<<>>,fun(Committed,St) ->
@@ -26,6 +26,43 @@ world_names_use_the_shared_recipe_and_stay_out_of_personal_draws_test() ->
             {ok,#{'Name' := Name}} = quod_ct:session_prove(Committed,{origin,test},proof_ctx(),Goal),
             ?assertMatch({ok,#{'Name' := Name}},quod_ct:session_prove(Committed,{origin,test},proof_ctx(),Goal)),
             ?assertEqual([{<<"landscape">>,<<"world">>,<<"neutral">>}],selections(Name,St))
+        end)
+    end).
+
+%% Places are a kind of their own, in three pools: a British habitation name
+%% (description, feature and town ending), a vivid word on such a base, and
+%% strange syllables alone or on one. draw/3 names a place without choosing
+%% the pool: each pool has the same chance, whatever its size.
+place_names_test() ->
+    with_committed_names(<<>>,fun(Committed,St) ->
+        ?assertEqual(20*12 + 20*25 + 25*12,
+                     value({'N'},{count,<<"british">>,<<"place">>,<<"neutral">>,{'N'}},St)),
+        ?assertEqual(26*25 + 26*12,
+                     value({'N'},{count,<<"vivid">>,<<"place">>,<<"neutral">>,{'N'}},St)),
+        %% A wider culture reaches the pools beneath it.
+        ?assertEqual(26*37 + 4*100*100 + 400*37,
+                     value({'N'},{count,<<"fantastic">>,<<"place">>,<<"neutral">>,{'N'}},St)),
+        ?assertEqual(<<"Ashbury">>,
+                     value({'N'},{name_nth,<<"british">>,<<"place">>,<<"neutral">>,0,{'N'}},St)),
+        ?assertEqual(<<"Runebeck">>,
+                     value({'N'},{name_nth,<<"vivid">>,<<"place">>,<<"neutral">>,0,{'N'}},St)),
+        ?assertEqual([{<<"british">>,<<"place">>,<<"neutral">>}],selections(<<"Greenhill">>,St)),
+        ?assert(lists:member({<<"fantastic">>,<<"place">>,<<"neutral">>},selections(<<"Naldor">>,St))),
+        fails({person_kind,<<"place">>},St),
+        with_origin(<<78:256>>,fun() ->
+            Draw = fun(Salt) ->
+                {ok,#{'Name' := Name}} = quod_ct:session_prove(Committed,{origin,test},proof_ctx(),
+                                                               {draw,<<"place">>,Salt,{'Name'}}),
+                Name
+            end,
+            Names = [Draw(Salt) || Salt <- lists:seq(1,24)],
+            ?assertEqual(Names,[Draw(Salt) || Salt <- lists:seq(1,24)]),
+            Kinds = lists:usort([K || Name <- Names, {_,K,_} <- selections(Name,St)]),
+            ?assertEqual([<<"place">>],Kinds),
+            %% Twenty-four draws from three equally likely pools reach more than one of them.
+            ?assert(length(lists:usort([C || Name <- Names, {C,_,_} <- selections(Name,St)])) > 1),
+            ?assertEqual(fail,quod_ct:session_prove(Committed,{origin,test},proof_ctx(),
+                                                    {draw,<<"tavern">>,1,{'Name'}}))
         end)
     end).
 
@@ -312,7 +349,7 @@ saltless_pair(ProofId) ->
 class_view_test() ->
     with_names(fun(St) ->
         ?assertMatch({succeed, _}, erlog_int:prove_goal({isa, pool, thing}, St)),
-        ?assertEqual([<<"personal">>,<<"world">>],
+        ?assertEqual([<<"personal">>,<<"place">>,<<"world">>],
                      solutions({'K'}, {instance_of, kind, {'K'}}, St)),
         ?assertEqual([<<"female">>, <<"male">>, <<"neutral">>],
                      solutions({'G'}, {instance_of, gender, {'G'}}, St)),
@@ -348,6 +385,7 @@ policy_test() ->
            {count, {'_'}, {'_'}, {'_'}, {'N'}},
            {name_nth, <<"elf">>, <<"personal">>, <<"female">>, 3, {'N'}},
            {draw, <<"orc">>, <<"personal">>, <<"male">>, salt, {'N'}}, {draw, salt, {'N'}},
+           {draw, <<"place">>, salt, {'N'}},
            {draw, <<"orc">>, <<"personal">>, <<"male">>, {'N'}}, {draw, {'N'}}]),
         fails({can_invoke, {assertz, {elements, <<"zz">>, [<<"zzz">>]}}, anyone, [], ns}, St),
         fails({can_invoke, {',', {name, {'N'}, <<"orc">>, <<"personal">>, <<"male">>},

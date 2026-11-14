@@ -212,6 +212,9 @@ public partial class ExportChecks
         } finally { line.TextChanged-=Changed; }
         Check(line.Text==value,"keyboard enters exact offered text or integer");
     }
+    // The creation form opens with a place name drawn for it, the one the offer carries.
+    static bool Suggested(OperationsPanel panel)=>panel.FormPanel.Draft["space_name"] is {Length:>0} name
+        && name!="Space" && name==panel.Current!.Form.Defaults["space_name"];
     async Task ClickSubmit(OperationsPanel panel)
     {
         var button=(Button)panel.FormPanel.Input(panel.Current!.Form.Submit.ToString())!;
@@ -247,7 +250,7 @@ public partial class ExportChecks
         var panel=(OperationsPanel)app.FindChild("operations",true,false); var scene=(ScenePanel)app.FindChild("space-scene",true,false);
         if(phase=="m2-fresh") {
             await CreationTarget(panel,human,"create");
-            Check(panel.FormPanel.Draft["space_name"]=="Space" && panel.FormPanel.Draft["space_length(width)"]=="10","normal creation presents the authored default name and ten metre extent");
+            Check(Suggested(panel) && panel.FormPanel.Draft["space_length(width)"]=="10","normal creation presents a drawn place name and the authored ten metre extent");
             await Keyboard(panel,panel.Current!); Check(!panel.FormPanel.Validate(),"invalid creation draft remains local");
             await Type((LineEdit)panel.FormPanel.Input("space_length(width)")!,"101");
             await ClickSubmit(panel);
@@ -311,6 +314,30 @@ public partial class ExportChecks
         Check(panel.Current==null && panel.FormPanel.Descriptor==null,"a press outside the open form cancels it and it disappears");
         await CreationTarget(panel,human,"create");
         Check(panel.FormPanel.Draft.OrderBy(p=>p.Key).SequenceEqual(panel.Current!.Form.Defaults.OrderBy(p=>p.Key)),"reopening after an outside press starts from the offered form too");
+        // In the headset a ray presses the same form: every length's − and + must act, also when its row is
+        // cut by the top or the bottom edge of the fields' scroll area and only part of the button shows.
+        var headset=(OpenXRInput)app.FindChild("openxr-input",true,false);var shared=(SpatialGui)app.FindChild("shared-gui",true,false);
+        headset.PresentWorkspace(true);await Frame();await Frame();
+        foreach(string axis in new[]{"width","height","depth"}) {
+            string role=$"space_length({axis})";var steps=panel.FormPanel.Input(role)!.GetParent().GetChildren().OfType<Button>().ToArray();
+            ScrollContainer area=null!;for(Node? parent=steps[0].GetParent();parent!=null;parent=parent.GetParent())if(parent is ScrollContainer found){area=found;break;}
+            foreach(var (step,change) in new[]{(steps[1],1),(steps[0],-1)})
+                foreach(string edge in new[]{"whole","top","bottom"}) {
+                    area.EnsureControlVisible(step);await Frame();
+                    var whole=step.GetGlobalRect();var shown=area.GetGlobalRect();
+                    if(edge=="top")area.ScrollVertical+=(int)(whole.Position.Y-shown.Position.Y+whole.Size.Y/2);
+                    if(edge=="bottom")area.ScrollVertical-=(int)(shown.End.Y-whole.Position.Y-whole.Size.Y/2);
+                    await Frame();
+                    var visible=step.GetGlobalRect().Intersection(area.GetGlobalRect());
+                    // The content is not always long enough to cut this row at this edge.
+                    if(edge!="whole"&&(visible.Size.Y<4||visible.Size.Y>whole.Size.Y-4))continue;
+                    var length=System.Numerics.BigInteger.Parse(panel.FormPanel.Draft[role]);
+                    shared.Move(visible.GetCenter(),shared.FormSurface);shared.Press();shared.Release();await Frame();
+                    Check(System.Numerics.BigInteger.Parse(panel.FormPanel.Draft[role])==length+change,
+                        $"a ray press on {axis}'s {(change>0 ? "+" : "−")} changes that length ({edge} button showing)");
+                }
+        }
+        headset.PresentWorkspace(false);await Frame();await Frame();
         long reopenedWrites=await Writes();
         Check(reopenedWrites==before,$"local cancel and reopen submit no work: before={before} after={reopenedWrites}");
         await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Preserved draft");
@@ -398,7 +425,7 @@ public partial class ExportChecks
         await CreationTarget(panel,human,"create");
         await Type((LineEdit)panel.FormPanel.Input("space_name")!,"Local unsent name");
         await CreationTarget(panel,target,"create");
-        Check(panel.FormPanel.Draft["space_name"]=="Space","another storing ontology opens its own offered form for the same class");
+        Check(Suggested(panel),"another storing ontology opens its own offered form for the same class");
         await ClickSubmit(panel);
         Check(Json.Committed(panel.LastOutcome!),"authorized existing foreign storage commits through the ordinary selected-target route");
         var foreignResults=SpaceResults(panel.LastOutcome!); var foreignSpace=Result(foreignResults,"space");
@@ -406,7 +433,7 @@ public partial class ExportChecks
             Result(foreignResults,"location").Args[0].ToString()==s0.ToString(),"foreign storage, U ownership and S0 placement remain distinct exact references");
         await Until(()=>scene.Count>=15); Check(scene.Count==15,"foreign-storage source appears through the same shared marker");
         await CreationTarget(panel,human,"create");
-        Check(panel.FormPanel.Draft["space_name"]=="Space","a form left for another storing ontology is gone; returning opens the offered form");
+        Check(Suggested(panel),"a form left for another storing ontology is gone; returning opens the offered form");
         var ids=scene.Ids.Order().ToArray();
         await SpaceRefusals(panel,human,s0,scene);
         await Until(()=>State["question_receiver_ready"]?.GetValue<bool>()==true);

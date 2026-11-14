@@ -282,6 +282,9 @@ public partial class SpatialGui : TextureRect
         if(inside==next)return;inside=next;if(next)viewport.NotifyMouseEntered();else viewport.NotifyMouseExited();
     }
     public void Leave(){MouseInside(Surface,false);MouseInside(FormSurface,false);}
+    // The control under the pointer, in a few words, for the session's console lines.
+    internal string Pointed=>pointerViewport.GuiGetHoveredControl() is Control c
+        ? c.GetClass()+":"+c.Name+(c is Button b ? "\""+b.Text+"\"" : "")+"@"+(Vector2I)c.GetGlobalRect().Position : "nothing";
     public void Press()
     {
         if(pressed)return;pressed=true;Captures++;

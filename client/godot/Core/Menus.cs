@@ -142,7 +142,8 @@ public sealed class PieNavigator(MenuNode root, float threshold, double markingD
 
 // The only placement numbers the client introduces (decision 4, 2026-11-05):
 // a first Vive profile, to be measured on the headset. Not domain policy.
-// The working panel takes the pie's angle below eye level (Yan, 2026-11-13).
+// The working panel takes the pie's angle below eye level, raised so that it
+// ends above the HUD strip (Yan, 2026-11-13).
 // The HUD strip numbers (25° below eye level, following after a 35° head turn)
 // were chosen by Yan on 2026-11-06 for the same first profile.
 public sealed record DeviceProfile(float ReadingDistance, float BelowEyeDegrees, float HudBelowEyeDegrees, float HudFollowDegrees)

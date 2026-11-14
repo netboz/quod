@@ -15,7 +15,12 @@ signed_empty_space_results_and_recovery_test_() ->
         {Bindings, Bytes, Outcome} = create(C, Target, Inputs, Placement),
         [Space = {entity_ref, Target, _, Id}, Name] = [V || {_, V} <- Bindings],
         ?assertEqual(26, byte_size(Id)),
-        ?assertEqual(case Lane of foreign -> <<"Workshop">>; _ -> <<"Space">> end, Name),
+        %% A supplied name is kept; otherwise the class draws a place name.
+        case Lane of
+            foreign -> ?assertEqual(<<"Workshop">>, Name);
+            _ -> ?assertMatch({ok,[_],_}, quod_prolog:prove_ro(<<"quod:names">>,
+                    {name,Name,{'_'},<<"place">>,<<"neutral">>}))
+        end,
         holds(Target, {attribute, Id, owner, maps:get(human, C)}),
         Dimensions = case Lane of ordinary -> default_dimensions(); foreign -> mixed_dimensions(); atomic -> infinite end,
         Saved = conj([{instance_of, space_class(), Id}, {attribute, Id, name, Name},
@@ -59,8 +64,16 @@ explicit_and_near_agent_placement_test_() ->
         assignment(C, Target, Id, 1, Room),
         holds(Target, {attribute, Id, transform, {transform, 200,300,-1850,0,45,0}}),
         holds(Dest, {space_placement, room, Space, 1}),
+        %% Later ones from the same standing point take the next free places:
+        %% one and a half markers to the right, then to the left. None moves.
+        [begin
+            {Next, _, _} = create(C, Target, []),
+            [{_, {entity_ref, Target, _, NextId}}, _] = Next,
+            holds(Target, {attribute, NextId, transform, {transform, X,300,-1850,0,45,0}})
+         end || X <- [950, -550, 1700]],
+        holds(Target, {attribute, Id, transform, {transform, 200,300,-1850,0,45,0}}),
         {Explicit, _, _} = create(C, Target, [], placement(Local)),
-        [{_, ExplicitRef = {entity_ref, Target, _, ExplicitId}}, _] = Explicit,
+        [{_, ExplicitRef = {entity_ref, Target, _, ExplicitId}}, {_, ExplicitName}] = Explicit,
         assignment(C, Target, ExplicitId, 1, Local),
         holds(Ns, {space_placement, room, ExplicitRef, 1}),
         fails(Dest, {space_placement, room, ExplicitRef, {'_'}}),
@@ -70,7 +83,7 @@ explicit_and_near_agent_placement_test_() ->
         ?assertMatch([{mark,_,<<"group">>,[],{transform,10,20,30,0,0,0},
                       no_surface,unlabelled,{depicts,Target,_,ExplicitId}},
                      {mark,_,<<"box">>,Size,_,{surfaces,_,_,_},unlabelled,_},
-                     {mark,_,<<"corner_box">>,Size,_,{surfaces,_,_,_},{label,<<"Space">>,<<"above">>},_}], Marks),
+                     {mark,_,<<"corner_box">>,Size,_,{surfaces,_,_,_},{label,ExplicitName,<<"above">>},_}], Marks),
         %% Placement is one-time, not a subscription following A.
         edit(Ns, {retract, {attribute,personal,transform,{'_'}}}),
         holds(Target, {attribute, Id, transform, {transform,200,300,-1850,0,45,0}}),
@@ -197,6 +210,9 @@ with_spaces(Fun, Extra, SpaceSource) ->
         MeasureRef = {measure_vocabulary,Measure,quod_simplex:genesis_hash(Measure)},
         Owner = <<"quod:space">>,
         SSup = quod_agent_hosting_tests:start_ontology(Owner,Dir,Node,[],SpaceSource ++ [MeasureRef]),
+        %% A space given no name draws one from the names ontology.
+        NSup = quod_agent_hosting_tests:start_ontology(<<"quod:names">>,Dir,Node,[],
+            quod_prolog:read_terms("priv/ontologies/quod_names.pl")),
         Pin = {space_vocabulary,Owner,quod_simplex:genesis_hash(Owner)},
         Terms = Sources ++ [Pin, storage_open,
             {':-', {can_invoke,{'_'},A,{'_'},{'_'}},storage_open},
@@ -205,7 +221,7 @@ with_spaces(Fun, Extra, SpaceSource) ->
         DSup = quod_agent_hosting_tests:start_ontology(Dest,Dir,Node,[],Terms),
         edit(Ns, {assertz,Pin}),
         try Fun(C#{storage=>Target,destination=>Dest,measure=>Measure})
-        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [DSup,TSup,SSup,MSup]] end
+        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [DSup,TSup,NSup,SSup,MSup]] end
     end, Sources).
 
 source(File) ->

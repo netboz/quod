@@ -27,8 +27,7 @@ attribute(space_extent, options, [option(infinite, <<"Infinite">>),
     option(box(q(10, <<"m">>), q(10, <<"m">>), q(10, <<"m">>)), <<"10 metres">>)]).
 attribute(create, label, <<"Create">>).
 gui_children(space_create, [example_name, space_extent, create]).
-gui_initial(space_create, example_name, Name) :-
-    quod:space::have_attribute(space, name, binary, default(Name)).
+gui_initial(space_create, example_name, <<"Space">>).
 gui_initial(space_create, space_extent, Extent) :-
     quod:space::have_attribute(space, dimensions, space_dimensions, default(Extent)).
 gui_form(space_create, [field(example_name, Name), field(space_extent, Extent)],

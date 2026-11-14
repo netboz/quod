@@ -210,7 +210,18 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     {if(mappingIdentity!=mapping?.Digest){gui.EndTextInput();mappingIdentity=mapping?.Digest;}Router.Install(mapping);}
     void ControlChanged() { if(controlIdentity!=scene.ControlIdentity) { InvalidateWorld();controlIdentity=scene.ControlIdentity; } }
     public void ContextChanged() { ControlChanged();Router.ContextChanged(); }
-    public void InvalidateWorld() { gui.EndTextInput();Router.Cancel();calibration=null;pressedSubject=null; }
+    // A re-read of the same space keeps the headset where it stands in it and
+    // leaves the panel, pie and keyboard in use alone: only a press on a thing
+    // of the old view is forgotten. Any other change of world ends those and
+    // takes the headset's place again from the agent's.
+    public void InvalidateWorld(bool sameSpace=false)
+    { pressedSubject=null;if(sameSpace)return;gui.EndTextInput();Router.Cancel();calibration=null; }
+    // The tracked head stands at the viewer's place, facing its forward.
+    internal void Calibrate(Transform3D head)
+    {
+        var forward=-head.Basis.Z;var inverse=new Basis(Vector3.Up,-Mathf.Atan2(-forward.X,-forward.Z));
+        calibration=new(inverse,-(inverse*head.Origin));
+    }
     internal void PresentWorkspace(bool spatial)
     {
         ObservePresentation(spatial||attached);
@@ -269,7 +280,8 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     // while a pie is open in front of it.
     void PlaceHud()
     {
-        bool shown=gui.Spatial&&!pie.IsOpen&&hudViewport.GetChildren().OfType<Control>().Any(c=>c.Visible);
+        // The keyboard extends below the panel, into the strip's place: the strip waits while it is up.
+        bool shown=gui.Spatial&&!pie.IsOpen&&!gui.TextEntryActive&&hudViewport.GetChildren().OfType<Control>().Any(c=>c.Visible);
         hudQuad.Visible=shown;if(!shown)return;
         var head=XRServer.GetTracker("head") as XRPositionalTracker;
         if(head?.HasPose("default")!=true||!head.GetPose("default").HasTrackingData)return;
@@ -281,6 +293,16 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         // The workspace's own angular text density: 1600 surface pixels per metre of distance.
         ((QuadMesh)hudQuad.Mesh).Size=new(hudViewport.Size.X*reading/1600,hudViewport.Size.Y*reading/1600);
         hudQuad.GlobalTransform=BelowEye(headWorld.Origin,new(-Mathf.Sin(heading),0,-Mathf.Cos(heading)),reading,Profile.HudBelowEyeDegrees);
+    }
+    // The panel sits below eye level as the profile says, raised as far as
+    // needed for its lower edge to end where the strip begins. Its height is
+    // half its distance, whatever that distance is.
+    internal float PanelBelowEyeDegrees {
+        get {
+            // Half the strip as the eye sees it: its pixels at 1600 per metre of distance.
+            float strip=Mathf.RadToDeg(Mathf.Atan(hudViewport.Size.Y/3200f));
+            return Math.Min(Profile.BelowEyeDegrees,Profile.HudBelowEyeDegrees-strip-Mathf.RadToDeg(Mathf.Atan(.25f)));
+        }
     }
     // A surface along a level heading, the given angle below eye level, turned to face the eye.
     static Transform3D BelowEye(Vector3 eye,Vector3 heading,float distance,float degrees)
@@ -318,8 +340,8 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         var headWorld=origin.GlobalTransform*pose.GetAdjustedTransform();
         var forward=-headWorld.Basis.Z;forward.Y=0;
         if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
-        // In front of where the head looks now, below eye level as the profile says; then world-locked.
-        var target=BelowEye(headWorld.Origin,forward.Normalized(),workspaceDistance,Profile.BelowEyeDegrees);
+        // In front of where the head looks now, then world-locked.
+        var target=BelowEye(headWorld.Origin,forward.Normalized(),workspaceDistance,PanelBelowEyeDegrees);
         if(panel.GlobalTransform!=target)panel.GlobalTransform=target;
         placeRequested=false;panel.Visible=shown;
     }
@@ -347,11 +369,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         bool tracked=head?.HasPose("default")==true && head.GetPose("default").HasTrackingData &&
             head.GetPose("default").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
         ControlChanged();
-        if(tracked && calibration==null) {
-            var pose=head!.GetPose("default").Transform;var forward=-pose.Basis.Z;
-            var inverse=new Basis(Vector3.Up,-Mathf.Atan2(-forward.X,-forward.Z));
-            calibration=new(inverse,-(inverse*pose.Origin));
-        }
+        if(tracked && calibration==null)Calibrate(head!.GetPose("default").Transform);
         long time=api.GetPredictedDisplayTime();
         Advance(time>0 ? (ulong)time : 0,xr.GetSessionState()==OpenXRInterface.SessionState.Focused,api.IsRunning(),tracked);
     }
@@ -496,10 +514,11 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     {
         if(gui.NativePressed)return;
         pointerSource=input;pressedSubject=null;
-        if(pie.IsOpen){pointingPie=true;return;}
-        if(HudHit(input) is {} onHud){pointingHud=true;HudPointer(onHud,true);return;}
-        if(GuiHit(input) is {} hit) { pointingGui=true;gui.Move(hit.Point,gui.PresentationSurface);gui.Press(); }
-        else { pointingGui=false;if(!dismissForm() && !Blocked && Router.MenuOwner==null){var ray=Ray(input);pressedSubject=scene.PickRay(ray.Origin,ray.Direction);} }
+        if(pie.IsOpen){pointingPie=true;Trace.Line("press","pie");return;}
+        if(HudHit(input) is {} onHud){pointingHud=true;HudPointer(onHud,true);Trace.Line("press",$"strip at={(Vector2I)onHud}");return;}
+        if(GuiHit(input) is {} hit) { pointingGui=true;gui.Move(hit.Point,gui.PresentationSurface);Trace.Line("press",$"panel at={(Vector2I)hit.Point} control={gui.Pointed}");gui.Press(); }
+        else if(dismissForm()) { pointingGui=false;Trace.Line("press","outside the open form"); }
+        else { pointingGui=false;if(!Blocked && Router.MenuOwner==null){var ray=Ray(input);pressedSubject=scene.PickRay(ray.Origin,ray.Direction);}Trace.Line("press",$"world thing={pressedSubject?.Label??(pressedSubject==null ? "none" : "unlabelled")}"); }
     }
     public void Release(IControllerSource input)
     {
@@ -507,7 +526,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(pointingPie){pointingPie=false;if(pie.IsOpen)pie.CommitAt(PiePoint(input));return;}
         // A strip command that opens a pie hands it to the controller that pressed it.
         if(pointingHud){pointingHud=false;HudPointer(HudHit(input)??new(-1,-1),false);if(pie.IsOpen)pieSource=input;return;}
-        if(pointingGui) { gui.Release();return; }
+        if(pointingGui) { Trace.Line("release",$"panel control={gui.Pointed}");gui.Release();return; }
         var before=pressedSubject;pressedSubject=null;
         if(before!=null && !Blocked && Router.MenuOwner==null) { var ray=Ray(input);if(scene.PickRay(ray.Origin,ray.Direction)==before)scene.Select(before); }
     }

@@ -45,7 +45,7 @@ async function actor(row) {
 }
 const [owner,other,publicReader] = await Promise.all([...config.users,config.public_reader].map(actor))
 const catalogue = await readSystemOntologies(publicReader.identity)
-assert.deepEqual(catalogue.map(row=>row.namespace).sort(),['quod:agent','quod:controllers','quod:gui','quod:node','quod:space','quod:user'])
+assert.deepEqual(catalogue.map(row=>row.namespace).sort(),['quod:agent','quod:controllers','quod:gui','quod:names','quod:node','quod:space','quod:user'])
 const tools = {namespace:'quod:gui',anchor:fromB64url(config.gui)}
 const target = owner.reference
 const query = (who,ref,goal)=>signedGoal(who.identity,{mode:'read',agent:who.reference,goal:anchoredGoal(ref,goal)})

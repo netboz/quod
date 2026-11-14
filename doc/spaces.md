@@ -158,8 +158,11 @@ result leaves the new space unplaced. A `placed(Destination, Transform)` result
 places it in front of A along that frame's −Z axis: 2 m from A's position plus
 half the shared marker's depth, read from the scene vocabulary's
 `marker_size/1`. With the 0.5 m marker the new space appears 2.25 m away,
-whatever it measures inside (Yan, 2026-11-12). This is one-time placement,
-not following A. A denied, unavailable, ambiguous or incomplete location read
+whatever it measures inside (Yan, 2026-11-12). On that line it takes the
+first free place: straight ahead, then alternately one and a half markers to
+the right and to the left, until no placed thing whose location can be read
+stands within one marker of it on every axis. Things already placed are never
+moved. This is one-time placement, not following A. A denied, unavailable, ambiguous or incomplete location read
 fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
 Transform)`; missing pose does not prove absence. Physical-pilot entry and live
 body poses remain the separate physical/entry integration.
@@ -177,9 +180,11 @@ creation route is unchanged.
 The space class owner offers **Create space** and **Create infinite space**
 through its recipes and forms. Its `gui_vocabulary/2` pins the component
 vocabulary. Forms compile at that owner and their goals run in the selected
-storing ontology. The forms initialize name
-and finite dimensions from class defaults; leaving those fields unchanged uses
-the defaults, while edits supply explicit values. Finite controls accept positive
+storing ontology. The forms initialize finite dimensions from class defaults
+and the name with a place name drawn from `quod:names`
+(`draw(<<"place">>, Salt, Name)`); leaving those fields unchanged uses those
+values, while edits supply explicit ones. Each read of the form draws again, so
+an untouched suggestion can change while the form is open. Finite controls accept positive
 integers in mm, cm, m or km (1–1,000,000 per axis); the domain model still accepts
 the wider exact measurement contract above. The placement selector supplies
 `near_agent` and authored exact destinations. The class owner authors its options for each selected storing ontology,
@@ -194,8 +199,10 @@ authority; installing client files does not rewrite ontology data.
 The shared form also offers **Create space with rational lengths**, with a
 positive integer numerator/divisor per axis and an explicit length unit. The
 ordinary finite form retains its integer defaults; both use the same Stage 1
-assertion and binder. Names may be empty binary values; leaving the supplied
-default unchanged keeps `Space`. Every form selects placement. No form offers
+assertion and binder. Names may be empty binary values. A space asserted
+without a name takes one from its class default, `default_from(space_name)`,
+which draws a place name for that instance from `quod:names`; when that
+ontology cannot answer, creation fails rather than falling back to a fixed name. Every form selects placement. No form offers
 an outside choice: a new space is shown by the marker. The creation subject is `class_ref(<<"quod:space">>, Anchor, space)`;
 its class identity is independent of the selected storing ontology. Each storing
 ontology separately authorizes the acting principal's request and the class

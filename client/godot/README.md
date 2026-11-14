@@ -320,8 +320,11 @@ Move/Place, Recenter, Hide and nearer/farther are local presentation actions.
 Changing distance scales the panel proportionally (1m high at 2m), retaining its
 central angular extent and text/target scale. Text size remains independently
 adjustable. This is idealized presentation geometry, not a lens/comfort claim.
-Initial placement and explicit repositioning use the current tracked head's
-height and horizontal forward direction, with an upright panel. A vertical-only
+Initial placement, explicit repositioning and every opening of a panel or form
+use the current tracked head's position and horizontal forward direction. The
+panel faces the eye and sits below eye level by the device profile's angle,
+raised as far as needed for its lower edge to end where the HUD strip begins
+(about 9° below with the first Vive profile); it is then world-locked. A vertical-only
 direction waits for a measurable heading. The existing XR frame owner places
 it once; ordinary head movement leaves the panel stationary.
 Hide retains the controls/drafts. The mapped menu can summon the hidden workspace
@@ -366,17 +369,25 @@ anywhere but on a wedge cancels. Unavailable wedges stay visible with their
 reason in the hub; a confirmed wedge asks for a second press. On desktop, Backspace goes back, Enter commits, digits pick wedges and
 the Menu key opens the pointed target's pie. In VR the pie has its own
 world-locked surface at the device profile's reading distance; only the
-controller that opened it steers it with its ray. A chosen action without
+controller that opened it steers it with its ray. A re-read of the space the headset stands in (after
+any commit there) keeps the headset's place in it; only another space, a lost
+view or the runtime's own recentre takes it again from the agent's place.
+A chosen action without
 input fields runs at once; one with fields opens its form. A press outside the
 open form closes and cancels it, as its Close button does; a form that was sent
 stays until its result is known. The HUD strip
 shows the human's `hud_commands/1` view, the one local "This device" command
 and the last status sentence: along the bottom edge on desktop, and in VR on
 its own surface 25° below eye level that follows the body only after a 35°
-head turn. Agents the human already lets put questions before them may offer a command;
+head turn; it waits while the spatial keyboard is up, which extends below the
+panel into its place. Agents the human already lets put questions before them may offer a command;
 the offer waits until the human answers it through **Offered commands** in
 their own pie. A strip click is committed by the same pie as any wedge, so a
 command that asks for confirmation still asks.
+For reading a session back, the client writes `QUOD_TRACE` console lines: one
+per pie opened (when its socket opened, when the node answered, when its first
+frame was drawn), one per icon fetched, and one per headset press and release
+(what the ray reached). Nothing of it is shown on screen.
 Editable text, numeric and source fields in the spatial workspace expose an
 opaque adjacent AZERTY keyboard. Keys use the same native editor, caret,
 selection, undo and draft events; Enter follows the field's native semantics

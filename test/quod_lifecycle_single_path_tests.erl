@@ -611,6 +611,9 @@ m1a_foundations(F = #{dir := Dir, manager := Manager}) ->
     Controllers = m1a_found(<<"quod:controllers">>, ["quod_controllers.pl"],
         [{gui_vocabulary, <<"quod:gui">>, Gui}], [quod_agent_predicates]),
     m1a_register(<<"quod:controllers">>, Controllers, false),
+    %% The space class draws its default names here.
+    Names = m1a_found(<<"quod:names">>, ["quod_names.pl"], [], []),
+    m1a_register(<<"quod:names">>, Names, false),
     Space = m1a_found(<<"quod:space">>, ["quod_space.pl"], GuiPins,
         [quod_agent_predicates]),
     m1a_register(<<"quod:space">>, Space, false),
@@ -630,10 +633,10 @@ m1a_foundations(F = #{dir := Dir, manager := Manager}) ->
     m1a_complete(RegEvidence),
     {ok, [#{'Rows' := Catalogue}], _} = quod_prolog:prove_ro(?ROOT_NS,
         {findall, {ontology_ref, {'N'}, {'A'}}, {system_ontology, {'N'}, {'A'}}, {'Rows'}}),
-    ?assertEqual(6, length(Catalogue)),
-    ?assertEqual(6, length(lists:usort([A || {ontology_ref, _, A} <- Catalogue]))),
+    ?assertEqual(7, length(Catalogue)),
+    ?assertEqual(7, length(lists:usort([A || {ontology_ref, _, A} <- Catalogue]))),
     ?assertEqual(lists:sort([?NODE_NS, <<"quod:agent">>, <<"quod:gui">>,
-        <<"quod:controllers">>, <<"quod:space">>, <<"quod:user">>]),
+        <<"quod:controllers">>, <<"quod:names">>, <<"quod:space">>, <<"quod:user">>]),
         lists:sort([N || {ontology_ref, N, _} <- Catalogue])),
     #{node => Node, agent => Agent, gui => Gui, user => UserClass,
       node_client => NodeClient, catalogue => Catalogue, gui_files => GuiFiles}.
@@ -675,9 +678,13 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
         {gui_operations,ForeignClass,{0}}}}),
     {ForeignOutcome,ForeignBytes}=m2_create(C,Foreign,ForeignCreate,element(7,ForeignCreate)),
     [{result,space,ForeignSpace={entity_ref,Foreign,ForeignAnchor,ForeignId}},
-     {result,location,{placed,S0,Near}},{result,owner,Owner}]=m1a_output(ForeignOutcome),
+     {result,location,{placed,S0,ForeignNear}},{result,owner,Owner}]=m1a_output(ForeignOutcome),
+    %% The first space stands straight ahead; this one takes the next free
+    %% place, one and a half markers to the right, and the first stays put.
+    ?assertEqual({transform,750,0,-2250,0,0,0},ForeignNear),
+    ?assertEqual({placed,S0,Near},m1a_read(User,m2_space({space_location,m2_entity(User,Id),{0}}))),
     ?assertEqual(Owner,m1a_read(Other,{attribute,ForeignId,owner,{0}})),
-    ?assertEqual({placed,S0,Near},m1a_read(Other,m2_space({space_location,m2_entity(Other,ForeignId),{0}}))),
+    ?assertEqual({placed,S0,ForeignNear},m1a_read(Other,m2_space({space_location,m2_entity(Other,ForeignId),{0}}))),
     Contents=m1a_read(User,{findall,{'E'},m2_space({space_contains,S0,{'E'}}),{0}}),
     ?assertEqual(lists:sort([S1,ForeignSpace]),lists:sort(Contents -- [setelement(1,Actor,entity_ref)])),
     ok=m2_assert_scene(User,S0,ForeignSpace,<<"box">>),
@@ -1440,10 +1447,10 @@ m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, PublicReader) ->
                 signup=>m1a_request_receipt(maps:get(signup_request,U)),
                 setup=>m1a_request_receipt(maps:get(setup_request,U)),
                 custody=>quod_client_goal_parser:value_text(maps:get(setup_custody,U))} || U<-Users],
-            ?assertEqual(11, length(quod_simplex:namespaces())),
+            ?assertEqual(12, length(quod_simplex:namespaces())),
             Orders = #{root => [<<"quod_root.pl">>], node => [<<"quod_node.pl">>], agent => [<<"quod_agent.pl">>],
                 gui => [list_to_binary(F) || F <- GuiFiles], controllers => [<<"quod_controllers.pl">>],
-                space => [<<"quod_space.pl">>], user => [<<"quod_user.pl">>],
+                names => [<<"quod_names.pl">>], space => [<<"quod_space.pl">>], user => [<<"quod_user.pl">>],
                 private_account => <<"terms">>,
                 startup_base => [<<"common_predicates.pl">>,<<"construction.pl">>,
                     <<"material_policy.pl">>,<<"gui_forms.pl">>,<<"geometry_schema.pl">>]},
@@ -1454,8 +1461,8 @@ m1a_receipt(Network, Node, Catalogue, Users, GuiFiles, PublicReader) ->
                     unchanged_readiness_no_reconcile_or_io,restart_no_constructor_or_reaction_replay,
                     original_vault_keys_sign_new_operation_after_restart],
                 public_reader=>quod_client_goal_parser:value_text(maps:get(reference,PublicReader)),
-                counts => #{shared_foundations => 7, catalogue_rows => 6, node_instances => 1,
-                    user_histories => 2, personal_agents => 2, unrelated_agent_histories=>1, space_instances => 2, total_histories => 11}}))
+                counts => #{shared_foundations => 8, catalogue_rows => 7, node_instances => 1,
+                    user_histories => 2, personal_agents => 2, unrelated_agent_histories=>1, space_instances => 2, total_histories => 12}}))
     end.
 
 m1a_request_receipt({Bytes,Signature}) ->

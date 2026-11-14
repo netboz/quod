@@ -1,8 +1,8 @@
 # Grafana Tempo — trace backend for quod's OpenTelemetry spans.
 #
 # quod nodes export OTLP/HTTP to `otel_exporter_otlp_endpoint` from deploy/quod.nomad.
-# Its qengho default is the routable host endpoint `192.168.1.11:4318`; the receiver
-# therefore MUST bind host port 4318 exactly. The query API (used by the Grafana
+# Its qengho default is the routable host endpoint `192.168.1.10:4318` (conrad, where
+# this job runs); the receiver therefore MUST bind host port 4318 exactly. The query API (used by the Grafana
 # datasource) is on 3200. Single-binary, local storage, short retention — this is a
 # load-test/measurement backend, not long-term trace storage.
 #

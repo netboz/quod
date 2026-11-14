@@ -1,0 +1,11 @@
+Proposed fix for defect 2, NOT applied (awaits Yan's decision). Goes in with p1-repro-check.patch.
+The sample on which the pad comes up is lifting, not choosing: the wedge lit
+just before is committed; a thumb resting at the centre before the release
+still cancels, as today.
+
+--- a/client/godot/Core/Controllers.cs
++++ b/client/godot/Core/Controllers.cs
+@@ ControllerInput.Frame
+-                if(menu==s) { consumer.MoveMenu(c.Axes,g.Binding.Threshold);if(up){menu=null;consumer.CommitMenu();ContextChanged();} }
++                // The release sample is the thumb lifting, not a choice.
++                if(menu==s) { if(up){menu=null;consumer.CommitMenu();ContextChanged();} else consumer.MoveMenu(c.Axes,g.Binding.Threshold); }

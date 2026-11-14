@@ -26,7 +26,7 @@ public partial class ExportChecks
         adapter.Changed+=SourceInstalled;
         try { XRServer.AddTracker(tracker);await installed.Task.WaitAsync(TimeSpan.FromSeconds(30)); }
         finally { adapter.Changed-=SourceInstalled; }
-        await adapter.Completion;adapter.Advance(1,true,true,true);
+        await adapter.Completion;adapter.Advance(1,true,true,true,Frame90);
         var resources=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
         Check(resources["Decodes"]!.GetValue<int>()==1 && resources["LiveLeases"]!.GetValue<int>()==1,"real HTTPS asset bytes pass digest/profile/cost admission and instantiate in the production scene owner");
         using var probe=new System.Net.Sockets.TcpClient();await probe.ConnectAsync("127.0.0.1",int.Parse(Env("M1B_CONTROL_PORT")));
@@ -38,7 +38,7 @@ public partial class ExportChecks
             var received=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);void Projection(JsonNode _)=>received.TrySetResult();view.Projection+=Projection;
             try { await view.Renew();await received.Task.WaitAsync(TimeSpan.FromSeconds(30)); }finally { view.Projection-=Projection; }
         }
-        for(int i=0;i<3;i++){await Renew();adapter.Advance((ulong)i+2,true,true,true);}
+        for(int i=0;i<3;i++){await Renew();adapter.Advance((ulong)i+2,true,true,true,Frame90);}
         await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes("finish\n"));var work=JsonNode.Parse((await reader.ReadLineAsync())!)!;
         Check(work["work"]!["calls"]!.AsArray().Count==0,"unchanged signed mapping renewals perform zero watched history/reader/install/write/sync calls");
         var after=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;

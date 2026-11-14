@@ -75,10 +75,14 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     // The HUD strip: body-locked below the central view, tagging along.
     readonly SubViewport hudViewport=new() { Name="hud-viewport",Size=new(1200,(int)HudBar.Height),TransparentBg=true,HandleInputLocally=true,Disable3D=true };
     readonly MeshInstance3D hudQuad=new() { Name="hud-surface",Mesh=new QuadMesh(),Visible=false };
+    // The strip stands in the room: where it was placed, from which eye and
+    // heading, and the glide that takes it to a new place.
+    Transform3D? hudPlaced;
+    Transform3D hudFrom;
+    Vector3 hudEye;
     float? hudYaw;
+    float hudGlide=1;
     bool pointingHud;
-    readonly Label3D rayLabel=new() { Name="ray-label",Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,PixelSize=.0015f,FontSize=28,
-        OutlineSize=8,Modulate=new(0xF5/255f,0xF1/255f,0xEB/255f),OutlineModulate=new(0x19/255f,0x2B/255f,0x32/255f),Visible=false,NoDepthTest=true };
     readonly OpenXRApiExtension api=new();
     OpenXRInterface? xr;
     ScenePanel scene=null!;
@@ -99,6 +103,9 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     ScenePanel.Selection? occurrence;
     Transform3D personalPose;
     Basis occurrenceBasis;
+    // Where the form beside a thing in the world was placed, and the thing's
+    // pose it was placed for: it stays there until the thing moves.
+    (Transform3D Thing,Transform3D Form)? besideThing;
     IControllerSource? pointerSource,pieSource;
     public ControllerInput Router { get; private set; }=null!;
     public bool Running=>active;
@@ -143,7 +150,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     {
         this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.pie=pie;this.openPie=openPie;this.dismissForm=dismissForm;
         pie.Selected+=_=>MenuClosed();pie.Dismissed+=MenuClosed;
-        AddChild(origin);origin.AddChild(camera);AddChild(panel);AddChild(pieViewport);AddChild(pieQuad);AddChild(hudViewport);AddChild(hudQuad);AddChild(rayLabel);
+        AddChild(origin);origin.AddChild(camera);AddChild(panel);AddChild(pieViewport);AddChild(pieQuad);AddChild(hudViewport);AddChild(hudQuad);
         // The strip and the pie are the hand's own tools: they draw over any
         // boundary or thing between the eye and them, never half behind it.
         hudQuad.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=hudViewport.GetTexture(),
@@ -161,7 +168,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         xr.SessionFocussed+=Focused;xr.SessionVisible+=Unfocused;xr.SessionSynchronized+=Unfocused;xr.SessionStopping+=Stopping;
         xr.SessionLossPending+=Stopping;xr.InstanceExiting+=Stopping;xr.PoseRecentered+=Recentered;Subscriptions+=7;
         lifecycleSubscribed=true;xr.SetActionSetActive("quod_inputs",true);
-        AttachSources();active=true;calibration=null;
+        AttachSources();active=true;calibration=null;hudPlaced=null;
         scene.ReleaseInput();scene.PresentXR(true);
         gui.Surface.GuiEmbedSubwindows=true;
         camera.Current=true;PresentWorkspace(true);
@@ -201,7 +208,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     void Focused() { Status="OpenXR focused; release controls before use.";Changed?.Invoke(); }
     void Unfocused() { gui.EndTextInput();CancelPresentation();StopMovingWorkspace();HideVisuals();Status="OpenXR input paused: session has no focus.";Changed?.Invoke(); }
     void Stopping() { Unfocused();Status="OpenXR runtime stopped this session.";Changed?.Invoke(); }
-    void Recentered() { Router.Cancel();calibration=null; }
+    void Recentered() { Router.Cancel();calibration=null;hudPlaced=null; }
     void CancelPresentation() { Router.Cancel();gui.Cancel(); }
     bool StopMovingWorkspace() { if(!movingWorkspace)return false;movingWorkspace=false;placeRequested=false;return true; }
     public void DesktopFocusLost() { gui.EndTextInput();CancelPresentation();if(StopMovingWorkspace())Changed?.Invoke(); }
@@ -240,7 +247,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         CancelPresentation();
         if(occurrence!=null){occurrence.Owner.PresentationChanged-=RefreshOccurrence;occurrence.Owner.HideForm();}
         if(occurrence==null&&selected!=null)personalPose=panel.GlobalTransform;
-        occurrence=selected;
+        occurrence=selected;besideThing=null;
         if(selected==null){panel.GlobalTransform=personalPose;placeRequested=true;}
         else {occurrenceBasis=selected.Owner.ViewerPose.Basis;selected.Owner.PresentationChanged+=RefreshOccurrence;
             if(!ReferenceEquals(selected.Owner,scene)){panel.GlobalTransform=personalPose;placeRequested=true;}}
@@ -255,30 +262,51 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     {
         if(occurrence==null)return;
         if(occurrence.Pose is not Transform3D pose){gui.EndTextInput();CancelPresentation();occurrence.Owner.HideForm();panel.Visible=false;return;}
-        // Keep the selected view's stable orientation, but clear the solid's
-        // full extent in that basis. Centre depth can put the form behind its
-        // near face, especially the lower controls and adjacent keyboard.
-        var corners=occurrence.Corners.Select(p=>occurrenceBasis.Inverse()*(p-pose.Origin)).ToArray();
-        float top=corners.Length==0 ? 0 : corners.Max(p=>p.Y),front=corners.Length==0 ? 0 : corners.Max(p=>p.Z);
-        var pixels=gui.FormSurface.Size;float width=1.5f*workspaceDistance/2;var size=new Vector2(width,width*pixels.Y/pixels.X);
-        float height=size.Y*gui.FormSize.Y/pixels.Y;
-        var next=new Transform3D(occurrenceBasis,pose.Origin+occurrenceBasis*new Vector3(0,top+.15f+height/2,front+.15f));
         if(!ReferenceEquals(occurrence.Owner,scene)) {
-            if(gui.Spatial&&workspaceShown&&gui.PresentationVisible){if(occurrence.Owner.PresentForm(gui.FormSurface.GetTexture(),size,pixels,new(0,-(size.Y-height)/2,0),next))CancelPresentation();panel.Visible=true;}
+            // A thing in a side view: the form is drawn inside that view, in
+            // its stable orientation, above the thing and clear of its front.
+            var corners=occurrence.Corners.Select(p=>occurrenceBasis.Inverse()*(p-pose.Origin)).ToArray();
+            float top=corners.Length==0 ? 0 : corners.Max(p=>p.Y),front=corners.Length==0 ? 0 : corners.Max(p=>p.Z);
+            var pixels=gui.FormSurface.Size;float width=1.5f*workspaceDistance/2;var size=new Vector2(width,width*pixels.Y/pixels.X);
+            float height=size.Y*gui.FormSize.Y/pixels.Y;
+            var inView=new Transform3D(occurrenceBasis,pose.Origin+occurrenceBasis*new Vector3(0,top+.15f+height/2,front+.15f));
+            if(gui.Spatial&&workspaceShown&&gui.PresentationVisible){if(occurrence.Owner.PresentForm(gui.FormSurface.GetTexture(),size,pixels,new(0,-(size.Y-height)/2,0),inView))CancelPresentation();panel.Visible=true;}
             else occurrence.Owner.HideForm();
             return;
         }
-        if(panel.GlobalTransform!=next){CancelPresentation();panel.GlobalTransform=next;}
+        // A thing in the world: the form stands as the panel does, at its
+        // distance and angle below eye level, facing the eye, beside the
+        // thing on the side toward where the head looks. It is placed once
+        // and stays until the thing moves.
+        if(besideThing is not {} placed||placed.Thing!=pose)besideThing=placed=(pose,BesideThing(pose,occurrence.Corners));
+        if(panel.GlobalTransform!=placed.Form){CancelPresentation();panel.GlobalTransform=placed.Form;}
         panel.Visible=gui.Spatial&&workspaceShown&&gui.PresentationVisible;
+    }
+    Transform3D BesideThing(Transform3D thing,Vector3[] corners)
+    {
+        var head=Head();var eye=head.Origin;
+        static float Yaw(Vector3 v)=>Mathf.Atan2(-v.X,-v.Z);
+        static float Turn(float from,float to)=>Mathf.Wrap(to-from,-Mathf.Pi,Mathf.Pi);
+        var toward=thing.Origin-eye;toward.Y=0;var look=-head.Basis.Z;look.Y=0;
+        if(Mathf.IsZeroApprox(toward.LengthSquared()))toward=look;
+        float centre=Yaw(toward);
+        // Left is a positive turn about Up. Toward the view's centre; straight ahead, to the right.
+        float side=Mathf.IsZeroApprox(look.LengthSquared())||Turn(centre,Yaw(look))<=0 ? -1 : 1;
+        float reach=corners.Select(c=>{var v=c-eye;v.Y=0;return Mathf.IsZeroApprox(v.LengthSquared()) ? 0 : side*Turn(centre,Yaw(v));}).DefaultIfEmpty(0).Max();
+        float half=Mathf.Atan(((QuadMesh)panel.Mesh).Size.X/2/workspaceDistance);
+        float heading=centre+side*(Math.Max(0,reach)+half);
+        return BelowEye(eye,new(-Mathf.Sin(heading),0,-Mathf.Cos(heading)),workspaceDistance,Profile.PanelBelowEyeDegrees);
     }
     public void ShowWorkspace() { CancelPresentation();StopMovingWorkspace();workspaceShown=true;placeRequested=true;Changed?.Invoke(); }
     public void HideWorkspace() { gui.EndTextInput();CancelPresentation();CancelMenu();workspaceShown=false;movingWorkspace=false;placeRequested=false;panel.Visible=false;Changed?.Invoke(); }
     public void MoveWorkspace() { CancelPresentation();workspaceShown=true;movingWorkspace=!movingWorkspace;placeRequested=movingWorkspace;Changed?.Invoke(); }
     public void WorkspaceDistance(float change)
-    { float next=Math.Clamp(workspaceDistance+change,.6f,4);if(next==workspaceDistance)return;workspaceDistance=next;ResizePanel();ShowWorkspace(); }
-    // Below the central view, at reading distance, facing the head; hidden
-    // while a pie is open in front of it.
-    void PlaceHud()
+    { float next=Math.Clamp(workspaceDistance+change,Profile.NearestPanel,Profile.FarthestPanel);if(next==workspaceDistance)return;workspaceDistance=next;ResizePanel();ShowWorkspace(); }
+    // Below the central view, at reading distance, facing the eye, standing
+    // in the room like the panel. It takes a new place in front only once the
+    // head has turned past the follow angle or walked away from where it was
+    // placed, gliding there; hidden while a pie is open in front of it.
+    void PlaceHud(double seconds)
     {
         // The keyboard extends below the panel, into the strip's place: the strip waits while it is up.
         bool shown=gui.Spatial&&!pie.IsOpen&&!gui.TextEntryActive&&hudViewport.GetChildren().OfType<Control>().Any(c=>c.Visible);
@@ -287,22 +315,19 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(head?.HasPose("default")!=true||!head.GetPose("default").HasTrackingData)return;
         var headWorld=origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform();
         var forward=-headWorld.Basis.Z;forward.Y=0;if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
-        float yaw=Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z));
-        hudYaw=Profile.FollowYaw(hudYaw,yaw);float heading=Mathf.DegToRad(hudYaw!.Value);
-        float reading=Profile.ReadingDistance;
+        float yaw=Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z)),reading=Profile.ReadingDistance;
         // The workspace's own angular text density: 1600 surface pixels per metre of distance.
         ((QuadMesh)hudQuad.Mesh).Size=new(hudViewport.Size.X*reading/1600,hudViewport.Size.Y*reading/1600);
-        hudQuad.GlobalTransform=BelowEye(headWorld.Origin,new(-Mathf.Sin(heading),0,-Mathf.Cos(heading)),reading,Profile.HudBelowEyeDegrees);
-    }
-    // The panel sits below eye level as the profile says, raised as far as
-    // needed for its lower edge to end where the strip begins. Its height is
-    // half its distance, whatever that distance is.
-    internal float PanelBelowEyeDegrees {
-        get {
-            // Half the strip as the eye sees it: its pixels at 1600 per metre of distance.
-            float strip=Mathf.RadToDeg(Mathf.Atan(hudViewport.Size.Y/3200f));
-            return Math.Min(Profile.BelowEyeDegrees,Profile.HudBelowEyeDegrees-strip-Mathf.RadToDeg(Mathf.Atan(.25f)));
+        float? heading=Profile.FollowYaw(hudYaw,yaw);
+        if(hudPlaced==null||heading!=hudYaw||headWorld.Origin.DistanceTo(hudEye)>Profile.HudFollowMetres) {
+            hudYaw=heading;hudEye=headWorld.Origin;float turn=Mathf.DegToRad(heading!.Value);
+            var target=BelowEye(hudEye,new(-Mathf.Sin(turn),0,-Mathf.Cos(turn)),reading,Profile.HudBelowEyeDegrees);
+            if(hudPlaced==null){hudGlide=1;hudQuad.GlobalTransform=target;}else{hudGlide=0;hudFrom=hudQuad.GlobalTransform;}
+            hudPlaced=target;
         }
+        if(hudGlide>=1)return;
+        hudGlide=Math.Min(1,hudGlide+(float)(seconds/Profile.HudGlideSeconds));
+        hudQuad.GlobalTransform=hudFrom.InterpolateWith(hudPlaced.Value,Mathf.SmoothStep(0,1,hudGlide));
     }
     // A surface along a level heading, the given angle below eye level, turned to face the eye.
     static Transform3D BelowEye(Vector3 eye,Vector3 heading,float distance,float degrees)
@@ -341,7 +366,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         var forward=-headWorld.Basis.Z;forward.Y=0;
         if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
         // In front of where the head looks now, then world-locked.
-        var target=BelowEye(headWorld.Origin,forward.Normalized(),workspaceDistance,PanelBelowEyeDegrees);
+        var target=BelowEye(headWorld.Origin,forward.Normalized(),workspaceDistance,Profile.PanelBelowEyeDegrees);
         if(panel.GlobalTransform!=target)panel.GlobalTransform=target;
         placeRequested=false;panel.Visible=shown;
     }
@@ -371,9 +396,9 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         ControlChanged();
         if(tracked && calibration==null)Calibrate(head!.GetPose("default").Transform);
         long time=api.GetPredictedDisplayTime();
-        Advance(time>0 ? (ulong)time : 0,xr.GetSessionState()==OpenXRInterface.SessionState.Focused,api.IsRunning(),tracked);
+        Advance(time>0 ? (ulong)time : 0,xr.GetSessionState()==OpenXRInterface.SessionState.Focused,api.IsRunning(),tracked,delta);
     }
-    internal void Advance(ulong frame,bool focused,bool running,bool tracked)
+    internal void Advance(ulong frame,bool focused,bool running,bool tracked,double seconds)
     {
         ControlChanged();
         origin.Transform=scene.ViewerPose*(calibration??Transform3D.Identity);
@@ -381,7 +406,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         if(!interactive)gui.EndTextInput();
         foreach(var source in sources.Values)source.UpdatePose();
         // A visible session can show the workspace before it owns input focus.
-        PlaceWorkspace(running && tracked && visible,interactive);PlaceHud();
+        PlaceWorkspace(running && tracked && visible,interactive);PlaceHud(seconds);
         Router.Frame(frame,interactive);
         foreach(var (source,visual) in visuals)if(visual.Model!=null)visual.Model.Visible=running && tracked && visible && visual.Profile!=null && ((Source)source).GripTracked;
     }
@@ -433,13 +458,12 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         // Only the controller that opened the pie steers it; once its ray
         // leaves the pie's surface it points nothing.
         if(pie.IsOpen) {
-            rayLabel.Visible=false;
             if(PiePoint(input) is {} on){if(pieSource==null||input==pieSource)pie.PointerAt(on);}
             else if(input==pieSource)pie.PointerAway();
             return;
         }
-        if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.PointAt(null);return;}
-        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.PointAt(null);}
+        if(HudHit(input) is {} onHud){HudPointer(onHud,null);scene.PointAt(null);return;}
+        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else scene.PointAt(null);
         if(hit is {} at){gui.Move(at.Point,gui.PresentationSurface);PadScroll(source,at.Point);}
         else {source.PadRest=null;if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();}
     }
@@ -461,25 +485,22 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
             gui.PresentationSurface.PushInput(new InputEventMouseButton { Position=at,GlobalPosition=at,ButtonIndex=button,Pressed=false,Factor=1 },true);
         }
     }
-    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.PointAt(null);}
-    // Feedback before the press: the pointed thing shows its pointed-at look
-    // and its authored label at the ray tip. Pointing at nothing shows nothing.
+    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;scene.PointAt(null);}
+    // Feedback before the press: the pointed thing shows its pointed-at look;
+    // its name is already written above it. Pointing at nothing shows nothing.
     void PointTarget(IControllerSource input)
-    {
-        var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.PointAt(hit);
-        if(hit?.Label is not string text||hit.Pose is not Transform3D pose){rayLabel.Visible=false;return;}
-        float distance=Math.Max(.3f,(pose.Origin-ray.Origin).Dot(ray.Direction));
-        rayLabel.Text=text;rayLabel.GlobalPosition=ray.Origin+ray.Direction*distance+Vector3.Up*.06f;rayLabel.Visible=true;
-    }
+    { var ray=Ray(input);scene.PointAt(scene.PickRay(ray.Origin,ray.Direction)); }
     // World-locked placement, never following the head: in front of the
     // pointed object (pulled in to reading distance), or along the ray at
-    // reading distance slightly below eye level for the space.
+    // reading distance for the space; in both cases at least as far below
+    // eye level as the profile says.
     void PlacePie(IControllerSource input,ScenePanel.Selection? hit)
     {
         var ray=Ray(input);float reading=Profile.ReadingDistance,radius=PieRadius;
         float distance=hit?.Pose is Transform3D pose ? Math.Clamp((pose.Origin-ray.Origin).Dot(ray.Direction)-radius,radius,reading) : reading;
         var at=ray.Origin+ray.Direction*distance;var head=Head();
-        if(hit==null){float lowest=head.Origin.Y-distance*Mathf.Sin(Mathf.DegToRad(Profile.BelowEyeDegrees));at.Y=Math.Min(at.Y,lowest);}
+        float level=new Vector2(at.X-head.Origin.X,at.Z-head.Origin.Z).Length();
+        at.Y=Math.Min(at.Y,head.Origin.Y-level*Mathf.Tan(Mathf.DegToRad(Profile.PieBelowEyeDegrees)));
         PlacePieQuad(at,head);
     }
     // A strip command's pie opens just in front of that command.
@@ -545,7 +566,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
             gui.EndTextInput();var ray=Ray(input);
             var hit=GuiHit(input)!=null ? null : scene.PickRay(ray.Origin,ray.Direction);
             if(!openPie(hit))return false;
-            pieSource=input;rayLabel.Visible=false;scene.PointAt(null);if(gui.Spatial)PlacePie(input,hit);
+            pieSource=input;scene.PointAt(null);if(gui.Spatial)PlacePie(input,hit);
         }
         pie.Threshold=threshold;pie.MoveAxes(axes);return true;
     }
@@ -556,7 +577,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         pie.MoveAxes(axes);
     }
     public void CommitMenu(){if(pie.IsOpen)pie.Commit();}
-    public void CancelMenu()=>pie.Dismiss();
+    public void CancelMenu()=>pie.Dismiss("dismissed: input withdrawn (focus, a popup or a press elsewhere)");
     void MenuClosed(){Router.MenuSelected();pieQuad.Visible=false;pieSource=null;}
     public void Drive(IControllerSource source,NumericsVector2 axes)
     {

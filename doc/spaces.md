@@ -284,8 +284,12 @@ transaction; refusal or conflict restores all owners.
 
 The offered Enter and Leave forms bind the existing personal agent and its
 exact assignment revision. Their ordinary U-to-A instruction executes this
-operation; navigation reads the resulting assignment. Leave may explicitly make
-the agent unplaced. Storage and display references do not supply an inferred
+operation; navigation reads the resulting assignment. Leave returns the agent
+to the space the left space stands in, near in front of its marker and facing
+it, where its creator stood (`space_leave_to/2`, the same near distance as
+`placement_pose/2`); leaving a space that stands in no other makes the agent
+unplaced. A parent that refuses the agent refuses the leave; it never falls back
+to unplaced. Storage and display references do not supply an inferred
 parent or destination. A newly asserted instance uses its class policy; later operations use its
 committed membership and per-instance ACLs.
 

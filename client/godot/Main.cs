@@ -170,7 +170,7 @@ public partial class Main : Control
         scene.OutsidePress=DismissForm;
         xr.Install(ControllerMapping.SignIn);
         pie.Selected+=chosen=>{var occurrence=pieOccurrence;var at=pieAt;var source=pieView?.Target;ClosePie();Activate(chosen,occurrence,at,source);};
-        gui.Surface.AddChild(hud);hud.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
+        gui.Surface.AddChild(hud);hud.Theme=pie.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
         hud.Activated+=(command,control)=>{
             if(hud.Commands is not {} commands||!OpenPie(null,control.GetGlobalRect().GetCenter(),local:commands))return;
             if(pie.Choose(command.Slot))pie.Commit();
@@ -744,7 +744,7 @@ public partial class Main : Control
         if (@event is InputEventKey { Pressed:true, Echo:false, Keycode:Key.Menu } && !pie.IsOpen) {
             if(OpenPie(hovered,hovered==null ? null : hoverPoint))GetViewport().SetInputAsHandled();return;
         }
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { pie.Dismiss();GetViewport().SetInputAsHandled();return; }
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { pie.Dismiss("dismissed with Escape");GetViewport().SetInputAsHandled();return; }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
             if (backupDialog!=null) CloseBackup();
             else if (!DismissForm()) { if (xr.Running) ToggleVr(); else action?.Cancel(); }

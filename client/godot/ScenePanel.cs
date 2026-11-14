@@ -284,8 +284,11 @@ public partial class ScenePanel : SubViewportContainer
             }
             if(mark.Label.Kind!="atom" || mark.Label.Name!="unlabelled") {
                 var label=mark.Label.Require("label",2);float y=label[1].TextValue switch {"above"=>sizes[mark.Id].Y/2+.15f,"below"=>-sizes[mark.Id].Y/2-.15f,_=>0};
-                node.AddChild(new Label3D {Text=label[0].TextValue,Position=new(0,y,0),FontSize=32,PixelSize=.005f,
-                    Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Modulate=new Color("#F5F1EB"),Shaded=false});
+                // Fixed in the world with its thing: one copy reads from the
+                // thing's front, its twin, turned half round, from behind.
+                foreach(float turn in new[]{0,Mathf.Pi})
+                    node.AddChild(new Label3D {Text=label[0].TextValue,Position=new(0,y,0),Rotation=new(0,turn,0),FontSize=32,PixelSize=.005f,
+                        DoubleSided=false,Modulate=new Color("#F5F1EB"),Shaded=false});
             }
             long identity=old!=null && Subject(old)?.ToString()==NextSubject(mark)?.ToString() ? old.Identity : ++occurrenceIdentity;
             next.Add(mark.Id, new(mark, node, corners,lines,identity,shape,looks)); Rebuilt++;
@@ -340,7 +343,7 @@ public partial class ScenePanel : SubViewportContainer
         var points = occurrences.Values.SelectMany(o => o.Corners.Select(p => o.Node.GlobalTransform * p)
             .Concat(o.Node.GetChildren().OfType<Label3D>().SelectMany(label=>{
                 var padding=new Vector3(1,1,0)*label.OutlineSize*label.PixelSize;
-                return (label.GenerateTriangleMesh()?.GetFaces()??[]).SelectMany(p=>new[]{label.GlobalPosition+p-padding,label.GlobalPosition+p+padding});
+                return (label.GenerateTriangleMesh()?.GetFaces()??[]).SelectMany(p=>new[]{label.GlobalTransform*(p-padding),label.GlobalTransform*(p+padding)});
             }))).Concat(formSurface?.Visible==true ? Corners(new(((QuadMesh)formSurface.Mesh).Size.X,((QuadMesh)formSurface.Mesh).Size.Y,0)).Select(p=>formSurface.GlobalTransform*(p+((QuadMesh)formSurface.Mesh).CenterOffset)) : []).ToArray();
         if (points.Length == 0) { camera.Position = new(0,0,5); camera.Rotation = Vector3.Zero; camera.Near = 0.05f; camera.Far = 1000; return; }
         if (points.Any(p => !p.IsFinite())) throw new FormatException("Scene frame exceeds the engine's numeric range.");

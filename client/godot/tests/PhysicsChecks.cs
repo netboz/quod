@@ -130,7 +130,7 @@ public partial class ExportChecks
         tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
         tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
         XRServer.AddTracker(tracker);await Frame();await mapped.Completion;ulong mappedFrame=0;
-        void MappedFrame()=>mapped.Advance(++mappedFrame,true,true,true);
+        void MappedFrame()=>mapped.Advance(++mappedFrame,true,true,true,Frame90);
         MappedFrame();
         async Task Applied(Func<bool> gesture,string name) {
             ulong prior=ulong.Parse(current!.Sample!.ControlState!["sequence"]!.GetValue<string>());

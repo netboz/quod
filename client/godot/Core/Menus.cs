@@ -142,13 +142,21 @@ public sealed class PieNavigator(MenuNode root, float threshold, double markingD
 
 // The only placement numbers the client introduces (decision 4, 2026-11-05):
 // a first Vive profile, to be measured on the headset. Not domain policy.
-// The working panel takes the pie's angle below eye level, raised so that it
-// ends above the HUD strip (Yan, 2026-11-13).
-// The HUD strip numbers (25° below eye level, following after a 35° head turn)
-// were chosen by Yan on 2026-11-06 for the same first profile.
-public sealed record DeviceProfile(float ReadingDistance, float BelowEyeDegrees, float HudBelowEyeDegrees, float HudFollowDegrees)
+// Yan chose the strip's follow angle on 2026-11-06 and, on 2026-11-14 after
+// the ergonomics audit: the panel 9° below eye level, the strip 35° below and
+// placed in the room (it moves after a turn past the follow angle or a walk
+// of half a metre, in a 0.3 s glide), the panel no nearer than 1.25 m. The
+// pie of the space, and of any pointed thing, stays at least 15° below.
+public sealed record DeviceProfile(float ReadingDistance, float PieBelowEyeDegrees, float PanelBelowEyeDegrees,
+    float HudBelowEyeDegrees, float HudFollowDegrees, float HudFollowMetres, float HudGlideSeconds,
+    float NearestPanel, float FarthestPanel)
 {
-    public static readonly DeviceProfile Vive = new(1.5f, 15f, 25f, 35f);
+    public static readonly DeviceProfile Vive = new(ReadingDistance: 1.5f, PieBelowEyeDegrees: 15f, PanelBelowEyeDegrees: 9f,
+        HudBelowEyeDegrees: 35f, HudFollowDegrees: 35f, HudFollowMetres: .5f, HudGlideSeconds: .3f,
+        NearestPanel: 1.25f, FarthestPanel: 4f);
+    // The smallest text drawn on a surface in space: 0.6° at the workspace's
+    // density of 1600 surface pixels per metre of distance (Yan, 2026-11-14).
+    public const int SmallestTextPixels = 17;
     // Tag-along: the strip keeps its heading until the head has turned past
     // the threshold, then takes the head's heading. It never jitters with it.
     public float? FollowYaw(float? current, float head)

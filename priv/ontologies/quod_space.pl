@@ -82,23 +82,28 @@ space_location(Subject, Location) :-
       space_transform(Transform), Location = placed(Destination, Transform)).
 
 %% An omitted pose is resolved relative to the acting personal agent, at
-%% Yan's chosen two metres plus half the shared marker's depth along negative
-%% Z. The marker stands for the space outside, whatever it measures inside.
-%% On that line the new thing takes the first free place, so it never lands
-%% on a thing already placed there and never moves one.
+%% the near distance along negative Z. On that line the new thing takes the
+%% first free place, so it never lands on a thing already placed there and
+%% never moves one.
 placement_pose(Destination, Pose) :-
     (nonvar(Pose) -> space_transform(Pose)
     ; quod:user::personal_agent(Agent, _),
       Agent = agent_instance_ref(Ns,A,Entity),
       space_location(entity_ref(Ns,A,Entity), placed(Destination,transform(X,Y,Z,RX,RY,RZ))),
-      unique_solution(scene_vocabulary(Scene,Anchor)),
-      in_ontology(Scene,Anchor,marker_size(Size)),
-      NearZ is Z - 2000 - Size // 2,
+      space_near(Size, Near),
+      NearZ is Z - Near,
       Destination = entity_ref(DNs,DA,D),
       in_ontology(DNs,DA,findall(Subject,space_placement(D,Subject,_),Placed)),
       findall(Taken,(member(Subject,Placed),space_location(Subject,placed(Destination,Taken))),Poses),
       space_free_place(0,X,Y,NearZ,Size,Poses,FreeX),
       Pose = transform(FreeX,Y,NearZ,RX,RY,RZ)).
+%% Near: Yan's chosen two metres plus half the shared marker's depth, between
+%% an agent and a thing in front of it. The marker stands for the space
+%% outside, whatever it measures inside.
+space_near(Size, Near) :-
+    unique_solution(scene_vocabulary(Scene,Anchor)),
+    in_ontology(Scene,Anchor,marker_size(Size)),
+    Near is 2000 + Size // 2.
 %% Candidates run straight ahead, then alternately right and left, one and a
 %% half markers apart. A place is free when no placed thing whose location
 %% can be read stands within one marker of it on every axis.
@@ -324,18 +329,35 @@ eidolon(space_enter,subject(ontology_ref(Ns,A),instance(Space)),operation(Form))
     Form = space_travel_form(Agent,Revision,Before,placed(Destination,transform(0,0,0,0,0,0))).
 eidolon(space_leave,subject(ontology_ref(Ns,A),instance(Space)),operation(Form)) :-
     space_travel_context(Agent,Revision,entity_ref(Ns,A,Space)),
-    Form = space_travel_form(Agent,Revision,entity_ref(Ns,A,Space),unplaced).
+    space_leave_to(entity_ref(Ns,A,Space),After),
+    Form = space_travel_form(Agent,Revision,entity_ref(Ns,A,Space),After).
+%% Leaving a space that stands in another returns to that one, where a
+%% creator of the space stood: near in front of its marker, facing it. A
+%% space that stands nowhere is left for nowhere. A parent that refuses the
+%% agent refuses the leave; it never falls back to nowhere.
+space_leave_to(Space,After) :-
+    space_assignment(Space,_,Parent),
+    (Parent == none -> After = unplaced
+    ; space_location(Space,placed(Parent,transform(X,Y,Z,RX,RY,RZ))),
+      space_near(_,Near), StandZ is Z + Near,
+      After = parent(Parent,transform(X,Y,StandZ,RX,RY,RZ))).
 space_travel_context(Agent,Revision,Before) :-
     quod:user::personal_agent(Agent,_),
     Agent = agent_instance_ref(Ns,A,Entity), space_assignment(entity_ref(Ns,A,Entity),Revision,Before).
 instance_of(quod:gui:form,space_travel_form(_,_,_,_)).
 instance_of(quod:gui:button,space_travel_submit).
 attribute(space_travel_form(_,_,_,placed(_,_)),label,<<"Enter space">>).
-attribute(space_travel_form(_,_,_,unplaced),label,<<"Leave space">>).
+attribute(space_travel_form(_,_,_,Left),label,<<"Leave space">>) :- space_leaving(Left).
 attribute(space_travel_form(_,_,_,placed(_,_)),image,Icon) :- menu_icon(enter,Icon).
-attribute(space_travel_form(_,_,_,unplaced),image,Icon) :- menu_icon(leave,Icon).
-attribute(space_travel_form(_,_,_,_),help,
-    <<"Move the same personal agent. Navigation follows the committed location. Leaving without a destination makes the agent unplaced.">>).
+attribute(space_travel_form(_,_,_,Left),image,Icon) :- space_leaving(Left), menu_icon(leave,Icon).
+attribute(space_travel_form(_,_,_,placed(_,_)),help,
+    <<"Move the same personal agent into this space. Navigation follows the committed location.">>).
+attribute(space_travel_form(_,_,_,parent(_,_)),help,
+    <<"Go back to the space this one stands in, in front of it.">>).
+attribute(space_travel_form(_,_,_,unplaced),help,
+    <<"This space stands in no other: leaving makes the personal agent unplaced.">>).
+space_leaving(unplaced).
+space_leaving(parent(_,_)).
 attribute(space_travel_submit,label,<<"Move">>).
 gui_children(space_travel_form(_,_,_,_),[space_travel_submit]).
 gui_form(space_travel_form(Agent,Expected,Before,After),[],
@@ -344,11 +366,11 @@ gui_form(space_travel_form(Agent,Expected,Before,After),[],
          Move,
          quod:space::space_assignment(entity_ref(Source,Anchor,Entity),Revision,Destination)),
         operation(space_visit(Agent,Destination),
-            [result(agent,Agent),result(location,After),result(revision,Revision)]))) :-
+            [result(agent,Agent),result(location,Location),result(revision,Revision)]))) :-
     Agent = agent_instance_ref(Source,Anchor,Entity),
-    (After = unplaced -> Destination = none,
+    (After = unplaced -> Destination = none, Location = unplaced,
         Move = quod:space::goal(unplaced(entity_ref(Source,Anchor,Entity)))
-    ; After = placed(Destination,Pose),
+    ; (After = placed(Destination,Pose) ; After = parent(Destination,Pose)), Location = placed(Destination,Pose),
       Move = quod:space::goal(inside(Destination,entity_ref(Source,Anchor,Entity),Pose))).
 
 %% The space's own pie overrides the default. Fixed wedges keep paths
@@ -374,19 +396,20 @@ eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
     append([group(<<"Create here">>,[slot(1),image(CreateIcon)],[operation(class)],Class),
             group(<<"Show as">>,[slot(2),image(ShowIcon)],[operation(instance)],Shows),
             group(<<"Inspect">>,[slot(3),image(InspectIcon)],[prolog,inspection,workspace],Storage)|Actions],
-           [group(<<"Go to">>,[],[operation(instance)],Destinations)],Entries),
+           [group(<<"Go to">>,[image(GoIcon)],[operation(instance)],Destinations)],Entries),
     (binary(Name), Name \== <<"">> -> Title = Name; Title = <<"Space">>),
     menu_vocabulary(Gui,GuiAnchor),
     in_ontology(Gui,GuiAnchor,menu_tree(menu(Title,<<"">>,[],Entries),Tree)).
 space_menu_shows(item(choice(_,eidolon(operation(instance),Name,_)),_,_,_,_)) :- space_show_recipe(Name,_,_).
-space_menu_action(item(T,L,H,Av,_),item(T,L,H,Av,[slot(5),confirm(true)])) :-
+%% Leave takes the bottom wedge and a second press, keeping its form's icon.
+space_menu_action(item(T,L,H,Av,Options),item(T,L,H,Av,[slot(5),confirm(true)|Options])) :-
     T = choice(_,eidolon(operation(instance),leave,_)), !.
 space_menu_action(Item,Item) :- Item = item(choice(_,eidolon(operation(_),_,_)),_,_,_,_).
-space_menu_destination(Space,Ns,A,item(T,Label,H,Av,[])) :-
+space_menu_destination(Space,Ns,A,item(T,Label,H,Av,Options)) :-
     space_contains(entity_ref(Ns,A,Space),entity_ref(CNs,CA,Child)),
     entity_ref(CNs,CA,Child) \== entity_ref(Ns,A,Space), space_instance(entity_ref(CNs,CA,Child),space),
     in_ontology(CNs,CA,gui_menu_source(Child,menu_source(ChildName,Items))),
-    member(item(T,Offered,H,Av,_),Items), T = choice(_,eidolon(operation(instance),enter,_)),
+    member(item(T,Offered,H,Av,Options),Items), T = choice(_,eidolon(operation(instance),enter,_)),
     (binary(ChildName), ChildName \== <<"">> -> Label = ChildName; Label = Offered).
 
 %% Show as: this space's interior choices as offered actions without input

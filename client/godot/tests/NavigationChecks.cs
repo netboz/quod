@@ -158,7 +158,8 @@ public partial class ExportChecks
             $"transaction((assertz(space_member({Entity(s0)},{s2})),assertz(space_member({Entity(s1)},{leaf})),assertz(space_member({Entity(s2)},{s1})))).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
         Check(scene.SubjectIds(leaf).Distinct().Count()==4,"independent recursive paths preserve four occurrences of the same exact subject");
-        Check(scene.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="Contents cycle")==2,"exact ancestor cycles render explicit terminal occurrences on each independent branch");
+        // A label is written twice, back to back: count the labelled occurrences.
+        Check(scene.FindChildren("*","Label3D",true,false).OfType<Label3D>().Where(l=>l.Text=="Contents cycle").Select(l=>l.GetParent()).Distinct().Count()==2,"exact ancestor cycles render explicit terminal occurrences on each independent branch");
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},contents,{t2},none,solid,{t2},none).",timeout.Token);
         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==1 && scene.SubjectIds(s2).Length==2);
         Check(scene.SubjectIds(s2).Length==2,"the marker terminates each selected S2 occurrence while the independent S1 leaf remains visible");

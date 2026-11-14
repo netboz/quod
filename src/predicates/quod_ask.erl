@@ -305,13 +305,24 @@ native_scope_once(Scope,Goal,Chain) ->
         {error,_} = Error -> Error
     end.
 
+%% Tracing only: the called goal as predicate indicators, its first three
+%% conjuncts at most (`name/arity`, joined by commas). Arguments never leave.
+goal_names(Goal) ->
+    iolist_to_binary(lists:join(<<",">>, [goal_indicator(G) || G <- goal_conjuncts(Goal, 3)])).
+goal_conjuncts({',', Left, Right}, N) when N > 1 -> [Left | goal_conjuncts(Right, N - 1)];
+goal_conjuncts(Goal, _) -> [Goal].
+goal_indicator(Goal) when is_atom(Goal) -> [atom_to_binary(Goal), <<"/0">>];
+goal_indicator(Goal) when is_tuple(Goal), tuple_size(Goal) > 1, is_atom(element(1, Goal)) ->
+    [atom_to_binary(element(1, Goal)), $/, integer_to_binary(tuple_size(Goal) - 1)];
+goal_indicator(_) -> <<"_">>.
+
 %% A shared proof session routes every selection through its one origin-owned
 %% scope map. Raw snapshot adapters have no origin authority and are rejected
 %% here before directory resolution, dialing, or target-worker allocation.
 open(_Self, Target, GoalTerm, Chain, St) ->
     quod_trace:with_span(
       quod_trace:context(), <<"quod.ask.open">>, internal,
-      #{'quod.namespace' => Target},
+      #{'quod.namespace' => Target, 'quod.ask.goal' => goal_names(GoalTerm)},
       fun(_Span) ->
           St1 = publish_session(St),
           case session_metadata(St1) of

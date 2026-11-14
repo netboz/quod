@@ -44,7 +44,7 @@ public partial class ExportChecks
         adapter.Install(ControllerMapping.SignIn);adapter.AttachSources();
         var left=Tracker("m4_left",XRPositionalTracker.TrackerHand.Left);var right=Tracker("m4_right",XRPositionalTracker.TrackerHand.Right);
         ulong frame=0;
-        void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked);
+        void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked,Frame90);
         void Pose(XRControllerTracker t,Vector2 pixel) {
             var size=((QuadMesh)adapter.GuiSurface.Mesh).Size;
             var p=new Vector3((pixel.X/gui.Surface.Size.X-.5f)*size.X,(.5f-pixel.Y/gui.Surface.Size.Y)*size.Y,1);
@@ -148,7 +148,7 @@ public partial class ExportChecks
         Check(clicked==expectedClicks && adapter.Sources.Single(s=>s.Tracker==left).Grip.GetChildren().OfType<Node3D>().All(n=>!n.Visible),
             "lost grip pose hides that wand and cannot select through a retained ray");
         left.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
-        Held(left,"trigger_press",true);adapter.Advance(frame,true,true,true);Held(left,"trigger_press",false);
+        Held(left,"trigger_press",true);adapter.Advance(frame,true,true,true,Frame90);Held(left,"trigger_press",false);
         Check(clicked==expectedClicks,"duplicate stale frame cancels pending selection");
         Advance();Held(left,"trigger_press",true);adapter.Visibility(false);Advance();
         Check(ModelsHidden() && gui.Captures==0,"desktop visibility remains a persistent input and model gate");
@@ -230,6 +230,18 @@ public partial class ExportChecks
         Pose(right,gui.Surface.Size/2);Advance();Pose(right,onWedge);Advance();
         Held(right,"trigger_press",true);Held(right,"trigger_press",false);Held(right,"pad_press",false);
         Check(menuActivated==2 && adapter.Router.MenuOwner==null,"trigger wedge choice consumes its later pad release exactly once");
+        // Yan's gesture of 2026-11-14: the pad pressed near its centre and held,
+        // the ray brought onto a wedge, then the pad released. A thumb that
+        // shifts while lifting, or lifts off, must not take the ray's wedge away.
+        foreach(var lift in new[]{Vector2.Zero,new Vector2(.05f,.02f)}) {
+            int chosenBefore=menuActivated;
+            right.SetInput("pad_axes",Vector2.Zero);Advance();right.SetInput("pad_axes",new Vector2(.02f,.03f));Held(right,"pad_press",true);
+            Pose(right,gui.Surface.Size/2);Advance();Pose(right,onWedge);Advance();
+            Check(pie.Navigator!.Hovered==1,"the ray lights its wedge while the pad stays pressed near its centre");
+            right.SetInput("pad_axes",lift);Held(right,"pad_press",false);
+            Check(menuActivated==chosenBefore+1 && !pie.IsOpen,$"releasing the pad chooses the ray's wedge though the thumb moved to {lift} while lifting");
+            if(pie.IsOpen)adapter.CancelMenu();
+        }
         right.SetInput("pad_axes",Vector2.Zero);Advance();right.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();beforeRedraw=adapter.MenuRedraws;Held(right,"pad_press",true);
         Check(adapter.MenuRedraws==beforeRedraw,"unknown handedness does not receive the default menu role");Held(right,"pad_press",false);
         left.Profile="unsupported-profile";Advance();Pose(left,button.GetGlobalRect().GetCenter());Held(left,"trigger_press",true);Held(left,"trigger_press",false);

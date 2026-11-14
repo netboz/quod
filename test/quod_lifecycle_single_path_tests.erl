@@ -767,6 +767,7 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
     Resolve(), quod_outcome_result_tests:assert_unchanged_reads([Ns],Resolve,3),
     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
     m3a_recursive(User,C,S0,S1,S2),
+    FinalRevision=m3a_leave_to_parent(User,C,S0,S1,S2),
     FinalState=m2_state([Ns]),
     io:format("M3a signed same-agent route: ~p -> ~p -> ~p -> ~p -> ~p~n",[S0,S1,S2,S1,S0]),
     fun() ->
@@ -775,15 +776,15 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
     ?assertEqual(FinalState,m2_state([Ns])),
     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
     {agent_instance_ref,_,_,Personal}=Actor,
-    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment_state,Personal,11,S0})),
+    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment_state,Personal,FinalRevision,S0})),
     Resolve(),
     ok=quod_ct:write_evidence_json("QUOD_M3A_EVIDENCE","same-agent-route",
         #{schema => <<"m3a-same-agent-v1">>,
           agent => quod_client_goal_parser:value_text(Actor),
-          route => [quod_client_goal_parser:value_text(S)||S<-[S0,S1,S2,S1,S0,unplaced,S0]],
+          route => [quod_client_goal_parser:value_text(S)||S<-[S0,S1,S2,S1,S0,unplaced,S0,S2,S1,S2,S0]],
           original_enter_request_sha256 => binary:encode_hex(crypto:hash(sha256,EnterBytes)),
           original_enter_result => quod_client_goal_parser:value_text(m1a_output(EnterResult)),
-          final_assignment_revision => 11,
+          final_assignment_revision => FinalRevision,
           original_outcome_after_owner_restart => true,
           exact_state_after_owner_restart => true})
     end.
@@ -886,6 +887,34 @@ m3a_recursive(User,C,S0,S1,S2) ->
     %% argument is the expected read count across its three repetitions.
     quod_outcome_result_tests:assert_unchanged_reads([Ns],Read,0),
     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))).
+
+%% Leaving a space that stands in another returns the agent to that one, near
+%% in front of the space's marker and facing it, as its creator stood; the
+%% starting space stands nowhere, so leaving it makes the agent unplaced
+%% (m3a_travel). A parent that refuses the agent refuses the leave: nothing
+%% moves and the agent is not made unplaced.
+m3a_leave_to_parent(User,C,S0,S1,S2) ->
+    Ns=element(2,S0), Actor=maps:get(agent,C), Personal=m2_entity(User,personal),
+    {placed,S1,{transform,X,Y,Z,RX,RY,RZ}}=m1a_read(User,m2_space({space_location,S2,{0}})),
+    Stand={transform,X,Y,Z+2250,RX,RY,RZ},
+    Revision=fun() -> m1a_read(User,m2_space({space_assignment,Personal,{0},{'_'}})) end,
+    Enter=fun() -> {Entered,_}=m2_create(C,Ns,m3a_offer(User,S2,enter),[]), m3a_committed(Entered) end,
+    Enter(), Before=Revision(),
+    Leave=m3a_offer(User,S2,leave),
+    {Left,_}=m2_create(C,Ns,Leave,[]), m3a_committed(Left),
+    ?assertEqual([{result,agent,Actor},{result,location,{placed,S1,Stand}},{result,revision,Before+2}],m1a_output(Left)),
+    ?assertEqual({placed,S1,Stand},m1a_read(User,m2_space({space_location,Personal,{0}}))),
+    Enter(),
+    Deny={instance_permission,element(4,S1),space_admit,deny},
+    m2_edit(User,{assertz,Deny}),
+    Refused=m3a_offer(User,S2,leave), Unchanged=m2_state([Ns]),
+    {{failed,_},_}=m2_create(C,Ns,Refused,[]),
+    ?assertEqual(Unchanged,m2_state([Ns])),
+    ?assertEqual({placed,S2,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,Personal,{0}}))),
+    m2_edit(User,{retract,Deny}),
+    {Home,_}=m2_create(C,Ns,m3a_offer(User,S0,enter),[]), m3a_committed(Home),
+    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,Personal,{0}}))),
+    ?assertEqual(Before+6,Revision()), Revision().
 
 m3a_offer(User,Space,Name) ->
     Offers = m1a_read(User,{gui_operations,Space,{0}}),

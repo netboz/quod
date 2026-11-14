@@ -120,7 +120,9 @@ the previous visual consumer. Recipes may live in the same ontology as their cla
 
 Solid primitives retain authored colour, metallic, roughness and emission values.
 Neutral adapter lighting distinguishes solid faces against the ordinary black
-background. Wire and corner geometry remains unshaded and labels stay opaque. This supplies
+background. Wire and corner geometry remains unshaded and labels stay opaque. A
+label stands with its thing in the world, written back to back so it reads from
+the thing's front and from behind; it never turns toward the viewer. This supplies
 no physical sun, collision geometry or measured headset readability guarantee.
 
 A mark may carry three surfaces: display, pointed at and selected. Every mark
@@ -322,9 +324,12 @@ central angular extent and text/target scale. Text size remains independently
 adjustable. This is idealized presentation geometry, not a lens/comfort claim.
 Initial placement, explicit repositioning and every opening of a panel or form
 use the current tracked head's position and horizontal forward direction. The
-panel faces the eye and sits below eye level by the device profile's angle,
-raised as far as needed for its lower edge to end where the HUD strip begins
-(about 9° below with the first Vive profile); it is then world-locked. A vertical-only
+panel faces the eye and sits below eye level by the device profile's panel
+angle (9° with the first Vive profile, above the HUD strip); it is then
+world-locked. Nearer and Farther keep it between 1.25 m and 4 m. A form opened
+beside a thing in the world stands by the same rule (the panel's distance and
+angle, facing the eye), beside the thing on the side toward where the head
+looked when it opened, and stays there until the thing moves. A vertical-only
 direction waits for a measurable heading. The existing XR frame owner places
 it once; ordinary head movement leaves the panel stationary.
 Hide retains the controls/drafts. The mapped menu can summon the hidden workspace
@@ -368,7 +373,8 @@ the reserved back wedge returns to the parent, and a click or trigger release
 anywhere but on a wedge cancels. Unavailable wedges stay visible with their
 reason in the hub; a confirmed wedge asks for a second press. On desktop, Backspace goes back, Enter commits, digits pick wedges and
 the Menu key opens the pointed target's pie. In VR the pie has its own
-world-locked surface at the device profile's reading distance; only the
+world-locked surface at the device profile's reading distance, at least 15°
+below eye level whether it belongs to the space or to a pointed thing; only the
 controller that opened it steers it with its ray. A re-read of the space the headset stands in (after
 any commit there) keeps the headset's place in it; only another space, a lost
 view or the runtime's own recentre takes it again from the agent's place.
@@ -378,16 +384,19 @@ open form closes and cancels it, as its Close button does; a form that was sent
 stays until its result is known. The HUD strip
 shows the human's `hud_commands/1` view, the one local "This device" command
 and the last status sentence: along the bottom edge on desktop, and in VR on
-its own surface 25° below eye level that follows the body only after a 35°
-head turn; it waits while the spatial keyboard is up, which extends below the
+its own surface 35° below eye level that stands in the room like the panel: it
+moves only after a 35° head turn or a walk of more than half a metre, gliding
+there in 0.3 s. Its smallest text, as the pie's, is 17 px (0.6°). It waits while the spatial keyboard is up, which extends below the
 panel into its place. Agents the human already lets put questions before them may offer a command;
 the offer waits until the human answers it through **Offered commands** in
 their own pie. A strip click is committed by the same pie as any wedge, so a
 command that asks for confirmation still asks.
 For reading a session back, the client writes `QUOD_TRACE` console lines: one
 per pie opened (when its socket opened, when the node answered, when its first
-frame was drawn), one per icon fetched, and one per headset press and release
-(what the ray reached). Nothing of it is shown on screen.
+frame was drawn), one per pie ended (the wedge chosen, or why none was, and
+whether the pad or the pointer set the direction last), one per icon fetched,
+and one per headset press and release (what the ray reached). Nothing of it is
+shown on screen.
 Editable text, numeric and source fields in the spatial workspace expose an
 opaque adjacent AZERTY keyboard. Keys use the same native editor, caret,
 selection, undo and draft events; Enter follows the field's native semantics

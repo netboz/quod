@@ -17,6 +17,8 @@ public partial class ExportChecks : Node
     string Env(string name) => Environment.GetEnvironmentVariable(name) ?? throw new Exception(name);
     JsonNode State => JsonNode.Parse(app.Inspect())!;
     bool Busy => State["busy"]!.GetValue<bool>();
+    // One injected headset frame lasts as long as a 90 Hz display's.
+    const double Frame90=1/90.0;
     void Check(bool yes, string name) { if (!yes) throw new Exception(name + ": " + State["status"]?.ToString()); checks.Add(name); Console.WriteLine("PASS " + name); Console.Out.Flush(); }
     async Task Until(Func<bool> predicate)
     {

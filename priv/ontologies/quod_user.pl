@@ -422,15 +422,16 @@ eidolon(personal_menu, subject(ontology_ref(Ns, A), personal), menu(Tree)) :-
              gui_menu_source(Human, menu_source(_, Own)), member(Item, Own)), Choices))),
     (quod:space::space_location(entity_ref(Ns, A, personal), unplaced) ->
         Title = <<"You are nowhere yet">>; Title = <<"You">>),
+    menu_icon(go_to, KnownIcon), menu_icon(create_here, CreateIcon), menu_icon(me, MeIcon),
     menu_vocabulary(Gui, GuiAnchor),
     in_ontology(Gui, GuiAnchor, menu_tree(menu(Title, <<"">>, [],
-        [group(<<"Enter a known space">>, [slot(1)], [operation(instance)], Known),
-         group(<<"Create a space">>, [slot(3)], [operation(class)], Create),
-         group(<<"Your choices">>, [slot(5)], [operation(instance),playing,edition,prolog,inspection,workspace], Choices)]), Tree)).
-personal_menu_destination(ontology_ref(Ns, A), item(T, Label, Help, Availability, [])) :-
+        [group(<<"Enter a known space">>, [slot(1), image(KnownIcon)], [operation(instance)], Known),
+         group(<<"Create a space">>, [slot(3), image(CreateIcon)], [operation(class)], Create),
+         group(<<"Your choices">>, [slot(5), image(MeIcon)], [operation(instance),playing,edition,prolog,inspection,workspace], Choices)]), Tree)).
+personal_menu_destination(ontology_ref(Ns, A), item(T, Label, Help, Availability, Options)) :-
     quod:space::space_instance(entity_ref(Ns, A, Space), space), Space \= ontology_ref(_, _),
     in_ontology(Ns, A, gui_menu_source(Space, menu_source(Name, Items))),
-    member(item(T, Offered, Help, Availability, _), Items),
+    member(item(T, Offered, Help, Availability, Options), Items),
     T = choice(_, eidolon(operation(instance), enter, _)),
     (binary(Name), Name \== <<"">> -> Label = Name; Label = Offered).
 

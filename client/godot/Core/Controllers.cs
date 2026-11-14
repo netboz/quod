@@ -260,7 +260,8 @@ public sealed class ControllerInput(IControllerConsumer consumer) : IDisposable
             } else {
                 if(pointer!=null && !(pointer==s && menu==s)) { g.Armed=false;continue; }
                 if(down && menu==null && consumer.OpenMenu(s.Input,c.Axes,g.Binding.Threshold)) { StopTravel();menu=s; }
-                if(menu==s) { consumer.MoveMenu(c.Axes,g.Binding.Threshold);if(up){menu=null;consumer.CommitMenu();ContextChanged();} }
+                // The sample on which the pad comes up is the thumb lifting, not a choice.
+                if(menu==s) { if(up){menu=null;consumer.CommitMenu();ContextChanged();} else consumer.MoveMenu(c.Axes,g.Binding.Threshold); }
             }
         }
         foreach(var e in edges.Where(e=>e.G.Binding.Id is not ("select" or "menu"))) {

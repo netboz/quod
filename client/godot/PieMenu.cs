@@ -30,6 +30,9 @@ public partial class PieMenu : Control
     public bool PointerMoved { get; private set; }
     NumericsVector2 direction;
     NumericsVector2? axesSeen;
+    // Which input last set the pointed direction, for the console line that
+    // says how the pie ended.
+    string steeredBy="nothing";
     public float Threshold { get; set; }=.3f;
     // The texture for a node's authored image, when the host has it.
     public Func<MenuNode,Texture2D?>? Icons { get; set; }
@@ -52,7 +55,7 @@ public partial class PieMenu : Control
     // Opens at a point of this control while the subject's menu is read.
     public void Open(Vector2 at,float size,string reading)
     {
-        navigator=null;waiting=reading;presented="";radius=size;pointerKnown=pointerAway=PointerMoved=false;axesSeen=null;direction=NumericsVector2.Zero;
+        navigator=null;waiting=reading;presented="";radius=size;pointerKnown=pointerAway=PointerMoved=false;axesSeen=null;direction=NumericsVector2.Zero;steeredBy="nothing";
         centres.Clear();centres.Add(Clamp(at));Visible=true;GrabFocus();Refresh();
     }
     // An unchanged projection does no work; a changed one keeps the user's
@@ -72,15 +75,22 @@ public partial class PieMenu : Control
         }
         navigator.Move(direction,Now);Refresh();
     }
-    public void Close(){if(!Visible)return;Visible=false;navigator=null;centres.Clear();ReleaseFocus();Refresh();}
+    public void Close()=>End("closed by the client");
+    // Every way a pie ends writes one console line: what was chosen, or why nothing was.
+    void End(string how)
+    {
+        if(!Visible)return;
+        Quod.Client.Trace.Line("pie",$"ended {how} level=\"{navigator?.Level.Label??"unanswered"}\" lit={navigator?.Hovered??0} steered_by={steeredBy}");
+        Visible=false;navigator=null;centres.Clear();ReleaseFocus();Refresh();
+    }
     // The user gave the pie up: nothing is chosen.
-    public void Dismiss(){if(!Visible)return;Close();Dismissed?.Invoke();}
+    public void Dismiss(string why="dismissed"){if(!Visible)return;End(why);Dismissed?.Invoke();}
     // Pad axes: absolute direction from the pad centre. Repeated unchanged
     // samples are not movement, so a moving ray can take over.
     public void MoveAxes(NumericsVector2 axes)
     {
         if(axesSeen is {} seen&&NumericsVector2.Distance(seen,axes)<.01f)return;
-        axesSeen=axes;Move(axes);
+        axesSeen=axes;steeredBy="pad";Move(axes);
     }
     // Where a point of this control aims: a wedge's direction while it is on
     // the drawn ring, nothing on the hub or beyond the edge.
@@ -93,10 +103,10 @@ public partial class PieMenu : Control
     {
         if(!pointerKnown){pointer=point;pointerKnown=true;return;}
         if(!pointerAway&&point.DistanceTo(pointer)<1)return;
-        pointerAway=false;PointerMoved=true;pointer=point;Move(Aim(point));
+        pointerAway=false;PointerMoved=true;pointer=point;steeredBy="pointer";Move(Aim(point));
     }
     // The ray left this control's surface: it points nothing until it returns.
-    public void PointerAway(){if(!pointerKnown||pointerAway)return;pointerAway=true;Move(NumericsVector2.Zero);}
+    public void PointerAway(){if(!pointerKnown||pointerAway)return;pointerAway=true;steeredBy="pointer";Move(NumericsVector2.Zero);}
     void Move(NumericsVector2 next)
     {
         direction=next;if(navigator==null)return;int depth=navigator.Path.Count;
@@ -108,11 +118,12 @@ public partial class PieMenu : Control
     public void Back(){if(navigator?.Back()==true){centres.RemoveAt(centres.Count-1);Refresh();}}
     public PieOutcome Commit()
     {
-        if(navigator==null){Dismiss();return PieOutcome.Cancelled;}
+        if(navigator==null){Dismiss("cancelled before its contents arrived");return PieOutcome.Cancelled;}
         int depth=navigator.Path.Count;var outcome=navigator.Commit();
         if(outcome==PieOutcome.Open){Follow(depth);Refresh();return outcome;}
-        var chosen=navigator.Selection;Close();
-        if(outcome==PieOutcome.Selected)Selected?.Invoke(chosen!);else Dismissed?.Invoke();
+        var chosen=navigator.Selection;
+        if(outcome==PieOutcome.Selected){End($"chose \"{navigator.HoveredItem?.Label??chosen!.Label}\"");Selected?.Invoke(chosen!);}
+        else Dismiss("cancelled: released on no wedge");
         return outcome;
     }
     // A click or trigger release decides where it lands: on a wedge it commits
@@ -120,7 +131,7 @@ public partial class PieMenu : Control
     public PieOutcome CommitAt(Vector2? point)
     {
         if(point is Vector2 at){pointer=at;pointerKnown=true;}
-        pointerAway=point==null;int depth=navigator?.Path.Count??0;
+        pointerAway=point==null;steeredBy="pointer";int depth=navigator?.Path.Count??0;
         Move(point is Vector2 on ? Aim(on) : NumericsVector2.Zero);
         // Marking mode opened the pointed sub-pie at this very moment: that is the outcome.
         return navigator!=null&&navigator.Path.Count!=depth ? PieOutcome.Open : Commit();
@@ -190,7 +201,7 @@ public partial class PieMenu : Control
         }
         Disc(centre,radius*Hub,Glass,warns ? Rose : Gold,2,radius*.05f);
         bool named=navigator?.Hovered>0;
-        Words(font,centre,Title,Note,named ? size*3/2 : size,size,named ? pointed is {Enabled:false} ? Ink with {A=.7f} : Ink : Muted,armed ? RoseLight : Muted);
+        Words(font,centre,Title,Note,named ? size*3/2 : size,named ? pointed is {Enabled:false} ? Ink with {A=.7f} : Ink : Muted,armed ? RoseLight : Muted);
     }
     // A round disc with a smooth edge and, when asked, a soft shadow beneath:
     // a few widening rings of shade, densest at the disc.
@@ -224,13 +235,15 @@ public partial class PieMenu : Control
     }
     // The hub's words, centred: the title as large as asked while it fits the
     // hub, wrapped between words; the note smaller beneath it.
-    void Words(Font font,Vector2 centre,string title,string note,int asked,int plain,Color ink,Color quiet)
+    // The note's size: three quarters of the text size, never under the smallest text.
+    internal int NoteSize=>Math.Max(DeviceProfile.SmallestTextPixels,GetThemeDefaultFontSize()*3/4);
+    void Words(Font font,Vector2 centre,string title,string note,int asked,Color ink,Color quiet)
     {
-        float width=radius*Hub*1.6f,height=radius*Hub*1.2f;int small=Math.Max(12,plain*3/4),gap=note.Length>0 ? small/3 : 0;
+        float width=radius*Hub*1.6f,height=radius*Hub*1.2f;int small=NoteSize,gap=note.Length>0 ? small/3 : 0;
         float noteHeight=note.Length>0 ? font.GetMultilineStringSize(note,HorizontalAlignment.Center,width,small).Y : 0;
         bool Fits(int at)=>font.GetMultilineStringSize(title,HorizontalAlignment.Center,width,at).Y+gap+noteHeight<=height&&
             title.Split(' ').All(word=>font.GetStringSize(word,HorizontalAlignment.Left,-1,at).X<=width);
-        int chosen=asked;while(chosen>12&&!Fits(chosen))chosen-=2;
+        int chosen=asked;while(chosen>DeviceProfile.SmallestTextPixels&&!Fits(chosen))chosen-=1;
         float titleHeight=font.GetMultilineStringSize(title,HorizontalAlignment.Center,width,chosen).Y;
         var top=new Vector2(centre.X-width/2,centre.Y-(titleHeight+gap+noteHeight)/2);
         DrawMultilineString(font,top+new Vector2(0,font.GetAscent(chosen)),title,HorizontalAlignment.Center,width,chosen,-1,ink);
@@ -243,7 +256,7 @@ public partial class PieMenu : Control
         switch(input) {
             case InputEventMouseMotion motion: PointerAt(motion.Position);break;
             case InputEventMouseButton {ButtonIndex:MouseButton.Left,Pressed:true} click: CommitAt(click.Position);break;
-            case InputEventMouseButton {ButtonIndex:MouseButton.Right,Pressed:true}: Dismiss();break;
+            case InputEventMouseButton {ButtonIndex:MouseButton.Right,Pressed:true}: Dismiss("dismissed with the right button");break;
             case InputEventKey {Pressed:true} key: if(!Key(key))return;break;
             default: return;
         }
@@ -253,7 +266,7 @@ public partial class PieMenu : Control
     {
         int wedges=navigator?.Level.Wedges??8;
         switch(key.Keycode) {
-            case Godot.Key.Escape: Dismiss();return true;
+            case Godot.Key.Escape: Dismiss("dismissed with Escape");return true;
             case Godot.Key.Backspace: Back();return true;
             case Godot.Key.Enter or Godot.Key.KpEnter: Commit();return true;
             case Godot.Key.Up: Choose(MenuNode.Direction(new(0,-1),.5f,wedges));return true;

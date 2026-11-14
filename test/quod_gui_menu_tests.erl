@@ -110,6 +110,8 @@ space_pie_overrides_the_default_test_() ->
         ?assertEqual(<<"Closet">>,property(Closet,label)),
         ?assertMatch({choice,{entity_ref,Ns,Anchor,closed},{eidolon,{operation,instance},enter,_}},
                      property(Closet,target)),
+        %% Every wedge of the space's pie carries its icon from quod:gui.
+        ?assertEqual([icon(C,leave),icon(C,go_to),icon(C,enter)],[property(W,image) || W <- [Leave,GoTo,Closet]]),
         %% The class itself keeps the shared default pie: its creation forms.
         {menu,ClassPie} = menu(C,space_class()),
         ?assertEqual(lists:sort([<<"Create space">>,<<"Create space with rational lengths">>,<<"Create infinite space">>]),
@@ -278,6 +280,9 @@ unplaced_agent_pie_offers_the_ways_in_test_() ->
         ?assertEqual(<<"You are nowhere yet">>,property(Tree,label)),
         plain_labels(Tree),
         Known = wedge(Tree,1), ?assertEqual(<<"Enter a known space">>,property(Known,label)),
+        %% Each group and each known space carries its icon from quod:gui.
+        ?assertEqual([icon(C,go_to),icon(C,create_here),icon(C,me)],[property(wedge(Tree,N),image) || N <- [1,3,5]]),
+        ?assertEqual([icon(C,enter)],lists:usort([property(I,image) || I <- children(Known)])),
         ?assertMatch([{<<"Workshop">>,{choice,{entity_ref,Ns,Anchor,room},{eidolon,{operation,instance},enter,_}}}],
             [{property(I,label),property(I,target)} || I <- children(Known), property(I,label) =:= <<"Workshop">>]),
         ?assertEqual(<<"Create a space">>,property(wedge(Tree,3),label)),
@@ -383,6 +388,7 @@ read(C,Goal) ->
         {ok,_,{normalized,Other}} -> error({menu_read_error,element(1,Other)})
     end.
 ref(Ns,Id) -> {entity_ref,Ns,quod_simplex:genesis_hash(Ns),Id}.
+icon(C,Name) -> read(C,{'::',<<"quod:gui">>,{gui_icon,Name,{'Icon'}}}).
 space_class() -> {':',quod,{':',space,space}}.
 space(Goal) -> {'::',<<"quod:space">>,Goal}.
 

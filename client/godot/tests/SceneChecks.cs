@@ -64,6 +64,15 @@ public partial class ExportChecks
             Part(thing,"sides","box",Looks("#848FA5",0,30,40,120),"unlabelled") + "," + Part(thing,"corners","corner_box",Looks("#C9D2DB",1000,1000,1000,1000),"label(<<\"Space\">>,<<\"above\">>)");
         var markers = Term.Parse("[" + Marker("subject","transform(0,0,0,0,30,0)","artifact") + "," + Marker("other","transform(1500,0,0,0,30,0)","neighbour") + "," + Marker("third","transform(3000,0,0,0,30,0)","bystander") + "]");
         scene.Apply(markers); await Frame();
+        // A label stands with its thing: never turned toward the camera, written
+        // twice back to back so it reads from the front and from behind.
+        var named=scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Where(l=>l.Text=="Space").GroupBy(l=>l.GetParent()).ToArray();
+        Check(named.Length==3 && named.All(g=>g.Count()==2 && g.All(l=>l.Billboard==BaseMaterial3D.BillboardModeEnum.Disabled && !l.DoubleSided)),
+            "each thing's label is fixed in the world, written twice, each copy seen from one side only");
+        var facing=named.OrderBy(g=>g.First().GlobalPosition.DistanceTo(scene.WorldPose("subject").Origin)).First().ToArray();
+        var thingFront=scene.WorldPose("subject").Basis.Z;
+        Check(facing[0].GlobalBasis.Z.DistanceTo(thingFront)<.001f && facing[1].GlobalBasis.Z.Dot(thingFront)<-.999f,
+            "the label turns with its thing: one copy faces the thing's front, its twin the back");
         var fading=scene.SceneRoot.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>().First(m=>m.Mesh is ImmediateMesh);
         var drawn=RenderingServer.MeshGetSurface(fading.Mesh.GetRid(),0);
         Check(drawn["primitive"].AsInt32()==(int)RenderingServer.PrimitiveType.Lines && drawn["vertex_count"].AsInt32()==48 &&
@@ -100,7 +109,7 @@ public partial class ExportChecks
         Check(scene.ShowMode(here!,Term.Parse(Model("artifact",""))) && scene.Count==count && scene.Rebuilt==built,"the display model shown again in place changes and rebuilds nothing");
         Check(scene.ShowMode(here,Term.Parse(Model("artifact",sizeLine))) && scene.Count==count+1 && scene.Rebuilt==built+1,"another mode adds only its own new part to that one thing");
         Check(scene.WorldPose("subject").IsEqualApprox(place) && scene.WorldPose("subject/size").Origin.IsEqualApprox(place.Origin+new Vector3(0,-.25f,0)),"the mode is drawn where the thing stands, not at the model's own pose");
-        Check(scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="10 m")==1 && here.Pose!=null && here.Label=="Space","the thing keeps its selection and shows the mode's line");
+        Check(scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="10 m")==2 && here.Pose!=null && here.Label=="Space","the thing keeps its selection and shows the mode's line");
         scene.ShowSelected(here);Check(Shown(ours,2) && Shown(theirs,0),"a thing drawn in another mode still shows its selected look");
         scene.Apply(markers);Check(scene.Count==count+1 && scene.Rebuilt==built+1,"an unchanged world view keeps the thing in its mode and rebuilds nothing");
         Check(!scene.ShowMode(here,Term.Parse(Model("neighbour",sizeLine))) && !scene.ShowMode(here,markers) && scene.Count==count+1,"a model of another thing, or of several, is not drawn in this thing's place");

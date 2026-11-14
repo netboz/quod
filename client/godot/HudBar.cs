@@ -11,7 +11,9 @@ using Quod.Client;
 // and nesting.
 public partial class HudBar : Control
 {
-    public const float Height=104;
+    public const float Height=112;
+    // The status sentence's own band above the commands, and its text size.
+    const float StatusBand=30;const int StatusText=18;
     const float Icon=44;
     static readonly Color Glass=new(0x19/255f,0x2B/255f,0x32/255f,.9f),Edge=new(0x84/255f,0x8F/255f,0xA5/255f,.5f),
         Ink=new(0xF5/255f,0xF1/255f,0xEB/255f),Muted=new(0xC9/255f,0xD2/255f,0xDB/255f),
@@ -42,9 +44,9 @@ public partial class HudBar : Control
         var backdrop=new TextureRect {Name="hud-backdrop",MouseFilter=MouseFilterEnum.Ignore,StretchMode=TextureRect.StretchModeEnum.Scale,
             ExpandMode=TextureRect.ExpandModeEnum.IgnoreSize,Texture=new GradientTexture2D {Gradient=gradient,Width=4,Height=64,FillFrom=new(0,0),FillTo=new(0,1)}};
         backdrop.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);AddChild(backdrop);
-        status.SetAnchorsPreset(LayoutPreset.TopWide);status.OffsetLeft=18;status.OffsetRight=-18;status.OffsetTop=2;status.OffsetBottom=26;
-        status.AddThemeColorOverride("font_color",Muted);AddChild(status);
-        row.SetAnchorsPreset(LayoutPreset.BottomWide);row.OffsetTop=-(Height-26);row.OffsetBottom=-4;
+        status.SetAnchorsPreset(LayoutPreset.TopWide);status.OffsetLeft=18;status.OffsetRight=-18;status.OffsetTop=2;status.OffsetBottom=StatusBand;
+        status.AddThemeColorOverride("font_color",Muted);status.AddThemeFontSizeOverride("font_size",StatusText);AddChild(status);
+        row.SetAnchorsPreset(LayoutPreset.BottomWide);row.OffsetTop=-(Height-StatusBand);row.OffsetBottom=-4;
         row.AddThemeConstantOverride("separation",22);AddChild(row);
         row.AddChild(device);RefreshIcons();
     }
@@ -61,7 +63,7 @@ public partial class HudBar : Control
             var chosen=command;
             var item=Command(command,"hud-"+command.Slot,button=>Activated?.Invoke(chosen,button));
             var button=Button(item);button.Disabled=!command.Enabled;button.SetMeta("label",command.Label);
-            if(IsAttention(command))attentionBadge=Badge(button,"",new Vector2(Icon-12,-8));
+            if(IsAttention(command))attentionBadge=Badge(button,"",new Vector2(Icon-BadgeSize+6,-10));
             row.AddChild(item);
         }
         row.MoveChild(device,-1);
@@ -93,9 +95,9 @@ public partial class HudBar : Control
         var button=new Button {Name=name,CustomMinimumSize=new(Icon,Icon),SizeFlagsHorizontal=SizeFlags.ShrinkCenter,ExpandIcon=true,
             IconAlignment=HorizontalAlignment.Center,TooltipText=node.Help.Length>0 ? node.Label+" · "+node.Help : node.Label,FocusMode=FocusModeEnum.None};
         Round(button);button.Pressed+=()=>pressed(button);item.AddChild(button);shown.Add((button,node));
-        if(!node.Leaf)Badge(button,"▸",new Vector2(Icon-14,Icon-14));
+        if(!node.Leaf)Badge(button,"▸",new Vector2(Icon-BadgeSize+4,Icon-BadgeSize+4));
         var caption=new Label {Text=node.Label,HorizontalAlignment=HorizontalAlignment.Center,MouseFilter=MouseFilterEnum.Ignore,CustomMinimumSize=new(84,0),Modulate=new(1,1,1,0)};
-        caption.AddThemeFontSizeOverride("font_size",12);caption.AddThemeColorOverride("font_color",Ink);
+        caption.AddThemeFontSizeOverride("font_size",DeviceProfile.SmallestTextPixels);caption.AddThemeColorOverride("font_color",Ink);
         caption.AddThemeColorOverride("font_shadow_color",new Color(0,0,0,.75f));caption.AddThemeConstantOverride("shadow_offset_y",1);
         button.MouseEntered+=()=>caption.Modulate=Colors.White;button.MouseExited+=()=>caption.Modulate=new(1,1,1,0);
         item.AddChild(caption);
@@ -112,18 +114,20 @@ public partial class HudBar : Control
         button.AddThemeStyleboxOverride("pressed",Disc(new(0x2A/255f,0x3F/255f,0x48/255f,.95f),Gold,2));
         button.AddThemeStyleboxOverride("focus",Disc(Glass,Gold,1));
         button.AddThemeStyleboxOverride("disabled",Disc(Glass with {A=.6f},Edge with {A=.3f},1));
-        button.AddThemeFontSizeOverride("font_size",15);
+        button.AddThemeFontSizeOverride("font_size",DeviceProfile.SmallestTextPixels);
         foreach(string state in new[]{"font_color","font_hover_color","font_pressed_color","font_focus_color"})button.AddThemeColorOverride(state,Ink);
         button.AddThemeColorOverride("font_disabled_color",new(0x8A/255f,0x9A/255f,0xA3/255f));
         button.AddThemeColorOverride("icon_disabled_color",new(1,1,1,.55f));
     }
-    // A small gold disc on a command: the sub-pie mark or the attention count.
+    // A small gold disc on a command: the sub-pie mark or the attention count,
+    // as large as the smallest text it carries needs.
+    const int BadgeSize=DeviceProfile.SmallestTextPixels+9;
     static Label Badge(Control host,string text,Vector2 at)
     {
         var badge=new Label {Text=text,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,
-            MouseFilter=MouseFilterEnum.Ignore,CustomMinimumSize=new(20,20),Position=at,Visible=text.Length>0};
-        badge.AddThemeFontSizeOverride("font_size",11);badge.AddThemeColorOverride("font_color",Teal);
-        var disc=new StyleBoxFlat {BgColor=Gold,ContentMarginLeft=5,ContentMarginRight=5};disc.SetCornerRadiusAll(10);
+            MouseFilter=MouseFilterEnum.Ignore,CustomMinimumSize=new(BadgeSize,BadgeSize),Position=at,Visible=text.Length>0};
+        badge.AddThemeFontSizeOverride("font_size",DeviceProfile.SmallestTextPixels);badge.AddThemeColorOverride("font_color",Teal);
+        var disc=new StyleBoxFlat {BgColor=Gold,ContentMarginLeft=5,ContentMarginRight=5};disc.SetCornerRadiusAll(BadgeSize/2);
         badge.AddThemeStyleboxOverride("normal",disc);
         host.AddChild(badge);return badge;
     }

@@ -91,7 +91,7 @@ public partial class ExportChecks
         void PresentForm()=>form.Visible=adapter.WorkspaceVisible;
         adapter.Changed+=PresentForm;form.TreeExiting+=()=>adapter.Changed-=PresentForm;
         adapter.AttachSources();adapter.Install(mapping);adapter.PresentWorkspace(true);
-        ulong frame=0;void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked);
+        ulong frame=0;void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked,Frame90);
         Advance(tracked:false);
         Check(!adapter.GuiSurface.Visible,"a missing tracked head cannot invent an initial panel placement");
         void Head(Vector3 position,float yaw)=>head.SetPose("default",new(new Basis(Vector3.Up,yaw),position),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
@@ -109,11 +109,10 @@ public partial class ExportChecks
         var openingHead=((Node3D)adapter.FindChild("xr-origin",true,false)).GlobalTransform*head.GetPose("default").GetAdjustedTransform();
         var openingPanel=adapter.GuiSurface.GlobalTransform;var flatForward=-openingHead.Basis.Z;flatForward.Y=0;flatForward=flatForward.Normalized();
         var toPanel=openingPanel.Origin-openingHead.Origin;float tilt=Mathf.RadToDeg(Mathf.Atan2(-toPanel.Y,new Vector2(toPanel.X,toPanel.Z).Length()));
-        // 25° to the strip's centre, less half the strip (104 px of 1600 per metre) and half the panel (1 m at 2 m).
-        float panelBelow=25-Mathf.RadToDeg(Mathf.Atan(104f/1600/2))-Mathf.RadToDeg(Mathf.Atan(.25f));
-        Check(panelBelow<adapter.Profile.BelowEyeDegrees && Math.Abs(tilt-panelBelow)<.01f && Math.Abs(toPanel.Length()-2)<.0001f &&
+        float panelBelow=adapter.Profile.PanelBelowEyeDegrees;
+        Check(Math.Abs(tilt-panelBelow)<.01f && Math.Abs(toPanel.Length()-2)<.0001f &&
             new Vector3(toPanel.X,0,toPanel.Z).Normalized().DistanceTo(flatForward)<.0001f && (-openingPanel.Basis.Z).DistanceTo(toPanel.Normalized())<.0001f,
-            "the actual first tilted tracked head opens the workspace in its level forward heading, 2 m away, facing the eye, its lower edge ending where the strip begins");
+            $"the actual first tilted tracked head opens the workspace in its level forward heading, 2 m away, {panelBelow}° below eye level, facing the eye");
         adapter.PresentWorkspace(false);adapter.PresentWorkspace(true);
         head.SetPose("default",new(Basis.FromEuler(new(Mathf.Pi/2,0,0)),new(1.2f,1.4f,-.7f)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
         Check(!adapter.GuiSurface.Visible,"a vertical-only head direction waits for a measurable horizontal heading rather than inventing one");
@@ -182,23 +181,39 @@ public partial class ExportChecks
         Check(adapter.Router.MenuOwner!=null && adapter.PieQuad.Visible && !adapter.GuiSurface.Visible && !form.IsVisibleInTree(),"the pie opens on its own surface while the working panel stays hidden");
         right.SetInput("pad_press",false);Advance();Advance();
         Check(adapter.WorkspaceVisible && form.IsVisibleInTree() && adapter.Router.MenuOwner==null && ReferenceEquals(form.Draft,draft) && submits==0,"mapped menu recall restores the same unsent working form without submitting it");
-        // The HUD strip is body-locked below the view and tags along.
+        // The HUD strip stands in the room below the view and follows the body.
         var strip=new Button {Text="Strip command",Size=new(200,60)};adapter.HudSurface.AddChild(strip);
         Head(new(0,1.6f,0),0);Advance();
         var hudPose=adapter.HudQuad.GlobalTransform;var eye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;
         var offset=hudPose.Origin-eye;float below=Mathf.RadToDeg(Mathf.Atan2(-offset.Y,new Vector2(offset.X,offset.Z).Length()));
-        Check(adapter.HudQuad.Visible && Math.Abs(below-25)<.5f && Math.Abs(offset.Length()-1.5f)<.01f,"the HUD strip sits 25° below eye level at reading distance");
-        // The panel placed from this same head ends above the strip: no ray reaches both.
+        Check(adapter.HudQuad.Visible && Math.Abs(below-35)<.5f && Math.Abs(offset.Length()-1.5f)<.01f && (-hudPose.Basis.Z).DistanceTo(offset.Normalized())<.001f,
+            "the HUD strip sits 35° below eye level at reading distance, facing the eye");
+        // The panel placed from this same head stays above the strip: no ray reaches both.
         adapter.ShowWorkspace();Advance();
         var panelMesh=(QuadMesh)adapter.GuiSurface.Mesh;var stripMesh=(QuadMesh)adapter.HudQuad.Mesh;
         float Below(Vector3 point){var toward=point-eye;return Mathf.RadToDeg(Mathf.Atan2(-toward.Y,new Vector2(toward.X,toward.Z).Length()));}
         float panelLowest=Below(adapter.GuiSurface.GlobalTransform*new Vector3(0,-gui.WorkspaceSize.Y*panelMesh.Size.Y/gui.PresentationSurface.Size.Y/2,0));
         float stripHighest=Below(adapter.HudQuad.GlobalTransform*new Vector3(0,stripMesh.Size.Y/2,0));
-        Check(panelLowest<=stripHighest+.01f && stripHighest-panelLowest<.5f,$"the working panel's lower edge ({panelLowest:0.0}° below) ends where the strip begins ({stripHighest:0.0}° below)");
+        Check(panelLowest<stripHighest,$"the working panel's lower edge ({panelLowest:0.0}° below) stays above the strip ({stripHighest:0.0}° below)");
+        bool Near(Transform3D a,Transform3D b)=>a.Origin.DistanceTo(b.Origin)<.001f && a.Basis.IsEqualApprox(b.Basis);
+        Transform3D Strip(Vector3 at,float yaw) {
+            var level=new Vector3(-Mathf.Sin(yaw),0,-Mathf.Cos(yaw));float angle=Mathf.DegToRad(35);
+            var place=at+level*1.5f*Mathf.Cos(angle)-Vector3.Up*1.5f*Mathf.Sin(angle);
+            return new(Basis.LookingAt((place-at).Normalized(),Vector3.Up),place);
+        }
         Head(new(0,1.6f,0),Mathf.DegToRad(30));Advance();
         Check(Same(adapter.HudQuad.GlobalTransform,hudPose),"a head turn within 35° leaves the strip where it is");
+        Head(new(.3f,1.6f,0),Mathf.DegToRad(30));Advance();
+        Check(Same(adapter.HudQuad.GlobalTransform,hudPose),"a step of 0.3 m leaves the strip where it is");
         Head(new(0,1.6f,0),Mathf.DegToRad(40));Advance();
-        Check(!Same(adapter.HudQuad.GlobalTransform,hudPose),"a head turn past 35° brings the strip along");
+        var turnedEye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform());var turnedLook=-turnedEye.Basis.Z;
+        var turnedTarget=Strip(turnedEye.Origin,Mathf.Atan2(-turnedLook.X,-turnedLook.Z));
+        Check(!Same(adapter.HudQuad.GlobalTransform,hudPose) && !Near(adapter.HudQuad.GlobalTransform,turnedTarget),"a head turn past 35° starts the strip's glide, not a jump");
+        for(int i=0;i<27;i++)Advance();
+        Check(Near(adapter.HudQuad.GlobalTransform,turnedTarget),"0.3 s later the strip stands 35° below the new heading");
+        Head(new(0,1.6f,.6f),Mathf.DegToRad(40));for(int i=0;i<28;i++)Advance();
+        var walkedEye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform());
+        Check(Near(adapter.HudQuad.GlobalTransform,Strip(walkedEye.Origin,Mathf.Atan2(-turnedLook.X,-turnedLook.Z))),"a walk of more than half a metre brings the strip along");
         strip.Free();Advance();Check(!adapter.HudQuad.Visible,"an empty strip surface shows nothing");
         string retained=System.Text.Json.JsonSerializer.Serialize(models.Metrics);fixedPose=adapter.GuiSurface.GlobalTransform;
         for(int i=0;i<20;i++)Advance();
@@ -273,6 +288,59 @@ public partial class ExportChecks
         Check(!stood.IsEqualApprox(Transform3D.Identity) && origin.GlobalTransform.IsEqualApprox(stood),"a re-read of the same space leaves the headset where it stands in it");
         adapter.InvalidateWorld();Advance();
         Check(origin.GlobalTransform.IsEqualApprox(Transform3D.Identity),"another world takes the headset's place again from the agent's");
+        // The form beside a thing in the world: the panel's distance, angle and
+        // facing, beside the thing on the side toward the view, then fixed there.
+        string zero=Term.Binary(new byte[32]).ToString();
+        string Thing(int x)=>$"[mark(<<\"beside\">>,<<\"box\">>,[f(<<\"width\">>,500),f(<<\"height\">>,500),f(<<\"depth\">>,500)],transform({x},1600,-2250,0,0,0),surface(<<\"#6A90D9\">>,0,700,0,1000,[]),label(<<\"Foamstoke\">>,<<\"above\">>),depicts(<<\"scene-fixture\">>,{zero},thing))]";
+        scene.Apply(Term.Parse(Thing(0)));await Frame();
+        adapter.HideWorkspace();adapter.ShowWorkspace();Head(new(0,1.6f,0),0);Advance();
+        var looking=origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform();
+        float personalDistance=(adapter.GuiSurface.GlobalTransform.Origin-looking.Origin).Length();
+        var thing=scene.PickRay(looking.Origin,(scene.WorldPose("beside").Origin-looking.Origin).Normalized());
+        Check(thing!=null && thing.Label=="Foamstoke","the fixture thing is picked by a ray from the eye");
+        float Yaw(Vector3 v)=>Mathf.Atan2(-v.X,-v.Z);
+        float BelowFrom(Vector3 from,Vector3 point){var toward=point-from;return Mathf.RadToDeg(Mathf.Atan2(-toward.Y,new Vector2(toward.X,toward.Z).Length()));}
+        float Off(Vector3 point,Vector3 from,Vector3 toward)=>Mathf.Wrap(Yaw(point-from)-Yaw(toward),-Mathf.Pi,Mathf.Pi);
+        void Beside(string when,int side) {
+            var eyeAt=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;var form=adapter.GuiSurface.GlobalTransform;var to=form.Origin-eyeAt;
+            var toward=thing!.Pose!.Value.Origin-eyeAt;
+            float reach=thing.Corners.Max(c=>side*Off(c,eyeAt,toward)),half=Mathf.Atan(((QuadMesh)adapter.GuiSurface.Mesh).Size.X/2/personalDistance);
+            float edge=side*Off(form.Origin,eyeAt,toward)-half;
+            Check(adapter.GuiSurface.Visible && Math.Abs(to.Length()-personalDistance)<.001f && Math.Abs(BelowFrom(eyeAt,form.Origin)-adapter.Profile.PanelBelowEyeDegrees)<.01f &&
+                (-form.Basis.Z).DistanceTo(to.Normalized())<.001f && Math.Abs(edge-reach)<.001f,
+                $"{when}: the form beside the thing stands {personalDistance:0.00} m away, {adapter.Profile.PanelBelowEyeDegrees}° below eye level, facing the eye, its edge at the thing's {(side<0 ? "right" : "left")}");
+        }
+        adapter.PresentForm(true);adapter.BindOccurrence(thing);Advance();
+        Beside("looking at the thing",-1);var besidePose=adapter.GuiSurface.GlobalTransform;
+        Head(new(.3f,1.5f,.2f),.5f);Advance();
+        Check(Same(adapter.GuiSurface.GlobalTransform,besidePose),"head movement leaves the form beside the thing where it is");
+        adapter.BindOccurrence(null);Head(new(0,1.6f,0),Mathf.DegToRad(30));Advance();adapter.BindOccurrence(thing);Advance();
+        Beside("looking to the thing's left",1);
+        Head(new(0,1.6f,0),0);scene.Apply(Term.Parse(Thing(800)));await Frame();Advance();
+        // Moved to the right of the view: the form takes its left, toward the view's centre.
+        Beside("after the thing moved to the right of the view",1);
+        adapter.BindOccurrence(null);adapter.PresentForm(false);Advance();
+        // A pointed thing's pie stays as far below eye level as the space's.
+        adapter.HideWorkspace();Head(new(0,1.6f,0),0);Advance();
+        var eyeNow=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;
+        var aimAtThing=new Transform3D(Basis.LookingAt((scene.WorldPose("beside").Origin-eyeNow).Normalized(),Vector3.Up),eyeNow);
+        right.SetPose("aim",origin.GlobalTransform.AffineInverse()*aimAtThing,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+        right.SetInput("pad_axes",Vector2.Zero);right.SetInput("pad_press",false);Advance();right.SetInput("pad_press",true);Advance();
+        float pieBelow=BelowFrom(eyeNow,adapter.PieQuad.GlobalTransform.Origin);
+        Check(adapter.PieQuad.Visible && pieBelow>=adapter.Profile.PieBelowEyeDegrees-.01f,$"the pie of a thing pointed at eye level opens {pieBelow:0.0}° below eye level, as the space's does");
+        adapter.Router.CancelMenu();right.SetInput("pad_press",false);Advance();
+        // Nearer stops at the nearest comfortable distance.
+        adapter.WorkspaceDistance(-10);Advance();
+        Check(Math.Abs((adapter.GuiSurface.GlobalTransform.Origin-eyeNow).Length()-adapter.Profile.NearestPanel)<.001f,$"Nearer stops at {adapter.Profile.NearestPanel} m");
+        // Text on the strip and on the pie is never smaller than 0.6°.
+        var device=(Button)app.FindChild("hud-this-device",true,false);var caption=device.GetParent().GetChildren().OfType<Label>().Single();
+        var mark=device.GetChildren().OfType<Label>().Single();var status=(Label)app.FindChild("hud-status",true,false);
+        int smallest=DeviceProfile.SmallestTextPixels;int statusSize=status.GetThemeFontSize("font_size");
+        Check(device.GetThemeFontSize("font_size")>=smallest && caption.GetThemeFontSize("font_size")>=smallest && mark.GetThemeFontSize("font_size")>=smallest &&
+            statusSize>=smallest && status.GetThemeFont("font").GetHeight(statusSize)<=status.OffsetBottom-status.OffsetTop,
+            "the strip's initials, captions, badges and status are at least 17 px, the status inside its band");
+        var mainPie=(PieMenu)app.FindChild("pie-menu",true,false);
+        Check(mainPie.GetThemeDefaultFontSize()==gui.Appearance.DefaultFontSize && mainPie.NoteSize>=smallest,"the pie takes the shared text size and its smallest words are at least 17 px");
         scene.Stand(null);scene.Withdraw();
         adapter.StopSession();await adapter.Completion;
         Check(adapter.Subscriptions==0 && models.LiveLeases==0 && models.LiveTemplates==0 && gui.Captures==0,"workspace retirement releases real input/render consumers and captures");

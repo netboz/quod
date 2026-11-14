@@ -249,17 +249,28 @@ client_eidolon_scene(Entity,_,_,Layout,Model,
     in_ontology(MNs,MA,model(Parts,Marks)).
 
 class_eidolons(Classes,Eidolons) :- class_eidolons(Classes,_,_,Eidolons).
+%% For a class another ontology owns, every isa/2 answer is a proof in that
+%% ontology. Each class's ancestors are therefore read once, and the test that
+%% keeps only the most specific recipe compares those lists.
 class_eidolons(Classes,Purpose,Style,Eidolons) :-
     findall(candidate(Class,Purpose,Style,Recipe),
-        (member(Direct,Classes), (Class = Direct; isa(Direct,Class)),
+        (member(Direct,Classes), class_ancestors(Direct,Above), member(Class,Above),
          class_eidolon(Class,Purpose,Style,Recipe)), Candidates),
+    findall(Class, member(candidate(Class,_,_,_),Candidates), Raw), sort(Raw, Declaring),
+    findall(Class-Above, (member(Class,Declaring), class_ancestors(Class,Above)), Chains),
     findall(eidolon(Purpose,Style,Recipe),
         (member(Candidate,Candidates),
          Candidate = candidate(Class,Purpose,Style,Recipe),
          \+ (member(candidate(Other,Purpose,Style,_),Candidates),
-             isa(Other,Class), \+ isa(Class,Other)),
+             class_below(Other,Class,Chains), \+ class_below(Class,Other,Chains)),
          \+ local_recipe_overrides(Candidate,Candidates)), Choices),
     sort(Choices, Eidolons).
+
+%% A class with every class above it, itself included, as canonical names.
+class_ancestors(Class,Above) :-
+    findall(Name,((C = Class; isa(Class,C)), '$quod_name_normalize'(C,Name)),Raw), sort(Raw,Above).
+%% Whether Sub is Super or below it, from the ancestors already read.
+class_below(Sub,Super,Chains) :- member(Class-Above,Chains), Class == Sub, !, member_eq(Super,Above).
 
 %% A locally authored recipe of the same class, purpose, style and name
 %% replaces an imported copy. Other imported choices remain alternatives.
@@ -583,6 +594,8 @@ no_follow('$quod_isa_path'/3).
 no_follow('$quod_direct_isa'/2).
 no_follow('$quod_isa_semantics'/1).
 no_follow(most_specific_classes/3).
+no_follow(class_ancestors/2).
+no_follow(class_below/3).
 no_follow(member_eq/2).
 
 '$quod_owner_name'(Ns:Tail, Owner, Name) :-

@@ -454,14 +454,13 @@ gui_selected_values([], _, _).
 gui_selected_values([Value | Rest], Options, Seen) :-
     member(option(Value, _), Options), \+ member_eq(Value, Seen),
     gui_selected_values(Rest, Options, [Value | Seen]).
-%% Where the eyes are (integer millimetres and degrees, as transform/6) and
-%% the level direction they look along, in thousandths of a unit vector.
+%% Where the eyes are, as a scene pose (whole millimetres, turns 0 to 359),
+%% and the level direction they look along, in thousandths of a unit vector.
 gui_value(Kind, _, Value) :-
     once(isa(Kind, viewer_pose)),
     (Value == none -> true
-    ; Value = view(transform(X, Y, Z, RX, RY, RZ), forward(FX, FY, FZ)),
-      integer(X), integer(Y), integer(Z), integer(RX), integer(RY), integer(RZ),
-      integer(FX), integer(FY), integer(FZ)).
+    ; Value = view(Eye, forward(FX, FY, FZ)), Eye = transform(_, _, _, _, _, _),
+      placed(Eye), integer(FX), integer(FY), integer(FZ)).
 gui_value(Kind, Properties, Value) :-
     once(isa(Kind, numeric_input)), integer(Value),
     member(property(range, range(Min, Max, Step)), Properties),

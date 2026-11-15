@@ -354,6 +354,8 @@ modelling_query(shape(_, _, _)).
 modelling_query(align(_, _, _, _, _, _)).
 modelling_query(place_model(_, _, _, _, _)).
 modelling_query(marker_size(_)).
+%% A pose stored elsewhere is a scene pose: its owner asks this one rule.
+modelling_query(placed(_)).
 
 %% --- reusable recipe helpers -------------------------------------------------
 %% A recipe proves Parts; model/2 derives a scene without asserting anything.

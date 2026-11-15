@@ -28,6 +28,9 @@ public sealed record Length(BigInteger Numerator, BigInteger Denominator)
 }
 public sealed record ScenePose(BigInteger[]? Transform, ulong? Body, ulong Revision, bool Reframed)
 {
+    // A scene turn is whole degrees from 0 to 359, whatever direction the
+    // angle was measured in.
+    public static long Turn(double degrees) => ((long)Math.Round(degrees) % 360 + 360) % 360;
     public static ScenePose Decode(Term pose)
     {
         if (pose.Name is "body_pose" or "body_frame_pose") {

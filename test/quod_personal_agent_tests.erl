@@ -91,6 +91,7 @@ class_owner_setup_form_test_() ->
                     [{Ns, Row} || Row <- Pins ++ [{hosting_node, Node}, {user_namespace, Ns},
                         {account_setup, me, {pending, account}}, {signup_origin, <<"quod:user">>, UA, Token}]] ++
                     [{<<"quod:space">>, {measure_vocabulary, <<"quod:gui">>, GA}},
+                     {<<"quod:space">>, {modelling_vocabulary, <<"quod:gui">>, GA}},
                      {<<"quod:user">>, {gui_vocabulary, <<"quod:gui">>, GA}},
                      {<<"quod:user">>, ReceiptRow}]],
                 Read = fun(G) ->

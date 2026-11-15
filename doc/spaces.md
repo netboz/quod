@@ -150,15 +150,19 @@ staged instance grants cannot supply permission. See
 [creation authorization](proofs.md#class-and-instance-operation-permissions).
 
 After assertion, `quod:space::goal(inside(DestinationRef, Ref, Pose))` chooses an
-exact destination and transform, using existing integer millimetres/degrees.
-The action stores the pose in the instance's `transform` slot. The creation
+exact destination and transform. A pose is a scene pose, decided by the scene
+vocabulary's own `placed/1`: whole millimetres and turns from 0 to 359.
+`space_transform/1` asks that rule for every pose written (the `transform`
+slot's type, placing and representing), so a stored pose is never re-checked
+on reading. The action stores the pose in the instance's `transform` slot. The creation
 form's placement choice is an input to this action, not a stored slot.
 `near_agent` ("In front of me") reads A's exact location at `quod:space`; a
 successful `unplaced` result leaves the new space unplaced. A
 `placed(Destination, Transform)` result places it in front of the viewer. The
 form's `space_view` field is a `viewer_pose` the client fills itself: in a
 headset, where the eyes are and the level direction they look along
-(`view(transform(…), forward(FX, 0, FZ))`, the direction in thousandths). The
+(`view(transform(…), forward(FX, 0, FZ))`, the eyes as a scene pose turned to
+the look, the direction in thousandths). The
 space then stands that near distance along the look, at A's floor height,
 turned to face the viewer (Yan, 2026-11-14). Without a viewer pose (`none`,
 any client without a head) it stands in front of A along that frame's −Z
@@ -169,7 +173,7 @@ marker the new space appears 2.25 m away, whatever it measures inside (Yan,
 straight ahead, then alternately one and a half markers to the viewer's right
 and left, until no placed thing whose location can be read stands within one
 marker of it on every axis. A viewer pose whose direction is not a level unit
-vector is refused. Things already placed are never
+vector, or whose turns are outside 0 to 359, is refused. Things already placed are never
 moved. This is one-time placement, not following A. A denied, unavailable, ambiguous or incomplete location read
 fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
 Transform)`; missing pose does not prove absence. Physical-pilot entry and live

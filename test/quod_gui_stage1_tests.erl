@@ -16,28 +16,26 @@ created_spaces_show_the_shared_marker_test_() ->
         {Reply,Bytes}=submit(C,Ns,Finite,Defaults),{Ref,_}=created(C,Reply,Bytes,space),
         holds(Ns,{attribute,element(4,Ref),dimensions,default_dimensions()}),
         holds(Ns,{attribute,element(4,Ref),exterior,solid}),
-        quod_space_creation_tests:with_models(C,fun() ->
-            assert_marker(scene(C,Ns,room),Ref,Pose,{label,Suggested,<<"above">>}),
-            Values=fields(element(7,Exact),[{space_name,<<>>},{space_unit,<<"mm">>},
-                {{space_length,width},1},{{space_divisor,width},3},
-                {{space_length,height},1001},{{space_divisor,height},1},
-                {{space_length,depth},1001},{{space_divisor,depth},2},
-                {placement_field(Ns),Placement}]),
-            {Rational,RationalBytes}=submit(C,Ns,Exact,Values),
-            {RationalRef,_}=created(C,Rational,RationalBytes,space),
-            holds(Ns,{attribute,element(4,RationalRef),name,<<>>}),
-            holds(Ns,{attribute,element(4,RationalRef),dimensions,
-                {box,{q,{'/',1,3},<<"mm">>},{q,{'/',1001,1},<<"mm">>},{q,{'/',1001,2},<<"mm">>}}}),
-            %% The marker keeps one size whatever the space measures inside.
-            assert_marker(scene(C,Ns,room),RationalRef,Pose,unlabelled),
-            %% Explicit unplaced creation succeeds even though an ordinary
-            %% near-agent location read is unavailable, without admission.
-            edit(Ns,{assertz,{space_assignment_state,personal,1,Room}}),
-            [Current|_]=views(C,Ns,Subject),
-            {Unplaced,UnplacedBytes}=submit(C,Ns,Current,fields(element(7,Current),[{placement_field(Ns),unplaced}])),
-            {UnplacedRef,_}=created(C,Unplaced,UnplacedBytes,space),
-            ?assertEqual(unplaced,read(C,space({space_location,UnplacedRef,{'Location'}})))
-        end),
+        assert_marker(scene(C,Ns,room),Ref,Pose,{label,Suggested,<<"above">>}),
+        Values=fields(element(7,Exact),[{space_name,<<>>},{space_unit,<<"mm">>},
+            {{space_length,width},1},{{space_divisor,width},3},
+            {{space_length,height},1001},{{space_divisor,height},1},
+            {{space_length,depth},1001},{{space_divisor,depth},2},
+            {placement_field(Ns),Placement}]),
+        {Rational,RationalBytes}=submit(C,Ns,Exact,Values),
+        {RationalRef,_}=created(C,Rational,RationalBytes,space),
+        holds(Ns,{attribute,element(4,RationalRef),name,<<>>}),
+        holds(Ns,{attribute,element(4,RationalRef),dimensions,
+            {box,{q,{'/',1,3},<<"mm">>},{q,{'/',1001,1},<<"mm">>},{q,{'/',1001,2},<<"mm">>}}}),
+        %% The marker keeps one size whatever the space measures inside.
+        assert_marker(scene(C,Ns,room),RationalRef,Pose,unlabelled),
+        %% Explicit unplaced creation succeeds even though an ordinary
+        %% near-agent location read is unavailable, without admission.
+        edit(Ns,{assertz,{space_assignment_state,personal,1,Room}}),
+        [Current|_]=views(C,Ns,Subject),
+        {Unplaced,UnplacedBytes}=submit(C,Ns,Current,fields(element(7,Current),[{placement_field(Ns),unplaced}])),
+        {UnplacedRef,_}=created(C,Unplaced,UnplacedBytes,space),
+        ?assertEqual(unplaced,read(C,space({space_location,UnplacedRef,{'Location'}}))),
         %% No form offers an outside choice, and a direct request for the
         %% retired full-size one is refused.
         [?assertEqual(undefined,tree_property(element(5,View),{space_exterior,Extent},options))

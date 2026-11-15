@@ -7,7 +7,7 @@
 
 run() ->
     quod_gui_stage1_tests:with_forms(fun(C) ->
-        quod_space_creation_tests:with_models(C,fun() -> run_browser(C) end)
+        run_browser(C)
     end).
 
 run_browser(C = #{namespace := Ns, directory := Dir, storage := Storage}) ->

@@ -1,0 +1,1 @@
+Nov 14 22:18:50 prospero kernel: RenderThread[422141]: segfault at 108 ip 00007fd38d9199dd sp 00007fd380279fc0 error 4 in libnvidia-glcore.so.615.71.09[d199dd,7fd38d000000+c00000] likely on CPU 5 (core 5, socket 0)

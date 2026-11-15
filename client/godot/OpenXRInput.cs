@@ -335,11 +335,17 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     internal Term? ViewerPose()
     {
         if(XRServer.GetTracker("head") is not XRPositionalTracker head||!head.HasPose("default")||!head.GetPose("default").HasTrackingData)return null;
-        var eye=scene.SceneRoot.GlobalTransform.AffineInverse()*(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform());
+        return ViewerPose(scene.SceneRoot.GlobalTransform.AffineInverse()*(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()));
+    }
+    // The eyes in the shown space as a scene pose, turned to their level
+    // heading, and that heading in thousandths; null when looking straight up or down.
+    internal static Term? ViewerPose(Transform3D eye)
+    {
         var forward=-eye.Basis.Z;forward.Y=0;if(Mathf.IsZeroApprox(forward.LengthSquared()))return null;forward=forward.Normalized();
-        static Term N(float value)=>Term.Number(((long)Mathf.Round(value)).ToString());
+        static Term N(double value)=>Term.Number(((long)Math.Round(value)).ToString());
         return Term.Call("view",
-            Term.Call("transform",N(eye.Origin.X*1000),N(eye.Origin.Y*1000),N(eye.Origin.Z*1000),N(0),N(Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z))),N(0)),
+            Term.Call("transform",N(eye.Origin.X*1000),N(eye.Origin.Y*1000),N(eye.Origin.Z*1000),N(0),
+                Term.Number(ScenePose.Turn(Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z))).ToString()),N(0)),
             Term.Call("forward",N(forward.X*1000),N(0),N(forward.Z*1000)));
     }
     // A surface along a level heading, the given angle below eye level, turned to face the eye.

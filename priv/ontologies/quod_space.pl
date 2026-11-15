@@ -71,15 +71,19 @@ space_creator_owner(_, Owner) :-
 %% A space given no name takes a place name; quod:names owns the pools.
 space_name(Instance, Name) :-
     quod:names::draw(<<"place">>, Instance, Name).
-space_transform(transform(X, Y, Z, RX, RY, RZ)) :-
-    integer(X), integer(Y), integer(Z), integer(RX), integer(RY), integer(RZ).
+%% A space's pose is a scene pose; the scene vocabulary's one rule decides it
+%% (whole millimetres, turns 0 to 359). Every pose written passes here: the
+%% transform attribute's type, placing and representing.
+space_transform(Pose) :-
+    Pose = transform(_, _, _, _, _, _),
+    unique_solution(scene_vocabulary(Ns, A)), in_ontology(Ns, A, placed(Pose)).
 
 space_location(Subject, Location) :-
     Subject = entity_ref(Ns, Anchor, Entity),
     in_ontology(Ns,Anchor,instance_of(_, Entity)), space_assignment(Subject, _, Destination),
     (Destination == none -> Location = unplaced
     ; in_ontology(Ns,Anchor,unique_solution(attribute(Entity,transform,Transform))),
-      space_transform(Transform), Location = placed(Destination, Transform)).
+      Location = placed(Destination, Transform)).
 
 %% An omitted pose is resolved relative to the acting personal agent, at
 %% the near distance along negative Z. On that line the new thing takes the
@@ -124,7 +128,7 @@ space_free_place(Index, X, Y, Z, SX, SZ, Size, Poses, FX, FZ) :-
 %% they look, at the agent's floor height, turned to face them. Off to the
 %% sides is the direction to their right.
 space_view_pose(Destination, Floor, view(transform(X,_,Z,_,RY,_), forward(FX,0,FZ)), Pose) :-
-    integer(X), integer(Z), integer(RY), integer(FX), integer(FZ),
+    integer(X), integer(Z), integer(FX), integer(FZ),
     %% A unit vector in thousandths, up to its rounding.
     Length is FX * FX + FZ * FZ, Length >= 998001, Length =< 1002001,
     space_near(_, Near),

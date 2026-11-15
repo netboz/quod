@@ -116,7 +116,9 @@ docked to the side of the window farther from its target.
 A form may hold a viewer pose, a field the device fills itself: it is never
 drawn, and when the form is sent the headset fills it with where the eyes are
 and the level direction they look along; without a head it stays `none`. The
-space creation form uses it to place a new space in front of the eyes.
+eyes' turn is sent as a scene turn, 0 to 359 (`ScenePose.Turn`), however the
+heading was measured. The space creation form uses it to place a new space in
+front of the eyes.
 
 This also applies to an occurrence selected inside an offered visual preview.
 Its signed visual consumer stays installed while that form uses it. The form has

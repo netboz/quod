@@ -7,7 +7,8 @@ class_owner_creation_and_action_chain_test_() ->
             #{namespace := Store,node := Node}) ->
         {ok,[{class,SpaceClass}]} = erlog_io:read_string_terms("class(quod:space:space)."),
         Owner = <<"quod:space">>, Destination = <<"owned-space-destination">>,
-        start(C,Owner,quod_prolog:read_terms("priv/ontologies/quod_space.pl"),#{}),
+        {Scene, ScenePin} = scene_vocabulary(C),
+        start(C,Owner,quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++ [ScenePin],#{}),
         %% The space is asserted without a name: its class draws one here.
         start(C,<<"quod:names">>,quod_prolog:read_terms("priv/ontologies/quod_names.pl"),#{}),
         start(C,Destination,[{can_invoke,{'_'},Node,{'_'},Destination},
@@ -47,7 +48,7 @@ class_owner_creation_and_action_chain_test_() ->
             fails(Destination,{space_placement,second,Subject,{'_'}})
         after
             stop(quod_reg:where({quod_ns,Destination})),stop(quod_reg:where({quod_ns,<<"quod:names">>})),
-            stop(quod_reg:where({quod_ns,Owner}))
+            stop(quod_reg:where({quod_ns,Owner})),stop(quod_reg:where({quod_ns,Scene}))
         end
     end) end}.
 
@@ -211,18 +212,29 @@ with_spaces(Fun, ExtraSource) ->
     quod_agent_hosting_tests:with_host(fun(C = #{namespace := Owner}) ->
         Names = [<<"space-archive">>, <<"space-exhibit">>],
         Class = <<"quod:space">>,
+        {Scene, ScenePin} = scene_vocabulary(C),
         start(C,Class,quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++
-            [{can_invoke,{'_'},maps:get(node,C),{'_'},Class}],#{}),
+            [{can_invoke,{'_'},maps:get(node,C),{'_'},Class}, ScenePin],#{}),
         try
             [start(C, Ns, Source ++ destination_rules(maps:get(node, C)), #{}) || Ns <- Names],
             [A, B] = Names,
-            Fun(C#{a => A, b => B, subject => ref(Owner, artifact)})
+            Fun(C#{a => A, b => B, subject => ref(Owner, artifact), scene_pin => ScenePin})
         after
-            [stop(quod_reg:where({quod_ns, Ns})) || Ns <- Names ++ [Class]],
+            [stop(quod_reg:where({quod_ns, Ns})) || Ns <- Names ++ [Class, Scene]],
             %% The hosting fixture's original PID may have been replaced by replay.
             stop(quod_reg:where({quod_ns, Owner}))
         end
     end, Extra).
+
+%% As on a node, the space class has a scene vocabulary: it decides what a
+%% pose is, and anyone may ask its modelling queries, as of the system GUI.
+scene_vocabulary(C) ->
+    Scene = <<"space-scene">>,
+    start(C,Scene,quod_prolog:read_terms("priv/ontologies/gui_scene.pl") ++
+        [{':-',{can_invoke,{'G'},{'_'},{'_'},{'_'}},{modelling_query,{'G'}}},
+         {':-',{can_invoke,{',',{current_ontology_identity,{'_'},{'_'}},{'G'}},{'_'},{'_'},{'_'}},
+               {modelling_query,{'G'}}}],#{}),
+    {Scene, {modelling_vocabulary,Scene,quod_simplex:genesis_hash(Scene)}}.
 
 destination_rules(Node) ->
     S = {'S'}, E = {'E'}, M = {'M'},
@@ -517,7 +529,7 @@ conjunction([Goal | Rest]) -> {',', Goal, conjunction(Rest)}.
 
 ordinary_placement_and_shared_display_projection_test_() ->
     {timeout, 90, fun() -> with_spaces(fun(C = #{namespace := Owner, a := A,
-            b := B, node := Node, subject := Subject, identity := Identity}) ->
+            b := B, node := Node, subject := Subject, identity := Identity, scene_pin := ScenePin}) ->
         Model = <<"space-test-modelling">>, Rendering = <<"space-test-rendering">>,
         RenderingSup = start(C, Rendering,
             quod_ct:gui_terms(), #{}),
@@ -525,6 +537,8 @@ ordinary_placement_and_shared_display_projection_test_() ->
             quod_ct:gui_terms() ++
             [{rendering_vocabulary, Rendering, quod_simplex:genesis_hash(Rendering)}], #{}),
         try
+            %% These vocabularies replace the class's own: a store has one.
+            edit(<<"quod:space">>, {retract, ScenePin}),
             [edit(Ns, {transaction, conjunction([
                 {assertz, {modelling_vocabulary, Model, quod_simplex:genesis_hash(Model)}},
                 {assertz, {rendering_vocabulary, Rendering, quod_simplex:genesis_hash(Rendering)}}])})

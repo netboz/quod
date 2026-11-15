@@ -436,11 +436,13 @@ public partial class ExportChecks
         Check(Suggested(panel),"a form left for another storing ontology is gone; returning opens the offered form");
         // In the headset the device fills where the eyes are: the default placement
         // puts the new space 2.25 m along the look, at the agent's floor, facing them.
-        var device=panel.ViewerPose;
-        panel.ViewerPose=()=>Term.Parse("view(transform(1000,1600,0,0,90,0),forward(-1000,0,0))");
+        // Eyes looking to the right measure -90 degrees: the device sends the scene turn 270.
+        var device=panel.ViewerPose;var eye=new Transform3D(Basis.LookingAt(Vector3.Right,Vector3.Up),new Vector3(1,1.6f,0));
+        Check(OpenXRInput.ViewerPose(eye)!.ToString()=="view(transform(1000,1600,0,0,270,0),forward(1000,0,0))","the device's viewer pose turns a look to the right into the scene turn 270");
+        panel.ViewerPose=()=>OpenXRInput.ViewerPose(eye);
         await ClickSubmit(panel);panel.ViewerPose=device;
         Check(Json.Committed(panel.LastOutcome!) && Result(SpaceResults(panel.LastOutcome!),"location").ToString()==
-            Term.Call("placed",s0,Term.Parse("transform(-1250,0,0,0,90,0)")).ToString(),"a headset's creation lands in front of the eyes, turned to face them");
+            Term.Call("placed",s0,Term.Parse("transform(3250,0,0,0,270,0)")).ToString(),"a headset's creation lands in front of the eyes, turned to face them");
         await Until(()=>scene.Count>=18);
         var ids=scene.Ids.Order().ToArray();
         await SpaceRefusals(panel,human,s0,scene);
@@ -480,6 +482,12 @@ public partial class ExportChecks
             catch(ApiError error) { denied=error.Definite; }
             Check(denied,"wrong signing identity explicitly refuses the exact space creation operation");
         }
+        // A heading outside the scene's turns never reaches the ledger.
+        await CreationTarget(panel,human,"create");
+        var device=panel.ViewerPose;panel.ViewerPose=()=>Term.Parse("view(transform(1000,1600,0,0,-90,0),forward(1000,0,0))");
+        await ClickSubmit(panel);panel.ViewerPose=device;
+        Check(Json.Terminal(panel.LastOutcome!) && !Json.Committed(panel.LastOutcome!) && await StateOfSpaces()==before && scene.Count==marks,
+            "a viewer pose turned outside 0 to 359 is refused and creates nothing");
         string space=Actor.FromTerm(s0).InstanceText.TrimEnd('.');
         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"assertz(instance_permission({space},space_admit,deny)).",timeout.Token);
         await CreationTarget(panel,human,"create"); await ClickSubmit(panel);

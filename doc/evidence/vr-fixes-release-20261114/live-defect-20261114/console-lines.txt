@@ -1,0 +1,110 @@
+[2026-11-14 22:17:32] chdir "/home/yan/src/quod_worktrees/pearl-stone/client/_build/quod-steam-20261104-wwLDjq/"
+[2026-11-14 22:17:32] Game Recording - would start recording game 13778672612257300480, but recording for this game is disabled
+[2026-11-14 22:17:32] Adding process 422879 for gameID 13778672612257300480
+[2026-11-14 22:17:32] ERROR: ld.so: object '/home/yan/.local/share/Steam/steamrt32/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS32): ignored.
+[2026-11-14 22:17:32] Clearing capture only gameID
+[2026-11-14 22:17:32] GameScope focus changed to appID 0
+[2026-11-14 22:17:32] ERROR: ld.so: object '/home/yan/.local/share/Steam/steamrt32/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS32): ignored.
+[2026-11-14 22:17:32] ERROR: ld.so: object '/home/yan/.local/share/Steam/steamrt32/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS32): ignored.
+[2026-11-14 22:17:32] ERROR: ld.so: object '/home/yan/.local/share/Steam/steamrt64/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+[2026-11-14 22:17:32] ERROR: ld.so: object '/home/yan/.local/share/Steam/steamrt32/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS32): ignored.
+[2026-11-14 22:17:32] Adding process 422884 for gameID 13778672612257300480
+[2026-11-14 22:17:32] ERROR: ld.so: object '/home/yan/.local/share/Steam/steamrt32/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS32): ignored.
+[2026-11-14 22:17:32] Adding process 422885 for gameID 13778672612257300480
+[2026-11-14 22:17:32] Adding process 422886 for gameID 13778672612257300480
+[2026-11-14 22:17:32] Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+[2026-11-14 22:17:32] Error [GENERAL | xrCreateInstance | OpenXR-Loader] : LoaderInstance::CreateInstance chained CreateInstance call failed
+[2026-11-14 22:17:32] Error [GENERAL | xrCreateInstance | OpenXR-Loader] : xrCreateInstance failed
+[2026-11-14 22:17:32] Adding process 422887 for gameID 13778672612257300480
+[2026-11-14 22:17:33] Adding window 81788930 (2) for process 422885 and gameID 13778672612257300480
+[2026-11-14 22:17:33] >>> Starting desktop stream
+[2026-11-14 22:17:33] WARNING: Desktop capture unavailable, try running Steam with -pipewire
+[2026-11-14 22:17:33] ../steamUI/vr/vr2dgameoverlay.cpp (1467) : pubTextureData
+[2026-11-14 22:17:33] ../steamUI/vr/vr2dgameoverlay.cpp (1467) : pubTextureData
+[2026-11-14 22:17:33] assert_20261114221733_57.dmp[422924]: Uploading dump (out-of-process)
+[2026-11-14 22:17:33] /tmp/dumps/assert_20261114221733_57.dmp
+[2026-11-14 22:17:33] Fossilize INFO: Overriding serialization path: "/home/yan/.local/share/Steam/steamapps/shadercache/3208097213/fozpipelinesv6/steamapprun_pipeline_cache".
+[2026-11-14 22:17:33] GameScope focus changed to appID 0
+[2026-11-14 22:17:33] Window title set to Godot
+[2026-11-14 22:17:33] 11/14 22:17:33 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:17:33] 11/14 22:17:33 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(422938)
+[2026-11-14 22:17:33] 11/14 22:17:33 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(422938)
+[2026-11-14 22:17:33] CDesktopCaptureX11GL: OpenGL extension GLX_EXT_texture_from_pixmap not supported
+[2026-11-14 22:17:33] OpenXR: Created instance for OpenXR 1.0.54
+[2026-11-14 22:17:33] OpenXR: Running on OpenXR runtime:  SteamVR/OpenXR   2.19.3
+[2026-11-14 22:17:33] OpenXR: XrGraphicsRequirementsVulkan2KHR:
+[2026-11-14 22:17:33]  - minApiVersionSupported:  1.0.0
+[2026-11-14 22:17:33]  - maxApiVersionSupported:  1.2.0
+[2026-11-14 22:17:33] Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+[2026-11-14 22:17:33] 
+[2026-11-14 22:17:34] Clearing capture only gameID
+[2026-11-14 22:17:34] 11/14 22:17:34 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:17:34] 11/14 22:17:34 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423000)
+[2026-11-14 22:17:34] 11/14 22:17:34 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423000)
+[2026-11-14 22:17:34] 11/14 22:17:34 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:17:34] 11/14 22:17:34 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423008)
+[2026-11-14 22:17:34] 11/14 22:17:34 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423008)
+[2026-11-14 22:17:34] Caching cursor image for , size 24x24, serial 686, cache size = 1
+[2026-11-14 22:17:34] assert_20261114221733_57.dmp[422924]: Finished uploading minidump (out-of-process): success = yes
+[2026-11-14 22:17:34] assert_20261114221733_57.dmp[422924]: response: CrashID=bp-adadb8c4-448b-4b06-8b5b-4fe8f2261114
+[2026-11-14 22:17:34] assert_20261114221733_57.dmp[422924]: file ''/tmp/dumps/assert_20261114221733_57.dmp'', upload yes: ''CrashID=bp-adadb8c4-448b-4b06-8b5b-4fe8f2261114''
+[2026-11-14 22:17:35] 11/14 22:17:35 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423026)
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423026)
+[2026-11-14 22:17:35] Clearing capture only gameID
+[2026-11-14 22:17:35] >>> Stopped desktop stream
+[2026-11-14 22:17:35] 11/14 22:17:35 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423031)
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423031)
+[2026-11-14 22:17:35] 11/14 22:17:35 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423034)
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423034)
+[2026-11-14 22:17:35] 11/14 22:17:35 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423035)
+[2026-11-14 22:17:35] 11/14 22:17:35 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423035)
+[2026-11-14 22:17:35] QUOD_TRACE 21:17:35.451 icon file=a33fbc2379ea162f586a6e964e6765c9c7630d4729a823ecaf787cc0e22554d5.png ms=45 bytes=3555
+[2026-11-14 22:17:35] QUOD_TRACE 21:17:35.459 icon file=392f95140074b3e5162d8b2cc860a3ebe66c0bb20ca30deb4f4fe31949eab56a.png ms=55 bytes=4379
+[2026-11-14 22:17:40] QUOD_TRACE 21:17:40.517 pie name="Pentsark" connected_ms=19 answered_ms=997 drawn_ms=1025 wedges=5
+[2026-11-14 22:17:40] QUOD_TRACE 21:17:40.527 icon file=443faa8df4937365e159ecd54a0c7b5b23539bf55141d5330912d2a0665c57c2.png ms=18 bytes=4311
+[2026-11-14 22:17:40] QUOD_TRACE 21:17:40.528 icon file=1320941c3a3b79716403806ad34b19b39f10920e266b93d9e9783fb20d6abeef.png ms=25 bytes=4641
+[2026-11-14 22:17:40] QUOD_TRACE 21:17:40.528 icon file=8aa3240d88ef69fc14ab29514a4380d0b901f9f4aced431c393013a6b311237f.png ms=18 bytes=3410
+[2026-11-14 22:17:40] QUOD_TRACE 21:17:40.529 icon file=36652b712193cb0eb76fdac8319b2788cf2cbaae279cee7877f67d1427eaa183.png ms=18 bytes=3837
+[2026-11-14 22:17:40] QUOD_TRACE 21:17:40.529 icon file=bb182c7fb117a1dc013d5eb9bb99f5605c9b2c46e4311669325b75a804e6c521.png ms=17 bytes=1605
+[2026-11-14 22:17:41] QUOD_TRACE 21:17:41.912 icon file=10cb7a60ee0d4b85f634b888d23c34384dcc2fd40bf27115aa6133e85d1751ed.png ms=20 bytes=2785
+[2026-11-14 22:17:41] QUOD_TRACE 21:17:41.913 icon file=81551291fff5b3b6278d22f58083766e9d39a4f7323f1813da9dc326b786004e.png ms=20 bytes=3206
+[2026-11-14 22:17:41] QUOD_TRACE 21:17:41.913 icon file=6e838ec3e3cef10dffeb52c32e25f1e94be12b37216dc70fe7a4e38dbb451d1c.png ms=20 bytes=2841
+[2026-11-14 22:17:42] QUOD_TRACE 21:17:42.047 pie ended chose "Create space" level="Create here" lit=1 steered_by=pointer
+[2026-11-14 22:17:44] QUOD_TRACE 21:17:44.796 press panel at=(525, 146) control=Button:hide-subject-form"Close"@(16, 119)
+[2026-11-14 22:17:44] reaping pid: 423000 -- gameoverlayui
+[2026-11-14 22:17:44] QUOD_TRACE 21:17:44.975 release panel control=Button:hide-subject-form"Close"@(16, 119)
+[2026-11-14 22:17:50] QUOD_TRACE 21:17:50.859 pie name="Pentsark" connected_ms=15 answered_ms=979 drawn_ms=987 wedges=5
+[2026-11-14 22:17:51] QUOD_TRACE 21:17:51.794 pie ended chose "Create space" level="Create here" lit=1 steered_by=pointer
+[2026-11-14 22:17:54] reaping pid: 423008 -- gameoverlayui
+[2026-11-14 22:17:56] QUOD_TRACE 21:17:56.479 press panel at=(507, 137) control=Button:hide-subject-form"Close"@(16, 119)
+[2026-11-14 22:17:56] QUOD_TRACE 21:17:56.702 release panel control=Button:hide-subject-form"Close"@(16, 119)
+[2026-11-14 22:18:01] QUOD_TRACE 21:18:01.102 pie name="Pentsark" connected_ms=26 answered_ms=1086 drawn_ms=1098 wedges=5
+[2026-11-14 22:18:03] QUOD_TRACE 21:18:03.281 pie ended chose "Create space" level="Create here" lit=1 steered_by=pointer
+[2026-11-14 22:18:04] reaping pid: 423026 -- gameoverlayui
+[2026-11-14 22:18:07] QUOD_TRACE 21:18:07.989 press panel at=(545, 604) control=Button:control6"Create"@(16, 594)
+[2026-11-14 22:18:08] QUOD_TRACE 21:18:08.241 release panel control=Button:control6"Create"@(16, 594)
+[2026-11-14 22:18:13] QUOD_TRACE 21:18:13.770 press panel at=(567, 582) control=Button:disconnect"Disconnect"@(318, 565)
+[2026-11-14 22:18:14] QUOD_TRACE 21:18:14.004 release panel control=Button:disconnect"Disconnect"@(318, 565)
+[2026-11-14 22:18:14] reaping pid: 423031 -- gameoverlayui
+[2026-11-14 22:18:15] QUOD_TRACE 21:18:15.177 press panel at=(580, 543) control=Button:connect"Sign in"@(318, 521)
+[2026-11-14 22:18:15] QUOD_TRACE 21:18:15.378 release panel control=Button:connect"Sign in"@(318, 521)
+[2026-11-14 22:18:21] QUOD_TRACE 21:18:21.136 press panel at=(555, 614) control=Button:disconnect"Disconnect"@(318, 565)
+[2026-11-14 22:18:21] QUOD_TRACE 21:18:21.360 release panel control=Button:disconnect"Disconnect"@(318, 565)
+[2026-11-14 22:18:22] QUOD_TRACE 21:18:22.605 press panel at=(587, 515) control=VBoxContainer:login-steps@(318, 134)
+[2026-11-14 22:18:22] QUOD_TRACE 21:18:22.896 release panel control=Button:connect"Sign in"@(318, 521)
+[2026-11-14 22:18:23] QUOD_TRACE 21:18:23.499 press panel at=(585, 527) control=Button:connect"Sign in"@(318, 521)
+[2026-11-14 22:18:23] QUOD_TRACE 21:18:23.772 release panel control=Button:connect"Sign in"@(318, 521)
+[2026-11-14 22:18:24] reaping pid: 423034 -- gameoverlayui
+[2026-11-14 22:18:25] QUOD_TRACE 21:18:25.699 press panel at=(527, 614) control=Button:disconnect"Disconnect"@(318, 565)
+[2026-11-14 22:18:26] QUOD_TRACE 21:18:26.051 release panel control=Button:disconnect"Disconnect"@(318, 565)
+[2026-11-14 22:18:35] reaping pid: 423035 -- gameoverlayui
+[2026-11-14 22:19:11] 11/14 22:19:11 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:19:11] 11/14 22:19:11 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423903)
+[2026-11-14 22:19:11] 11/14 22:19:11 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423903)
+[2026-11-14 22:19:11] 11/14 22:19:11 minidumps folder is set to /tmp/dumps
+[2026-11-14 22:19:11] 11/14 22:19:11 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(20261113015957)/tid(423920)
+[2026-11-14 22:19:11] 11/14 22:19:11 Init: Installing breakpad exception handler for appid(gameoverlayui)/version(1.0)/tid(423920)

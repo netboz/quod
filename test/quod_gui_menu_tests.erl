@@ -132,30 +132,28 @@ interior_walls_use_the_shared_extent_test_() ->
             {assertz,{attribute,room,exterior,solid}},{assertz,{attribute,room,transform,T}},
             {assertz,{attribute,closed,dimensions,infinite}},
             {assertz,{attribute,closed,exterior,solid}},{assertz,{attribute,closed,transform,T}}])),
-        quod_space_creation_tests:with_models(C,fun() ->
-            ?assertEqual([],boundary(C,Ns,A)),
-            executed(C,space({space_represent,ref(Ns,room),solid,T,none,solid,T,wireframe})),
-            applied(Ns,fun() -> boundary(C,Ns,A) =/= [] end),
-            {[Root],Parts} = boundary(C,Ns,A),
-            ?assertMatch({mark,_,<<"group">>,[],T,no_surface,_,{depicts,Ns,A,room}},Root),
-            %% The walls stand at the exact real size, never rounded.
-            Size = [{f,<<"width">>,{'/',1,3}},{f,<<"height">>,3000},{f,<<"depth">>,{'/',1001,2}}],
-            ?assertMatch([{mark,_,<<"corner_box">>,Size,_,{surfaces,{surface,<<"#C9D2DB">>,_,_,_,_,_},_,_},_,_}],Parts),
-            ?assertMatch([{part,<<"extent">>,{corner_box,{'/',1,3},3000,{'/',1001,2}},_,_,_,_}],
-                read(C,space({eidolon,space_wireframe,
-                    {subject,{ontology_ref,Ns,A},room},{'Parts'}}))),
-            executed(C,space({space_represent,ref(Ns,room),solid,T,wireframe,solid,T,matrix})),
-            applied(Ns,fun() -> case boundary(C,Ns,A) of {_,P} -> length(P) =:= 2; [] -> false end end),
-            {[_],Matrix} = boundary(C,Ns,A),
-            ?assertMatch([{mark,_,<<"box">>,[{f,_,1},{f,_,3000},{f,_,501}],_,{surface,_,_,_,_,220,[]},_,_},
-                          {mark,_,<<"corner_box">>,Size,_,{surfaces,{surface,<<"#3CFF7A">>,_,_,_,_,_},_,_},_,_}],Matrix),
-            executed(C,space({space_represent,ref(Ns,room),solid,T,matrix,solid,T,none})),
-            applied(Ns,fun() -> boundary(C,Ns,A) =:= [] end),
-            ?assertEqual([],boundary(C,Ns,A)),
-            fails(Ns,{attribute,room,interior,{'_'}}),
-            %% Infinite extent refuses finite boundaries with the existing reason.
-            denied(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix}),{space_interior_unavailable,matrix,infinite})
-        end)
+        ?assertEqual([],boundary(C,Ns,A)),
+        executed(C,space({space_represent,ref(Ns,room),solid,T,none,solid,T,wireframe})),
+        applied(Ns,fun() -> boundary(C,Ns,A) =/= [] end),
+        {[Root],Parts} = boundary(C,Ns,A),
+        ?assertMatch({mark,_,<<"group">>,[],T,no_surface,_,{depicts,Ns,A,room}},Root),
+        %% The walls stand at the exact real size, never rounded.
+        Size = [{f,<<"width">>,{'/',1,3}},{f,<<"height">>,3000},{f,<<"depth">>,{'/',1001,2}}],
+        ?assertMatch([{mark,_,<<"corner_box">>,Size,_,{surfaces,{surface,<<"#C9D2DB">>,_,_,_,_,_},_,_},_,_}],Parts),
+        ?assertMatch([{part,<<"extent">>,{corner_box,{'/',1,3},3000,{'/',1001,2}},_,_,_,_}],
+            read(C,space({eidolon,space_wireframe,
+                {subject,{ontology_ref,Ns,A},room},{'Parts'}}))),
+        executed(C,space({space_represent,ref(Ns,room),solid,T,wireframe,solid,T,matrix})),
+        applied(Ns,fun() -> case boundary(C,Ns,A) of {_,P} -> length(P) =:= 2; [] -> false end end),
+        {[_],Matrix} = boundary(C,Ns,A),
+        ?assertMatch([{mark,_,<<"box">>,[{f,_,1},{f,_,3000},{f,_,501}],_,{surface,_,_,_,_,220,[]},_,_},
+                      {mark,_,<<"corner_box">>,Size,_,{surfaces,{surface,<<"#3CFF7A">>,_,_,_,_,_},_,_},_,_}],Matrix),
+        executed(C,space({space_represent,ref(Ns,room),solid,T,matrix,solid,T,none})),
+        applied(Ns,fun() -> boundary(C,Ns,A) =:= [] end),
+        ?assertEqual([],boundary(C,Ns,A)),
+        fails(Ns,{attribute,room,interior,{'_'}}),
+        %% Infinite extent refuses finite boundaries with the existing reason.
+        denied(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix}),{space_interior_unavailable,matrix,infinite})
     end) end}.
 
 %% The shared looks are ordinary recipes of the pinned GUI vocabulary. They
@@ -203,34 +201,32 @@ one_thing_is_read_in_another_mode_test_() ->
         edit(Ns,conj([{assertz,{attribute,room,name,<<"Room">>}},{assertz,{attribute,room,transform,T}},
             {assertz,{attribute,room,exterior,solid}},
             {assertz,{attribute,room,dimensions,{box,{q,10,<<"m">>},{q,{'/',1,3},<<"mm">>},{q,2,<<"km">>}}}}])),
-        quod_space_creation_tests:with_models(C,fun() ->
-            MA = quod_simplex:genesis_hash(Model),
-            Marker = {recipe,Model,MA,marker},
-            Edition = {eidolon,edition,solid,{recipe,Space,SA,space_edition}},
-            Offered = fun() -> [E || E={eidolon,P,solid,_} <- read(C,{entity_eidolons,room,{'E'}}),
-                                     lists:member(P,[playing,edition,selected])] end,
-            ?assertEqual([Edition,{eidolon,playing,solid,Marker}],lists:sort(Offered())),
-            At = {relative,<<"selected">>,{transform,0,0,0,0,0,0}},
-            Size = [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
-            Shown = [{mark,<<"selected">>,<<"group">>,[],T,no_surface,unlabelled,{depicts,Ns,A,room}},
-                     {mark,<<"selected/sides">>,<<"box">>,Size,At,{'_'},unlabelled,depicts_nothing},
-                     {mark,<<"selected/corners">>,<<"corner_box">>,Size,At,{'_'},{label,<<"Room">>,<<"above">>},depicts_nothing}],
-            Written = <<"10 m ",195,151," 1/3 mm ",195,151," 2 km">>,
-            {eidolon_scene,{entity_ref,Ns,A,room},Editing,nonphysical,[]} = read(C,{client_eidolon,room,Edition,{'View'}}),
-            ?assert(matches(Shown ++ [{mark,<<"selected/size">>,<<"group">>,[],
-                {relative,<<"selected">>,{transform,0,-250,0,0,0,0}},no_surface,{label,Written,<<"below">>},depicts_nothing}],Editing)),
-            %% Nothing offers a selected Eidolon until a class authors one.
-            Selected = {eidolon,selected,solid,Marker},
-            ?assertError({menu_read_failed,_,_},read(C,{client_eidolon,room,Selected,{'View'}})),
-            edit(Space,{assertz,{class_eidolon,space,selected,solid,Marker}}),
-            ?assertEqual([Edition,{eidolon,playing,solid,Marker},Selected],lists:sort(Offered())),
-            {eidolon_scene,{entity_ref,Ns,A,room},Chosen,nonphysical,[]} = read(C,{client_eidolon,room,Selected,{'View'}}),
-            ?assert(matches(Shown,Chosen)),
-            %% An infinite space says so.
-            edit(Ns,conj([{retract,{attribute,room,dimensions,{'_'}}},{assertz,{attribute,room,dimensions,infinite}}])),
-            {eidolon_scene,_,Endless,nonphysical,[]} = read(C,{client_eidolon,room,Edition,{'View'}}),
-            ?assertMatch({mark,_,<<"group">>,[],_,no_surface,{label,<<"Infinite">>,<<"below">>},_},lists:last(Endless))
-        end)
+        MA = quod_simplex:genesis_hash(Model),
+        Marker = {recipe,Model,MA,marker},
+        Edition = {eidolon,edition,solid,{recipe,Space,SA,space_edition}},
+        Offered = fun() -> [E || E={eidolon,P,solid,_} <- read(C,{entity_eidolons,room,{'E'}}),
+                                 lists:member(P,[playing,edition,selected])] end,
+        ?assertEqual([Edition,{eidolon,playing,solid,Marker}],lists:sort(Offered())),
+        At = {relative,<<"selected">>,{transform,0,0,0,0,0,0}},
+        Size = [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
+        Shown = [{mark,<<"selected">>,<<"group">>,[],T,no_surface,unlabelled,{depicts,Ns,A,room}},
+                 {mark,<<"selected/sides">>,<<"box">>,Size,At,{'_'},unlabelled,depicts_nothing},
+                 {mark,<<"selected/corners">>,<<"corner_box">>,Size,At,{'_'},{label,<<"Room">>,<<"above">>},depicts_nothing}],
+        Written = <<"10 m ",195,151," 1/3 mm ",195,151," 2 km">>,
+        {eidolon_scene,{entity_ref,Ns,A,room},Editing,nonphysical,[]} = read(C,{client_eidolon,room,Edition,{'View'}}),
+        ?assert(matches(Shown ++ [{mark,<<"selected/size">>,<<"group">>,[],
+            {relative,<<"selected">>,{transform,0,-250,0,0,0,0}},no_surface,{label,Written,<<"below">>},depicts_nothing}],Editing)),
+        %% Nothing offers a selected Eidolon until a class authors one.
+        Selected = {eidolon,selected,solid,Marker},
+        ?assertError({menu_read_failed,_,_},read(C,{client_eidolon,room,Selected,{'View'}})),
+        edit(Space,{assertz,{class_eidolon,space,selected,solid,Marker}}),
+        ?assertEqual([Edition,{eidolon,playing,solid,Marker},Selected],lists:sort(Offered())),
+        {eidolon_scene,{entity_ref,Ns,A,room},Chosen,nonphysical,[]} = read(C,{client_eidolon,room,Selected,{'View'}}),
+        ?assert(matches(Shown,Chosen)),
+        %% An infinite space says so.
+        edit(Ns,conj([{retract,{attribute,room,dimensions,{'_'}}},{assertz,{attribute,room,dimensions,infinite}}])),
+        {eidolon_scene,_,Endless,nonphysical,[]} = read(C,{client_eidolon,room,Edition,{'View'}}),
+        ?assertMatch({mark,_,<<"group">>,[],_,no_surface,{label,<<"Infinite">>,<<"below">>},_},lists:last(Endless))
     end) end}.
 %% Element-wise equality where {'_'} stands for any value.
 matches(Pattern,Value) when is_list(Pattern), is_list(Value), length(Pattern) =:= length(Value) ->

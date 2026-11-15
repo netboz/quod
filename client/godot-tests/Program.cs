@@ -126,6 +126,8 @@ static class Tests
     }
     static void Scenes()
     {
+        Check(ScenePose.Turn(-20) == 340 && ScenePose.Turn(-180) == 180 && ScenePose.Turn(-90.4) == 270 && ScenePose.Turn(359.6) == 0 &&
+            ScenePose.Turn(-0.4) == 0 && ScenePose.Turn(90) == 90 && ScenePose.Turn(720.2) == 0, "a heading measured either way becomes a scene turn from 0 to 359");
         string anchor = Term.Binary(new byte[32]).ToString();
         string group = $"mark(<<\"source\">>,<<\"group\">>,[],transform(1000,2000,3000,15,35,75),no_surface,unlabelled,depicts(<<\"storage\">>,{anchor},object))";
         string box = "mark(<<\"source/edges\">>,<<\"wire_box\">>,[f(<<\"width\">>,'/'(1,3)),f(<<\"height\">>,1001),f(<<\"depth\">>,'/'(1001,2))],relative(<<\"source\">>,transform(0,0,0,0,0,0)),surface(<<\"#6A90D9\">>,0,700,1000,1000,[]),unlabelled,depicts_nothing)";

@@ -1,6 +1,6 @@
 -module(quod_space_creation_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([with_spaces/2, with_spaces/3, with_models/2]).
+-export([with_spaces/2, with_spaces/3]).
 
 signed_empty_space_results_and_recovery_test_() ->
     [{atom_to_list(Lane), {timeout, 90, fun() -> with_spaces(fun(C) ->
@@ -58,7 +58,6 @@ explicit_and_near_agent_placement_test_() ->
         signed(C, inside(Room, ref(Ns,personal), {transform,200,300,400,0,45,0})),
         %% Near the agent is two metres plus half the shared marker's depth,
         %% read from the scene vocabulary: 400 - 2000 - 250.
-        with_models(C, fun() ->
         {Bindings, _, _} = create(C, Target, []),
         [{_, Space = {entity_ref, Target, _, Id}}, _] = Bindings,
         assignment(C, Target, Id, 1, Room),
@@ -89,7 +88,6 @@ explicit_and_near_agent_placement_test_() ->
         holds(Target, {attribute, Id, transform, {transform,200,300,-1850,0,45,0}}),
         denied_creation(C, Target, []),
         create(C, Target, [], placement(Local))
-        end)
     end) end}.
 
 %% "In front of me" with the viewer's pose from the device: the near distance
@@ -102,7 +100,6 @@ viewer_pose_placement_test_() ->
         signed(C, inside(Room, ref(Ns,personal), {transform,200,300,400,0,45,0})),
         %% Eyes at (1000, 1900, 0) looking along -X: yaw 90 degrees.
         View = {view,{transform,1000,1900,0,0,90,0},{forward,-1000,0,0}},
-        with_models(C, fun() ->
         [begin
             {Made, _, _} = create(C, Target, [], {viewed,near_agent,View}),
             [{_, {entity_ref, Target, _, Id}}, _] = Made,
@@ -110,11 +107,25 @@ viewer_pose_placement_test_() ->
             holds(Target, {attribute, Id, transform, Expected})
          end || Expected <- [{transform,-1250,300,0,0,90,0},{transform,-1250,300,-750,0,90,0}]],
         denied_creation(C, Target, [], {viewed,near_agent,{view,{transform,1000,1900,0,0,90,0},{forward,-700,0,0}}}),
+        %% A look to the right arrives as the scene turn 270 and lands along +X.
+        {Right, _, _} = create(C, Target, [], {viewed,near_agent,{view,{transform,1000,1900,0,0,270,0},{forward,1000,0,0}}}),
+        [{_, RightRef = {entity_ref, Target, _, RightId}}, _] = Right,
+        Faced = {transform,3250,300,0,0,270,0},
+        holds(Target, {attribute, RightId, transform, Faced}),
+        %% A turn outside 0 to 359 is no scene pose, whoever writes it: the
+        %% viewer's pose at the form, the stored attribute, and representing.
+        denied_creation(C, Target, [], {viewed,near_agent,{view,{transform,1000,1900,0,0,-90,0},{forward,1000,0,0}}}),
+        denied_creation(C, Target, [{attribute,transform,{transform,0,0,0,0,-90,0}}]),
+        Turned = {transform,3250,300,0,0,90,0},
+        Represent = fun(From, To) -> {'::',<<"quod:space">>,{space_represent,RightRef,solid,From,none,solid,To,none}} end,
+        signed(C, Represent(Faced, Turned)),
+        holds(Target, {attribute, RightId, transform, Turned}),
+        failed(signed_result(C, Represent(Turned, {transform,3250,300,0,0,-90,0}))),
+        holds(Target, {attribute, RightId, transform, Turned}),
         %% Without a viewer pose the agent's own place and facing decide, as before.
         {Plain, _, _} = create(C, Target, [], {viewed,near_agent,none}),
         [{_, {entity_ref, Target, _, PlainId}}, _] = Plain,
         holds(Target, {attribute, PlainId, transform, {transform,200,300,-1850,0,45,0}})
-        end)
     end) end}.
 
 explicit_owner_and_class_defaults_test_() ->
@@ -245,8 +256,16 @@ with_spaces(Fun, Extra, SpaceSource) ->
         TSup = quod_agent_hosting_tests:start_ontology(Target,Dir,Node,[],Terms),
         DSup = quod_agent_hosting_tests:start_ontology(Dest,Dir,Node,[],Terms),
         edit(Ns, {assertz,Pin}),
+        %% Like the system GUI on a node, a scene vocabulary is always there:
+        %% it draws spaces and decides what a pose is.
+        Render = <<"creation-rendering">>, Model = <<"creation-modelling">>,
+        RSup = quod_agent_hosting_tests:start_ontology(Render,Dir,Node,[],source("gui_scene.pl")),
+        GSup = quod_agent_hosting_tests:start_ontology(Model,Dir,Node,[],source("gui_scene.pl") ++
+            [{rendering_vocabulary,Render,quod_simplex:genesis_hash(Render)}]),
+        [edit(Store,{assertz,{modelling_vocabulary,Model,quod_simplex:genesis_hash(Model)}})
+            || Store <- [Ns,Owner]],
         try Fun(C#{storage=>Target,destination=>Dest,measure=>Measure})
-        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [DSup,TSup,NSup,SSup,MSup]] end
+        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [GSup,RSup,DSup,TSup,NSup,SSup,MSup]] end
     end, Sources).
 
 source(File) ->
@@ -350,16 +369,6 @@ empty_resources(C,Target,Id,ExpectedContents) ->
                                              all,quod_time:mono_ms()+10000),
         ?assertEqual(#{},gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds))
     end || Ns <- lists:usort([Target,maps:get(namespace,C),maps:get(destination,C)])].
-
-with_models(#{namespace := Ns, directory := Dir, identity := Node}, Fun) ->
-    Render = <<"creation-rendering">>, Model = <<"creation-modelling">>,
-    RSup = quod_agent_hosting_tests:start_ontology(Render,Dir,Node,[],source("gui_scene.pl")),
-    MSup = quod_agent_hosting_tests:start_ontology(Model,Dir,Node,[],source("gui_scene.pl") ++
-        [{rendering_vocabulary,Render,quod_simplex:genesis_hash(Render)}]),
-    [edit(Store,{assertz,{modelling_vocabulary,Model,quod_simplex:genesis_hash(Model)}})
-        || Store <- [Ns,<<"quod:space">>]],
-    try Fun()
-    after [quod_agent_hosting_tests:stop_ontology(S) || S <- [MSup,RSup]] end.
 
 atomic_completion_wait_includes_complete_record_test_() ->
     {timeout, 30, fun() -> with_spaces(fun(C = #{namespace := Ns, destination := Dest}) ->

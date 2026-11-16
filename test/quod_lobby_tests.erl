@@ -1187,9 +1187,16 @@ assert_ontology_choices(Choices, {ontology_ref, TargetNs, TargetAnchor}) ->
                 {eidolon, edition, solid, {recipe, Space, SpaceAnchor, space_edition}}] ++
                [{eidolon, menu, default, {recipe, Space, SpaceAnchor, space_menu}} |
                 [{eidolon, {operation, instance}, Name, {recipe, Space, SpaceAnchor, Recipe}}
-                 || {Name, Recipe} <- [{enter, space_enter}, {leave, space_leave},
-                                      {show_none, space_show_none}, {show_wireframe, space_show_wireframe},
-                                      {show_matrix, space_show_matrix}]]],
+                 || {Name, Recipe} <- [{enter, space_enter}, {leave, space_leave}]]] ++
+               %% Seen from inside, an ontology is a space: its walls and their
+               %% Show as offers come from the space class. Its own contents
+               %% Eidolon is offered, with Default, by the ontology class.
+               [{eidolon, interior, Name, {recipe, Space, SpaceAnchor, Recipe}}
+                || {Name, Recipe} <- [{wireframe, space_wireframe}, {matrix, space_matrix}]] ++
+               [{eidolon, {operation, instance}, {show, Purpose, Name}, {recipe, Space, SpaceAnchor, {show, space, Purpose, Name}}}
+                || {Purpose, Name} <- [{playing, solid}, {interior, wireframe}, {interior, matrix}, {interior, default}]] ++
+               [{eidolon, {operation, instance}, {show, playing, Name}, {recipe, TargetNs, TargetAnchor, {show, ontology, playing, Name}}}
+                || Name <- [contents, default]],
     ?assertEqual(lists:sort(Expected), lists:sort(Choices)).
 
 non_system_read_only_source_uses_the_same_recipe_test_() ->

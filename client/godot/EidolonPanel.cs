@@ -64,7 +64,7 @@ public partial class EidolonPanel : VBoxContainer
         var details=SpatialGui.ActionButton("Details");content.AddChild(details);details.Pressed+=()=>{exact.Visible=!exact.Visible;Operations.ShowDetails(exact.Visible);};
         content.AddChild(exact);
         Operations.SubjectOpened+=SubjectOpened;Operations.Changed+=()=>{
-            if(Selected?.Operation==true&&(!Operations.Available||Operations.Current?.Name!=Selected.Style)) {
+            if(Selected?.Operation==true&&(!Operations.Available||Operations.Current?.Name.ToString()!=Selected.Name.ToString())) {
                 WithdrawRepresentation(KeepVisual);Operations.Hide();status.Text="The selected action is unavailable. Choose a current view or action.";
             }
             RefreshContext();Changed?.Invoke();};
@@ -79,13 +79,13 @@ public partial class EidolonPanel : VBoxContainer
         workbench.OpenSubject+=s=>Open(session,accounts,store,s);
     }
     string Caption(Eidolon e)=>labels.TryGetValue(e.Exact.ToString(),out var authored) ? authored
-        : e.Operation ? Operations.Offered.FirstOrDefault(o=>o.Name==e.Style)?.Form.Tree.Label??e.Caption
+        : e.Operation ? Operations.Offered.FirstOrDefault(o=>o.Name.ToString()==e.Name.ToString())?.Form.Tree.Label??e.Caption
         : e.Purpose.Name switch {
-            "playing"=>e.Style.Replace('_',' ')+" view",
-            "edition"=>e.Style.Replace('_',' ')+" view · editing",
-            "selected"=>e.Style.Replace('_',' ')+" view · selected",
-            "prolog"=>e.Style=="source" ? "Source" : "Source · "+e.Style.Replace('_',' '),
-            "inspection"=>"Inspect · "+e.Style.Replace('_',' '),
+            "playing"=>e.Text+" view",
+            "edition"=>e.Text+" view · editing",
+            "selected"=>e.Text+" view · selected",
+            "prolog"=>e.Text=="source" ? "Source" : "Source · "+e.Text,
+            "inspection"=>"Inspect · "+e.Text,
             _=>e.Caption };
     public void RefreshContext()
     {
@@ -189,7 +189,7 @@ public partial class EidolonPanel : VBoxContainer
             var chosen=next.SingleOrDefault(e=>e.Exact.ToString()==preferred);
             // A thing shown in the world that offers a selected Eidolon shows it on selection; none is required.
             bool shown=Occurrence!=null&&!ReferenceEquals(Occurrence.Owner,preview);
-            if(preferred==null)chosen=(shown ? next.FirstOrDefault(e=>e.Purpose.Name=="selected") : null)??next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Style==Operations.Current?.Name)??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
+            if(preferred==null)chosen=(shown ? next.FirstOrDefault(e=>e.Purpose.Name=="selected") : null)??next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Name.ToString()==Operations.Current?.Name.ToString())??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
             var answered=request;request=null;
             bool asked=answered!=null&&chosen?.Exact.ToString()==answered.Choice;
             if(chosen!=null)Choose(chosen,reveal:asked,execute:asked&&answered!.Execute);else{WithdrawRepresentation(KeepVisual);status.Text=next.Length==0 ? "No authored representations are currently offered." : "The selected representation was withdrawn. Choose a current offered representation.";}
@@ -202,14 +202,14 @@ public partial class EidolonPanel : VBoxContainer
     {
         if(!Available || Current==null || !Offered.Any(e=>e.Exact.ToString()==choice.Exact.ToString()))throw new InvalidOperationException("Choose a current authored representation.");
         if(Selected?.Exact.ToString()==choice.Exact.ToString()) {
-            if(reveal&&choice.Operation)Operations.Choose(choice.Style,true,execute);
+            if(reveal&&choice.Operation)Operations.Choose(choice.Name,true,execute);
             else if(reveal&&preview.Visible)RevealPreview();
             return;
         }
         if(preferred!=choice.Exact.ToString())workbenchSource=false;
         WithdrawRepresentation(choice.Operation&&KeepVisual);Selected=choice;preferred=choice.Exact.ToString();RefreshContext();
         exact.Text=Current.Exact+"\n"+choice.Exact;
-        if(choice.Operation){Operations.Show();Operations.Choose(choice.Style,reveal,execute);status.Text="";Changed?.Invoke();return;}
+        if(choice.Operation){Operations.Show();Operations.Choose(choice.Name,reveal,execute);status.Text="";Changed?.Invoke();return;}
         Operations.Hide();bool revealPreview=reveal;var viewed=Current;
         string kind=choice.Purpose.Kind=="atom" && choice.Purpose.Name is "playing" or "edition" or "selected" ? "eidolon_scene" : "eidolon";
         var view=new SignedView(session,accounts.Human!,viewed.Target,kind,SignedSession.ViewGoal(viewed.Target,choice.Read(viewed.Local)));representation=view;previewRead=kind=="eidolon_scene";

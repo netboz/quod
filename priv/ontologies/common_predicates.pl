@@ -143,8 +143,8 @@ class_eidolon(thing, prolog, source, recipe(Namespace, Anchor, prolog_editor)) :
     Namespace = <<"quod:gui">>,
     quod:root::system_ontology(Namespace, Anchor).
 
-class_eidolon(ontology, inspection, Style, recipe(Namespace, Anchor, Style)) :-
-    member(Style, [policy, interfaces, routes]),
+class_eidolon(ontology, inspection, Name, recipe(Namespace, Anchor, Name)) :-
+    member(Name, [policy, interfaces, routes]),
     Namespace = <<"quod:gui">>,
     quod:root::system_ontology(Namespace, Anchor).
 
@@ -153,6 +153,8 @@ class_eidolon(ontology, workspace, workbench, recipe(Namespace, Anchor, workbenc
 
 class_eidolon(ontology,Mode,contents,recipe(Ns,A,ontology_contents)) :-
     member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
+attribute(eidolon(ontology,playing,contents),label,<<"Contents">>).
+attribute(eidolon(ontology,playing,contents),image,Icon) :- menu_icon(contents,Icon).
 eidolon(ontology_contents,subject(ontology_ref(Ns,A),Space),contents(Exposure)) :-
     current_ontology_identity(Ns,A), ontology_inspect(predicates(_),_),
     quod:space::space_contents_projection(entity_ref(Ns,A,Space),Exposure).
@@ -185,9 +187,9 @@ client_menu(Subject, View) :-
     ; fail_with_reason(ambiguous_menu(Entity))).
 
 entity_eidolons(Entity,Eidolons) :- entity_eidolons(Entity,_,_,Eidolons).
-entity_eidolons(Entity,Purpose,Style,Eidolons) :-
+entity_eidolons(Entity,Purpose,Name,Eidolons) :-
     findall(Direct,(instance_of(Direct,Entity); Direct = Entity, isa(Direct,Direct)),Raw),
-    sort(Raw,Classes), class_eidolons(Classes,Purpose,Style,Offered),
+    sort(Raw,Classes), class_eidolons(Classes,Purpose,Name,Offered),
     findall(eidolon(Mode,Kind,Recipe),
         (member(eidolon(Mode,Kind,Recipe),Offered), entity_eidolon_mode(Entity,Mode)), Eidolons).
 
@@ -215,18 +217,38 @@ client_entity_scene(Entity, Mode, Scene) :-
           \+ '$quod_stricter_class'(Class, Declaring)), Raw),
       sort(Raw, Scenes), member(Scene, Scenes)).
 
+%% Which Eidolon a viewer sees: their own choice, else the instance's, else
+%% the class default. The viewer's choice lives in their own ontology and
+%% changes only what they see; physics and other readers of
+%% client_entity_scene/3 keep the instance's. A choice naming an Eidolon the
+%% thing's classes no longer list counts as none. No viewer, or no choice, is
+%% an ordinary no.
+viewer_eidolon(Entity, Purpose, Name, Eidolons) :-
+    current_ontology_identity(Ns, A),
+    quod:user::shown_as(entity_ref(Ns, A, Entity), Purpose, Name),
+    entity_eidolons(Entity, Purpose, Name, Eidolons), Eidolons \== [].
+viewer_scene(Entity, Mode, Scene) :-
+    client_entity_scene(Entity, Mode, Declared),
+    (Declared = appearance(Id, _, Context, Layout, _),
+     viewer_eidolon(Entity, Mode, Name, Eidolons) ->
+        Scene = appearance(Id, Name, Context, Layout, Eidolons)
+    ; Scene = Declared).
+eidolon_seen(Entity, Purpose, Name, Eidolons) :-
+    (viewer_eidolon(Entity, Purpose, Name, Eidolons) -> true
+    ; once(client_entity_scene(Entity, Purpose, appearance(_, Name, _, _, Eidolons)))).
+
 %% A choice is data from this exact subject's authored associations, not an
 %% executable client continuation. The recipe and its reads retain their own
 %% anchored authorization and dependency tracking.
 client_eidolon(Entity,Choice,View) :-
     term_variables([Entity,Choice],[]),
-    Choice = eidolon(Purpose,Style,recipe(Ns,A,Recipe)),
-    entity_eidolons(Entity,Purpose,Style,Choices), member_eq(Choice,Choices),
+    Choice = eidolon(Purpose,Name,recipe(Ns,A,Recipe)),
+    entity_eidolons(Entity,Purpose,Name,Choices), member_eq(Choice,Choices),
     current_ontology_identity(Here,History), Target = ontology_ref(Here,History),
     (client_scene_purpose(Purpose,Shown) ->
         client_entity_scene(Entity,Shown,appearance(_,_,Context,Layout,_)),
         in_ontology(Ns,A,eidolon(Recipe,Context,Model)),
-        client_eidolon_scene(Entity,Purpose,Style,Layout,Model,View)
+        client_eidolon_scene(Entity,Purpose,Name,Layout,Model,View)
     ; in_ontology(Ns,A,eidolon(Recipe,subject(Target,Entity),View))).
 
 %% Each shown thing has a mode, display by default. A class may also offer a
@@ -252,16 +274,16 @@ class_eidolons(Classes,Eidolons) :- class_eidolons(Classes,_,_,Eidolons).
 %% For a class another ontology owns, every isa/2 answer is a proof in that
 %% ontology. Each class's ancestors are therefore read once, and the test that
 %% keeps only the most specific recipe compares those lists.
-class_eidolons(Classes,Purpose,Style,Eidolons) :-
-    findall(candidate(Class,Purpose,Style,Recipe),
+class_eidolons(Classes,Purpose,Name,Eidolons) :-
+    findall(candidate(Class,Purpose,Name,Recipe),
         (member(Direct,Classes), class_ancestors(Direct,Above), member(Class,Above),
-         class_eidolon(Class,Purpose,Style,Recipe)), Candidates),
+         class_eidolon(Class,Purpose,Name,Recipe)), Candidates),
     findall(Class, member(candidate(Class,_,_,_),Candidates), Raw), sort(Raw, Declaring),
     findall(Class-Above, (member(Class,Declaring), class_ancestors(Class,Above)), Chains),
-    findall(eidolon(Purpose,Style,Recipe),
+    findall(eidolon(Purpose,Name,Recipe),
         (member(Candidate,Candidates),
-         Candidate = candidate(Class,Purpose,Style,Recipe),
-         \+ (member(candidate(Other,Purpose,Style,_),Candidates),
+         Candidate = candidate(Class,Purpose,Name,Recipe),
+         \+ (member(candidate(Other,Purpose,Name,_),Candidates),
              class_below(Other,Class,Chains), \+ class_below(Class,Other,Chains)),
          \+ local_recipe_overrides(Candidate,Candidates)), Choices),
     sort(Choices, Eidolons).
@@ -272,11 +294,11 @@ class_ancestors(Class,Above) :-
 %% Whether Sub is Super or below it, from the ancestors already read.
 class_below(Sub,Super,Chains) :- member(Class-Above,Chains), Class == Sub, !, member_eq(Super,Above).
 
-%% A locally authored recipe of the same class, purpose, style and name
+%% A locally authored recipe of the same class, purpose, Eidolon and recipe
 %% replaces an imported copy. Other imported choices remain alternatives.
-local_recipe_overrides(candidate(Class,Purpose,Style,recipe(OtherNs,_,Name)),Candidates) :-
+local_recipe_overrides(candidate(Class,Purpose,Name,recipe(OtherNs,_,Recipe)),Candidates) :-
     current_ontology_identity(Ns,A), OtherNs \== Ns,
-    member(candidate(Class,Purpose,Style,recipe(Ns,A,Name)),Candidates).
+    member(candidate(Class,Purpose,Name,recipe(Ns,A,Recipe)),Candidates).
 
 entity_classes(Entity, Classes) :-
     findall(Class, ((instance_of(Direct,Entity); Direct = Entity, isa(Direct,Direct)),
@@ -408,6 +430,9 @@ public_source_query(entity_eidolons(_, _, _, _)).
 public_source_query(client_eidolon(_, _, _)).
 public_source_query(entity_scene(_, _, _)).
 public_source_query(client_entity_scene(_, _, _)).
+public_source_query(viewer_eidolon(_, _, _, _)).
+public_source_query(viewer_scene(_, _, _)).
+public_source_query(eidolon_seen(_, _, _, _)).
 public_source_query(client_menu(_, _)).
 public_source_query(gui_menu_source(_, _)).
 

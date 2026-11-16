@@ -1,0 +1,13 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+
+COST no_walls pie_us=286635 world_view_us=12986
+
+COST instance_walls pie_us=284706 world_view_us=28237
+[0;32m.[0m
+Finished in 30.252 seconds
+[0;32m1 tests, 0 failures
+[0m

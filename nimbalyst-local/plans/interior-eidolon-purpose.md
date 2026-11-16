@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-interior-eidolon-purpose
   title: Eidolons without styles; who chooses which one is shown
-  status: in-development
+  status: in-review
   startDate: "2026-11-16"
   planType: system-design
   priority: high
@@ -14,8 +14,8 @@ planStatus:
     - ontology
     - design
   created: "2026-11-15"
-  updated: "2026-11-16T15:40:00.000Z"
-  progress: 20
+  updated: "2026-11-16T20:30:00.000Z"
+  progress: 83
 ---
 
 # Eidolons without styles; who chooses which one is shown
@@ -33,22 +33,75 @@ release and live edits each still need his own go.
 - [x] Phase 1 — The spec page replaces the old text
   - [x] `doc/gui-plan.md`, "Entities, Eidolons and marks"
   - [x] `doc/spaces.md`: the `space_represent` and `interior` paragraphs, "Direct depiction"
-- [ ] Phase 2 — What I see: the viewer's own choice (`quod_user.pl`, `common_predicates.pl`)
-  - [ ] the choice is stored in the user's ontology and changed through `quod:user`
-  - [ ] one shared rule applies it wherever a thing is drawn
-- [ ] Phase 3 — The inside of a space on the one path (`quod_space.pl`)
-  - [ ] inside Eidolons declared with `class_eidolon/4`
-  - [ ] walls drawn through `entity_eidolons/4`
-  - [ ] no stored `none`; private interior tables removed
-- [ ] Phase 4 — "Show as" from the class's list (`gui_forms.pl`, `quod_space.pl`, `quod_gui.pl`)
-  - [ ] caption and icon declared with each Eidolon
-  - [ ] one shared offer per Eidolon, plus "Default"
-  - [ ] the space pie shows the list for what I am looking at
-- [ ] Phase 5 — Godot client carries an offered action's name as a term
-- [ ] Phase 6 — Tests
+- [x] Phase 2 — What I see: the viewer's own choice (`quod_user.pl`, `common_predicates.pl`)
+  - [x] the choice is stored in the user's ontology and changed through `quod:user`
+  - [x] one shared rule applies it wherever a thing is drawn
+- [x] Phase 3 — The inside of a space on the one path (`quod_space.pl`)
+  - [x] inside Eidolons declared with `class_eidolon/4`
+  - [x] walls drawn through `entity_eidolons/4`
+  - [x] no stored `none`; private interior tables removed
+- [x] Phase 4 — "Show as" from the class's list (`gui_forms.pl`, `quod_space.pl`, `quod_gui.pl`)
+  - [x] caption and icon declared with each Eidolon
+  - [x] one shared offer per Eidolon, plus "Default"
+  - [x] the space pie shows the list for what I am looking at
+- [x] Phase 5 — Godot client carries an offered action's name as a term
+- [x] Phase 6 — Tests
 - [ ] Phase 7 — Gates, line delta, then Yan's go for the commit
+  - [x] gates green: server-04 (eunit 4369/0, ct, xref, dialyzer), client-04 (all 16 steps), after the icons
+  - [x] line delta: see the report (icons add catalogue lines)
+  - [ ] Yan's go for the commit
 - [ ] Phase 8 — Release, on Yan's go
 - [ ] Phase 9 — On a separate go: remove what is left of "style" in the code
+
+## Build notes (2026-11-16, Opus build session)
+
+Where the build differs from the steps below, and why. To be checked by Yan.
+
+1. **The viewer's choice is applied where things are drawn, not inside
+   `client_entity_scene/3`.** Physics proves its frames through
+   `client_entity_scene/3` (`quod_physics.pl:213`). Applying the choice
+   there would have let a viewer's own choice reach physics. One shared rule
+   (`viewer_scene/3`, `common_predicates.pl`) applies it in
+   `space_scene_parts`; the walls use `eidolon_seen/4`. Physics keeps the
+   instance's choice.
+2. **The inside joins `entity_scene/3`.** `quod_space.pl` answers
+   `entity_scene(…, interior, …)` from the `interior` slot, as it does for
+   the outside from `exterior`. The shared rule for "what I see" then works
+   for any purpose.
+3. **Each wedge has its own recipe term**, `show(Class, Purpose, Name)`: the
+   offered-action framework finds a form by recipe and subject only
+   (`gui_forms.pl` `gui_operation_form`). The offer's name is
+   `show(Purpose, Name)` as planned.
+4. **Permission:** the offer's form checks `show_as(Purpose, Name)` on the
+   thing; `class_permission(thing, show_as, allow)` sits with the offer in
+   `gui_forms.pl`.
+5. **Default is offered only once the viewer has chosen**, and the Eidolon
+   already seen is not offered. Wedges come in name order (inside: Matrix,
+   Wire; outside: Contents, Solid), Default where the pie places it.
+6. The ontology class's own `contents` Eidolon got its caption
+   (`common_predicates.pl`).
+7. Tests: the physics fixture now starts `quod:user`, as every node has it.
+   Without it, 16 physics view tests failed.
+8. Found in passing: a `retract` inside `findall/3` is undone, so the first
+   "Default" made no write; fixed in `show_as/3`. `set_instance_permission/3`
+   (`common_predicates.pl:400`) uses the same pattern; not checked.
+9. Cost (median of 41 signed reads, agent inside a finite room): pie 287 →
+   425 ms, world view 13.0 → 19.2 ms (28.2 → 41.8 ms with instance walls).
+   Each Show-as offer reads the thing's Eidolons, what the viewer sees and
+   whether its model exists; the space pie computes all of the space's
+   offers, outside and inside. Evidence in
+   `doc/evidence/interior-eidolon-purpose-20261116/`.
+10. Icons (Yan asked for them, 2026-11-16): `default`, `solid` and `contents` drawn in
+    the existing style (`nimbalyst-local/icons/svg/`), added to the `quod:gui`
+    catalogue and the client bundle; `show_none` removed as superseded.
+11. **A class offers a wedge only for an Eidolon it gives a caption.** The
+    lobby ontology forwards inherited Eidolons under its own class name
+    (`lobby_instance.pl:137`); without this the `ontology` class offered a
+    second copy of every space wedge.
+12. **The browser client** (`client/src/world.js`) also read an Eidolon's name
+    as an atom; it now carries it as a term, like the Godot client. Not named
+    in Phase 5.
+13. Tests: the space-tests fixture now starts `quod:user` too.
 
 ## Yan's rulings (2026-11-16)
 

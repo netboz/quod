@@ -86,29 +86,47 @@ Its section 6.1 prescribes a direct domain change in the submission transaction.
 The event-based submission requested here revises that proposed default; the
 transaction boundaries and consequences are explicit below.
 
-## Entities, Eidolons and marks
+## Eidolons
 
-Use plain descriptions alongside the current source names:
+Approved by Yan on 2026-11-16.
 
-| Source term | Plain meaning | GUI example |
-| --- | --- | --- |
-| Class | A reusable semantic kind, linked by `isa/2` | `text_box`, `slider`, `form` |
-| Instance or entity | A particular thing in an owning ontology, declared with `instance_of(Class, Instance)` | The `name_input` control in a particular settings form |
-| Eidolon or recipe | A reusable way to represent a subject for a purpose and style | A settings panel, or a rotary appearance for a numeric control |
-| Mark | One visual occurrence in a view, described by `mark/7` | A panel surface or the visible dial of a knob |
-| `depicts` | The link from a mark to its semantic subject | The dial points to its exact ontology and `angle_input` instance |
+**Eidolon.** One way a thing looks. A different look is a different Eidolon.
+There are no styles.
 
-An Eidolon is the recipe; a mark is one visual occurrence. A control instance
-may have several representations and appear in several places without becoming
-several independent controls. Conversely, several decorative marks may depict
-one control. A renderer mesh name is never the domain identity.
+**A class lists its Eidolons.** Each has a name and says what it is for: the
+thing is seen from outside, it is edited, the viewer is inside it. Edition
+is an Eidolon like any other.
+
+**Which one I see.** My own choice if I made one, otherwise the instance's
+choice, otherwise the class's default. The default may be none.
+
+**Where each is stored.** The class default with the class. The instance's
+choice on the instance. My choice in my own ontology, never on the instance.
+
+**"Show as"** is in the pie of the thing I am looking at. It lists the
+Eidolons for what I am looking at, plus "Default". It changes only what I
+see.
+
+**A new Eidolon appears by itself.** An Eidolon added to a class shows in
+the pies with nothing else to change. A wedge has a caption, an icon and the
+name of its Eidolon. A caption is one short word.
+
+*Recipe* and *mark* are words of the code only, not concepts.
+
+In the code, `class_eidolon(Class, Purpose, Name, Recipe)` declares one
+Eidolon: its class, what it is for (`playing` seen from outside, `edition`,
+`interior`), its name, and the recipe that draws it. Its caption and icon
+are `attribute(eidolon(Class, Purpose, Name), label, Caption)` and
+`attribute(eidolon(Class, Purpose, Name), image, Icon)`. A recipe returns
+marks; `depicts` links each mark to the exact thing it shows. A renderer
+mesh name is never the thing's identity.
 
 The current path is grounded in
 [common class recipe discovery](../priv/ontologies/common_predicates.pl),
 [rendering descriptors](../priv/ontologies/gui_scene.pl),
 [workspace recipe output](../priv/ontologies/gui_tools.pl) and
 [client decoding](../client/src/world.js). `class_eidolon/4` associates a class,
-purpose and style with an exact recipe; `entity_eidolons/2` discovers choices.
+purpose and name with an exact recipe; `entity_eidolons/2` discovers them.
 The existing recipe can return a semantic `workspace(...)`, so not every GUI
 control needs to become an independent 3D mark. The rendering ontology already
 names `gui_eidolon` alongside model and surface representations.

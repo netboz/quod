@@ -111,9 +111,9 @@ public partial class ExportChecks : Node
                 }
             }
             var offered = operations.Current ?? throw new Exception("No offered operation");
-            Check(offered.Name == "controller_settings", "actual offered controller-preference operation");
+            Check(offered.Name.ToString() == "controller_settings", "actual offered controller-preference operation");
             Check(offered.Form.Tree.Leaves.Count(c => c.Input) > 2, "generic typed offered inputs rendered");
-            await ChooseOfferedOperation(operations,offered.Name);
+            await ChooseOfferedOperation(operations,offered.Name.ToString());
             if(phase=="m4-live") { await ControllerLive(operations);return; }
             if (phase.StartsWith("m2-")) { await SpaceCreation(phase, original); return; }
             if (phase == "closing") {
@@ -304,7 +304,7 @@ public partial class ExportChecks : Node
         await Refuses(Term.Call("gui_operation", human.Entity, Term.Atom("not_offered"), form.Revision, form.Form.Submit, fields, Term.Variable("Results")) + ".", "denied operation explicit production outcome");
         var number = form.Form.Tree.Leaves.First(c => c.Family == "number");
         Term Replace(Term value) => Term.List(fields.Items.Select(row => row.Args[0].ToString() == number.Role ? Term.Call("field", row.Args[0], value) : row).ToArray());
-        string Goal(Term values, Term revision) => Term.Call("gui_operation", human.Entity, Term.Atom(form.Name), revision, form.Form.Submit, values, Term.Variable("Results")) + ".";
+        string Goal(Term values, Term revision) => Term.Call("gui_operation", human.Entity, form.Name, revision, form.Form.Submit, values, Term.Variable("Results")) + ".";
         await Refuses(Goal(Replace(Term.Text("invalid type")), form.Revision), "invalid type refused by production offered binder");
         await Refuses(Goal(Replace(Term.Number((number.Range.Max + number.Range.Step).ToString())), form.Revision), "invalid range refused by production offered binder");
         var oldOffer = JsonNode.Parse(await File.ReadAllTextAsync(Env("M1B_OLD_OFFER")))!;

@@ -29,7 +29,7 @@ public partial class ExportChecks
         await Until(()=>pane.Available&&panel.Available);
         // An action without fields runs at once and its validated form is gone
         // again; observe the selection where it happens.
-        bool chosen=false;void Seen(){chosen|=panel.Current?.Name==name;}
+        bool chosen=false;void Seen(){chosen|=panel.Current?.Name.ToString()==name;}
         panel.Changed+=Seen;
         try {
         var pie=(PieMenu)app.FindChild("pie-menu",true,false);
@@ -37,7 +37,7 @@ public partial class ExportChecks
         await Until(()=>pie.Navigator!=null||!pie.IsOpen);
         Check(pie.Navigator!=null,"the subject's authored pie arrives: "+app.Inspect());
         List<MenuNode>? Path(MenuNode node)=>node.Leaf
-            ? (node.Target!.Choice.Require("eidolon",3)[1].Name==name&&node.Target.Choice.Args[0].Name=="operation" ? [node] : null)
+            ? (node.Target!.Choice.Require("eidolon",3)[1].ToString()==name&&node.Target.Choice.Args[0].Name=="operation" ? [node] : null)
             : node.Children.Select(c=>Path(c) is {} p ? p.Prepend(node).ToList() : null).FirstOrDefault(p=>p!=null);
         var path=Path(pie.Navigator!.Root)??throw new Exception("No wedge offers "+name);
         foreach(var step in path.Skip(1)) {
@@ -273,12 +273,12 @@ public partial class ExportChecks
         string firstId=scene.SubjectIds(firstSpace).Single();
         await PickSpace(scene,firstId,Vector3.Zero,firstSpace);
         await Until(()=>panel.Available);
-        Check(((Label)panel.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()) && panel.Offered.Any(o=>o.Name=="enter"),
+        Check(((Label)panel.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()) && panel.Offered.Any(o=>o.Name.ToString()=="enter"),
             "reconnect-first picking selects the existing space, which offers its ordinary Enter before any account or creation button");
         var unopened=new OperationsPanel { Name="unopened-subject-probe" }; app.AddChild(unopened);
         var firstActor=Actor.FromTerm(firstSpace);
         await PanelResponse(unopened,()=>unopened.OpenSubject(app.ActiveSession,app.ActiveAccounts,firstActor,firstSpace),()=>unopened.Available);
-        Check(unopened.Offered.Any(o=>o.Name=="enter") &&
+        Check(unopened.Offered.Any(o=>o.Name.ToString()=="enter") &&
             ((Label)unopened.FindChild("operation-scope",true,false)).Text.Contains(firstSpace.ToString()),
             "a newly constructed generic panel opens an exact picked subject without prior account/storage initialization");
         var wrongAnchor=firstActor with { Anchor=Identity.Encode(new byte[32]) };
@@ -398,11 +398,11 @@ public partial class ExportChecks
         await Until(()=>modes.Available);
         bool SizeLine()=>scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Any(l=>l.Text=="10 m × 10 m × 10 m");
         int displayed=scene.Count;
-        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="edition"&&e.Style=="solid"));
+        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="edition"&&e.Name.ToString()=="solid"));
         await Until(SizeLine);
         Check(scene.Count==displayed+1 && !modes.Preview.Visible,"editing a space adds its real size in place in the world, with no side picture");
         Check(scene.SubjectIds(second).Single()==secondId && scene.WorldCorners(secondId+"/corners").Length==8,"the edited space is the same shown thing, still drawn by the marker");
-        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="playing"&&e.Style=="solid"));
+        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="playing"&&e.Name.ToString()=="solid"));
         Check(!SizeLine() && scene.Count==displayed,"leaving edition returns that space to display at once");
         await CreationTarget(panel,human,"create_exact");
         foreach(var (role,value) in new[] { ("space_length(width)","1"),("space_divisor(width)","3"),("space_length(height)","1001"),("space_divisor(height)","1"),("space_length(depth)","1001"),("space_divisor(depth)","2") })

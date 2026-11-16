@@ -370,3 +370,39 @@ gui_operation_availability(Subject, Permission, Availability) :-
         ; Availability = unavailable)
     ; Availability = requires_input).
 
+%% Show as: for a purpose the viewer looks at, outside (`playing`) or inside
+%% (`interior`), each Eidolon a class lists is an offered action, plus
+%% Default. It changes only what the viewer sees; Default removes their own
+%% choice. Answered by the class's own ontology from its class_eidolon/4, so
+%% an Eidolon added to a class is offered with nothing else to change. Its
+%% caption and icon are the Eidolon's own label and image attributes; a class
+%% offers only the Eidolons it gives a caption, never copies it inherits.
+class_eidolon(Class, operation(instance), show(Purpose, Name), recipe(Ns, A, show(Class, Purpose, Name))) :-
+    atom(Class), member(Purpose, [playing, interior]),
+    findall(N, (class_eidolon(Class, Purpose, N, _), attribute(eidolon(Class, Purpose, N), label, _)), Raw),
+    sort(Raw, Names), Names \== [],
+    (member(Name, Names); Name = default),
+    current_ontology_identity(Ns, A).
+class_permission(thing, show_as, allow).
+%% Offered when the thing has several Eidolons for the purpose. A wedge is
+%% not offered for the Eidolon the viewer already sees, nor for one that
+%% gives no model for this thing; Default only when the viewer chose one.
+eidolon(show(Class, Purpose, Name), subject(ontology_ref(Ns, A), instance(Entity)),
+        operation(show_as(entity_ref(Ns, A, Entity), Class, Purpose, Name))) :-
+    in_ontology(Ns, A, entity_eidolons(Entity, Purpose, _, Eidolons)),
+    findall(N, member(eidolon(_, N, _), Eidolons), Raw), sort(Raw, [_, _ | _]),
+    (Name == default -> once(in_ontology(Ns, A, viewer_eidolon(Entity, Purpose, _, _)))
+    ; (in_ontology(Ns, A, eidolon_seen(Entity, Purpose, Seen, _)) -> Name \== Seen; true),
+      member(eidolon(_, Name, recipe(RNs, RA, Recipe)), Eidolons),
+      once(in_ontology(RNs, RA, eidolon(Recipe, subject(ontology_ref(Ns, A), Entity), _)))).
+instance_of(quod:gui:form, show_as(_, _, _, _)).
+instance_of(quod:gui:button, show_as_submit).
+attribute(show_as(_, _, _, default), label, <<"Default">>).
+attribute(show_as(_, _, _, default), image, Icon) :- menu_icon(default, Icon).
+attribute(show_as(_, Class, Purpose, Name), Key, Value) :-
+    member(Key, [label, image]), attribute(eidolon(Class, Purpose, Name), Key, Value).
+attribute(show_as_submit, label, <<"Show">>).
+gui_children(show_as(_, _, _, _), [show_as_submit]).
+gui_form(show_as(Thing, _, Purpose, Name), [],
+    submit(show_as_submit, quod:user::show_as(Thing, Purpose, Name),
+        operation(show_as(Purpose, Name), []))).

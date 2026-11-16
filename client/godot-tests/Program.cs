@@ -101,10 +101,10 @@ static class Tests
     {
         var source = File.ReadAllText(Path.Combine(repo, "priv/ontologies/quod_gui.pl"));
         var icons = System.Text.RegularExpressions.Regex.Matches(source, @"gui_icon\(\w+, (image\(asset\(.*?\), resources\(\d+, \d+\)\))\)\.");
-        Check(icons.Count == 36, "every authored icon declares its own resources");
+        Check(icons.Count == 38, "every authored icon declares its own resources");
         var assets=source.Split('\n').Where(line=>line.StartsWith("gui_asset(")).Select(line=>Term.Parse(line.TrimEnd('.')).Require("gui_asset",3))
             .ToDictionary(row=>row[0].TextValue,row=>(Mime:row[1].TextValue,Bytes:row[2].Bytes));
-        Check(assets.Count==36 && assets.Values.Sum(asset=>asset.Bytes.Length)==100690,"all icon bytes belong to the GUI ontology");
+        Check(assets.Count==38 && assets.Values.Sum(asset=>asset.Bytes.Length)==106039,"all icon bytes belong to the GUI ontology");
         Check(!Directory.Exists(Path.Combine(repo,"priv/explorer/assets/icons")),"the node has no static icon directory");
         foreach (System.Text.RegularExpressions.Match row in icons) {
             var term = Term.Parse(row.Groups[1].Value);

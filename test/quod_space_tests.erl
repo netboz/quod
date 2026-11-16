@@ -215,12 +215,14 @@ with_spaces(Fun, ExtraSource) ->
         {Scene, ScenePin} = scene_vocabulary(C),
         start(C,Class,quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++
             [{can_invoke,{'_'},maps:get(node,C),{'_'},Class}, ScenePin],#{}),
+        %% As on every node, the user class owner answers who views a scene.
+        start(C,<<"quod:user">>,quod_prolog:read_terms("priv/ontologies/quod_user.pl"),#{}),
         try
             [start(C, Ns, Source ++ destination_rules(maps:get(node, C)), #{}) || Ns <- Names],
             [A, B] = Names,
             Fun(C#{a => A, b => B, subject => ref(Owner, artifact), scene_pin => ScenePin})
         after
-            [stop(quod_reg:where({quod_ns, Ns})) || Ns <- Names ++ [Class, Scene]],
+            [stop(quod_reg:where({quod_ns, Ns})) || Ns <- Names ++ [Class, <<"quod:user">>, Scene]],
             %% The hosting fixture's original PID may have been replaced by replay.
             stop(quod_reg:where({quod_ns, Owner}))
         end

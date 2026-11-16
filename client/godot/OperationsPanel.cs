@@ -178,10 +178,10 @@ public partial class OperationsPanel : VBoxContainer
         view = new(session, human, chosen, "gui_operations", SignedSession.ViewGoal(chosen, Term.Call("gui_operations", exact, Term.Variable("View"))));
         view.Projection += message => {
             if (disposed || expected != generation) return;
-            var next = Offer.Decode(Json.S(message, "value"), exact); string? previous = Current?.Name;
+            var next = Offer.Decode(Json.S(message, "value"), exact); string? previous = Current?.Name.ToString();
             offers = next;
             Available = true; FormPanel.Show();
-            var selected = next.FirstOrDefault(o => o.Name == (requested??previous)) ?? (next.Length == 1 ? next[0] : null);
+            var selected = next.FirstOrDefault(o => o.Name.ToString() == (requested??previous)) ?? (next.Length == 1 ? next[0] : null);
             if (selected != null) Select(selected);
             else if (!sent) { Current = null; FormPanel.Clear(); status.Text = next.Length == 0 ? "Nothing can be done here." : "Choose an action."; }
             Changed?.Invoke();
@@ -191,12 +191,12 @@ public partial class OperationsPanel : VBoxContainer
     }
     // A chosen action without input fields is submitted as soon as its current
     // offer is selected; with fields it only opens the form for editing.
-    public void Choose(string name,bool reveal=false,bool submit=false)
-    { requested=name;revealPending|=reveal;submitPending=submit;if(Available && offers.SingleOrDefault(o=>o.Name==name) is Offer offered)Select(offered); }
+    public void Choose(Term name,bool reveal=false,bool submit=false)
+    { requested=name.ToString();revealPending|=reveal;submitPending=submit;if(Available && offers.SingleOrDefault(o=>o.Name.ToString()==requested) is Offer offered)Select(offered); }
     void Select(Offer offer)
     {
         targeting.Hide();
-        bool shown = FormPanel.Descriptor != null && Current?.Name == offer.Name;
+        bool shown = FormPanel.Descriptor != null && Current?.Name.ToString() == offer.Name.ToString();
         if (!(shown && sent)) {
             if (!shown) { sent = false; status.Text = accounts.Uncertain ? Unknown : ""; FormPanel.Present(offer.Form); }
             else if (Current!.Revision.ToString() != offer.Revision.ToString()) FormPanel.Present(offer.Form, Carry(Current.Form, FormPanel.Draft, offer.Form));
@@ -206,7 +206,7 @@ public partial class OperationsPanel : VBoxContainer
         Refresh();
         if(revealPending)Reveal(FormPanel);
         revealPending=false;
-        bool submit=submitPending&&offer.Name==requested;submitPending=false;
+        bool submit=submitPending&&offer.Name.ToString()==requested;submitPending=false;
         if(submit&&!offer.Form.Tree.Leaves.Any(c=>c.Input))_=Submit();
         Changed?.Invoke();
     }
@@ -265,7 +265,7 @@ public partial class OperationsPanel : VBoxContainer
             if ((recovered.FirstOrDefault(reply => !Json.Committed(reply)) ?? recovered.LastOrDefault()) is {} known) ShowOutcome(known);
         }
         if (LastOutcome is {} outcome && Json.Committed(outcome)) { Close(Current!.Form.Tree.Label); return; }
-        if (offers.FirstOrDefault(o => o.Name == Current!.Name) is Offer latest) Select(latest);
+        if (offers.FirstOrDefault(o => o.Name.ToString() == Current!.Name.ToString()) is Offer latest) Select(latest);
         else { Current = null; FormPanel.Clear(); Refresh(); Changed?.Invoke(); }
     }
     void ShowOutcome(System.Text.Json.Nodes.JsonNode reply)

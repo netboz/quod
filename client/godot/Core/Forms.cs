@@ -187,20 +187,20 @@ public sealed record Form(Component Tree, Term Submit, Dictionary<string, string
     }
 }
 
-public sealed record Offer(string Name, Term Subject, Term Revision, Term ValuesToken, Form Form, string Availability)
+public sealed record Offer(Term Name, Term Subject, Term Revision, Term ValuesToken, Form Form, string Availability)
 {
     public static Offer[] Decode(string text, Term subject)
     {
         var root = Term.Parse(text); root.Ground(); var names = new HashSet<string>();
         return root.Items.Select(row => {
             var a = row.Require("operation_view", 9);
-            if (a[0].Kind != "atom" || !names.Add(a[0].Name) || a[1].ToString() != subject.ToString() ||
+            if (!names.Add(a[0].ToString()) || a[1].ToString() != subject.ToString() ||
                 a[2].Kind != "binary" || a[2].Bytes.Length != 32 || a[4].Kind != "binary" || a[4].Bytes.Length != 32 ||
                 a[7].Items.Any(x => x.Kind != "atom") || a[8].Kind != "atom" || a[8].Name is not ("available" or "unavailable" or "requires_input"))
                 throw new FormatException("Invalid offered operation binding.");
-            return new Offer(a[0].Name, a[1], a[2], a[4], Form.Decode(a[3], a[5], a[6]), a[8].Name);
+            return new Offer(a[0], a[1], a[2], a[4], Form.Decode(a[3], a[5], a[6]), a[8].Name);
         }).ToArray();
     }
-    public string Goal(IReadOnlyDictionary<string, string> draft) => Term.Call("gui_operation", Subject, Term.Atom(Name), Revision, Form.Submit,
+    public string Goal(IReadOnlyDictionary<string, string> draft) => Term.Call("gui_operation", Subject, Name, Revision, Form.Submit,
         Form.Fields(draft), Term.Variable("Results")) + ".";
 }

@@ -184,7 +184,8 @@ no admission. It is distinct from treating a failed near-agent read as absence.
 Creation asserts the space and runs `goal(inside(…))` in the same transaction.
 Refused placement rolls back the instance and all admission writes; it never tries another destination or unplaced creation. Physical
 destinations retain their mandatory physical hook and checks. Creation does not
-prepare a simulation, terrain, sky or walls. The defined solid Eidolon uses a
+prepare a simulation, terrain, sky or walls, and stores no `interior`
+choice. The defined solid Eidolon uses a
 half-metre cube independently of finite or infinite interior extent, through the
 existing scene/model/rendering path. Contents remain empty. The landscape/terrain
 creation route is unchanged.
@@ -324,20 +325,28 @@ it is neither a naming service nor a second current-location record. The
 marker and the inside walls use the same authored name in their scene label.
 An empty permitted scene remains black; its context belongs to the GUI chrome.
 
-`quod:space::space_represent(SpaceRef, BeforeStyle, BeforePose, BeforeInterior,
-Style, Pose, Interior)` checks the exact source values and committed `space_represent`
-instance policy. A changed exterior or pose invokes the admitting destination's
-physical consequence in the same transaction. An unchanged representation
-performs no state mutation.
+`quod:space::space_represent(SpaceRef, BeforeExterior, BeforePose, BeforeInterior,
+Exterior, Pose, Interior)` changes the instance's own choices and pose, for
+every viewer who made no choice of their own. It checks the exact source values
+and committed `space_represent` instance policy. For the inside, `none` in an
+argument means no fact: the class default, which is none. A changed exterior or
+pose invokes the admitting destination's physical consequence in the same
+transaction. An unchanged representation performs no state mutation. No pie
+wedge calls it.
 
-`interior` (`none`, `wireframe` or `matrix`; absent means `none`) shows the
-space's own walls from inside, at its real size. Both nest the scene
-vocabulary's shared `extent` recipe: a corner outline whose lengths equal the
-exact interior dimensions, never rounded. The interior projection places it at
-the space's origin after its contents, depicting the space itself. `matrix`
-draws that outline in emissive green over translucent faces. Infinite spaces
-refuse both with the `space_interior_unavailable` reason.
-The space's pie offers the interior choices under **Show as**.
+Inside a space, its walls are its `interior` Eidolons: `wireframe` and
+`matrix`. The class has no default for the inside, so a space shows no walls
+until its instance or the viewer chooses one. Both nest the scene vocabulary's
+shared `extent` recipe: a corner outline whose lengths equal the exact interior
+dimensions, never rounded. The interior projection places it at the space's
+origin after its contents, depicting the space itself. `matrix` draws that
+outline in emissive green over translucent faces. Walls need a finite size: an
+infinite space draws none and its pie offers none.
+
+The space's pie offers **Show as** in slot 2. Inside the space it lists the
+`interior` Eidolons, from outside the `playing` ones, without the one the
+viewer already sees, and **Default** once the viewer has chosen one. It
+changes only what the viewer sees (see [Eidolons](gui-plan.md#eidolons)).
 
 ## Invocation policy
 
@@ -385,25 +394,28 @@ independently of the class defaults or per-instance ACL overrides.
 
 [A space's exterior Eidolon may display its contents instead of a mesh.]{decided by="yan.guiborat" email=yan.guiborat@gmail.com on=2026-10-27} [Y](https://console.nimbalyst.com/app/cite/ed9cd520-b2a4-4607-a8f5-ff99d08f3e46/prompt/0ed00d8751e1d31d9ff931cbc71dfcc9 "by=yan.guiborat email=yan.guiborat@gmail.com at=2026-10-27T14:14:39.228Z quote='please remember that a space, can have an external eidolon pourposed to display its content instead of a mesh, I wish you remember taht%0A%3CNIMBALYST%5FSYSTEM%5FMESSAGE%3E%0AThe user is currently looking at this document. They are not necessarily asking you about this document, but they may be. Use your best judgement to decide if they are making a general request or asking specifically about this…'")
 
-Exterior and interior describe viewing purposes, not fixed representation types: showing
-contents does not require entering the space, moving A or changing containment.
+Outside and inside are what an Eidolon is for, its purpose: showing contents
+does not require entering the space, moving A or changing containment.
 
-Seen from outside, a space is the shared fixed-size **marker** of the scene
-vocabulary (`exterior` `solid`) or its permitted contents (`exterior`
-`contents`). The marker is half a metre whatever the space measures inside,
-finite or infinite: see-through sides, corner lines that fade along each edge,
-gold while pointed at and once selected. It creates no collision surfaces or
-physical bodies. Its `edition` Eidolon is the same marker with the real size
-written beneath it as authored, for example `10 m × 1/3 mm × 2 km`, or
-`Infinite`. A client reads it for the one space being edited and draws it in
-that space's place; the other things keep their display Eidolon. A class may
-also offer a `selected` Eidolon, read the same way on selection; the space
-class offers none. The earlier full-size `wireframe` exterior is retired: it is
-not a valid new `exterior` value, and a space still storing it is shown by the
-marker. The real size is shown from inside by the `interior` walls, where exact
-rational lengths are never rounded: Prolog converts the stored quantities and
-the engine converts only when rendering. The contents recipe returns a
-source-owned exposure, never a substitute mesh.
+Seen from outside, a space has two Eidolons: `solid`, the shared fixed-size
+**marker** of the scene vocabulary and the class default, and `contents`, its
+permitted contents. The instance's choice is its `exterior` slot; a viewer's
+own choice overrides it for that viewer only. The marker is half a metre
+whatever the space measures inside, finite or infinite: see-through sides,
+corner lines that fade along each edge, gold while pointed at and once
+selected. It creates no collision surfaces or physical bodies. Its `edition`
+Eidolon is the same marker with the real size written beneath it as authored,
+for example `10 m × 1/3 mm × 2 km`, or `Infinite`. A client reads it for the
+one space being edited and draws it in that space's place; the other things
+keep their display Eidolon. A class may also offer a `selected` Eidolon, read
+the same way on selection; the space class offers none. The earlier full-size
+`wireframe` exterior is retired: it is not a valid new `exterior` value, and a
+space still storing it is shown by the marker. The real size is shown
+from inside by the `interior` walls, where exact rational lengths are never
+rounded: Prolog converts the stored quantities and the engine converts only
+when rendering. The contents recipe returns a source-owned exposure, never a
+substitute mesh. Physical composition follows the instance's `exterior`, never
+a viewer's own choice.
 
 [When S0 contains S1 containing S2, and both S1 and S2 select contents exteriors,
 their contents are displayed recursively in S0, subject to physics, as if all

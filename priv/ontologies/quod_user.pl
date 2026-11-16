@@ -58,6 +58,8 @@ signup_invocation(account_setup_state(_), _).
 signup_invocation(controller_preferences_view(_, _), _).
 signup_invocation(controller_preferences_set(_, _, _, _, _), _).
 signup_invocation(controller_settings_save(_, _, _, _, _, _, _), _).
+signup_invocation(shown_as(_, _, _), _).
+signup_invocation(show_as(_, _, _), _).
 signup_invocation(account_setup_preparation(_), _).
 signup_invocation(account_navigation(_), _).
 signup_invocation(account_navigation(_, _), _).
@@ -520,6 +522,20 @@ controller_preferences_set(Human,Expected,ExpectedDigest,Settings,Next) :-
       in_ontology(Ns,A,
         ((Expected = 0 -> true; retract(attribute(Instance,controller_preferences,preferences(Expected,Previous)))),
          assertz(attribute(Instance,controller_preferences,preferences(Next,Settings))))))).
+
+%% What a human sees of a thing, for one purpose: one fact on the human, in
+%% their own ontology, never on the thing. Default removes it. Only the human
+%% or their personal agent reads or changes it.
+shown_as(Thing, Purpose, Name) :-
+    personal_agent_owner(agent_instance_ref(Ns,A,Human)),
+    in_ontology(Ns,A,attribute(Human,show_as,shown(Thing,Purpose,Name))).
+show_as(Thing, Purpose, Name) :-
+    term_variables([Thing,Purpose,Name],[]), Thing = entity_ref(TNs,TA,Entity),
+    personal_agent_owner(agent_instance_ref(Ns,A,Human)),
+    (Name == default -> true; in_ontology(TNs,TA,entity_eidolons(Entity,Purpose,Name,[_|_]))),
+    transaction(in_ontology(Ns,A,
+        ((retract(attribute(Human,show_as,shown(Thing,Purpose,_))) -> true; true),
+         (Name == default -> true; assertz(attribute(Human,show_as,shown(Thing,Purpose,Name))))))).
 
 class_eidolon(human_user,operation(instance),controller_settings,recipe(Ns,A,controller_settings)) :-
     current_ontology_identity(Ns,A).

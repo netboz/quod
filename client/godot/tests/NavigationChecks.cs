@@ -71,7 +71,7 @@ public partial class ExportChecks
             await Until(()=>scene.SubjectIds(s1).Length==1);
             await PickSpace(scene,scene.SubjectIds(s1).Single(),Vector3.Zero,s1);
             // A click opens the subject; its actions are chosen from its pie.
-            await Until(()=>panel.Available && panel.Offered.Any(o=>o.Name=="enter"));
+            await Until(()=>panel.Available && panel.Offered.Any(o=>o.Name.ToString()=="enter"));
             await Move(panel,s1,lose:true,open:false); return;
         }
         var route=JsonNode.Parse(await File.ReadAllTextAsync(routePath))!.AsObject(); s1=Term.Parse(Json.S(route,"s1"));

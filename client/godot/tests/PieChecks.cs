@@ -13,7 +13,7 @@ public partial class ExportChecks
             new(Term.Atom("render_"+icon),label,enabled ? "" : "Not allowed here.",enabled,slot,8,back,
                 children==null ? new MenuTarget(Term.Atom("render"),Term.Atom(icon)) : null,confirm,children??[],"res://assets/icons/"+icon+".png");
         var authored=new MenuNode(Term.Atom("render"),"Workshop","",true,0,8,0,null,false,[Wedge(1,"Enter space","enter"),
-            Wedge(2,"Show as","show_as",children:[Wedge(1,"Wire box","wireframe"),Wedge(3,"Matrix walls","matrix"),Wedge(4,"Nothing","show_none")],back:6),
+            Wedge(2,"Show as","show_as",children:[Wedge(1,"Wire","wireframe"),Wedge(3,"Matrix","matrix"),Wedge(4,"Default","default")],back:6),
             Wedge(3,"Inspect","inspect"),Wedge(4,"Create a space with exact lengths","create_exact",enabled:false),
             Wedge(5,"Leave space","leave",confirm:true),Wedge(7,"Me","me"),
             new(Term.Atom("render_plain"),"Add to my commands","",true,8,8,0,new MenuTarget(Term.Atom("render"),Term.Atom("plain")),false,[])]);
@@ -40,7 +40,7 @@ public partial class ExportChecks
             Check(pie.CommitAt(On(middle,5))==PieOutcome.Open && pie.Note=="Press again","a click on a wedge that asks a second press arms it");await Raster("press-again");
             Check(pie.CommitAt(On(middle,2))==PieOutcome.Open && pie.Navigator!.Level.Label=="Show as","a click on a sub-pie's wedge opens it");
             var nested=On(middle,2).Clamp(new Vector2(margin,margin),(Vector2)pixels-new Vector2(margin,margin));
-            pie.PointerAt(On(nested,3));Check(pie.Title=="Matrix walls","the sub-pie's wedges are pointed from its own centre");await Raster("nested");
+            pie.PointerAt(On(nested,3));Check(pie.Title=="Matrix","the sub-pie's wedges are pointed from its own centre");await Raster("nested");
             pie.PointerAt(On(nested,6));Check(pie.Title=="Back" && pie.Note=="Workshop","the back wedge names where it returns");await Raster("back");
             Check(pie.CommitAt(nested+new Vector2(0,radius*1.03f))==PieOutcome.Cancelled && !pie.IsOpen,"a click just past the drawn edge cancels the pie");
             surface.QueueFree();

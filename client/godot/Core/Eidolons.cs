@@ -18,18 +18,18 @@ public sealed record Subject(Term Exact, Actor Target, Term Local)
     }
 }
 
-public sealed record Eidolon(Term Exact,Term Purpose,string Style,Actor Recipe)
+public sealed record Eidolon(Term Exact,Term Purpose,Term Name,Actor Recipe)
 {
     public bool Operation=>Purpose.Name=="operation" && Purpose.Args.Length==1;
-    public string Caption=>string.Join(" · ",new[]{Operation ? "Action" : Purpose.Name,Style.Replace('_',' ')});
+    public string Caption=>string.Join(" · ",new[]{Operation ? "Action" : Purpose.Name,Text});
+    public string Text=>Name.ToString().Replace('_',' ');
     public static Eidolon[] Decode(string text)
     {
         var value=Term.Parse(text);value.Ground();
         var choices=value.Items.Select(t=> {
             var e=t.Require("eidolon",3);var r=e[2].Require("recipe",3);
-            if(e[1].Kind!="atom" || r[2].Kind!="atom")throw new FormatException("Unsupported Eidolon identity.");
             var recipe=Actor.FromTerm(Term.Call("entity_ref",r));
-            return new Eidolon(t,e[0],e[1].Name,recipe);
+            return new Eidolon(t,e[0],e[1],recipe);
         }).ToArray();
         if(choices.Select(c=>c.Exact.ToString()).Distinct().Count()!=choices.Length)throw new FormatException("Duplicate representation choice.");
         return choices;

@@ -53,7 +53,7 @@ have_attribute(space, dimensions, space_dimensions,
 have_attribute(space, owner, space_owner, default_from(space_creator_owner)).
 have_attribute(space, transform, space_transform, default(transform(0,0,0,0,0,0))).
 have_attribute(space, exterior, space_exterior, default(solid)).
-have_attribute(space, interior, space_interior, default(none)).
+have_attribute(space, interior, space_interior).
 
 space_dimensions(infinite).
 space_dimensions(box(Width, Height, Depth)) :-
@@ -212,35 +212,30 @@ space_change_physics(Space, Subject, Change) :-
 space_physical_change(entity_ref(Ns,A,Space),Subject,Change) :-
     in_ontology(Ns,A,space_physical_change(Space,Subject,Change)).
 
-space_represent(Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior) :-
-    term_variables([Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior],[]),
+%% The instance's own choices, for every viewer without one of their own.
+%% For the inside, none means no fact: the class default, which is none.
+space_represent(Subject,BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior) :-
+    term_variables([Subject,BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior],[]),
     Subject = entity_ref(Ns,A,Space),
-    transaction((space_instance(Subject,space),space_transform(Pose),space_interior(Interior),
-        (Style == BeforeStyle -> true; space_exterior(Style)),
-        space_authorized_representation(Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior),
-        in_ontology(Ns,A,unique_solution((attribute(Space,exterior,BeforeStyle),attribute(Space,transform,BeforePose)))),
-        space_interior_of(Subject,BeforeInterior),
-        in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)),
-        space_interior_available(Interior,Dimensions),
+    transaction((space_instance(Subject,space),space_transform(Pose),
+        (Interior == none -> true; space_interior(Interior)),
+        (Exterior == BeforeExterior -> true; space_exterior(Exterior)),
+        space_authorized_representation(Subject,BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior),
+        in_ontology(Ns,A,unique_solution((attribute(Space,exterior,BeforeExterior),attribute(Space,transform,BeforePose)))),
+        in_ontology(Ns,A,findall(I,attribute(Space,interior,I),Inside)),
+        (Inside == [] -> BeforeInterior == none; Inside == [BeforeInterior]),
         (BeforeInterior == Interior -> true
         ; in_ontology(Ns,A,((BeforeInterior == none -> true; retract(attribute(Space,interior,BeforeInterior))),
                            (Interior == none -> true; assertz(attribute(Space,interior,Interior)))))),
-        (BeforeStyle == Style, BeforePose == Pose -> true
+        (BeforeExterior == Exterior, BeforePose == Pose -> true
         ; in_ontology(Ns,A,(
-            retract(attribute(Space,exterior,BeforeStyle)),assertz(attribute(Space,exterior,Style)),
+            retract(attribute(Space,exterior,BeforeExterior)),assertz(attribute(Space,exterior,Exterior)),
             retract(attribute(Space,transform,BeforePose)),assertz(attribute(Space,transform,Pose)))),
           space_assignment(Subject,_,Destination),
           (Destination == none -> true; space_representation_changed(Destination,Subject))))).
-space_authorized_representation(entity_ref(Ns,A,Space),BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior) :-
+space_authorized_representation(entity_ref(Ns,A,Space),BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior) :-
     in_ontology(Ns,A,operation_authorized(instance(Space),
-        space_represent(BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior))).
-space_interior_of(entity_ref(Ns,A,Space),Interior) :-
-    in_ontology(Ns,A,findall(I,attribute(Space,interior,I),Rows)),
-    (Rows = [] -> Interior = none
-    ; Rows = [Interior] -> true
-    ; fail_with_reason(ambiguous_space_interior(Space))).
-space_interior_boundary(Space,Recipe) :-
-    space_interior_of(Space,Interior), space_interior_recipe(Interior,Recipe).
+        space_represent(BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior))).
 space_representation_changed(Space,Subject) :-
     Space = entity_ref(Ns,A,Id), in_ontology(Ns,A,space_placement(Id,Subject,Assignment)),
     space_assignment(Subject,Assignment,Space), space_change_physics(Space,Subject,represented).
@@ -417,8 +412,12 @@ eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
     in_ontology(Ns,A,gui_menu_source(Space,menu_source(Name,Own))),
     in_ontology(Ns,A,gui_menu_source(quod:space:space,menu_source(_,Class))),
     in_ontology(Ns,A,gui_menu_source(ontology_ref(Ns,A),menu_source(_,Storage))),
-    findall(Item,(member(Item,Own),space_menu_shows(Item)),Shows),
-    findall(Item,(member(Offered,Own),\+ space_menu_shows(Offered),space_menu_action(Offered,Item)),Actions),
+    %% Show as lists the Eidolons for what I am looking at: the inside of the
+    %% space my agent is in, otherwise its outside.
+    (space_travel_context(_,_,entity_ref(Ns,A,Space)) -> Seen = interior; Seen = playing),
+    findall(Item,(member(Item,Own),Item = item(choice(_,eidolon(_,show(Seen,_),_)),_,_,_,_)),Shows),
+    findall(Item,(member(Offered,Own),\+ Offered = item(choice(_,eidolon(_,show(_,_),_)),_,_,_,_),
+                  space_menu_action(Offered,Item)),Actions),
     findall(Item,space_menu_destination(Space,Ns,A,Item),Destinations),
     menu_icon(create_here,CreateIcon), menu_icon(show_as,ShowIcon), menu_icon(inspect,InspectIcon), menu_icon(go_to,GoIcon),
     append([group(<<"Create here">>,[slot(1),image(CreateIcon)],[operation(class)],Class),
@@ -428,7 +427,6 @@ eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
     (binary(Name), Name \== <<"">> -> Title = Name; Title = <<"Space">>),
     menu_vocabulary(Gui,GuiAnchor),
     in_ontology(Gui,GuiAnchor,menu_tree(menu(Title,<<"">>,[],Entries),Tree)).
-space_menu_shows(item(choice(_,eidolon(operation(instance),Name,_)),_,_,_,_)) :- space_show_recipe(Name,_,_).
 %% Leave takes the bottom wedge and a second press, keeping its form's icon.
 space_menu_action(item(T,L,H,Av,Options),item(T,L,H,Av,[slot(5),confirm(true)|Options])) :-
     T = choice(_,eidolon(operation(instance),leave,_)), !.
@@ -440,33 +438,6 @@ space_menu_destination(Space,Ns,A,item(T,Label,H,Av,Options)) :-
     member(item(T,Offered,H,Av,Options),Items), T = choice(_,eidolon(operation(instance),enter,_)),
     (binary(ChildName), ChildName \== <<"">> -> Label = ChildName; Label = Offered).
 
-%% Show as: this space's interior choices as offered actions without input
-%% fields, each through the one representation operation.
-class_eidolon(space,operation(instance),Name,recipe(Ns,A,Recipe)) :-
-    space_show_recipe(Name,Recipe,_), current_ontology_identity(Ns,A).
-space_show_recipe(show_none,space_show_none,none).
-space_show_recipe(show_wireframe,space_show_wireframe,wireframe).
-space_show_recipe(show_matrix,space_show_matrix,matrix).
-eidolon(Recipe,subject(ontology_ref(Ns,A),instance(Space)),operation(space_show_form(entity_ref(Ns,A,Space),Style,Pose,Before,Interior))) :-
-    space_show_recipe(_,Recipe,Interior), space_instance(entity_ref(Ns,A,Space),space),
-    in_ontology(Ns,A,unique_solution((attribute(Space,exterior,Style),attribute(Space,transform,Pose)))),
-    space_interior_of(entity_ref(Ns,A,Space),Before), Before \== Interior,
-    in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)), space_interior_available(Interior,Dimensions).
-instance_of(quod:gui:form,space_show_form(_,_,_,_,_)).
-instance_of(quod:gui:button,space_show_submit).
-attribute(space_show_form(_,_,_,_,none),label,<<"No walls inside">>).
-attribute(space_show_form(_,_,_,_,wireframe),label,<<"Wire box walls">>).
-attribute(space_show_form(_,_,_,_,matrix),label,<<"Matrix walls">>).
-attribute(space_show_form(_,_,_,_,none),image,Icon) :- menu_icon(show_none,Icon).
-attribute(space_show_form(_,_,_,_,wireframe),image,Icon) :- menu_icon(wireframe,Icon).
-attribute(space_show_form(_,_,_,_,matrix),image,Icon) :- menu_icon(matrix,Icon).
-attribute(space_show_form(_,_,_,_,_),help,<<"Changes how this space looks from inside. Nothing moves.">>).
-attribute(space_show_submit,label,<<"Show">>).
-gui_children(space_show_form(_,_,_,_,_),[space_show_submit]).
-gui_form(space_show_form(Space,Style,Pose,Before,After),[],
-    submit(space_show_submit,quod:space::space_represent(Space,Style,Pose,Before,Style,Pose,After),
-        operation(space_represent(Style,Pose,Before,Style,Pose,After),[]))).
-
 %% Pure space depiction, composed with the space vocabulary and ordinary
 %% entity Eidolons. Membership and physical bindings stay with their owners.
 %% Seen from outside, a space is its permitted contents or the shared
@@ -475,18 +446,21 @@ class_eidolon(space,Mode,contents,recipe(Ns,A,space_contents)) :-
     member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
 class_eidolon(space,playing,solid,recipe(Ns,A,marker)) :- scene_vocabulary(Ns,A).
 class_eidolon(space,edition,solid,recipe(Ns,A,space_edition)) :- current_ontology_identity(Ns,A).
-space_exterior(solid).
-space_exterior(contents).
-space_interior(none).
-space_interior(Walls) :- space_interior_recipe(Walls,_).
-space_interior_recipe(wireframe,space_wireframe).
-space_interior_recipe(matrix,space_matrix).
-%% Walls stand at the space's real size, so they need a finite one.
-space_interior_available(none,_).
-space_interior_available(Walls,Dimensions) :-
-    space_interior_recipe(Walls,_),
-    (Dimensions = box(_,_,_) -> true
-    ; fail_with_reason(space_interior_unavailable(Walls,Dimensions))).
+%% Seen from inside, a space shows its own walls at its real size; the class
+%% has no default. Walls need a finite size: their recipes fail on an
+%% infinite space, which then draws and offers none.
+class_eidolon(space,interior,wireframe,recipe(Ns,A,space_wireframe)) :- current_ontology_identity(Ns,A).
+class_eidolon(space,interior,matrix,recipe(Ns,A,space_matrix)) :- current_ontology_identity(Ns,A).
+attribute(eidolon(space,playing,solid),label,<<"Solid">>).
+attribute(eidolon(space,playing,solid),image,Icon) :- menu_icon(solid,Icon).
+attribute(eidolon(space,playing,contents),label,<<"Contents">>).
+attribute(eidolon(space,playing,contents),image,Icon) :- menu_icon(contents,Icon).
+attribute(eidolon(space,interior,wireframe),label,<<"Wire">>).
+attribute(eidolon(space,interior,wireframe),image,Icon) :- menu_icon(wireframe,Icon).
+attribute(eidolon(space,interior,matrix),label,<<"Matrix">>).
+attribute(eidolon(space,interior,matrix),image,Icon) :- menu_icon(matrix,Icon).
+space_exterior(Name) :- class_eidolon(space,playing,Name,_).
+space_interior(Name) :- class_eidolon(space,interior,Name,_).
 eidolon(space_wireframe, Subject, Walls) :-
     space_extent(Subject,W,H,D), unique_solution(scene_vocabulary(Ns,A)),
     in_ontology(Ns,A,eidolon(extent(W,H,D),Subject,Walls)).
@@ -590,11 +564,11 @@ space_exposure_projection(exposure(Frame,_,Subjects),Mode,Marks,Exposures) :-
 
 %% The viewed space's own boundary sits at its interior origin, after its
 %% contents, depicting the space itself. It is not a contained subject.
+%% The walls are the Eidolon the viewer sees for the inside; none draws none.
 space_boundary_parts(Frame,MNs,MA,Contents,Parts) :-
     Frame = entity_ref(Here,History,Space),
-    (space_interior_boundary(Frame,Recipe) ->
-        current_ontology_identity(Owner,Anchor),
-        space_entity_model([recipe(Owner,Anchor,Recipe)],subject(ontology_ref(Here,History),Space),Model),
+    (in_ontology(Here,History,eidolon_seen(Space,interior,_,[eidolon(interior,_,Recipe)])),
+     space_entity_model([Recipe],subject(ontology_ref(Here,History),Space),Model) ->
         term_hex_digest([interior(Frame),boundary],Occurrence),
         in_ontology(MNs,MA,place_model(Occurrence,transform(0,0,0,0,0,0),depicts(Here,History,Space),Model,Boundary)),
         append(Contents,Boundary,Parts)
@@ -604,13 +578,13 @@ space_scene_parts([],_,_,_,_,_,[],[]).
 space_scene_parts([exposed(Subject,Relation,Binding)|Rest],Mode,Path,Seen,Parent,Role,
                   Parts,Exposures) :-
     Subject = entity_ref(Ns,A,Entity),
-    in_ontology(Ns,A,client_entity_scene(Entity,Mode,Scene)),
+    in_ontology(Ns,A,viewer_scene(Entity,Mode,Scene)),
     (Scene = hidden -> Placed = [], Current = []
-    ; Scene = appearance(Id,Style,Context,Layout,Eidolons),
+    ; Scene = appearance(Id,Name,Context,Layout,Eidolons),
       append(Path,[edge(Subject,Id)],OccurrencePath),
       term_hex_digest(OccurrencePath,Occurrence),
-      findall(Recipe,member(eidolon(Mode,Style,Recipe),Eidolons),Recipes),
-      (Style == contents ->
+      findall(Recipe,member(eidolon(Mode,Name,Recipe),Eidolons),Recipes),
+      (Name == contents ->
           (Recipes = [Selected],
            space_entity_model([Selected],Context,contents(exposure(Subject,ContentRevision,Subjects))) ->
               Model = contents(exposure(Subject,ContentRevision,Subjects))
@@ -679,9 +653,15 @@ space_eidolon_status(Text,
     [part(<<"eidolon-status">>,group,transform(0,0,0,0,0,0),
           no_surface,label(Text,<<"above">>),depicts_nothing)]).
 
+%% The instance's own choices. Outside: its exterior slot. Inside: its
+%% interior slot, when it has one.
+entity_scene(subject(ontology_ref(Ns,A),Space), interior,
+        appearance(Space, Name, subject(ontology_ref(Ns,A),Space), transform(0,0,0,0,0,0), Eidolons)) :-
+    space_instance(entity_ref(Ns,A,Space), space),
+    in_ontology(Ns,A,(attribute(Space,interior,Name),entity_eidolons(Space,interior,Name,Eidolons))).
 entity_scene(subject(ontology_ref(Ns,A),Space), Mode,
-        appearance(Space, Style, subject(ontology_ref(Ns,A),Space), Transform, Eidolons)) :-
+        appearance(Space, Name, subject(ontology_ref(Ns,A),Space), Transform, Eidolons)) :-
     space_instance(entity_ref(Ns,A,Space), space), member(Mode, [playing, edition]),
     in_ontology(Ns,A,(attribute(Space,transform,Transform),attribute(Space,exterior,Stored),
-                     (Stored == contents -> Style = contents; Style = solid),
-                     entity_eidolons(Space,Mode,Style,Eidolons))).
+                     (Stored == contents -> Name = contents; Name = solid),
+                     entity_eidolons(Space,Mode,Name,Eidolons))).

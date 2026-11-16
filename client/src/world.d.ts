@@ -14,7 +14,7 @@ export type GuiComponent = {
 }
 export type GuiView = { title: string; enabled?: boolean; layout?: 'column' | 'row' | 'grid'; fields: GuiComponent[] }
 export type OntologyReference = { namespace: string; anchor: Uint8Array }
-export type EidolonChoice = { purpose: string; style: string; recipe: OntologyReference & { name: string } }
+export type EidolonChoice = { purpose: string; name: string; recipe: OntologyReference & { name: string; term: PrologTerm } }
 export type EidolonWorkspace = { target: OntologyReference; tools: OntologyReference; selection?: PrologTerm | null; view: GuiView }
 export type EidolonRepresentation = { kind: 'workspace'; controller: 'prolog_editor' | 'proof_console' | 'space_library'; workspace: EidolonWorkspace }
   | { kind: 'lens'; target: OntologyReference; lens: OntologyReference; view: string; parameters: PrologTerm }

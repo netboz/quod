@@ -92,6 +92,9 @@ offered_creation_and_instance_operation_test_() ->
         ?assertEqual(26,byte_size(Id)),
         holds(Ns,{attribute,Id,name,<<"Offered">>}),
         holds(Ns,{attribute,Id,owner,maps:get(human,C)}),
+        %% Its look from outside is the class default; the inside has no default
+        %% and creation stores no choice for it.
+        holds(Ns,{attribute,Id,exterior,solid}), fails(Ns,{attribute,Id,interior,{'_'}}),
         wait_complete(Reply),
         %% The retained result includes exactly the selected named result list.
         {ok,_,{operation_outcome,_,Outcome}} = quod_personal_agent_tests:lookup(C,Bytes),
@@ -100,8 +103,9 @@ offered_creation_and_instance_operation_test_() ->
         %% A real authorized placement makes the same subject's instance offer
         %% available; it uses existing withdrawal, not a GUI executor.
         {Placed,_} = signed(C,space({goal,{inside,Destination,Ref,{transform,0,0,0,0,0,0}}})), wait_complete(Placed),
-        %% The instance also offers how its inside looks (Show as).
-        ?assertEqual([show_matrix,show_wireframe],lists:sort([N || {operation_view,N,_,_,_,_,_,_,_,_} <- views(C,Ns,Ref), lists:member(N,[show_matrix,show_wireframe])])),
+        %% The instance also offers what its viewer sees of it (Show as).
+        ?assertEqual([{show,interior,matrix},{show,interior,wireframe},{show,playing,contents}],
+                     lists:sort([N || {operation_view,N={show,_,_},_,_,_,_,_,_,_,_} <- views(C,Ns,Ref)])),
         [Withdraw] = withdraw_views(C,Ns,Ref),
         {operation_view,withdraw,Ref,WR,_,_,WV,WC,[],available} = Withdraw,
         ?assertEqual([{field,{destination,Id},Destination}],WV),

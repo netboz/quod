@@ -3420,11 +3420,15 @@ with_world(Ns, Fun, Transform) ->
             quod_prolog:read_terms("priv/ontologies/quod_space.pl") ++
             [{gui_vocabulary,RenderingNs,RA},{measure_vocabulary,RenderingNs,RA},
              {rendering_vocabulary,RenderingNs,RA},{modelling_vocabulary,RenderingNs,RA}]),
+        %% As on every node, the user class owner answers who views a scene.
+        UserOwner = quod_agent_hosting_tests:start_ontology(<<"quod:user">>,Dir,Identity,
+            quod_prolog:genesis_diff(filename:join([code:priv_dir(quod),"ontologies","quod_user.pl"])),[]),
         try
             commit(Ns, {',', {assertz, {rendering_vocabulary, RenderingNs, RA}},
                               {assertz, {modelling_vocabulary, RenderingNs, RA}}}),
             Fun(F)
-        after quod_agent_hosting_tests:stop_ontology(SpaceOwner),
+        after quod_agent_hosting_tests:stop_ontology(UserOwner),
+              quod_agent_hosting_tests:stop_ontology(SpaceOwner),
               quod_agent_hosting_tests:stop_ontology(Rendering) end
     end,
     try quod_agent_hosting_tests:with_host(WithRendering, Transform(Rules), current, Ns)

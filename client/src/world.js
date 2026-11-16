@@ -393,12 +393,14 @@ export async function readEntityEidolons(identity, agent, subject, options = {})
   const choices = readTerm(singleBinding(reply, 'Choices'))
   if (choices.type !== 'list' || choices.tail !== null) throw new Error('invalid eidolon choices')
   return choices.items.map(choice => {
-    const [purpose, style, recipe] = args(choice, 'eidolon', 3)
-    const [ns, anchor, name] = args(recipe, 'recipe', 3)
-    if (!(purpose.type === 'atom' || (purpose.type === 'compound' && purpose.functor === 'operation' && purpose.args.length === 1 && ['class', 'instance'].includes(purpose.args[0].value))) || style.type !== 'atom' || name.type !== 'atom' ||
+    // An Eidolon's name and its recipe's name are terms, such as show(interior,matrix).
+    const [purpose, name, recipe] = args(choice, 'eidolon', 3)
+    const [ns, anchor, recipeName] = args(recipe, 'recipe', 3)
+    const named = term => term.type === 'atom' || term.type === 'compound'
+    if (!(purpose.type === 'atom' || (purpose.type === 'compound' && purpose.functor === 'operation' && purpose.args.length === 1 && ['class', 'instance'].includes(purpose.args[0].value))) || !named(name) || !named(recipeName) ||
         anchor.type !== 'binary' || anchor.value.length !== 32) throw new Error('invalid eidolon recipe')
-    return { purpose: renderTerm(purpose), style: style.value,
-      recipe: { namespace: textValue(ns), anchor: anchor.value, name: name.value } }
+    return { purpose: renderTerm(purpose), name: renderTerm(name),
+      recipe: { namespace: textValue(ns), anchor: anchor.value, name: renderTerm(recipeName), term: recipeName } }
   })
 }
 
@@ -406,7 +408,7 @@ export async function readEidolon(identity, agent, subject, choice, options = {}
   const target = ontologyTerm({ namespace: subject.ontology, anchor: subject.anchor })
   const reply = await signedGoal(identity, {
     mode: 'read', agent, goal: anchoredGoal(choice.recipe,
-      compound('eidolon', [atom(choice.recipe.name), compound('subject', [target, subject.entity]), variable('Representation')])),
+      compound('eidolon', [choice.recipe.term, compound('subject', [target, subject.entity]), variable('Representation')])),
   }, options)
   return readEidolonRepresentation(singleBinding(reply, 'Representation'), subject)
 }

@@ -1186,7 +1186,8 @@ gui_open_message(Ctx, Session, Kind, Ns, Anchor, Q, ExtraExpiry) ->
         gui_question -> [<<"<<\"quod:gui\">>::gui_question_form(">>, quod_client_goal_parser:value_text({question_ref,Ns,Anchor,Q}), <<",View)">>];
         source_access -> [<<"prolog_inspect(">>, quod_client_goal_parser:value_text(Q), <<",presentation,View)">>];
         gui_operations -> [<<"gui_operations(">>, quod_client_goal_parser:value_text(Q), <<",View)">>];
-        menu -> [<<"client_menu(">>, quod_client_goal_parser:value_text(Q), <<",View)">>] end,
+        menu -> [<<"client_menu(">>, quod_client_goal_parser:value_text(Q), <<",View)">>];
+        world -> [<<"client_world_view(">>, quod_client_goal_parser:value_text(Q), <<",playing,[],View)">>] end,
     Goal = iolist_to_binary([quod_client_goal_parser:value_text(Ns), " :: (current_ontology_identity(",
         quod_client_goal_parser:value_text(Ns), ",", quod_client_goal_parser:value_text(Anchor), "),", Inner, ")."]),
     {ok, Bytes} = quod_client_goal:encode(#{network_identity => maps:get(network, Ctx),

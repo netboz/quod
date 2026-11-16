@@ -54,7 +54,7 @@ public sealed class Accounts(SignedSession session, LocalStore store)
         if (args[0].ToString() != human.Ontology.ToString()) throw new FormatException("Setup selected unexpected account storage.");
         var offers = Json.Binding(await session.Read(human,
             Term.Call("gui_operations", human.Entity, Term.Variable("Offers")) + ".", cancellation), "Offers");
-        setupOffer = Offer.Decode(offers.ToString(), human.Entity).Single(x => x.Name == "setup");
+        setupOffer = Offer.Decode(offers.ToString(), human.Entity).Single(x => x.Name.ToString() == "setup");
         StorageDescription = "Your starting space will be saved in your ontology.";
         Prepared = preparation;
     }
@@ -69,7 +69,7 @@ public sealed class Accounts(SignedSession session, LocalStore store)
         var custody = args[2].Require("prepared_key", 2);
         var fields = Term.List(Term.Call("field", Term.Atom("setup_key"), custody[0]),
             Term.Call("field", Term.Atom("setup_receipt"), custody[1]));
-        var goal = Term.Call("gui_operation", human.Entity, Term.Atom(offer.Name), offer.Revision,
+        var goal = Term.Call("gui_operation", human.Entity, offer.Name, offer.Revision,
             offer.Form.Submit, fields, Term.Variable("Results")) + ",member(result(setup,Setup),Results).";
         var reply = await session.Execute(human, goal, "setup", cancellation);
         Apply(reply, Pending().Single(x => x.Flow == "setup")); Prepared = null;

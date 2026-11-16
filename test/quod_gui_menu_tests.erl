@@ -1,6 +1,6 @@
 -module(quod_gui_menu_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([with_menus/1,property/2,children/1,wedge/2,edit/2,conj/1]).
+-export([with_menus/1,property/2,children/1,wedge/2,edit/2,conj/1,read/2,menu/2,boundary/4,executed/2,applied/2,icon/2,ref/2,space/1,fails/2]).
 
 %% Pie menus are class-selected Eidolons read through the signed human path.
 
@@ -8,8 +8,8 @@ icon_bytes_are_public_signed_facts_test_() ->
     {timeout,90,fun() -> with_menus(fun(C) ->
         Gui = <<"quod:gui">>,
         Assets = [A || A={gui_asset,_,_,_} <- quod_ct:gui_terms()],
-        ?assertEqual(36,length(Assets)),
-        ?assertEqual(100690,lists:sum([byte_size(B) || {gui_asset,_,_,B} <- Assets])),
+        ?assertEqual(38,length(Assets)),
+        ?assertEqual(106039,lists:sum([byte_size(B) || {gui_asset,_,_,B} <- Assets])),
         quod_lobby_tests:assert_read_has_no_io(fun() ->
             lists:foreach(fun({gui_asset,Digest,Mime,Bytes}) ->
                 lists:foreach(fun(_) ->
@@ -94,10 +94,11 @@ space_pie_overrides_the_default_test_() ->
         ?assertEqual(lists:sort([<<"Create space">>,<<"Create space with rational lengths">>,
                                  <<"Create infinite space">>]),
                      lists:sort([property(I,label) || I <- children(Create)])),
-        %% Show as offers how the inside looks, never the current choice again.
+        %% From inside, Show as lists the inside Eidolons by their own short
+        %% captions and icons; Default only once the viewer chose one.
         ?assertEqual(<<"Show as">>,property(wedge(Tree,2),label)),
-        ?assertEqual([<<"Matrix walls">>,<<"Wire box walls">>],
-                     lists:sort([property(I,label) || I <- children(wedge(Tree,2))])),
+        ?assertEqual([{<<"Matrix">>,icon(C,matrix)},{<<"Wire">>,icon(C,wireframe)}],
+                     lists:sort([{property(I,label),property(I,image)} || I <- children(wedge(Tree,2))])),
         %% Leave keeps the fixed bottom wedge and asks for a second press; the
         %% unauthorized choice stays visible, dimmed, with its plain reason.
         Leave = wedge(Tree,5),
@@ -152,8 +153,11 @@ interior_walls_use_the_shared_extent_test_() ->
         applied(Ns,fun() -> boundary(C,Ns,A) =:= [] end),
         ?assertEqual([],boundary(C,Ns,A)),
         fails(Ns,{attribute,room,interior,{'_'}}),
-        %% Infinite extent refuses finite boundaries with the existing reason.
-        denied(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix}),{space_interior_unavailable,matrix,infinite})
+        %% Walls need a finite size: an infinite space keeps its choice and
+        %% draws none.
+        executed(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix})),
+        applied(Ns,fun() -> element(1,quod_prolog:prove_ro(Ns,{attribute,closed,interior,matrix})) =:= ok end),
+        ?assertEqual([],boundary(C,Ns,A,closed))
     end) end}.
 
 %% The shared looks are ordinary recipes of the pinned GUI vocabulary. They
@@ -236,9 +240,10 @@ matches(Pattern,Value) when is_tuple(Pattern), is_tuple(Value), tuple_size(Patte
     matches(tuple_to_list(Pattern),tuple_to_list(Value));
 matches(Pattern,Value) -> Pattern =:= Value.
 
-boundary(C,Ns,A) ->
-    Marks = read(C,space({world_view,ref(Ns,room),playing,{'Marks'}})),
-    case [M || M={mark,_,<<"group">>,_,_,_,_,{depicts,N,H,room}} <- Marks, {N,H}=:={Ns,A}] of
+boundary(C,Ns,A) -> boundary(C,Ns,A,room).
+boundary(C,Ns,A,Space) ->
+    Marks = read(C,space({world_view,ref(Ns,Space),playing,{'Marks'}})),
+    case [M || M={mark,_,<<"group">>,_,_,_,_,{depicts,N,H,S}} <- Marks, {N,H,S}=:={Ns,A,Space}] of
         [] -> [];
         [Root] -> {[Root],[M || M={mark,_,_,_,{relative,P,_},_,_,_} <- Marks, P =:= element(2,Root)]}
     end.
@@ -248,11 +253,6 @@ executed(C,Goal) ->
     ?assertMatch({ok,_,{normalized,{committed,_,_}}},Result),
     {ok,Evidence,_} = Result, Op = quod_client_goal:operation_ref(Evidence),
     ?assertMatch(#{operation_state:=terminal},quod_ct:await_operation_complete(element(2,Op),Op,10000)).
-denied(C,Goal,Reason) ->
-    {Bytes,Signature} = quod_personal_agent_tests:request(C,execute,Goal),
-    {ok,_,{normalized,{failed,Blob}}} = quod_client_goal_ingress:submit(Bytes,Signature),
-    {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
-    ?assertMatch({true,_},{lists:member(Reason,Reasons),Reasons}).
 fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
 %% A committed change becomes readable when the owner's projection advances;
 %% recheck on those notices only, never on a timer.

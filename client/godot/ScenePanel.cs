@@ -58,6 +58,15 @@ public partial class ScenePanel : SubViewportContainer
         return new Vector2((at.X/size.X+.5f)*formPixels.X,(.5f-at.Y/size.Y)*formPixels.Y);
     }
     WorldProjection? world;
+    RainMaterials rain;
+    static Task<string> NoReader(Term source,CancellationToken cancellation)=>Task.FromException<string>(new InvalidOperationException("Not signed in."));
+    // How a named rain source is read: the Source panel's read, for the signed-in
+    // human. A new reader forgets what the last one read.
+    public Func<Term,CancellationToken,Task<string>>? ReadSource { set { rain.Dispose();rain=new(value??NoReader,RainDrawn); } }
+    // A rain text arriving changes what is drawn.
+    void RainDrawn()=>PresentationChanged?.Invoke();
+    public ScenePanel()=>rain=new(NoReader,RainDrawn);
+    internal int SourceReads=>rain.SourceReads;
     bool looking;
     Selection? pressedSubject;
     bool navigationBlocked;
@@ -135,7 +144,9 @@ public partial class ScenePanel : SubViewportContainer
         "wire_box" => Edges.Select(e=>(c[e.A],c[e.B])).ToArray(),
         "corner_box" => Edges.SelectMany(e=>new[]{(c[e.A],c[e.A].Lerp(c[e.B],1/3f)),(c[e.B],c[e.B].Lerp(c[e.A],1/3f))}).ToArray(),
         _ => [] };
-    static StandardMaterial3D Look(SceneMark mark,SceneSurface surface)
+    // Rain is drawn on a box's faces; another shape shows its plain surface.
+    Material Look(SceneMark mark,SceneSurface surface,Vector3 size)=>surface.Rain!=null&&mark.Kind=="box" ? rain.Material(surface,size) : Plain(mark,surface);
+    static StandardMaterial3D Plain(SceneMark mark,SceneSurface surface)
     {
         // Below full opacity a surface is translucent; both sides already draw.
         // A corner line fades along its length through its vertex alpha.
@@ -266,7 +277,7 @@ public partial class ScenePanel : SubViewportContainer
             changed = true; var node = new Node3D { Name = "occurrence" }; root.AddChild(node);
             var corners = mark.Kind == "group" ? [] : Corners(sizes[mark.Id]);
             var lines = Lines(mark.Kind,corners);MeshInstance3D? shape=null;
-            var looks = mark.Looks.Select(surface=>(Material)Look(mark,surface)).ToArray();
+            var looks = mark.Looks.Select(surface=>Look(mark,surface,sizes[mark.Id])).ToArray();
             if (mark.Kind != "group") {
                 Mesh mesh;
                 if (mark.Edges) {
@@ -302,6 +313,7 @@ public partial class ScenePanel : SubViewportContainer
         }
         foreach (var old in occurrences.Values) if (!next.TryGetValue(old.Mark.Id, out var current) || old.Node != current.Node) { old.Node.GetParent()?.RemoveChild(old.Node); old.Node.QueueFree(); changed = true; }
         occurrences.Clear(); foreach (var pair in next) occurrences.Add(pair.Key, pair.Value);
+        rain.Retain(marks.SelectMany(m=>m.Looks).Where(l=>l.Rain!=null).Select(l=>l.Rain!.Key));
         world = projection;drawn=marks;
         available=true;
         ShowLooks(true);

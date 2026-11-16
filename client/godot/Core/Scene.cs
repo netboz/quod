@@ -44,15 +44,22 @@ public sealed record ScenePose(BigInteger[]? Transform, ulong? Body, ulong Revis
         return new(values, null, 0, false);
     }
 }
-public sealed record SceneSurface(string Colour, int Metallic, int Roughness, int Emission, int Opacity)
+// Pictures are not drawn here; a surface carries no texture, or one rain.
+public sealed record SceneSurface(string Colour, int Metallic, int Roughness, int Emission, int Opacity, SceneRain? Rain)
 {
     public static SceneSurface Decode(Term term)
     {
-        var surface = term.Require("surface", 6); string colour = surface[0].TextValue;
+        var surface = term.Require("surface", 6); string colour = surface[0].TextValue; var textures = surface[5].Items;
         if (!System.Text.RegularExpressions.Regex.IsMatch(colour, "^#[0-9A-F]{6}$") ||
-            surface.Skip(1).Take(4).Any(v => v.Integer < 0 || v.Integer > 1000) || surface[5].Items.Length != 0)
+            surface.Skip(1).Take(4).Any(v => v.Integer < 0 || v.Integer > 1000) || textures.Length > 1)
             throw new FormatException("Unsupported or invalid scene surface.");
-        return new(colour, (int)surface[1].Integer, (int)surface[2].Integer, (int)surface[3].Integer, (int)surface[4].Integer);
+        SceneRain? rain = null;
+        if (textures.Length == 1) {
+            var texture = textures[0].Require("texture", 3);
+            if (texture[0].Kind != "binary" || texture[0].TextValue != "rain") throw new FormatException("Unsupported or invalid scene surface.");
+            rain = SceneRain.Decode(texture[1], texture[2]);
+        }
+        return new(colour, (int)surface[1].Integer, (int)surface[2].Integer, (int)surface[3].Integer, (int)surface[4].Integer, rain);
     }
 }
 // Looks holds one surface, or three: display, pointed at, selected. A group has none.

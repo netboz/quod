@@ -17,7 +17,10 @@ inside_show_as_changes_only_what_i_see_test_() ->
         choose(C,Room,{show,interior,matrix}),
         applied(Ns,fun() -> boundary(C,Ns,A,room) =/= [] end),
         {[_],Walls} = boundary(C,Ns,A,room),
-        ?assertMatch([{mark,_,<<"box">>,_,_,_,_,_},{mark,_,<<"corner_box">>,_,_,_,_,_}],Walls),
+        Space = {ontology_ref,<<"quod:space">>,quod_simplex:genesis_hash(<<"quod:space">>)},
+        ?assertMatch([{mark,_,<<"box">>,[{f,_,4000},{f,_,3000},{f,_,5000}],_,
+                       {surface,_,_,_,_,1000,[{texture,<<"rain">>,{source,Space},{glyph,_}}]},_,_},
+                      {mark,_,<<"corner_box">>,_,_,_,_,_}],Walls),
         %% The space's own facts are unchanged; the choice is the human's.
         fails(Ns,{attribute,room,interior,{'_'}}),
         holds(Ns,{attribute,me,show_as,{shown,Room,interior,matrix}}),

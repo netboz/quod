@@ -339,9 +339,25 @@ Inside a space, its walls are its `interior` Eidolons: `wireframe` and
 until its instance or the viewer chooses one. Both nest the scene vocabulary's
 shared `extent` recipe: a corner outline whose lengths equal the exact interior
 dimensions, never rounded. The interior projection places it at the space's
-origin after its contents, depicting the space itself. `matrix` draws that
-outline in emissive green over translucent faces. Walls need a finite size: an
-infinite space draws none and its pie offers none.
+origin after its contents, depicting the space itself. Walls need a finite
+size: an infinite space draws none and its pie offers none.
+
+**Matrix walls** (approved by Yan, 2026-11-16). The four walls inside the
+space are screens of code, the digital rain of the film *The Matrix*. The code
+is the real Prolog source of `quod:space`, read from `quod:space` itself:
+never invented text, never a copy kept in the client. It stands on a black
+wall in columns of letters, one letter above the other, so a column read from
+top to bottom is real code. The letters stay where they are; what falls is
+light. In each column a bright point runs down. The letter it reaches lights
+up, almost white green, and the letters behind it fade through emerald to
+dark, then to black. Each column has its own speed, its own starting moment
+and its own stretch of the source. Each new fall of light brings the next
+stretch, so the whole source passes over the walls. The lit letters glow. The
+rain never stops while the walls are shown. A letter has the same real size on
+every wall and in every space, and the walls stay at the space's exact size.
+Far away the letters melt into soft green streaks; they never flicker. Floor
+and ceiling are black. A wall with no light on it is black, never grey. The
+walls are the first user of [rain](gui-plan.md#rain).
 
 The space's pie offers **Show as** in slot 2. Inside the space it lists the
 `interior` Eidolons, from outside the `playing` ones, without the one the

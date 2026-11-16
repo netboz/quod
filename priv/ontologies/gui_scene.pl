@@ -3,6 +3,8 @@
 %% millimetres; angles degrees; optical factors and UV repeat permille.
 %% Surface texture slots: base_colour is sRGB; normal is OpenGL tangent space;
 %% orm is linear R=occlusion/G=roughness/B=metallic. JPEG assets use SHA-256.
+%% Beside the pictures, a surface can show a text as rain: the letters stand
+%% still in columns and light falls down each one.
 %% quod:gui — the marks a renderer may be asked to draw.
 %%
 %% A mark is a visual occurrence. It is not the thing it shows: several marks
@@ -39,6 +41,8 @@
 %%               asset_surfaces for meshes | no_surface for groups.
 %%               Optical factors, opacity and repeats are permille; a surface
 %%               below full opacity is drawn from both sides.
+%%               Textures: pictures, and at most one
+%%               texture(<<"rain">>, Text, glyph(Height)).
 %%     Label     label(Text, Placement) | unlabelled
 %%     Depicts   depicts(Ontology, Anchor, Entity) | depicts_nothing
 %%               Unanchored depicts(Ontology, Entity) is display-only.
@@ -225,12 +229,28 @@ surfaced(surface(Colour, Metallic, Roughness, Emission, Opacity, Textures)) :-
 
 %% One binding per semantic slot. Assets are verified JPEG bytes, addressed by
 %% lowercase SHA-256; references never carry a URL or executable engine code.
+%%
+%% Rain shows a text on the surface: Text is text(Binary), the text itself, or
+%% source(ontology_ref(Namespace, Anchor)), the whole Prolog source of that
+%% ontology, which the client reads once with the Source panel's read, under
+%% the same source policy. Height is a letter's height in millimetres. The
+%% surface's colour is the lit letters' colour, its emission their brightness,
+%% its opacity how dark the surface is between them. Rain falls along the
+%% mark's own up-down axis; how it moves is the client's drawing of rain.
 texture_bindings([], _).
 texture_bindings([texture(Slot, asset(Digest, <<"image/jpeg">>), repeat(U, V)) | Rest], Seen) :-
     texture_slot(Slot), \+ member(Slot, Seen),
     binary_codes(Digest, Bytes), length(Bytes, 64), digest_hex(Bytes),
     integer(U), U > 0, integer(V), V > 0,
     texture_bindings(Rest, [Slot | Seen]).
+texture_bindings([texture(<<"rain">>, Text, glyph(Height)) | Rest], Seen) :-
+    \+ member(<<"rain">>, Seen), term_variables(Text, []), rain_text(Text),
+    integer(Height), Height > 0,
+    texture_bindings(Rest, [<<"rain">> | Seen]).
+rain_text(text(Text)) :- binary(Text), scene_text(Text).
+rain_text(source(ontology_ref(Namespace, Anchor))) :-
+    binary(Namespace), scene_text(Namespace),
+    binary(Anchor), binary_codes(Anchor, Bytes), length(Bytes, 32).
 texture_slot(<<"base_colour">>).
 texture_slot(<<"normal">>).
 texture_slot(<<"orm">>).

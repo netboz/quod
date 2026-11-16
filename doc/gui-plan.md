@@ -145,6 +145,32 @@ by the client adapter. A reusable binding between a semantic form and a chosen
 surface/placement is a concrete gap to close in the existing rendering model;
 do not claim it is already implemented or invent a competing scene graph.
 
+## Rain
+
+Approved by Yan on 2026-11-16.
+
+A surface can show a text as rain. Any class's Eidolon can use it; the Matrix
+walls of a space are its first user.
+
+The text stands on the surface in columns of letters. The letters stay in
+place and light falls down each column. The surface's colour is the colour of
+the lit letters, its emission their brightness, its opacity how dark the
+surface is between them.
+
+In the code, rain is one more texture of a surface, beside the pictures:
+`texture(<<"rain">>, Text, glyph(Height))`. `Height` is the height of a letter
+in millimetres. `Text` is `text(Binary)`, the text itself, or
+`source(ontology_ref(Namespace, Anchor))`, the whole Prolog source of that
+ontology. The client reads a named source once, with the read the Source panel
+uses and under the same source policy, and again only when that ontology
+changes. A viewer who may not read the source sees no rain.
+
+Rain falls along the mark's own up-down axis. A face that looks up or down
+shows none.
+
+How the rain moves is the client's drawing of rain, the same for every user of
+it. No shader code and no URL travel in a mark.
+
 ## Ownership proposal
 
 Extend `quod:gui` for semantic controls, typed values, composition, validation

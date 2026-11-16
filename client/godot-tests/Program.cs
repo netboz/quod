@@ -157,6 +157,28 @@ static class Tests
         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace("'/'(1,3)","0.5") + "]")), "floating scene dimensions refuse");
         Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace(anchor,"<<\"wrong\">>") + "]")), "wrong depicted anchor refuses");
         Reject(() => new Length(BigInteger.One << 2000,1).RenderMetres(), "unrenderable finite extent refuses explicitly");
+        // Rain: one more texture of a surface, carried text or a named source.
+        string Rain(string text, string glyph) => box.Replace(",1000,1000,[])", $",1000,1000,[texture(<<\"rain\">>,{text},glyph({glyph}))])");
+        string named = $"source(ontology_ref(<<\"quod:space\">>,{anchor}))";
+        var written = SceneMark.Decode(Term.Parse("[" + group + "," + Rain("text(<<\"a :- b.\">>)", "60") + "]"))[1].Looks.Single().Rain!;
+        Check(written.Text == "a :- b." && written.Source == null && written.Height == new Length(60,1), "a rain carries its text and its letter height");
+        var source = SceneMark.Decode(Term.Parse("[" + group + "," + Rain(named, "100") + "]"))[1].Looks.Single().Rain!;
+        Check(source.Text == null && source.Source!.ToString() == $"ontology_ref(<<\"quod:space\">>,{anchor})" && source.Key == source.Source.ToString(), "a rain names an exact ontology whose source is read once by its identity");
+        Check(SceneMark.Decode(Term.Parse("[" + group + "," + box + "]"))[1].Looks.Single().Rain == null, "a plain surface has no rain");
+        string picture = $"texture(<<\"base_colour\">>,asset(<<\"{new string('a',64)}\">>,<<\"image/jpeg\">>),repeat(1000,1000))";
+        foreach (string bad in new[] {
+            box.Replace(",1000,1000,[])", $",1000,1000,[{picture}])"),
+            box.Replace(",1000,1000,[])", $",1000,1000,[texture(<<\"rain\">>,text(<<\"a\">>),glyph(60)),texture(<<\"rain\">>,text(<<\"b\">>),glyph(60))])"),
+            box.Replace(",1000,1000,[])", $",1000,1000,[texture(<<\"rain\">>,text(<<\"a\">>),glyph(60)),{picture}])"),
+            Rain("text(<<\"a\">>)", "0"), Rain("text(<<\"a\">>)", "-60"), Rain("text(<<\"a\">>)", "'/'(1,3)"), Rain("text(<<\"\">>)", "60"),
+            Rain("text(a)", "60"), Rain($"source(ontology_ref(<<\"quod:space\">>,<<\"short\">>))", "60"), Rain($"source(ontology_ref(<<\"\">>,{anchor}))", "60"),
+            Rain("source(<<\"quod:space\">>)", "60"), box.Replace(",1000,1000,[])", ",1000,1000,[texture(<<\"rain\">>,text(<<\"a\">>),repeat(1000,1000))])") })
+            Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + bad + "]")), "a picture, two rains, a bad height, text or anchor refuse");
+        var cells = RainCells.Of("foo(X) :-\n\t bar(X, 'é').\r\n");
+        Check(string.Concat(cells.Cells.Select(i => cells.Letters[i])) == "foo(X):-bar(X,'é')." && cells.Letters.Length == 14 &&
+              cells.Letters[cells.Cells[^4]] == "é" && cells.Cells.Length == 19, "rain cells drop white space and keep each distinct letter once, a non-ASCII letter included");
+        Check(RainCells.Of("aaa").Letters.SequenceEqual(["a"]) && RainCells.Of("aaa").Cells.SequenceEqual([0,0,0]), "a repeated letter is one letter of the set");
+        Reject(() => RainCells.Of(" \n\t "), "a text of white space only has no rain");
     }
     static void Models(string repo)
     {

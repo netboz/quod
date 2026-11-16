@@ -115,6 +115,7 @@ public partial class ExportChecks
         Check(!scene.ShowMode(here,Term.Parse(Model("neighbour",sizeLine))) && !scene.ShowMode(here,markers) && scene.Count==count+1,"a model of another thing, or of several, is not drawn in this thing's place");
         Check(scene.ShowMode(here,null) && scene.Count==count && Shown(ours,2) && scene.WorldPose("subject").IsEqualApprox(place),"withdrawing the mode returns the thing to display");
         scene.ShowSelected(null);
+        if(DisplayServer.GetName()!="headless") await RainChecks(scene,Raster);
         var all = new List<Node>(); void Visit(Node node) { all.Add(node); foreach(var child in node.GetChildren()) Visit(child); }
         Visit(scene); Check(!all.Any(n => n is CollisionObject3D), "exterior adapter creates no collision bodies or walls");
         scene.Withdraw(); await Frame(); Check(scene.Count == 0 && scene.Pick(Vector2.Zero) == null, "withdrawal removes geometry and picking together");

@@ -52,6 +52,38 @@ public partial class ExportChecks
         Gone(panel,"Create space");
         return Result(SpaceResults(panel.LastOutcome!),"space");
     }
+    // Inside S1, Show as Matrix: the walls rain quod:space's own source, read
+    // once from the real server with the Source panel's read.
+    async Task MatrixWalls(OperationsPanel panel,ScenePanel scene,Term s1)
+    {
+        ShaderMaterial? Walls()=>scene.SceneRoot.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>()
+            .Select(m=>m.MaterialOverride).OfType<ShaderMaterial>().FirstOrDefault(m=>m.GetShaderParameter("cell_count").AsInt32()>0);
+        int reads=scene.SourceReads;
+        // The walls' text arrives after the view: wait on the scene's own notice.
+        async Task Drawn(Func<bool> shown){
+            var done=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void Seen(){if(shown())done.TrySetResult();}
+            scene.PresentationChanged+=Seen;app.Changed+=Seen;
+            try{Seen();await done.Task.WaitAsync(TimeSpan.FromSeconds(60));}finally{scene.PresentationChanged-=Seen;app.Changed-=Seen;}
+        }
+        await ChooseOfferedOperation(panel,"show(interior,matrix)",s1);
+        await Until(()=>!panel.IsWorking&&panel.LastOutcome!=null);
+        Check(Json.Committed(panel.LastOutcome!),"Show as Matrix commits the viewer's own choice");
+        await Drawn(()=>Walls()!=null);
+        var human=app.ActiveAccounts.Human!;
+        var space=Json.Binding(await app.ActiveSession.Read(human,SignedSession.ViewGoal(human,Term.Call("::",Term.Text("quod:space"),
+            Term.Call("current_ontology_identity",Term.Text("quod:space"),Term.Variable("Anchor")))),CancellationToken.None),"Anchor");
+        var source=await app.ActiveSession.ReadSource(human,SignedSession.ViewGoal(human,Term.Call("::",Term.Text("quod:gui"),
+            Term.Call("prolog_source",Term.Call("ontology_ref",Term.Text("quod:space"),space),Term.Variable("Source")))),"Source",CancellationToken.None);
+        var cells=RainCells.Of(source);
+        Console.WriteLine($"M3_MATRIX source_bytes={System.Text.Encoding.UTF8.GetByteCount(source)} cells={cells.Cells.Length} letters={cells.Letters.Length} reads={scene.SourceReads-reads}");
+        Check(Walls()!.GetShaderParameter("cell_count").AsInt32()==cells.Cells.Length && source.Contains("space_matrix"),"the Matrix walls rain every letter of quod:space's own source");
+        Check(scene.SourceReads-reads==1,"the source is read once");
+        await ExactSubject(panel,s1);
+        await ChooseOfferedOperation(panel,"show(interior,default)",s1);
+        await Drawn(()=>!panel.IsWorking&&Walls()==null);
+        Check(scene.SourceReads-reads==1,"returning to Default reads nothing");
+    }
     async Task SpaceNavigation(string phase,JsonObject original)
     {
         var human=app.ActiveAccounts.Human!; var setup=Term.Parse(original["setup"]!.GetValue<string>()).Require("account",6);
@@ -77,6 +109,7 @@ public partial class ExportChecks
         var route=JsonNode.Parse(await File.ReadAllTextAsync(routePath))!.AsObject(); s1=Term.Parse(Json.S(route,"s1"));
         if(phase=="m3-entered") {
             Check(State["current_location"]?.ToString()==Term.Call("placed",s1,Term.Parse("transform(0,0,0,0,0,0)")).ToString(),"lost Enter reply reopens the committed S1 instead of setup S0");
+            await MatrixWalls(panel,scene,s1);
             var s2=await CreateNested(panel,human);
             Check(Result(SpaceResults(panel.LastOutcome!),"location").Args[0].ToString()==s1.ToString(),"S2 creation places near the same A inside S1 without entering it");
             await Move(panel,s2);

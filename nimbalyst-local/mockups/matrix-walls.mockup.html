@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quod — Matrix walls: the source of the space class</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #000000; }
+  body { font-family: Inter, "Segoe UI", system-ui, sans-serif; color: #8FA596; }
+  .stage { width: min(100%, 1200px, calc((100vh - 64px) * 12 / 7)); min-width: 480px; margin: 0 auto; background: #000000; }
+  .view { width: 100%; aspect-ratio: 12 / 7; background: #000000; overflow: hidden; }
+  .view canvas { display: block; width: 100%; height: 100%; background: #000000; }
+  .strip { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 22px; padding: 9px 14px;
+           background: #050705; border-top: 1px solid #0d140f; font-size: 12px; line-height: 1; white-space: nowrap; }
+  .group { display: flex; align-items: center; gap: 10px; }
+  .group > b { font-weight: 600; color: #5F7566; }
+  .strip label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .strip input { margin: 0; accent-color: #00B140; cursor: pointer; }
+  .cap { margin-left: auto; color: #4A5C50; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="view" id="view"><canvas id="room"></canvas></div>
+  <div class="strip">
+    <div class="group"><b>Letters</b>
+      <label><input type="radio" name="letters" value="written" checked> As written</label>
+      <label><input type="radio" name="letters" value="mirrored"> Mirrored</label>
+    </div>
+    <div class="group"><b>Size</b>
+      <label><input type="radio" name="size" value="0.025"> Small</label>
+      <label><input type="radio" name="size" value="0.035" checked> Medium</label>
+      <label><input type="radio" name="size" value="0.05"> Large</label>
+    </div>
+    <div class="group"><b>Glow</b>
+      <label><input type="checkbox" name="glow" checked> On</label>
+    </div>
+    <div class="group"><b>Leading glyph</b>
+      <label><input type="radio" name="heads" value="all" checked> Every column</label>
+      <label><input type="radio" name="heads" value="fifth"> One column in five</label>
+    </div>
+    <div class="group"><b>Corner lines</b>
+      <label><input type="checkbox" name="lines" checked> On</label>
+    </div>
+    <div class="group"><b>Floor and ceiling</b>
+      <label><input type="radio" name="planes" value="black" checked> Black</label>
+      <label><input type="radio" name="planes" value="rain"> Rain</label>
+    </div>
+    <span class="cap">Matrix walls: the source of the space class</span>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  // priv/ontologies/quod_space.pl, comment lines and whitespace removed, first 12,000 characters.
+  var TEXT = "can_invoke(Goal,_,_,_):-space_query(Goal).can_invoke((current_ontology_identity(_,_),Goal),_,_,_):-space_query(Goal).can_invoke(Goal,_,_,_):-system_source_query(Goal).can_invoke(_,node(Key),_,_):-peer_admitted(Key,_,_,Key).can_join(_,_,Key):-peer_ready(Key).space_query(isa(_,_)).space_query(have_attribute(_,_,_,_)).space_query(have_attribute(_,_,_)).space_query('$quod_constructor_metadata'(_,_,_)).space_query(attribute_value(Type,_)):-member(Type,[binary,space_dimensions,space_owner,space_transform,space_exterior,space_interior]).space_query(class_permission(_,_,_)).space_query(class_requirement(_,_,_)).space_query(class_eidolon(_,_,_,_)).space_query(eidolon(_,_,_)).space_query(gui_definition(_,_,_,_,_,_)).space_query(gui_initial_values(_,_,_,_)).space_query(gui_bind_values(_,_,_,_,_)).space_query(gui_form_caption(_,_,_,_,_)).space_query(space_instance(_,_)).space_query(space_assignment(_,_,_)).space_query(space_location(_,_)).space_query(space_contains(_,_)).space_query(space_projection(_,_,_)).space_query(space_contents_projection(_,_)).space_query(world_view(_,_,_)).space_query(space_exposure_projection(_,_,_,_)).space_query(space_simulation_domain(_,_,_,_)).space_query(space_creator_owner(_,_)).space_query(space_name(_,_)).space_query(space_dimensions(_)).space_query(space_owner(_)).space_query(space_transform(_)).space_query(space_exterior(_)).space_query(space_interior(_)).space_query(goal(inside(_,_,_))).space_query(goal(unplaced(_))).space_query(goal(shown_in(_,_))).space_query(goal(not_shown_in(_,_))).space_query(space_represent(_,_,_,_,_,_,_)).space_query(space_form_placement(_,_,_,_)).space_query(Goal):-public_source_query(Goal).isa(space,thing).isa(physical_space,space).class_permission(space,Operation,allow):-member(Operation,[create,space_enter,space_admit,space_leave,space_remove,space_visit,space_represent]).have_attribute(space,name,binary,default_from(space_name)).have_attribute(space,dimensions,space_dimensions,default(box(q(10,<<\"m\">>),q(10,<<\"m\">>),q(10,<<\"m\">>)))).have_attribute(space,owner,space_owner,default_from(space_creator_owner)).have_attribute(space,transform,space_transform,default(transform(0,0,0,0,0,0))).have_attribute(space,exterior,space_exterior,default(solid)).have_attribute(space,interior,space_interior).space_dimensions(infinite).space_dimensions(box(Width,Height,Depth)):-unique_solution(measure_vocabulary(Ns,Anchor)),space_length(Ns,Anchor,Width),space_length(Ns,Anchor,Height),space_length(Ns,Anchor,Depth).space_length(Ns,Anchor,q(Value,Unit)):-binary(Unit),in_ontology(Ns,Anchor,convert(Value,Unit,<<\"m\">>,Metres)),(integer(Metres)->Metres>0;Metres=N/D,integer(N),integer(D),N>0,D>0).space_owner(agent_instance_ref(Ns,Anchor,Entity)):-binary(Ns),binary(Anchor),term_variables(Entity,[]).space_creator_owner(_,Owner):-quod:user::personal_agent_owner(Owner).space_name(Instance,Name):-quod:names::draw(<<\"place\">>,Instance,Name).space_transform(Pose):-Pose=transform(_,_,_,_,_,_),unique_solution(scene_vocabulary(Ns,A)),in_ontology(Ns,A,placed(Pose)).space_location(Subject,Location):-Subject=entity_ref(Ns,Anchor,Entity),in_ontology(Ns,Anchor,instance_of(_,Entity)),space_assignment(Subject,_,Destination),(Destination==none->Location=unplaced;in_ontology(Ns,Anchor,unique_solution(attribute(Entity,transform,Transform))),Location=placed(Destination,Transform)).placement_pose(Destination,Pose):-(nonvar(Pose)->space_transform(Pose);quod:user::personal_agent(Agent,_),Agent=agent_instance_ref(Ns,A,Entity),space_location(entity_ref(Ns,A,Entity),placed(Destination,transform(X,Y,Z,RX,RY,RZ))),space_near(_,Near),NearZisZ-Near,space_free_pose(Destination,transform(X,Y,NearZ,RX,RY,RZ),1000,0,Pose)).space_near(Size,Near):-unique_solution(scene_vocabulary(Scene,Anchor)),in_ontology(Scene,Anchor,marker_size(Size)),Nearis2000+Size//2.space_free_pose(Destination,transform(X,Y,Z,RX,RY,RZ),SX,SZ,transform(FX,Y,FZ,RX,RY,RZ)):-space_near(Size,_),Destination=entity_ref(DNs,DA,D),in_ontology(DNs,DA,findall(Subject,space_placement(D,Subject,_),Placed)),findall(Taken,(member(Subject,Placed),space_location(Subject,placed(Destination,Taken))),Poses),space_free_place(0,X,Y,Z,SX,SZ,Size,Poses,FX,FZ).space_free_place(Index,X,Y,Z,SX,SZ,Size,Poses,FX,FZ):-Sideis(Index+1)//2*(Size*3//2),(Indexmod2=:=1->Sign=1;Sign=-1),CXisX+Sign*Side*SX//1000,CZisZ+Sign*Side*SZ//1000,(member(transform(TX,TY,TZ,_,_,_),Poses),abs(TX-CX)<Size,abs(TY-Y)<Size,abs(TZ-CZ)<Size->NextisIndex+1,space_free_place(Next,X,Y,Z,SX,SZ,Size,Poses,FX,FZ);FX=CX,FZ=CZ).space_view_pose(Destination,Floor,view(transform(X,_,Z,_,RY,_),forward(FX,0,FZ)),Pose):-integer(X),integer(Z),integer(FX),integer(FZ),LengthisFX*FX+FZ*FZ,Length>=998001,Length=<1002001,space_near(_,Near),BXisX+FX*Near//1000,BZisZ+FZ*Near//1000,RightXis-FZ,space_free_pose(Destination,transform(BX,Floor,BZ,0,RY,0),RightX,FX,Pose).space_subject(entity_ref(Ns,Anchor,Entity),Subject):-in_ontology(Ns,Anchor,(instance_of(_,Entity)->Subject=instance(Entity);isa(Entity,Entity),Subject=class(Entity))).space_authorized(Reference,Name,Other,Mode):-Reference=entity_ref(Ns,Anchor,_),space_subject(Reference,Subject),Operation=..[Name,Reference,Other,Mode],in_ontology(Ns,Anchor,operation_authorized(Subject,Operation)).space_assignment(entity_ref(Ns,Anchor,Entity),Revision,Destination):-in_ontology(Ns,Anchor,findall(assignment(R,D),space_assignment_state(Entity,R,D),Rows)),(Rows=[]->R0=0,D0=none;Rows=[assignment(R0,D0)]->true;fail_with_reason(ambiguous_space_assignment(Entity))),Revision=R0,Destination=D0.inside(Space,Entity,Pose):-Space=entity_ref(_,_,_),space_assignment(Entity,_,Space),Entity=entity_ref(Ns,A,Id),in_ontology(Ns,A,attribute(Id,transform,Pose)).unplaced(Entity):-space_assignment(Entity,_,none).action(place(Space,Entity,Pose),[goal(unplaced(Entity)),placement_pose(Space,Pose),space_authorized(Entity,space_enter,Space,placement),space_authorized(Space,space_admit,Entity,placement)],inside(Space,Entity,Pose)).action(withdraw(Entity),[space_assignment(Entity,_,Space),Space\\==none,space_authorized(Entity,space_leave,Space,placement)],unplaced(Entity)).place(Space,Entity,Pose):-term_variables([Space,Entity,Pose],[]),Space\\==Entity,space_instance(Space,space),space_assignment(Entity,Before,none),Entity=entity_ref(Ns,A,Id),Space=entity_ref(SNs,SA,S),RevisionisBefore+1,in_ontology(Ns,A,(instance_of(_,Id),(Before=0->true;retract(space_assignment_state(Id,Before,none))),findall(Old,attribute(Id,transform,Old),Poses),(Poses=[]->true;Poses=[Old],retract(attribute(Id,transform,Old))),assertz(attribute(Id,transform,Pose)),assertz(space_assignment_state(Id,Revision,Space)))),space_change_physics(Space,Entity,admitted),in_ontology(SNs,SA,(\\+space_placement(S,Entity,_),assertz(space_placement(S,Entity,Revision)))).withdraw(Entity):-space_assignment(Entity,Before,Space),Space=entity_ref(SNs,SA,S),Entity=entity_ref(Ns,A,Id),RevisionisBefore+1,in_ontology(Ns,A,(retract(space_assignment_state(Id,Before,Space)),assertz(space_assignment_state(Id,Revision,none)))),space_change_physics(Space,Entity,withdrawn),in_ontology(SNs,SA,retract(space_placement(S,Entity,Before))).shown_in(entity_ref(Ns,A,Space),Entity):-in_ontology(Ns,A,space_member(Space,Entity)).not_shown_in(Space,Entity):-\\+shown_in(Space,Entity).action(show(Space,Entity),[space_instance(Space,space),Space\\==Entity,space_authorized(Entity,space_enter,Space,display),space_authorized(Space,space_admit,Entity,display)],shown_in(Space,Entity)).action(hide(Space,Entity),[space_removal_allowed(Space,Entity,display)],not_shown_in(Space,Entity)).show(entity_ref(Ns,A,Space),Entity):-in_ontology(Ns,A,assertz(space_member(Space,Entity))).hide(entity_ref(Ns,A,Space),Entity):-in_ontology(Ns,A,retract(space_member(Space,Entity))).space_removal_allowed(Space,Entity,Mode):-(space_authorized(Space,space_remove,Entity,Mode)->true;space_authorized(Entity,space_leave,Space,Mode)).space_change_physics(Space,Subject,Change):-Space=entity_ref(Ns,A,Id),((space_instance(Space,physical_space);space_simulation_domain(Space,_,_,_);Change==withdrawn,in_ontology(Ns,A,physics_body_definition(Id,_,_,_,_,live(Subject,_,_,_))))->(space_physical_change(Space,Subject,Change)->true;fail_with_reason(space_physical_change_refused(Space,Change)));true).space_physical_change(entity_ref(Ns,A,Space),Subject,Change):-in_ontology(Ns,A,space_physical_change(Space,Subject,Change)).space_represent(Subject,BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior):-term_variables([Subject,BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior],[]),Subject=entity_ref(Ns,A,Space),transaction((space_instance(Subject,space),space_transform(Pose),(Interior==none->true;space_interior(Interior)),(Exterior==BeforeExterior->true;space_exterior(Exterior)),space_authorized_representation(Subject,BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior),in_ontology(Ns,A,unique_solution((attribute(Space,exterior,BeforeExterior),attribute(Space,transform,BeforePose)))),in_ontology(Ns,A,findall(I,attribute(Space,interior,I),Inside)),(Inside==[]->BeforeInterior==none;Inside==[BeforeInterior]),(BeforeInterior==Interior->true;in_ontology(Ns,A,((BeforeInterior==none->true;retract(attribute(Space,interior,BeforeInterior))),(Interior==none->true;assertz(attribute(Space,interior,Interior)))))),(BeforeExterior==Exterior,BeforePose==Pose->true;in_ontology(Ns,A,(retract(attribute(Space,exterior,BeforeExterior)),assertz(attribute(Space,exterior,Exterior)),retract(attribute(Space,transform,BeforePose)),assertz(attribute(Space,transform,Pose)))),space_assignment(Subject,_,Destination),(Destination==none->true;space_representation_changed(Destination,Subject))))).space_authorized_representation(entity_ref(Ns,A,Space),BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior):-in_ontology(Ns,A,operation_authorized(instance(Space),space_represent(BeforeExterior,BeforePose,BeforeInterior,Exterior,Pose,Interior))).space_representation_changed(Space,Subject):-Space=entity_ref(Ns,A,Id),in_ontology(Ns,A,space_placement(Id,Subject,Assignment)),space_assignment(Subject,Assignment,Space),space_change_physics(Space,Subject,represented).class_eidolon(space,operation(class),Name,recipe(Ns,A,Recipe)):-space_creation_recipe(Name,Recipe,_),current_ontology_identity(Ns,A).eidolon(Recipe,subject(Store,class(Class)),operation(space_create(Store,Extent))):-current_ontology_identity(Ns,_),once((isa(Class,Parent),'$quod_qualified_class'(Ns,Parent,Owned),'$quod_owner_name'(Owned,Owner,space),ontology_name(Owner,Ns))),space_creation_recipe(_,Recipe,Extent).space_creation_recipe(create,space_create,finite).space_creation_recipe(create_exact,space_create_exact,exact).space_creation_recipe(create_infinite,space_create_infinite,infinite).instance_of(quod:gui:form,space_create(ontology_ref(_,_),Extent)):-member(Extent,[finite,exact,infinite]).instance_of(quod:gui:text_box,space_name).instance_of(quod:gui:selection,space_placement(ontology_ref(_,_))).instance_of(quod:gui:viewer_pose,space_view).instance_of(quod:gui:number_input,space_length(Axis)):-member(Axis,[width,height,depth]).instance_of(quod:gui:number_input,space_divisor(Axis)):-member(Axis,[width,height,depth]).instance_of(quod:gui:selection,space_unit).instance_of(quod:gui:button,space_create_submit).attribute(space_create(_,finite),label,<<\"Createspace\">>).attribute(space_create(_,exact),label,<<\"Createspacewithrationallengths\">>).attribute(space_create(_,infinite),label,<<\"Createinfinitespace\">>).attribute(space_create(_,finite),image,Icon):-menu_icon(create_finite,Icon).attribute(space_create(_,exact),image,Icon):-menu_icon(create_exact,Icon).attribute(space_create(_,infinite),image,Icon):-menu_icon(create_infinite,Icon).attribute(space_create(_,_),help,<<\"Thepersonalagent'shumanisthedefaultowner,independentlyoftheselectedstorageandplacement.Creationdoesnotenterthenewspace.\">>).attribute(space_name,label,<<\"Name\">>).attribute(space_name,help,<<\"Aplacenameissuggested.Changeittouseyourown.\">>).attribute(space_name,required,false).at";
+
+  var FONT = '"JetBrains Mono","DejaVu Sans Mono","Liberation Mono",monospace';
+
+  // Room, in units of the front wall's height. The eye is at mid height, looking at the front wall.
+  var ROOM_W = 1.5;        // width of the front wall
+  var ROOM_D = 2.0;        // depth of the room; the back wall is behind the viewer
+  var LINE = '60,255,122'; // corner lines, #3CFF7A
+  var FRONT_FRAC = 0.60;   // front wall height / view height
+  var FOCAL = 1.0;         // focal length / view height
+  var Z_FRONT = FOCAL / FRONT_FRAC;
+
+  // Rain.
+  var DROP_LEN = 0.9;      // one sawtooth period, in wall heights
+  var FALL = 0.30;         // wall heights per second at speed 1.0
+  var NT = 20;             // trail brightness levels
+  var NH = 6;              // leading glyph levels (near-white cooling to bright green)
+
+  var HEAD = [230, 255, 233];     // #E6FFE9
+  var BRIGHT = [60, 255, 122];    // #3CFF7A
+  var RAMP = [[0, [0, 0, 0]], [0.22, [0, 59, 20]], [0.62, [0, 177, 64]], [1, BRIGHT]];  // #003B14, #00B140
+
+  var view = document.getElementById('view');
+  var cv = document.getElementById('room');
+  var ctx = cv.getContext('2d', { alpha: false });
+
+  var opt = { mirror: false, size: 0.035, glow: true, allHeads: true, lines: true, planeRain: false };
+
+  // ---- text ----
+  var N = TEXT.length, glyphs = [], glyphIndex = {}, codes = new Uint8Array(N);
+  for (var i = 0; i < N; i++) {
+    var ch = TEXT[i];
+    if (glyphIndex[ch] === undefined) { glyphIndex[ch] = glyphs.length; glyphs.push(ch); }
+    codes[i] = glyphIndex[ch];
+  }
+
+  function hash(n) {
+    n = Math.imul(n ^ 0x9E3779B9, 0x85EBCA6B); n ^= n >>> 13;
+    n = Math.imul(n, 0xC2B2AE35); n ^= n >>> 16;
+    return n >>> 0;
+  }
+  function rnd(id, salt) { return hash(hash(id) + salt) / 4294967296; }
+
+  function column(id) {
+    return {
+      speed: 0.5 + 0.5 * rnd(id, 1),                 // 0.5 .. 1.0
+      offset: DROP_LEN * (4 + 64 * rnd(id, 2)),      // its own start moment
+      start: hash(id) % N,                           // its own stretch of the text
+      head: hash(id + 7919) % 5 === 0                // one column in five
+    };
+  }
+
+  // ---- colours ----
+  function mix(a, b, w) { return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w]; }
+  function ramp(v) {
+    for (var i = 1; i < RAMP.length; i++) {
+      if (v <= RAMP[i][0]) return mix(RAMP[i - 1][1], RAMP[i][1], (v - RAMP[i - 1][0]) / (RAMP[i][0] - RAMP[i - 1][0]));
+    }
+    return BRIGHT;
+  }
+  function css(c, a) { return 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + a + ')'; }
+
+  // ---- glyph atlas: one sprite per (glyph, level); the halo is baked into the sprite ----
+  function buildAtlas(cellPx) {
+    var S = Math.ceil(cellPx * 2) + 2;
+    var atlas = document.createElement('canvas');
+    atlas.width = glyphs.length * S; atlas.height = (NT + NH) * S;
+    var actx = atlas.getContext('2d');
+    var scratch = document.createElement('canvas');
+    scratch.width = S; scratch.height = S;
+    var sctx = scratch.getContext('2d');
+    sctx.font = '700 ' + (cellPx * 0.94) + 'px ' + FONT;
+    sctx.textAlign = 'center'; sctx.textBaseline = 'alphabetic';
+    var m = sctx.measureText('Mg');
+    var asc = m.fontBoundingBoxAscent || cellPx * 0.9, desc = m.fontBoundingBoxDescent || cellPx * 0.25;
+    var bx = S / 2, by = S / 2 + (asc - desc) / 2, FAR = 4096;
+
+    for (var lv = 0; lv < NT + NH; lv++) {
+      var colour, halo, blur, passes;
+      if (lv < NT) {
+        var v = (lv + 1) / NT;
+        colour = ramp(v); halo = ramp(v);
+        blur = cellPx * (0.26 + 0.24 * v); passes = [1, v];
+      } else {
+        var w = 1 - (lv - NT) / (NH - 1);          // 1 = light has just arrived
+        colour = mix(BRIGHT, HEAD, w); halo = mix(BRIGHT, [150, 255, 180], w);
+        blur = cellPx * 0.5; passes = [1, 1, w, w];
+      }
+      for (var g = 0; g < glyphs.length; g++) {
+        sctx.clearRect(0, 0, S, S);
+        if (opt.glow) {
+          sctx.shadowColor = css(halo, 1); sctx.shadowBlur = blur; sctx.shadowOffsetX = FAR; sctx.shadowOffsetY = 0;
+          sctx.fillStyle = '#000';
+          for (var p = 0; p < passes.length; p++) {
+            sctx.globalAlpha = passes[p];
+            if (passes[p] > 0.01) sctx.fillText(glyphs[g], bx - FAR, by);
+          }
+          sctx.globalAlpha = 1;
+          sctx.shadowColor = 'rgba(0,0,0,0)'; sctx.shadowBlur = 0; sctx.shadowOffsetX = 0;
+        }
+        sctx.fillStyle = css(colour, 1);
+        sctx.fillText(glyphs[g], bx, by);
+        if (opt.mirror) {
+          actx.setTransform(-1, 0, 0, 1, (g + 1) * S, lv * S);
+        } else {
+          actx.setTransform(1, 0, 0, 1, g * S, lv * S);
+        }
+        actx.drawImage(scratch, 0, 0);
+      }
+    }
+    return { canvas: atlas, S: S, cellPx: cellPx };
+  }
+
+  // ---- geometry ----
+  var PW = 0, PH = 0, G = null, atlasF = null, atlasS = null, dirty = true, built = '';
+
+  function rebuild() {
+    var r = view.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    PW = Math.round(r.width * dpr); PH = Math.round(r.height * dpr);
+    if (PW < 64 || PH < 64) { G = null; built = ''; return; }
+    var key = [PW, PH, opt.size, opt.mirror, opt.glow].join();
+    if (key === built) return;                            // nothing that shapes the grid or the glyphs changed
+    built = key;
+    if (cv.width !== PW || cv.height !== PH) { cv.width = PW; cv.height = PH; }
+
+    var cell = opt.size;                                  // in wall heights
+    var rows = Math.floor(1 / cell + 1e-6);
+    var cols = Math.floor(ROOM_W / cell + 1e-6);
+    var f = FOCAL * PH, cx = PW / 2, cy = PH / 2;
+    var wallPx = f / Z_FRONT;                             // front wall height in pixels
+    var cellPx = cell * wallPx;
+    var marginX = (ROOM_W - cols * cell) / 2;
+
+    var yw = new Float64Array(rows);                      // row centres, wall heights from the eye line
+    for (var i = 0; i < rows; i++) yw[i] = (i + 0.5 - rows / 2) * cell;
+
+    atlasF = buildAtlas(cellPx);
+    atlasS = buildAtlas(Math.min(cellPx * 1.7, 44));
+
+    var front = [];
+    for (var c = 0; c < cols; c++) {
+      front.push({ col: column(c), x: Math.round(cx + (c + 0.5 - cols / 2) * cellPx - atlasF.S / 2) });
+    }
+    var fy = new Int32Array(rows);
+    for (i = 0; i < rows; i++) fy[i] = Math.round(cy + yw[i] * wallPx - atlasF.S / 2);
+
+    // Side walls: the same cells, receding from the viewer to the front wall's edges.
+    var side = [];
+    [-1, 1].forEach(function (sgn) {
+      var xw = sgn * ROOM_W / 2;
+      for (var j = 0; ; j++) {
+        var z1 = Z_FRONT - marginX - j * cell, z0 = z1 - cell;
+        if (z0 < 0.08) break;
+        var xa = cx + f * xw / z1, xb = cx + f * xw / z0;
+        if (xa < -cellPx || xa > PW + cellPx) break;
+        var zm = 2 / (1 / z0 + 1 / z1);
+        var s = f / zm;                                   // pixels per wall height at this column
+        side.push({
+          col: column((sgn < 0 ? 10000 : 20000) + j),
+          xm: cx + f * xw / zm, s: s,
+          a: Math.abs(xb - xa) / atlasS.cellPx,
+          d: s * cell / atlasS.cellPx
+        });
+      }
+    });
+
+    // Floor and ceiling: the same cells, their columns running from the front wall toward the viewer.
+    var planeCols = [], planeRows = [];
+    for (c = 0; c < cols; c++) planeCols.push({ xw: (c + 0.5 - cols / 2) * cell, floor: column(30000 + c), ceil: column(40000 + c) });
+    for (var j = 0; ; j++) {
+      var pz1 = Z_FRONT - marginX - j * cell, pz0 = pz1 - cell;
+      if (pz0 < 0.08 || f * 0.5 / pz1 > PH / 2 + cellPx) break;
+      var pzm = 2 / (1 / pz0 + 1 / pz1);
+      planeRows.push({ k: f / pzm, a: f * cell / pzm / atlasS.cellPx, e: f * cell / (pzm * pzm) / atlasS.cellPx });
+    }
+
+    // Corner lines: each visible edge starts at a corner and fades out a third of the way along.
+    var hw = ROOM_W / 2, fades = [];
+    function P(x, y, z) { return [cx + f * x / z, cy + f * y / z]; }
+    function fade(x0, y0, z0, x1, y1, z1) {              // from the corner to a third of the edge
+      var stops = [], a = P(x0, y0, z0), b = P(x1, y1, z1), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      for (var q = 0; q <= 8; q++) {
+        var w = q / 8, p = P(x0 + (x1 - x0) * w, y0 + (y1 - y0) * w, z0 + (z1 - z0) * w);
+        stops.push([Math.min(1, Math.hypot(p[0] - a[0], p[1] - a[1]) / len), 1 - w]);
+      }
+      fades.push({ a: a, b: b, stops: stops });
+    }
+    [-1, 1].forEach(function (sx) {
+      [-1, 1].forEach(function (sy) {
+        var x = sx * hw, y = sy * 0.5;
+        fade(x, y, Z_FRONT, x - sx * ROOM_W / 3, y, Z_FRONT);          // along the front wall's top or bottom edge
+        fade(x, y, Z_FRONT, x, y - sy / 3, Z_FRONT);                   // along the front wall's left or right edge
+        fade(x, y, Z_FRONT, x, y, Z_FRONT - ROOM_D / 3);               // along the edge that runs toward the viewer
+      });
+    });
+
+    G = { cell: cell, rows: rows, cx: cx, cy: cy, yw: yw, front: front, fy: fy, side: side,
+          planeCols: planeCols, planeRows: planeRows, planeDepth: Math.floor(ROOM_D / cell + 1e-6),
+          fades: fades, lineWidth: Math.max(1, 1.5 * dpr) };
+  }
+
+  // ---- frame ----
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (dirty) { dirty = false; rebuild(); }
+    if (!G) return;
+
+    var t = now / 1000;
+    var rows = G.rows, kL = G.cell / DROP_LEN, invKL = DROP_LEN / G.cell, allHeads = opt.allHeads;
+    var c, r, col, base, u, n, ph, hc, lv, b, w, ci, S, img;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, PW, PH);
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Brightness of a cell: b = 1 - fract((t * speed + offset - row * k) / dropLength), then b^1.5.
+    // floor() of the same value counts the passes; the cell takes its next character when it steps.
+
+    // front wall, flat, pixel-aligned
+    S = atlasF.S; img = atlasF.canvas;
+    for (c = 0; c < G.front.length; c++) {
+      col = G.front[c].col; base = (t * FALL * col.speed + col.offset) / DROP_LEN;
+      var x = G.front[c].x;
+      for (r = 0; r < rows; r++) {
+        u = base - r * kL; n = Math.floor(u); ph = u - n; hc = ph * invKL;
+        if (hc < 1 && (allHeads || col.head)) {
+          w = hc < 0.5 ? 0 : (hc - 0.5) * 2;
+          lv = NT + Math.round(w * (NH - 1));
+        } else {
+          b = 1 - ph; lv = ((b * Math.sqrt(b) * NT + 0.5) | 0) - 1;
+          if (lv < 0) continue;
+        }
+        ci = codes[(((col.start + r + n * rows) % N) + N) % N];
+        ctx.drawImage(img, ci * S, lv * S, S, S, x, G.fy[r], S, S);
+      }
+    }
+
+    // left and right walls, one affine cell at a time
+    S = atlasS.S; img = atlasS.canvas;
+    var half = S / 2, cx = G.cx, cy = G.cy, yw = G.yw, limit = PH / 2;
+    for (c = 0; c < G.side.length; c++) {
+      var sc = G.side[c];
+      col = sc.col; base = (t * FALL * col.speed + col.offset) / DROP_LEN;
+      var reach = limit + sc.s * G.cell;
+      for (r = 0; r < rows; r++) {
+        var dy = sc.s * yw[r];
+        if (dy > reach || dy < -reach) continue;
+        u = base - r * kL; n = Math.floor(u); ph = u - n; hc = ph * invKL;
+        if (hc < 1 && (allHeads || col.head)) {
+          w = hc < 0.5 ? 0 : (hc - 0.5) * 2;
+          lv = NT + Math.round(w * (NH - 1));
+        } else {
+          b = 1 - ph; lv = ((b * Math.sqrt(b) * NT + 0.5) | 0) - 1;
+          if (lv < 0) continue;
+        }
+        ci = codes[(((col.start + r + n * rows) % N) + N) % N];
+        ctx.setTransform(sc.a, -dy / (cx - sc.xm) * sc.a, 0, sc.d, sc.xm, cy + dy);
+        ctx.drawImage(img, ci * S, lv * S, S, S, -half, -half, S, S);
+      }
+    }
+
+    // floor and ceiling; the row index counts cells away from the front wall
+    if (opt.planeRain) {
+      var depth = G.planeDepth, pr, pc, sgn;
+      for (c = 0; c < G.planeCols.length; c++) {
+        pc = G.planeCols[c];
+        for (sgn = -1; sgn <= 1; sgn += 2) {             // -1 ceiling, +1 floor
+          col = sgn < 0 ? pc.ceil : pc.floor; base = (t * FALL * col.speed + col.offset) / DROP_LEN;
+          for (r = 0; r < G.planeRows.length; r++) {
+            pr = G.planeRows[r];
+            var px = cx + pc.xw * pr.k;
+            if (px < -S || px > PW + S) continue;
+            u = base - r * kL; n = Math.floor(u); ph = u - n; hc = ph * invKL;
+            if (hc < 1 && (allHeads || col.head)) {
+              w = hc < 0.5 ? 0 : (hc - 0.5) * 2;
+              lv = NT + Math.round(w * (NH - 1));
+            } else {
+              b = 1 - ph; lv = ((b * Math.sqrt(b) * NT + 0.5) | 0) - 1;
+              if (lv < 0) continue;
+            }
+            ci = codes[(((col.start + r + n * depth) % N) + N) % N];
+            // sgn keeps the letters unmirrored on the ceiling (they are turned, not flipped)
+            ctx.setTransform(sgn * pr.a, 0, pc.xw * pr.e, sgn * 0.5 * pr.e, px, cy + sgn * 0.5 * pr.k);
+            ctx.drawImage(img, ci * S, lv * S, S, S, -half, -half, S, S);
+          }
+        }
+      }
+    }
+
+    if (opt.lines) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.lineWidth = G.lineWidth; ctx.lineCap = 'butt';
+      for (c = 0; c < G.fades.length; c++) {
+        var fd = G.fades[c], grad = ctx.createLinearGradient(fd.a[0], fd.a[1], fd.b[0], fd.b[1]);
+        for (r = 0; r < fd.stops.length; r++) grad.addColorStop(fd.stops[r][0], 'rgba(' + LINE + ',' + fd.stops[r][1] + ')');
+        ctx.strokeStyle = grad;
+        ctx.beginPath(); ctx.moveTo(fd.a[0], fd.a[1]); ctx.lineTo(fd.b[0], fd.b[1]); ctx.stroke();
+      }
+    }
+  }
+
+  // ---- controls ----
+  function readControls() {
+    opt.mirror = document.querySelector('input[name=letters]:checked').value === 'mirrored';
+    opt.size = parseFloat(document.querySelector('input[name=size]:checked').value);
+    opt.glow = document.querySelector('input[name=glow]').checked;
+    opt.allHeads = document.querySelector('input[name=heads]:checked').value === 'all';
+    opt.lines = document.querySelector('input[name=lines]').checked;
+    opt.planeRain = document.querySelector('input[name=planes]:checked').value === 'rain';
+    dirty = true;
+  }
+  document.querySelector('.strip').addEventListener('change', readControls);
+  readControls();
+  if (window.ResizeObserver) new ResizeObserver(function () { dirty = true; }).observe(view);
+  else window.addEventListener('resize', function () { dirty = true; });
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

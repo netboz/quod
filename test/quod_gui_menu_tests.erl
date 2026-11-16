@@ -147,7 +147,12 @@ interior_walls_use_the_shared_extent_test_() ->
         executed(C,space({space_represent,ref(Ns,room),solid,T,wireframe,solid,T,matrix})),
         applied(Ns,fun() -> case boundary(C,Ns,A) of {_,P} -> length(P) =:= 2; [] -> false end end),
         {[_],Matrix} = boundary(C,Ns,A),
-        ?assertMatch([{mark,_,<<"box">>,[{f,_,1},{f,_,3000},{f,_,501}],_,{surface,_,_,_,_,220,[]},_,_},
+        %% Matrix walls: one black box at the whole millimetres, raining the
+        %% exact source of quod:space, inside the same green outline. The view
+        %% is well formed: every part passed the scene vocabulary's model/2.
+        Space = {ontology_ref,<<"quod:space">>,quod_simplex:genesis_hash(<<"quod:space">>)},
+        ?assertMatch([{mark,_,<<"box">>,[{f,<<"width">>,1},{f,<<"height">>,3000},{f,<<"depth">>,501}],_,
+                       {surface,<<"#3CFF7A">>,0,1000,1000,1000,[{texture,<<"rain">>,{source,Space},{glyph,100}}]},_,_},
                       {mark,_,<<"corner_box">>,Size,_,{surfaces,{surface,<<"#3CFF7A">>,_,_,_,_,_},_,_},_,_}],Matrix),
         executed(C,space({space_represent,ref(Ns,room),solid,T,matrix,solid,T,none})),
         applied(Ns,fun() -> boundary(C,Ns,A) =:= [] end),

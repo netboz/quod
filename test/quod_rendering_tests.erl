@@ -271,6 +271,34 @@ texture_bindings_are_typed_and_unique_test() ->
              [setelement(4, Texture, {repeat, 0, 1000})]])
     end).
 
+%% Rain is one more texture, beside the pictures, and not one of their slots.
+rain_texture_is_typed_and_unique_test() ->
+    with_rendering(fun(St) ->
+        Anchor = binary:copy(<<7>>, 32),
+        Text = {texture, <<"rain">>, {text, <<"a :- b.">>}, {glyph, 60}},
+        Source = {texture, <<"rain">>, {source, {ontology_ref, <<"quod:space">>, Anchor}}, {glyph, 60}},
+        Picture = {texture, <<"base_colour">>, {asset, binary:copy(<<"a">>, 64), <<"image/jpeg">>}, {repeat, 1000, 1000}},
+        Surface = fun(Ts) -> setelement(6, box(<<"wall">>),
+            {surface, <<"#3CFF7A">>, 0, 1000, 1000, 1000, Ts}) end,
+        lists:foreach(fun(Ts) -> holds({well_formed_mark, Surface(Ts)}, St) end,
+            [[Text], [Source], [Picture, Source], [Source, Picture]]),
+        lists:foreach(fun(Ts) -> fails({well_formed_mark, Surface(Ts)}, St) end,
+            [[Text, Source],
+             [setelement(3, Text, {text, <<>>})],
+             [setelement(3, Text, {text, "a :- b."})],
+             [setelement(3, Text, {text, a})],
+             [setelement(4, Text, {glyph, 0})],
+             [setelement(4, Text, {glyph, -60})],
+             [setelement(4, Text, {glyph, 60.0})],
+             [setelement(3, Source, {source, {ontology_ref, <<"quod:space">>, <<7:248>>}})],
+             [setelement(3, Source, {source, {ontology_ref, <<>>, Anchor}})],
+             [setelement(3, Source, {source, {ontology_ref, <<"quod:space">>, {'A'}}})],
+             [setelement(3, Text, {text, {'T'}})],
+             [setelement(4, Text, {glyph, {'H'}})],
+             [setelement(3, Source, {source, <<"quod:space">>})],
+             [setelement(4, Text, {repeat, 1000, 1000})]])
+    end).
+
 has_float(T) when is_float(T) -> true;
 has_float([Head | Tail]) -> has_float(Head) orelse has_float(Tail);
 has_float(T) when is_tuple(T) -> lists:any(fun has_float/1, tuple_to_list(T));

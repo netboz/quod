@@ -397,6 +397,12 @@ public partial class Main : Control
         store.Update(s => s.Endpoint = origin);
         var connecting = new SignedSession(key, store, new Transport(origin, pinned));
         session = connecting; statusText = "Signing in…"; Notify();
+        // A named rain source: the Source panel's whole-source read, asked of
+        // quod:gui by the signed-in human, under the same source policy.
+        scene.ReadSource=(source,cancellation)=>{
+            var human=accounts?.Human??throw new InvalidOperationException("No account yet.");
+            return connecting.ReadSource(human,SignedSession.ViewGoal(human,Term.Call("::",Term.Text("quod:gui"),Term.Call("prolog_source",source,Term.Variable("Source")))),"Source",cancellation);
+        };
         connecting.Expired+=()=>{
             if(!ReferenceEquals(session,connecting)||disposed||closing)return;
             Disconnect();state="sign-in-expired";
@@ -702,7 +708,7 @@ public partial class Main : Control
         }
         ViewsDisposed = ViewsDisposed.IsCompleted ? Finish() : Task.WhenAll(ViewsDisposed, Finish());
         accounts = null; worldAccepted = false; location.Text = controllers.Text = "";localControllers=null;localControllerStatus=null;sourceChoices.Clear();sourceSchema="";
-        scene?.Withdraw();
+        scene?.Withdraw();if(scene!=null)scene.ReadSource=null;
         home=returnHome;
     }
     public void Disconnect()

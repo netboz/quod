@@ -464,12 +464,15 @@ space_interior(Name) :- class_eidolon(space,interior,Name,_).
 eidolon(space_wireframe, Subject, Walls) :-
     space_extent(Subject,W,H,D), unique_solution(scene_vocabulary(Ns,A)),
     in_ontology(Ns,A,eidolon(extent(W,H,D),Subject,Walls)).
-%% Matrix walls: the outline in emissive green over translucent near-black
-%% faces, drawn from both sides so they read from in and out.
+%% Matrix walls: black walls showing this ontology's own source as rain, inside
+%% the green outline. The source is named, not copied: the client reads it once.
 eidolon(space_matrix, Subject,
     [part(<<"walls">>, box(WI,HI,DI), transform(0,0,0,0,0,0),
-          surface(<<"#030F08">>,0,900,80,220,[]), unlabelled, depicts_nothing) | Outline]) :-
-    space_extent(Subject,W,H,D), unique_solution(scene_vocabulary(Ns,A)),
+          surface(<<"#3CFF7A">>,0,1000,1000,1000,
+                  [texture(<<"rain">>,source(ontology_ref(Here,History)),glyph(100))]),
+          unlabelled, depicts_nothing) | Outline]) :-
+    space_extent(Subject,W,H,D), current_ontology_identity(Here,History),
+    unique_solution(scene_vocabulary(Ns,A)),
     in_ontology(Ns,A,eidolon(extent(W,H,D,<<"#3CFF7A">>),Subject,Outline)),
     space_whole_mm(W,WI), space_whole_mm(H,HI), space_whole_mm(D,DI).
 %% Editing shows the marker with the real size written beneath it, as authored.

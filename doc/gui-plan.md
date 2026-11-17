@@ -174,7 +174,7 @@ it. No shader code and no URL travel in a mark.
 ## Ownership proposal
 
 Extend `quod:gui` for semantic controls, typed values, composition, validation
-contracts and reusable form rules. The seven-foundation composition also owns
+contracts and reusable form rules. The foundation composition also owns
 shared appearances, exact measurement, rendering/model descriptors and portable
 inspection recipes in `quod:gui`; see the
 [foundation contract](godot-foundation-contract.md). Domain meaning and

@@ -45,6 +45,12 @@ requiring a deferred question. The normal World screen and spatial panel share
 its bound forms, personal-agent submission and original-result recovery.
 Physical-headset acceptance remains separate.
 
+[Played-agent movement](player-movement-plan.md) gives the control contract for
+a played agent; what is built of it is in the
+[physics profile](physics-native.md#played-agent-movement), and its acceptance
+waits for the physical space. [Default physical lobby](lobby-redesign.md)
+describes the later lobby; it is not what signup does today.
+
 [World generation brainstorming](world-generation-brainstorm.md) explores RPG
 world-building sources, ontology-based generation, composable roleplaying rules,
 an AI game master through MCP, and models, animation and sound. It distinguishes

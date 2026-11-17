@@ -1,9 +1,10 @@
-# Godot and seven-foundation contract
+# Godot and foundation contract
 
 This is the M0 implementation contract for [QUO-60](nimbalyst://QUO-60) and
 [QUO-61](nimbalyst://QUO-61). The shared tracker owns status and scheduling.
-This document specifies the replacement; it does not claim that the seven
-foundations, onboarding journey or recursive physics are installed.
+When it was written this document specified a replacement that was not yet
+installed. The foundations, the onboarding journey and recursive physics have
+since been built (M0 to M3, closed on 2026-11-17); M4 and M5 are in progress.
 The [source audit](evidence/godot-m0-20261027/ontology-audit.json),
 [retirement map](evidence/godot-m0-20261027/retirement-map.md), and
 [qualification evidence](evidence/godot-m0-20261027/README.md) freeze its inputs.

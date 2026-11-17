@@ -29,7 +29,7 @@ icon_bytes_are_public_signed_facts_test_() ->
 release_terms_use_the_existing_signed_edit_gate_test_() ->
     {timeout,90,fun() -> with_menus(fun(C=#{identity:=#{pubkey:=NodeKey}}) ->
         Gui = <<"quod:gui">>, Root = quod_ontology:root_ns(),
-        File = "doc/evidence/live-ontology-release-0.7.282-20261108/quod_source_release.erl",
+        File = "scripts/release/quod_source_release.erl",
         {ok,quod_source_release,Beam} = compile:file(File,[binary,return_errors]),
         {module,quod_source_release} = code:load_binary(quod_source_release,File,Beam),
         Asset = {gui_asset,<<"release-test">>,<<"application/octet-stream">>,<<0,34,92,137,255>>},

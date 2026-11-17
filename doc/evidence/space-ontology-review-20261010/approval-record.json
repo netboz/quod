@@ -1,8 +1,0 @@
-{
-  "authorize_external_fable": true,
-  "respondedBy": "desktop",
-  "respondedAt": 1791590650121,
-  "destination": "Configured external Claude Fable service",
-  "payload": "review-request.md, AGENTS.md and the 28 frozen files enumerated in run-review.mjs",
-  "constraints": "Read-only architecture review; no credentials, keys, live account data, unrelated files, production edits or deployment"
-}

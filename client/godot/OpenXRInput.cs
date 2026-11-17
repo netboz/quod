@@ -517,11 +517,27 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
     {
         var ray=Ray(input);float reading=Profile.ReadingDistance,radius=PieRadius;
         float distance=hit?.Pose is Transform3D pose ? Math.Clamp((pose.Origin-ray.Origin).Dot(ray.Direction)-radius,radius,reading) : reading;
-        var at=ray.Origin+ray.Direction*distance;var head=Head();
+        var head=Head();
+        PlacePieQuad(BelowEye(ray.Origin+ray.Direction*distance,head),head);
+    }
+    Vector3 BelowEye(Vector3 at,Transform3D head)
+    {
         float level=new Vector2(at.X-head.Origin.X,at.Z-head.Origin.Z).Length();
         at.Y=Math.Min(at.Y,head.Origin.Y-level*Mathf.Tan(Mathf.DegToRad(Profile.PieBelowEyeDegrees)));
-        PlacePieQuad(at,head);
+        return at;
     }
+    // A pie that neither the pad nor a strip command placed (a wedge that
+    // opens another pie, a class chosen on the panel) shows where the last
+    // pie was, or in front of the eyes when none was placed yet. Never an
+    // open pie without a surface: it would hide the strip and swallow presses.
+    internal void ShowPie()
+    {
+        if(pieQuad.Visible)return;
+        if(piePlaced){pieQuad.Visible=true;return;}
+        var head=Head();
+        PlacePieQuad(BelowEye(head.Origin-head.Basis.Z*Profile.ReadingDistance,head),head);
+    }
+    bool piePlaced;
     // A strip command's pie opens just in front of that command.
     internal void PlacePieAtHud(Vector2 surfacePoint)
     {
@@ -539,7 +555,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
         float size=pieViewport.Size.X*Profile.ReadingDistance/1600;var facing=at-head.Origin;
         ((QuadMesh)pieQuad.Mesh).Size=new(size,size);
         pieQuad.GlobalTransform=new(facing.LengthSquared()>1e-6f ? Basis.LookingAt(facing.Normalized(),Vector3.Up) : head.Basis,at);
-        pieQuad.Visible=true;
+        pieQuad.Visible=true;piePlaced=true;
     }
     // Where a controller's ray meets the surface that shows the pie.
     Vector2? PiePoint(IControllerSource source)=>pieQuad.Visible ? PieHit(source) : GuiHit(source)?.Point;

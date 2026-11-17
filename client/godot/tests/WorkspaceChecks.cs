@@ -181,7 +181,14 @@ public partial class ExportChecks
         Check(adapter.Sources.Single(s=>s.Hand=="right").Read("xr-standard-touchpad")!.Neutral,"fixture supplies an actually released neutral touchpad before the next menu gesture");
         right.SetInput("pad_axes",new Vector2(0,1));right.SetInput("pad_press",true);Advance();Advance();
         Check(adapter.Router.MenuOwner!=null && adapter.PieQuad.Visible && !adapter.GuiSurface.Visible && !form.IsVisibleInTree(),"the pie opens on its own surface while the working panel stays hidden");
+        var placedPie=adapter.PieQuad.GlobalTransform;
         right.SetInput("pad_press",false);Advance();Advance();
+        // A pie opened by another pie's wedge has a surface where the last pie was.
+        Check(!adapter.PieQuad.Visible,"a closed pie hides its surface");
+        adapter.ShowPie();
+        Check(adapter.PieQuad.Visible && adapter.PieQuad.GlobalTransform.Origin.DistanceTo(placedPie.Origin)<.001f && adapter.PieQuad.GlobalTransform.Basis.IsEqualApprox(placedPie.Basis),
+            "a pie opened from a wedge shows where the last pie was, never open without a surface");
+        adapter.PieQuad.Visible=false;
         Check(adapter.WorkspaceVisible && form.IsVisibleInTree() && adapter.Router.MenuOwner==null && ReferenceEquals(form.Draft,draft) && submits==0,"mapped menu recall restores the same unsent working form without submitting it");
         // The HUD strip stands in the room below the view and follows the body.
         var strip=new Button {Text="Strip command",Size=new(200,60)};adapter.HudSurface.AddChild(strip);

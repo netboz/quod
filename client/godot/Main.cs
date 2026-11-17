@@ -316,6 +316,7 @@ public partial class Main : Control
         var opened=System.Diagnostics.Stopwatch.StartNew();
         // A HUD sub-pie or the device menu is already in hand; nothing to read.
         if(local!=null){if(gui.Spatial&&at is Vector2 origin)xr.PlacePieAtHud(origin);pie.Present(local,"");Quod.Client.Trace.Line("pie",$"name=\"{name}\" local");Notify();return true;}
+        if(gui.Spatial)xr.ShowPie();
         Subject exact;
         try{exact=Subject.Decode(subject);}catch(FormatException){pie.Close();return false;}
         var storing=exact.Exact.Name=="class_ref" && representations?.Current?.Exact.ToString()==subject.ToString()

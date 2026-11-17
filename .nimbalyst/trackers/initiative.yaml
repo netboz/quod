@@ -1,0 +1,90 @@
+# Shared with your team. Saving this file updates it for everyone. Last changed by yan.guiborat.
+
+type: initiative
+displayName: Initiative
+displayNamePlural: All initiatives
+icon: flag
+color: '#2563eb'
+modes:
+  inline: true
+  fullDocument: true
+idPrefix: init
+idFormat: ulid
+fields:
+  - name: title
+    type: string
+    required: true
+    displayInline: true
+  - name: status
+    type: select
+    required: false
+    displayInline: true
+    options:
+      - value: proposed
+        label: Proposed
+        category: backlog
+      - value: active
+        label: Active
+        category: started
+      - value: paused
+        label: Paused
+        category: started
+      - value: done
+        label: Done
+        category: done
+  - name: health
+    type: select
+    required: false
+    displayInline: true
+    options:
+      - value: on-track
+        label: on-track
+      - value: at-risk
+        label: at-risk
+      - value: off-track
+        label: off-track
+  - name: owner
+    type: user
+    required: false
+    displayInline: true
+  - name: start
+    type: date
+    required: false
+    displayInline: true
+  - name: target
+    type: date
+    required: false
+    displayInline: true
+  - name: impact
+    type: number
+    required: false
+    displayInline: true
+    min: 1
+    max: 5
+  - name: effort
+    type: number
+    required: false
+    displayInline: true
+    min: 1
+    max: 5
+  - name: tags
+    type: array
+    itemType: string
+    displayInline: false
+tableView:
+  defaultColumns:
+    - status
+    - health
+    - owner
+    - target
+  sortable: true
+  filterable: true
+  exportable: true
+roles:
+  title: title
+  workflowStatus: status
+  assignee: owner
+  dueDate: target
+  tags: tags
+sharing: team
+draftByDefault: false

@@ -1,0 +1,55 @@
+# Shared with your team. Saving this file updates it for everyone. Last changed by yan.guiborat.
+
+type: module
+displayName: Module
+displayNamePlural: Modules
+icon: view_module
+color: '#0891b2'
+modes:
+  inline: true
+  fullDocument: true
+idPrefix: mod
+idFormat: ulid
+fields:
+  - name: title
+    type: string
+    required: true
+    displayInline: true
+  - name: layer
+    type: string
+    required: false
+    displayInline: true
+  - name: maturity
+    type: select
+    required: false
+    displayInline: true
+    options:
+      - value: planned
+        label: planned
+      - value: building
+        label: building
+      - value: live
+        label: live
+      - value: retired
+        label: retired
+  - name: owner
+    type: user
+    required: false
+    displayInline: true
+  - name: tags
+    type: array
+    itemType: string
+    displayInline: false
+tableView:
+  defaultColumns:
+    - layer
+    - maturity
+    - owner
+  sortable: true
+  filterable: true
+  exportable: true
+roles:
+  title: title
+  tags: tags
+sharing: team
+draftByDefault: false

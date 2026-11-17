@@ -1,0 +1,41 @@
+# Shared with your team. Saving this file updates it for everyone. Last changed by yan.guiborat.
+
+type: competitor
+displayName: Competitor
+displayNamePlural: Competitors
+icon: compare_arrows
+color: '#7c3aed'
+modes:
+  inline: true
+  fullDocument: true
+idPrefix: comp
+idFormat: ulid
+fields:
+  - name: title
+    type: string
+    required: true
+    displayInline: true
+  - name: category
+    type: string
+    required: false
+    displayInline: true
+  - name: website
+    type: string
+    required: false
+    displayInline: true
+  - name: tags
+    type: array
+    itemType: string
+    displayInline: false
+tableView:
+  defaultColumns:
+    - category
+    - website
+  sortable: true
+  filterable: true
+  exportable: true
+roles:
+  title: title
+  tags: tags
+sharing: team
+draftByDefault: false

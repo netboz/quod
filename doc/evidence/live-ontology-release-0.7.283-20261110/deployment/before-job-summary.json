@@ -1,0 +1,54 @@
+{
+  "id": "quod",
+  "version": 259,
+  "groups": [
+    {
+      "name": "quod-node",
+      "count": 8,
+      "volumes": [
+        {
+          "name": "quod-data",
+          "source": "quod-node-local"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "wait-for-peer",
+          "image": "192.168.1.11:5000/quod:0.7.282"
+        },
+        {
+          "name": "prepare-agent-vault",
+          "image": "192.168.1.11:5000/quod:0.7.282"
+        },
+        {
+          "name": "quod",
+          "image": "192.168.1.11:5000/quod:0.7.282"
+        }
+      ]
+    },
+    {
+      "name": "quod-cloud",
+      "count": 2,
+      "volumes": [
+        {
+          "name": "quod-data",
+          "source": "quod-node-cloud"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "wait-for-peer",
+          "image": "alpine:3.19"
+        },
+        {
+          "name": "prepare-agent-vault",
+          "image": "192.168.1.11:5000/quod:0.7.282"
+        },
+        {
+          "name": "quod",
+          "image": "192.168.1.11:5000/quod:0.7.282"
+        }
+      ]
+    }
+  ]
+}

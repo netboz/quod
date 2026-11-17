@@ -1,0 +1,10 @@
+quod.quod-cloud[0] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-cloud[1] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[0] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[1] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[2] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[3] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[4] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[5] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[6] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}
+quod.quod-node[7] #{space => 19, gui => 9, ok340 => ok, neg20 => fail, view270 => ok, viewneg => fail}

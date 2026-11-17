@@ -1,0 +1,186 @@
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+Error [GENERAL | xrCreateInstance | OpenXR-Loader] : LoaderInstance::CreateInstance chained CreateInstance call failed
+Error [GENERAL | xrCreateInstance | OpenXR-Loader] : xrCreateInstance failed
+WARNING: xdg-toplevel-icon protocol not found! Cannot set window icon.
+     at: init (platform/linuxbsd/wayland/wayland_thread.cpp:5642)
+vrenv.sh[2750164]: VRCOMPOSITOR_LD_LIBRARY_PATH=/home/yan/.local/share/Steam/steamapps/common/SteamVR/bin/linux64:/home/yan/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/qt/lib:/home/yan/.local/share/Steam/steamapps/common/SteamVR/bin/linux64
+vrenv.sh[2750164]: exec /home/yan/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor -nokillprocess -startupexename quod.x86_64 -startupreason applaunch_unknown -startupapptype 10
+Using breakpad crash handler
+Setting breakpad minidump AppID = 250820
+Forcing breakpad minidump interfaces to load
+Looking up breakpad interfaces from steamclient
+Calling BreakpadMiniDumpSystemInit
+11/11 14:58:09 minidumps folder is set to /tmp/dumps
+11/11 14:58:09 Init: Installing breakpad exception handler for appid(250820)/version(2.19.2)/tid(2750164)
+OpenXR: Created instance for OpenXR 1.0.54
+OpenXR: Running on OpenXR runtime:  SteamVR/OpenXR   2.19.2
+OpenXR: XrGraphicsRequirementsVulkan2KHR:
+ - minApiVersionSupported:  1.0.0
+ - maxApiVersionSupported:  1.2.0
+Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+
+sh: line 1: steamxdg-icon-resource: command not found
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+CQVRMonitorHeadsetWarning(0x55cfd6a5a670)  does not have a property named  "green_color"
+CQVRMonitorHeadsetWarning(0x55cfd6a5a670)  does not have a property named  "red_color"
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+libpng warning: iCCP: known incorrect sRGB profile
+[S_API] SteamAPI_Init(): Loaded '/home/yan/.local/share/Steam/linux64/steamclient.so' OK.
+Looking up breakpad interfaces from steamclient
+Calling BreakpadMiniDumpSystemInit
+SteamInternal_SetMinidumpSteamID:  Caching Steam ID:  76561198058878609 [API loaded yes]
+SteamInternal_SetMinidumpSteamID:  Setting Steam ID:  76561198058878609
+Initialize() is failed!!!
+qt.network.ssl: QSslSocket: cannot resolve CRYPTO_num_locks
+qt.network.ssl: QSslSocket: cannot resolve CRYPTO_set_id_callback
+qt.network.ssl: QSslSocket: cannot resolve CRYPTO_set_locking_callback
+qt.network.ssl: QSslSocket: cannot resolve ERR_free_strings
+qt.network.ssl: QSslSocket: cannot resolve sk_new_null
+qt.network.ssl: QSslSocket: cannot resolve sk_push
+qt.network.ssl: QSslSocket: cannot resolve sk_free
+qt.network.ssl: QSslSocket: cannot resolve sk_num
+qt.network.ssl: QSslSocket: cannot resolve sk_pop_free
+qt.network.ssl: QSslSocket: cannot resolve sk_value
+qt.network.ssl: QSslSocket: cannot resolve SSL_get_peer_certificate
+qt.network.ssl: QSslSocket: cannot resolve SSL_library_init
+qt.network.ssl: QSslSocket: cannot resolve SSL_load_error_strings
+qt.network.ssl: QSslSocket: cannot resolve SSL_get_ex_new_index
+qt.network.ssl: QSslSocket: cannot resolve SSLv2_client_method
+qt.network.ssl: QSslSocket: cannot resolve SSLv3_client_method
+qt.network.ssl: QSslSocket: cannot resolve SSLv23_client_method
+qt.network.ssl: QSslSocket: cannot resolve SSLv2_server_method
+qt.network.ssl: QSslSocket: cannot resolve SSLv3_server_method
+qt.network.ssl: QSslSocket: cannot resolve SSLv23_server_method
+qt.network.ssl: QSslSocket: cannot resolve X509_STORE_CTX_get_chain
+qt.network.ssl: QSslSocket: cannot resolve OPENSSL_add_all_algorithms_noconf
+qt.network.ssl: QSslSocket: cannot resolve OPENSSL_add_all_algorithms_conf
+qt.network.ssl: QSslSocket: cannot resolve SSLeay
+qt.network.ssl: QSslSocket: cannot resolve SSLeay_version
+qt.network.ssl: QSslSocket: cannot call unresolved function SSLeay
+qt.network.ssl: QSslSocket: cannot call unresolved function CRYPTO_num_locks
+qt.network.ssl: QSslSocket: cannot call unresolved function CRYPTO_set_id_callback
+qt.network.ssl: QSslSocket: cannot call unresolved function CRYPTO_set_locking_callback
+qt.network.ssl: QSslSocket: cannot call unresolved function SSL_library_init
+qt.network.ssl: QSslSocket: cannot call unresolved function SSLv23_client_method
+qt.network.ssl: QSslSocket: cannot call unresolved function sk_num
+sh: line 1: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools/lighthouse/bin/linux64/vivetools-bv: No such file or directory
+sh: line 1: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools/lighthouse/bin/linux64/vivetools-bv: No such file or directory
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"1","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"2","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":true,"Subscriptions":15,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+PASS native startup presents XR before sign-in
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"1","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"2","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":true,"Subscriptions":15,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+PASS ending a network session leaves XR presentation running
+PASS installed OpenXR interface starts cycle 1
+PASS real runtime supplies fresh stereo head frames cycle 1
+PASS XR scene retains the runtime's stereo render layout cycle 1
+PASS hidden desktop container keeps the actual XR scene rendering cycle 1
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"2","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":false,"Subscriptions":11,"sources":1,"appearances":1,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":10,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+PASS OpenXR adapter stop releases every subscribed source cycle 1
+PASS XR stop restores the same desktop mono scene and camera cycle 1
+M4_XR_CYCLE 1
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"3","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":false,"Subscriptions":13,"sources":1,"appearances":1,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"4","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"3","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":false,"Subscriptions":14,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"4","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"3","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":true,"Subscriptions":15,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"4","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"3","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":true,"Subscriptions":15,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+PASS installed OpenXR interface starts cycle 2
+PASS real runtime supplies fresh stereo head frames cycle 2
+PASS XR scene retains the runtime's stereo render layout cycle 2
+PASS hidden desktop container keeps the actual XR scene rendering cycle 2
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"3","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":false,"Subscriptions":11,"sources":1,"appearances":1,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":10,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+PASS OpenXR adapter stop releases every subscribed source cycle 2
+PASS XR stop restores the same desktop mono scene and camera cycle 2
+M4_XR_CYCLE 2
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"5","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":false,"Subscriptions":13,"sources":1,"appearances":1,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"6","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"5","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":false,"Subscriptions":14,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"6","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"5","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":true,"Subscriptions":15,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"6","hand":"right","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."},{"id":"5","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":true,"Subscriptions":15,"sources":2,"appearances":2,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+PASS installed OpenXR interface starts cycle 3
+PASS real runtime supplies fresh stereo head frames cycle 3
+PASS XR scene retains the runtime's stereo render layout cycle 3
+PASS hidden desktop container keeps the actual XR scene rendering cycle 3
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[{"id":"5","hand":"left","profile":"unsupported","tracked":false,"bindings":[],"reason":"No unambiguous supported profile/components."}]},"controller_metrics":{"Running":false,"Subscriptions":11,"sources":1,"appearances":1,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":10,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+PASS OpenXR adapter stop releases every subscribed source cycle 3
+PASS XR stop restores the same desktop mono scene and camera cycle 3
+M4_XR_CYCLE 3
+M4_XR_PASS
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Disconnected. Your key and unsent work stay on this device.","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+ERROR: Attempt to disconnect a nonexistent connection from '<OpenXRSpatialEntityExtension#3858759889>'. Signal: 'spatial_discovery_recommended', callable: ''.
+   at: _disconnect (core/object/object.cpp:1640)
+ERROR: 1 RID allocations of type 'N9OpenXRAPI18InteractionProfileE' were leaked at exit.
+GetRunningAppName
+Destroy() is failed!!
+qt.network.ssl: QSslSocket: cannot call unresolved function CRYPTO_num_locks
+qt.network.ssl: QSslSocket: cannot call unresolved function CRYPTO_set_id_callback
+qt.network.ssl: QSslSocket: cannot call unresolved function CRYPTO_set_locking_callback
+qt.network.ssl: QSslSocket: cannot call unresolved function ERR_free_strings

@@ -1,0 +1,18 @@
+{
+  "allocation": "a03c494a-6cd8-4bde-451b-2c9671ece91c",
+  "expression": "{ok,SpaceTemplate}=file:read_file(filename:join([code:priv_dir(quod),\"ontologies\",\"quod_space.pl\"])),quod_foundation_operator:found(<<\"quod:space\">>,[\"quod_space.pl\"],[{gui_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},{measure_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},{rendering_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},{modelling_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},space_foundation,{acl_sovereign,{':',quod,space}},{space_template_hash,crypto:hash(sha256,SpaceTemplate)}],[quod_agent_predicates])",
+  "command_argv": [
+    "nomad",
+    "alloc",
+    "exec",
+    "-i=false",
+    "-t=false",
+    "-address=http://192.168.1.10:4646",
+    "-task",
+    "quod",
+    "a03c494a-6cd8-4bde-451b-2c9671ece91c",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin {ok,SpaceTemplate}=file:read_file(filename:join([code:priv_dir(quod),\"ontologies\",\"quod_space.pl\"])),quod_foundation_operator:found(<<\"quod:space\">>,[\"quod_space.pl\"],[{gui_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},{measure_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},{rendering_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},{modelling_vocabulary,<<\"quod:gui\">>,binary:decode_hex(<<\"6ECF83C41582E5B194DA9D7DD9F591ADD3D5B42B35331F89E4D76E5B4131EE43\">>)},space_foundation,{acl_sovereign,{':',quod,space}},{space_template_hash,crypto:hash(sha256,SpaceTemplate)}],[quod_agent_predicates]) end))))."
+  ]
+}

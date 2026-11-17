@@ -1,0 +1,14 @@
+{
+  "switch_exit": 0,
+  "installed": "/home/yan/Games/quod",
+  "backup": "/home/yan/Games/quod-before-eidolon-toolkit-20261112",
+  "verified_export_files": 226,
+  "engine_sha256": "d776f83ae09d82cfa1295fb3d70ad7ab8a77fe66a4cc4f9d42244fae3665d8cc",
+  "managed_assembly_sha256": "860e736628914c977b757e7b409f7134420888b93da5f6947d4c362ba7d9abcb",
+  "pack_sha256": "c204c45ae11c7e9e3f2d4a0c667b98854c8094f5557e27007e3fcc095af1445d",
+  "preserved": [
+    "steam",
+    "last-run.log"
+  ],
+  "saved_identity_opened": false
+}

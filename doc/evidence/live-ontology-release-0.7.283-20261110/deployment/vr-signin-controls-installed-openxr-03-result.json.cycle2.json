@@ -1,0 +1,1 @@
+{"cycle":2,"fresh":90,"tracked":90,"high":90,"invalidStartupFrames":0,"invalidHeadCalibration":false,"sourceTracking":[{"name":"right_hand","valid_frames":90,"aim":"High","grip":"High"},{"name":"left_hand","valid_frames":90,"aim":"High","grip":"High"}],"sourcePosesAgree":true,"draws":3,"update_mode":"Always","view_count":2,"session_state":"Focused","can_render":true}

@@ -1,0 +1,13 @@
+ERROR: ld.so: object '/home/yan/.local/share/Steam/ubuntu12_32/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS32): ignored.
+ERROR: ld.so: object '/home/yan/.local/share/Steam/ubuntu12_32/gameoverlayrenderer.so' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS32): ignored.
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+Error [GENERAL | xrCreateInstance | OpenXR-Loader] : LoaderInstance::CreateInstance chained CreateInstance call failed
+Error [GENERAL | xrCreateInstance | OpenXR-Loader] : xrCreateInstance failed
+Fossilize INFO: Overriding serialization path: "/home/yan/.local/share/Steam/steamapps/shadercache/3208097213/fozpipelinesv6/steamapprun_pipeline_cache".
+OpenXR: Created instance for OpenXR 1.0.54
+OpenXR: Running on OpenXR runtime:  SteamVR/OpenXR   2.19.2
+OpenXR: XrGraphicsRequirementsVulkan2KHR:
+ - minApiVersionSupported:  1.0.0
+ - maxApiVersionSupported:  1.2.0
+Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+

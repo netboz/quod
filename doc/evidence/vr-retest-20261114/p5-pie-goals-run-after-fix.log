@@ -1,0 +1,10 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+PIE_GOALS written to doc/evidence/vr-retest-20261114/p5-pie-goals-local-after-fix.txt
+[0;32m.[0m
+Finished in 3.060 seconds
+[0;32m1 tests, 0 failures
+[0m

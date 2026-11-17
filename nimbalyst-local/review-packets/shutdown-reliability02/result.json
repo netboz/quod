@@ -1,0 +1,39 @@
+{
+  "passed": true,
+  "commands": [
+    {
+      "command": [
+        "tar",
+        "-czf",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/shutdown-reliability02/new-evidence.tar.gz",
+        "-C",
+        "/home/yan/src/quod_worktrees/pearl-stone",
+        "doc/evidence/godot-shutdown-reliability-20261103"
+      ],
+      "true_exit": 0,
+      "elapsed_seconds": 0.04081120699993335
+    },
+    {
+      "command": [
+        "tar",
+        "--same-permissions",
+        "-xzf",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/shutdown-reliability02/new-evidence.tar.gz",
+        "-C",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-shutdown-reliability-20261103/reconstructed-delta02"
+      ],
+      "true_exit": 0,
+      "elapsed_seconds": 0.008348634999947535
+    }
+  ],
+  "manifest_sha256": "4ed4d782b469ac5017eb050d01070f0af15e51af65019cd4aab9e175a4be09f1",
+  "archive_sha256": "8d0b3c3aa41de72a2635859e8c8175e39f9e132b17041cdd76b3bdfb8843e08f",
+  "archive_bytes": 431073,
+  "files": 97,
+  "directories": 14,
+  "reconstruction": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-shutdown-reliability-20261103/reconstructed-delta02",
+  "contents_types_modes_verified": true,
+  "inherited_changed_files": 0,
+  "production_lines_added": 0,
+  "production_lines_removed": 0
+}

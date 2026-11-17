@@ -1,0 +1,14 @@
+{
+  "switch_exit": 0,
+  "installed": "/home/yan/Games/quod",
+  "backup": "/home/yan/Games/quod-before-piesurface-20261117",
+  "verified_export_files": 227,
+  "engine_sha256": "d776f83ae09d82cfa1295fb3d70ad7ab8a77fe66a4cc4f9d42244fae3665d8cc",
+  "managed_assembly_sha256": "bcebad84a6a13d3be44d0c1782e4d8cf09c2973ecfcd1bcee9dcfd322019cb9e",
+  "pack_sha256": "ea2d1a572c49afe055ed38ff4172f2ef0c320c9a45bab69256a7d8dde990a0aa",
+  "preserved": [
+    "steam",
+    "last-run.log"
+  ],
+  "saved_identity_opened": false
+}

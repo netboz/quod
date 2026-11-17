@@ -1,0 +1,23 @@
+{
+  "freeze_verified": true,
+  "source_label": "renewal-diagnosis01",
+  "files": 1693,
+  "manifest_sha256": "9b271e94d05a1825c69f006a184c913a6cba1f6a925188e06ada2ece1f5127a4",
+  "archive_sha256": "5718667bc67a47ac355b709e442cfe2acedbb9e3c61316521dfc8e81449228ac",
+  "candidate_installed": false,
+  "production_delta": {
+    "added": 0,
+    "removed": 0
+  },
+  "proposal_production_delta": {
+    "added": 16,
+    "removed": 10
+  },
+  "historical_original_aggregate_acceptance": "failed and retained",
+  "isolated_candidate_original_aggregate_acceptance": "passed",
+  "installed_aggregate_acceptance": "not run; candidate uninstalled",
+  "dependency_pin": "5cad93c71579f138e053b3bb971c050bf2dacb7c",
+  "hardware": false,
+  "deployment": false,
+  "user_stores_accessed": false
+}

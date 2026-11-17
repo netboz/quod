@@ -1,0 +1,389 @@
+npm notice run quod-client@0.1.0 pretest
+npm notice run node tools/check-dependencies.mjs
+npm notice run quod-client@0.1.0 test
+npm notice run node --test test/*.test.js
+✔ signup retains its receipt through preparation and hands off once to atomic U/A/S0 setup (27.801606ms)
+✔ lost setup reply resolves exact bytes and signature without another creation or preparation (11.977452ms)
+✔ failed local account save retains original signup outcome for recovery (3.464674ms)
+✔ a consumed signup handoff cannot advance twice (6.534861ms)
+✔ definite setup refusal can be explicitly retried while retaining the original U (7.142268ms)
+✔ disconnect during preparation retains committed signup evidence and resolves it before dependent setup (7.872993ms)
+✔ a fresh device with the same account reads complete source state without writes or a journal (4.371755ms)
+✔ setup refuses a result with replacement actor or owner references and retains recovery evidence (6.442831ms)
+✔ setup rejects replacement storage and retains its exact recovery operation (4.390812ms)
+(node:568866) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ agent references are stored and selected independently of the signing key (6.586674ms)
+✔ agent references and active selection are isolated by root network (2.174833ms)
+✔ legacy global references are not loaded into a root network (0.22773ms)
+✔ removing an active reference chooses a replacement from the same network (0.542733ms)
+✔ malformed storage input is rejected before signing (0.417723ms)
+✔ agent-reference namespaces preserve UTF-8 through the signed length field (0.539161ms)
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+✔ backward desktop travel sends integer zero axes accepted by physics (41.717903ms)
+✔ renewing the same binding preserves held travel and authored camera placement (7.648488ms)
+✔ authored off-centre cockpit follows accepted body pose; commands cannot translate the camera (4.326732ms)
+✔ tracked stereo views follow unrestricted head motion without moving the controlled body (10.591372ms)
+✔ unknown capabilities and implicit movement profiles fail closed (4.277046ms)
+✔ Space jumps once and promptly resumes held travel; unavailable control does not jump (6.15514ms)
+✔ XR entry preserves tracked pitch and roll; free agents cannot request landing teleport (4.886182ms)
+✔ real Babylon component observations drive one permitted semantic request per edge (3.599382ms)
+✔ tracking loss cancels a pressed selection and a menu without activation; held recovery rearms only after release (0.890155ms)
+✔ unchanged renewal and unrelated disconnect preserve held navigation; a changed mapping retires it (0.825953ms)
+✔ unknown handedness never becomes the menu; duplicate hands disable roles without disabling selection (0.727615ms)
+✔ menu selection consumes radial release, and closing a workspace does not resume held travel (0.33238ms)
+✔ late initialization after removal and missing axes cannot resurrect a binding (2.440658ms)
+✔ changing the modifier while the pad is held cannot turn a snap into travel (0.611542ms)
+✔ loss of a temporary choice never routes menu and movement to the same remaining source (0.611791ms)
+✔ mapping withdrawal and owner cancellation retire captures without activation (0.914574ms)
+✔ pointer capture stops travel in the same frame, reverse sources=false (0.531579ms)
+✔ pointer capture stops travel in the same frame, reverse sources=true (0.254423ms)
+✔ changing menu entries retires only an active menu gesture and its selection (0.28746ms)
+✔ tracking status and failed role choices update values without replacing the panel schema (4.869004ms)
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+✔ scene picking does not click a stale tracked mesh on loss, recovery or disposal while pressed (43.426446ms)
+✔ hidden cancels without an XR frame and cannot click on return (23.6909ms)
+✔ visible-blurred cancels without an XR frame and cannot click on return (5.455168ms)
+✔ refresh withdraws input but retains the verified appearance until its source leaves (15.958859ms)
+✔ Vive description uses the exact packaged model, admitted by the existing GLB validator (47.401883ms)
+✔ preferences reuse signed-view renewal, ignore old replies and stop at expiry with no write (16.572069ms)
+✔ asymmetric static GLB measures its actual geometry, hierarchy and PNG (4.075356ms)
+✔ each scene node referencing a mesh counts its drawn vertices and triangles (3.671473ms)
+✔ external resources, extensions and dynamic features fail before loading (4.761108ms)
+✔ reused accessors retain their measured costs and bounds (0.456804ms)
+✔ each measured resource is checked against its authorized allowance (1.216951ms)
+✔ unallocated presentation still validates and measures the asset (0.650783ms)
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+✔ actual Babylon GUI cancellation releases button and slider capture without clicking or losing the draft (16.009059ms)
+✔ HUD uses the authenticated human scope and renews without frame credit or losing its view (37.232987ms)
+✔ question adapter decodes the common form model without world state (4.665219ms)
+✔ HUD expiry discards authorization and late candidates without reconnecting (5.254123ms)
+✔ HUD disconnect discards authorization and late candidates without reconnecting (4.287257ms)
+✔ HUD refusal discards authorization and late candidates without reconnecting (3.393361ms)
+✔ GUI kind mismatch refuses the projection (2.82628ms)
+✔ a HUD cannot select a malformed receiver address (2.450532ms)
+✔ receiver pending retains exact bytes and blocks another selection after reopening (3.284624ms)
+✔ receiver lost response retains exact bytes and blocks another selection after reopening (3.61167ms)
+✔ receiver selection fails closed when its existing operation journal cannot be read (3.477199ms)
+✔ native preparation is hidden, idempotent, retained across refresh and activated only once (2.928691ms)
+✔ signed HUD removal retires activated receipts and reuses capacity without waiting for expiry (8.241076ms)
+✔ native malformed/unsupported preparation is refused: {"descriptor":"unsupported"} (1.881773ms)
+✔ native malformed/unsupported preparation is refused: {"connection":"foreign"} (2.993554ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"0"} (1.929955ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"99999999999999999"} (3.537554ms)
+✔ native malformed/unsupported preparation is refused: {"capacity":0} (3.42139ms)
+✔ native malformed/unsupported preparation is refused: {"question":"question_ref(bad,bad,bad)"} (2.330202ms)
+✔ native support must be explicit (1.565339ms)
+✔ native capacity and disconnect release only local resources (7.195705ms)
+✔ verified browser backup contains the exact active identity (428.46623ms)
+✔ verified browser backup fails when storage silently discards it (316.906509ms)
+✔ encrypted identity carries exact per-network account references (615.207867ms)
+✔ signed motion quantization encodes integer zero, including negative sub-milli values (4.733674ms)
+✔ motion quantization keeps signed truncation and invalid input rejection (0.7826ms)
+✔ landing uses exact canonical millimetres beyond the browser integer range (2.460681ms)
+✔ terrain descriptors bind generated resources to an anchored physical body (16.541311ms)
+✔ multiple ontology mark occurrences retain one exact instance and no body identity (0.986285ms)
+✔ a reply becomes drawable marks (0.803242ms)
+✔ a mark may show nothing and carry no label (0.326087ms)
+✔ several marks may depict one entity (2.195954ms)
+✔ an unreadable descriptor fails closed (10.387685ms)
+✔ capsules and tori keep their neutral dimensions (0.872705ms)
+✔ a sky sphere keeps its renderer-neutral diameter (0.553203ms)
+✔ a binary that did not survive the reply is refused (1.899946ms)
+✔ the reader accepts what the renderer writes and nothing more (1.29495ms)
+✔ the reader preserves values beyond the retired depth quota (0.664253ms)
+✔ the lens is asked by its flat binary name, with the dot the grammar needs (2.667958ms)
+✔ binary identities and UTF-8 text survive lossless signed bindings (0.606417ms)
+✔ texture slots carry digest identity and explicit sampling; invalid bindings fail (2.586131ms)
+✔ a raining surface is accepted and shown black, with no rain here (9.071674ms)
+✔ mesh marks carry typed digest, local frame, scale and asset surfaces (0.928819ms)
+✔ complete large scene preserves long names, labels and coordinates (84.211317ms)
+✔ desktop camera uses familiar movement keys and measured controls (1.517659ms)
+✔ Shift accelerates movement and releasing focus restores walking speed (0.450135ms)
+✔ pointer capture follows the canvas lifecycle and releases cleanly (0.764017ms)
+✔ storage is explicit, the controller retains edits, and success cannot be repeated accidentally (88.004494ms)
+✔ opening another subject preserves known refusal and does not re-resolve history (15.600162ms)
+✔ lost reply blocks creation, preserves the draft, and resolves only the original instruction (7.55723ms)
+✔ another device with a cleared journal recovers committed history without a submit (0.95742ms)
+✔ an unresolved authoritative instruction blocks a fresh device too (1.678907ms)
+✔ interrupted recovery reuses terminal observations in the same controller (2.364922ms)
+✔ busy subject changes report refusal without changing the active draft (4.041306ms)
+✔ changed defaults preserve input; changed definitions require explicit adoption; wrong subjects refuse (7.608076ms)
+✔ unavailable agents refuse before submission; cancellation keeps unsent draft (5.002803ms)
+✔ the binder goal carries the exact subject, schema and only typed fields (1.189213ms)
+✔ human signs one exact instruction; a lost reply is only resolved (35.749139ms)
+✔ a second device discovers the actor and instruction without a browser journal (13.807537ms)
+✔ unavailable actor and cancellation before send do not retain unsent work (7.019661ms)
+✔ cancellation after send retains the original operation and target selection is required (5.268693ms)
+✔ a pending instruction reply is retained and recovered without a second submission (10.526571ms)
+✔ an explicit post-admission refusal retires the definitely unsent instruction (1.829063ms)
+✔ the code adapter only reads exact tools and target references; preparing an edit does not submit it (29.550358ms)
+✔ predicate selection and clause cards remain ordinary source data (0.67407ms)
+✔ a real thirty-clause compiled edit crosses the shared result reader (5.389074ms)
+✔ complete source uses one cursor, preserves split UTF-8, and stops at the explicit final chunk (15.346613ms)
+✔ a lost or exhausted source cursor never publishes a partial ontology (3.707412ms)
+✔ fixed authored source lenses reject other selections before I/O and refuse absent catalogue bindings (2.082432ms)
+✔ highlights Quod clauses without interpreting or rewriting source (9.507044ms)
+✔ HTML and unfinished quoted drafts remain inert text (0.95354ms)
+✔ canonical stored facts retain fact highlighting (0.250057ms)
+✔ generic terms render ordinary inspectable Prolog text (1.814166ms)
+✔ namespace atoms use the same quoting rule as every other atom (0.176935ms)
+✔ builder text and direct text produce byte-identical signed requests (1.119873ms)
+✔ binary terms use explicit Erlang notation and preserve every byte (0.309865ms)
+✔ builders reject malformed variables, numbers, and structures (0.662627ms)
+✔ console scope construction handles terminators, quoted periods and trailing comments (0.694119ms)
+✔ canonical code terms retain variable sharing within one clause only (1.000779ms)
+✔ canonical partial lists preserve their tail instead of dropping it (0.487045ms)
+✔ code numbers keep float identity and integers beyond JavaScript precision (2.137024ms)
+✔ readable source preserves associativity, controls, cut and scoped goals (0.49344ms)
+✔ quoted code data retains literal dots, comment markers, quotes and bytes (0.688013ms)
+✔ current code source distinguishes numeric negatives from unary expressions (0.189233ms)
+✔ the result reader preserves deep, long and large values (19.064594ms)
+✔ both renderers share one local draft and synchronous submission lock (18.291276ms)
+✔ unknown submission survives reopening and resolves through outcomes without replay (5.344371ms)
+✔ definite refusal preserves editing; changed schema locks and preserves the previous draft (3.939037ms)
+✔ changed defaults preserve input until the human explicitly chooses to replace it (5.012154ms)
+✔ a question first read stale can become editable only with its accepted schema (3.966656ms)
+✔ a successful submission can be cancelled only after its completion is certified negative (3.641932ms)
+✔ only a terminal negative answer permits submitted cancellation (3.051185ms)
+✔ unreadable journal cannot authorize a new write (1.636686ms)
+✔ reopened submitted questions observe status on view progress without dispatching completion (4.033209ms)
+✔ an obsolete status read cannot overwrite the latest projection or authorize cancellation (3.503028ms)
+✔ a saved uncertain write suppresses automatic status reads until exact resolution (2.393494ms)
+✔ withdrawn form access does not prevent status-based cancellation of an awaiting question (0.946972ms)
+✔ prepared controller defers its signed view and shares one draft across mounted consumers (1.342004ms)
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+✔ shared mesh without extensions: real decoder and occurrences share one verified template (271.77687ms)
+✔ pinned Vive appearance: real decoder and occurrences share one verified template (92.548588ms)
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+✔ generated terrain uses shared verified model resources and real engine disposal (47.400698ms)
+BJS - [23:20:52]: Babylon.js v9.18.1 - Null engine
+✔ terrain verification and cancellation precede engine allocation (24.173411ms)
+✔ terrain and ordinary surfaces share texture custody and preserve independent optical properties (50.625223ms)
+✔ shared bindings retain textures until their last consumer leaves (2.506122ms)
+✔ different bindings share verified bytes and keep independent sampling (2.149321ms)
+✔ corrupted bytes fail before image decoding (1.262091ms)
+✔ last release cancels fetch; a late fetch response cannot create a texture (1.677351ms)
+✔ release during decode disposes immediately and ignores late completion (0.863177ms)
+✔ two model occurrences share verified bytes and one decoded template (3.86724ms)
+✔ measured costs deny decode and a stricter occurrence independently (3.588649ms)
+✔ a declared frame must match bounds measured from the verified asset (1.507997ms)
+✔ a late model decode cannot restore a released template (3.115078ms)
+✔ a model digest mismatch stops before GLB parse and Babylon decode (2.130051ms)
+✔ model transfer allowance stops the stream before GLB parsing or decode (0.996654ms)
+✔ GUI image leases share verified texture bytes and revoke only at last release (9.343555ms)
+✔ retired GUI image completion never creates a URL and corruption is rejected (1.605242ms)
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+✔ hierarchy composes transforms and unchanged snapshots retain engine resources (34.306603ms)
+✔ the Babylon adapter builds capsule and torus geometry from neutral dimensions (16.102616ms)
+✔ the Babylon adapter draws an unlit inward sky which cannot intercept selection (34.018399ms)
+✔ a parented panorama follows translated and rebased viewing positions without changing rotation (36.531434ms)
+✔ a sky panorama applies brightness once through its unlit surface (18.540194ms)
+✔ a changed panorama surface still renders before foreground geometry (22.20081ms)
+✔ reparented children survive removed parents; geometry replacement retires only old resources (10.250618ms)
+✔ malformed hierarchy and material never reach the renderer (2.371643ms)
+✔ the world adapter registers ray picking for rendered geometry (6.196272ms)
+✔ radial selection starts at the top, proceeds clockwise, and preserves its dead zone (2.464617ms)
+✔ the neutral transform applies X then Y then Z before translation (4.872046ms)
+✔ textured scene reconciliation retains leases and retires stale completions (5.46008ms)
+✔ two mesh occurrences keep separate transforms and subjects with one template (4.957482ms)
+✔ model replacement acquires first and ignores a retired late completion (1.099626ms)
+✔ a changed declared mesh bound acquires a fresh verification lease (0.774411ms)
+✔ radial menu uploads labels only when the selected sector changes (2.140843ms)
+✔ signed proofs have five minutes, bounded by the current session (18.62556ms)
+✔ system discovery rejects unavailable or wrong-network catalogues (5.387338ms)
+✔ optional traceparent changes only HTTP metadata, not signed request bytes (2.431851ms)
+✔ traced HTTP transport errors retain uncertainty and do not retry (1.538318ms)
+✔ prepared byte budget reports exact policy pressure without retry or uncertainty (1.433513ms)
+✔ signed goal bytes match the Erlang browser fixture (2.004257ms)
+✔ request encoding and journaling preserve large exact signed bytes (11.046485ms)
+✔ goal encoding accepts text beyond the retired quota (1.328351ms)
+✔ a lost signed-goal response is marked outcome-unknown (29.762777ms)
+✔ exact persisted requests are resolved, never resubmitted (10.213532ms)
+✔ a returned group reference survives reload and resolves only that submitted attempt (7.24702ms)
+✔ a pending reference for another ontology never replaces the recoverable signed request (2.119703ms)
+✔ a definite execute reply removes the durable browser row (3.215995ms)
+✔ cursor Accept persists the original request before an uncertain reply (5.099028ms)
+✔ cursor Accept retains its exact request after lost response body (5.103085ms)
+✔ cursor Accept retains its exact request after broken JSON (73.259179ms)
+✔ cursor Accept retains its exact request after missing write result (4.411974ms)
+✔ cursor Accept retains its exact request after null response (3.090205ms)
+✔ cursor Accept retains its exact request after unrecognized write result (5.529821ms)
+✔ cursor Accept retains its exact request after empty gateway failure (3.620941ms)
+✔ pending cursor Accept identifies its journal row and resolution never submits another request (6.742315ms)
+✔ retryable cursor refusal clears the journal but keeps the same cursor request (4.113448ms)
+✔ transient control is signed once and never journaled or replayed after response loss (2.656324ms)
+✔ missing durable storage permits reads but sends no possible write (2.5042ms)
+✔ the browser journal has no fixed unresolved-operation population limit (12.182189ms)
+✔ result delivery failure retains exact signed work and resolves without execution replay (4.517553ms)
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+✔ ordinary selections are explicit and cannot accept native frames or expired authorization (7.018135ms)
+✔ authored place name is presentation, independent of empty contents and authority (0.439553ms)
+✔ navigation fences preserve uint64 heights and exact sorted source identities (9.103129ms)
+✔ mixed scenes retain parents, decoration and exact subjects under one body pose writer (50.732633ms)
+✔ dropped ticks are latest-wins; late, duplicate, foreign and old-incarnation frames cannot move the view (1.583486ms)
+✔ independent bodies retain their world poses through moving and replaced parents (12.113082ms)
+✔ appearance refresh retains the live transform; deletion/recreation reusing a mark cannot inherit the old pose (6.413553ms)
+✔ restart, authority change and reconnect begin with a fresh current projection (3.071498ms)
+✔ uint64 identities remain exact; a body projection has one complete pose source (1.712374ms)
+✔ socket refresh and reconnect sign fresh reads and reject delayed messages from a previous view (81.303377ms)
+✔ early renewal keeps frames and controls live and never rolls sequence backwards (15.981749ms)
+✔ renewal preserves an in-flight discrete command's uncertain outcome (11.144608ms)
+✔ renewal preserves an in-flight discrete command's refused outcome (5.008226ms)
+✔ a candidate cannot restore a view after expired (3.803942ms)
+✔ a candidate cannot restore a view after denied (3.445804ms)
+✔ a late digest cannot send or revive an expired candidate (3.750745ms)
+✔ nonphysical renewal stops at sign-in expiry without repeated shorter renewals (2.33497ms)
+✔ navigation returns an exact space and every signed dependency without changing the acting agent (0.919714ms)
+✔ snap admission waits for its discrete outcome and stops after uncertain loss (5.843806ms)
+✔ push admission waits for its discrete outcome and stops after uncertain loss (5.056321ms)
+✔ local frame sequence fences rebases without changing the world incarnation (0.458809ms)
+✔ catalogue identities include anchors and instances; duplicate labels are allowed (6.247275ms)
+✔ entry rechecks navigation and reuses an already initialized world without a write (52.682199ms)
+✔ an authored agent term stays in the signed parser grammar rather than the binding reader (3.329504ms)
+✔ closing during preparation prevents initialization and a late navigation callback (10.283783ms)
+✔ a HUD refresh shares current work; a lost initializer is resolved without resubmission (17.836763ms)
+✔ closing while a form request is being signed prevents its journal and network submission (5.03595ms)
+✔ saved form resolution reports failed endpoint and retains its original journal identity (5.941052ms)
+✔ saved form resolution reports nonterminal reply and retains its original journal identity (9.310073ms)
+✔ saved form resolution reports invalid committed form and retains its original journal identity (6.563925ms)
+✔ a returned foreign world or failed catalogue does not enable setup or creation (3.635812ms)
+✔ revoking a listed world before entry prevents initialization (5.329002ms)
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+✔ signed terrain stream waits for rendering, retains unchanged chunks and evicts before replacement (62.095544ms)
+✔ an unauthorized aggregate is rejected before bytes or renderer allocations (3.208828ms)
+✔ complete requested content installs atomically and releases its exact token (4.30126ms)
+✔ a stale completed set releases only its own token without installing content (1.47932ms)
+✔ a missing chunk bundle cannot install partial content or release credit (2.726102ms)
+✔ a duplicate chunk bundle cannot install partial content or release credit (1.698459ms)
+✔ a unrequested chunk bundle cannot install partial content or release credit (1.917874ms)
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+✔ a digest chunk bundle cannot install partial content or release credit (2.885047ms)
+BJS - [09:00:00]: Babylon.js v9.18.1 - Null engine
+✔ a body revision keeps unchanged models dormant until its new signed manifest confirms them (11.319467ms)
+BJS - [09:00:00]: Babylon.js v9.18.1 - Null engine
+✔ authorization renewal preserves terrain for unchanged bindings (8.87348ms)
+BJS - [09:00:00]: Babylon.js v9.18.1 - Null engine
+✔ authorization renewal rechecks terrain for incarnation bindings (5.791235ms)
+✔ authorization renewal rechecks terrain for allowance bindings (6.714334ms)
+✔ camera interest is canonical, boundary driven, and stale completion cannot open the new horizon (3.012596ms)
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+✔ camera movement during checksum verification releases credit without installing an old chunk (1.825676ms)
+✔ large canonical terrain keeps the same model across a local frame shift (5.715048ms)
+✔ native surface positions, winding and material survive decoding (11.762711ms)
+✔ complete framing, palette and allocation are mandatory (19.648591ms)
+✔ empty and full chunks can carry an empty surface (0.25411ms)
+✔ adjacent negative-coordinate chunks preserve texture phase and vertical walls have nondegenerate UVs (15.239962ms)
+✔ unallocated presentation keeps measured cost and finite authored refusal (8.918902ms)
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Error: permission refused
+BJS - [23:20:53]: permission refused
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Error: init
+BJS - [23:20:53]: init
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Error: before-capture
+BJS - [23:20:53]: before-capture
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: XR.requestReferenceSpace failed for the following reason: 
+BJS - [23:20:53]: Error: reference
+BJS - [23:20:53]: Error: reference
+BJS - [23:20:53]: Defaulting to universally-supported "viewer" reference space type.
+BJS - [23:20:53]: XR initialization failed: required "viewer" reference space type not supported.
+BJS - [23:20:53]: undefined
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Error: layer
+BJS - [23:20:53]: layer
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Error: render-state
+BJS - [23:20:53]: render-state
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Error: after-loop
+BJS - [23:20:53]: after-loop
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+BJS - [23:20:53]: Babylon.js v9.18.1 - Null engine
+✔ prepares explicit owners without permissions, styles, profiles or optional features (59.931563ms)
+✔ failed preparation releases its partial helper and can be prepared again (13.24266ms)
+✔ disposal during preparation cannot install a late helper or request a session (6.164537ms)
+✔ permission refusal retires failed helper and permits deliberate retry (12.71304ms)
+✔ init failure ends actual session, restores desktop and permits retry (9.175865ms)
+✔ before-capture failure ends actual session, restores desktop and permits retry (8.314045ms)
+✔ reference failure ends actual session, restores desktop and permits retry (8.484608ms)
+✔ layer failure ends actual session, restores desktop and permits retry (7.446788ms)
+✔ render-state failure ends actual session, restores desktop and permits retry (7.003305ms)
+✔ after-loop failure ends actual session, restores desktop and permits retry (6.108007ms)
+✔ cancel and dispose during consent join the original entry and end its late session once (4.954634ms)
+✔ native end during pending layer setup waits for its continuation before retiring (5.580071ms)
+✔ end rejection blocks re-entry; later native end completes cleanup without another end request (9.625111ms)
+✔ native end racing explicit exit wins over an already-ended rejection (4.623475ms)
+✔ first frame callback failure stops the real session (6.238521ms)
+✔ later frame callback failure stops the real session (4.404201ms)
+✔ real Vive decoders and controller adapter detach sources across end and re-entry (10.173771ms)
+✔ real XRInput components drive scene picks and cancel on visibility loss or source departure (50.537256ms)
+✔ source callback exception is contained and releases its session (9.31753ms)
+✔ disposal retains dependencies after end rejection until native release arrives (6.603593ms)
+✔ successful end promise does not dispose ahead of native end dispatch (6.301313ms)
+✔ end refusal is visible while layer setup remains pending (7.075377ms)
+✔ ordinary ontology instances and lens recipes preserve exact identity across representations (16.666394ms)
+✔ ontology and ordinary instance selection submit the same signed query shape (12.699582ms)
+✔ question forms preserve accepted revisions and typed defaults across schema changes (7.785309ms)
+✔ a device projection binds the exact selected ontology before reading content (0.294723ms)
+✔ lobby references preserve identity bytes and refuse display abbreviations (0.415569ms)
+✔ the reusable proof form requires each supported semantic role exactly once (1.018756ms)
+✔ forms describe semantic components independently of their workspace name (0.904831ms)
+✔ portable components preserve nested identities, typed options and exact ranges (2.940125ms)
+✔ a partial or ambiguous projection is not a successful view (0.519789ms)
+✔ projection failures preserve explicit access denials without inventing them for other failures (0.648747ms)
+✔ HUD references are exact, ground and unique (0.645275ms)
+✔ draft submission carries fields as data and keeps the accepted revision (1.74007ms)
+✔ status uses signed reads and never turns unknown into cancellation permission (1.681666ms)
+✔ input variants preserve typed drafts and reject malformed selections (5.505619ms)
+✔ composition and display keep the input-only submission contract (1.166727ms)
+✔ tables, images and transient containers stay inside the common descriptor contract (2.586737ms)
+✔ source workspace binding is authored data for ordinary subjects and exact owners (5.059939ms)
+✔ a viewer pose field is never drawn by a browser and is submitted as none (1.642938ms)
+ℹ tests 297
+ℹ suites 0
+ℹ pass 297
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1955.224332

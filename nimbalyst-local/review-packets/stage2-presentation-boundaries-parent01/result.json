@@ -1,0 +1,15 @@
+{
+  "freeze_verified": true,
+  "scope": "parent review documentation supplement only",
+  "base_source_packet": "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/stage2-presentation-boundaries01",
+  "base_archive_sha256": "a637c55b644113f36728a604d2827174a3e4d6731890d9bcab7edf58eb5dd67b",
+  "base_manifest_sha256": "cb973b7610a44343be0a0fc7377fbaae80e07f289085e4ce9f54a0451d2f6fa8",
+  "production_changed": false,
+  "all_46_current_production_paths_match_base": true,
+  "source_label": "applied-carrier02",
+  "scope_accepted": false,
+  "large_signed_display_accepted": false,
+  "archive_sha256": "48e382f30281e482eefbb338e922a3a8368c88bd0cf67175f8e4e0513aa1c6d3",
+  "manifest_sha256": "4ea71de3c20aef15ad73bbb68e9d67555e2230f86c8bd998f7abbe88866b8a6e",
+  "reason": "The base freeze captured an earlier parent-review revision. This supplement preserves the final parent review without modifying or relabelling the immutable base packet."
+}

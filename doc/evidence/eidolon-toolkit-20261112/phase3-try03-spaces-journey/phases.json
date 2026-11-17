@@ -1,0 +1,42 @@
+[
+  {
+    "phase": "m2-fresh",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-l_i7nx0x/client/identity",
+      "--node",
+      "https://127.0.0.1:45987"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 5.861281563004013,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m2-final",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-l_i7nx0x/client/identity",
+      "--node",
+      "https://127.0.0.1:45987"
+    ],
+    "child_exit": -9,
+    "passed": false,
+    "watchdog_progress_missing": true,
+    "elapsed_seconds": 67.74417642099434
+  }
+]

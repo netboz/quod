@@ -1,0 +1,341 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1581 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2211 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2211 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m=CRASH REPORT==== 11-Nov-2026::15:08:35.667071 ===
+  crasher:
+    initial call: quod_prolog:init/1
+    pid: <0.1158.0>
+    registered_name: []
+    exception error: {bad_config,identity_mismatch}
+      in function  quod_prolog:configured_signer/2 (/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl:1043)
+      in call from quod_prolog:init/1 (/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl:1053)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.606.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.606.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 376
+    stack_size: 29
+    reductions: 130
+  neighbours:
+    neighbour:
+      pid: <0.1064.0>
+      registered_name: quod_client_auth
+      initial call: quod_client_auth:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.606.0>]
+      message_queue_len: 0
+      links: [<0.606.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 233
+      stack_size: 9
+      reductions: 82
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.1063.0>
+      registered_name: []
+      initial call: quod_ask_router:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.606.0>]
+      message_queue_len: 0
+      links: [<0.606.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 233
+      stack_size: 9
+      reductions: 133
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.606.0>
+      registered_name: []
+      initial_call: {erlang,apply,2}
+      current_function: {proc_lib,sync_start,2}
+      ancestors: []
+      message_queue_len: 29
+      links: [<0.1063.0>,<0.1065.0>,<0.1066.0>,<0.1158.0>,<0.1064.0>,
+                  <0.605.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 987
+      stack_size: 33
+      reductions: 3455146
+      current_stacktrace: [{proc_lib,sync_start,2,[{file,"proc_lib.erl"},{line,438}]},
+                  {quod_prolog_tests,setup,0,
+                      [{file,
+                           "/home/yan/src/quod_worktrees/pearl-stone/test/quod_prolog_tests.erl"},
+                       {line,170}]},
+                  {eunit_test,enter_context,4,
+                      [{file,"eunit_test.erl"},{line,341}]},
+                  {eunit_proc,run_group,2,
+                      [{file,"eunit_proc.erl"},{line,593}]},
+                  {eunit_proc,tests_inorder,3,
+                      [{file,"eunit_proc.erl"},{line,479}]},
+                  {eunit_proc,with_timeout,3,
+                      [{file,"eunit_proc.erl"},{line,369}]},
+                  {eunit_proc,run_group,2,
+                      [{file,"eunit_proc.erl"},{line,593}]},
+                  {eunit_proc,child_process,2,
+                      [{file,"eunit_proc.erl"},{line,397}]}]
+
+=ERROR REPORT==== 11-Nov-2026::15:08:35.670950 ===
+** Generic server {n,l,{agent_vault,node}} terminating 
+** Last message in was {'EXIT',<0.606.0>,
+                           {{bad_config,identity_mismatch},
+                            [{quod_prolog,configured_signer,2,
+                                 [{file,
+                                      "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                                  {line,1043}]},
+                             {quod_prolog,init,1,
+                                 [{file,
+                                      "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                                  {line,1053}]},
+                             {gen_server,init_it,2,
+                                 [{file,"gen_server.erl"},{line,2276}]},
+                             {gen_server,init_it,6,
+                                 [{file,"gen_server.erl"},{line,2236}]},
+                             {proc_lib,init_p_do_apply,3,
+                                 [{file,"proc_lib.erl"},{line,333}]}]}}
+** When Server state == encrypted_custody
+** Reason for termination ==
+** {{bad_config,identity_mismatch},
+    [{quod_prolog,configured_signer,2,
+                  [{file,"/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                   {line,1043}]},
+     {quod_prolog,init,1,
+                  [{file,"/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                   {line,1053}]},
+     {gen_server,init_it,2,[{file,"gen_server.erl"},{line,2276}]},
+     {gen_server,init_it,6,[{file,"gen_server.erl"},{line,2236}]},
+     {proc_lib,init_p_do_apply,3,[{file,"proc_lib.erl"},{line,333}]}]}
+
+Failures:
+
+=CRASH REPORT==== 11-Nov-2026::15:08:35.671155 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.1066.0>
+    registered_name: []
+    exception exit: {{bad_config,identity_mismatch},
+                     [{quod_prolog,configured_signer,2,
+                          [{file,
+                               "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                           {line,1043}]},
+                      {quod_prolog,init,1,
+                          [{file,
+                               "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                           {line,1053}]},
+                      {gen_server,init_it,2,
+                          [{file,"gen_server.erl"},{line,2276}]},
+                      {gen_server,init_it,6,
+                          [{file,"gen_server.erl"},{line,2236}]},
+                      {proc_lib,init_p_do_apply,3,
+                          [{file,"proc_lib.erl"},{line,333}]}]}
+      in function  gen_server:decode_msg/6 (gen_server.erl:2379)
+    ancestors: [<0.606.0>]
+    message_queue_len: 0
+    messages: []
+    links: []
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 4185
+    stack_size: 29
+    reductions: 14134
+  neighbours:
+
+  1) quod_physics_tests:-retained_view_restart/1-fun-13-/0: expired
+[0;31m     Failure/Error: {error,badarg,
+                        [{gproc,reg,
+                             [{p,l,{runtime,<<"host-test-agent">>}}],
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/gproc/src/gproc.erl"},
+                              {line,645}]},
+                         {quod_agent_hosting_tests,start_ontology,6,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1859}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1791}]},
+                         {quod_physics_tests,with_world,3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                              {line,3418}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]}]}
+[0m=ERROR REPORT==== 11-Nov-2026::15:08:35.671029 ===
+** Generic server {n,l,{foreign_log,node}} terminating 
+** Last message in was {'EXIT',<0.606.0>,
+                           {{bad_config,identity_mismatch},
+                            [{quod_prolog,configured_signer,2,
+                                 [{file,
+                                      "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                                  {line,1043}]},
+                             {quod_prolog,init,1,
+                                 [{file,
+                                      "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                                  {line,1053}]},
+                             {gen_server,init_it,2,
+                                 [{file,"gen_server.erl"},{line,2276}]},
+                             {gen_server,init_it,6,
+                                 [{file,"gen_server.erl"},{line,2236}]},
+                             {proc_lib,init_p_do_apply,3,
+                                 [{file,"proc_lib.erl"},{line,333}]}]}}
+** When Server state == {s,"/tmp/quod_hosted_7F79594538C59CF8/foreign",
+                           undefined,8000,#{},#{},#{},#{},#{},0,0,0,0,0,0,0,0,
+                           0,0,0,0,0,0,#{},#{},#{},#{},#{},#{},#{},
+                           #Ref<0.2326705758.3634102273.210972>}
+** Reason for termination ==
+** {{bad_config,identity_mismatch},
+    [{quod_prolog,configured_signer,2,
+                  [{file,"/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                   {line,1043}]},
+     {quod_prolog,init,1,
+                  [{file,"/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                   {line,1053}]},
+     {gen_server,init_it,2,[{file,"gen_server.erl"},{line,2276}]},
+     {gen_server,init_it,6,[{file,"gen_server.erl"},{line,2236}]},
+     {proc_lib,init_p_do_apply,3,[{file,"proc_lib.erl"},{line,333}]}]}
+
+[0;36m     Output: [0m
+  2) quod_physics_tests:-retained_view_restart/1-fun-13-/0: closed
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.1063.0>}}},
+                        [{quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1757}]},
+                         {quod_physics_tests,with_world,3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                              {line,3418}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m=CRASH REPORT==== 11-Nov-2026::15:08:35.671830 ===
+  crasher:
+    initial call: quod_foreign_log:init/1
+    pid: <0.1065.0>
+    registered_name: []
+    exception exit: {{bad_config,identity_mismatch},
+                     [{quod_prolog,configured_signer,2,
+                          [{file,
+                               "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                           {line,1043}]},
+                      {quod_prolog,init,1,
+                          [{file,
+                               "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                           {line,1053}]},
+                      {gen_server,init_it,2,
+                          [{file,"gen_server.erl"},{line,2276}]},
+                      {gen_server,init_it,6,
+                          [{file,"gen_server.erl"},{line,2236}]},
+                      {proc_lib,init_p_do_apply,3,
+                          [{file,"proc_lib.erl"},{line,333}]}]}
+      in function  gen_server:decode_msg/6 (gen_server.erl:2379)
+    ancestors: [<0.606.0>]
+    message_queue_len: 0
+    messages: []
+    links: []
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 6772
+    stack_size: 29
+    reductions: 14667
+  neighbours:
+
+[0;36m     Output: [0m
+  3) quod_physics_tests:-registered_view_dependency_waits_for_replay_test_/0-fun-13-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.1063.0>}}},
+                        [{quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1757}]},
+                         {quod_physics_tests,with_world,3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                              {line,3418}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+
+Pending:
+[0;33m  undefined
+[0m[0;36m    %% Related process exited with reason: {{bad_config,identity_mismatch},
+                                     [{quod_prolog,configured_signer,2,
+                                       [{file,
+                                         "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                                        {line,1043}]},
+                                      {quod_prolog,init,1,
+                                       [{file,
+                                         "/home/yan/src/quod_worktrees/pearl-stone/src/quod_prolog.erl"},
+                                        {line,1053}]},
+                                      {gen_server,init_it,2,
+                                       [{file,"gen_server.erl"},{line,2276}]},
+                                      {gen_server,init_it,6,
+                                       [{file,"gen_server.erl"},{line,2236}]},
+                                      {proc_lib,init_p_do_apply,3,
+                                       [{file,"proc_lib.erl"},{line,333}]}]}
+[0m
+
+Finished in ? seconds
+[0;31m7 tests, 3 failures, 2 cancelled
+[0m===> Error running tests

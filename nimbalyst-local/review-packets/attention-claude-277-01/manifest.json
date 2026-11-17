@@ -1,0 +1,64 @@
+{
+  "packet": "attention-claude-277-01",
+  "purpose": "current bounded attention/question spec conformance read-only review",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "d08fd7b55a0e89bda53ae67c6133d98b1023520442b985a264ce6593164c4ee5",
+      "bytes": 8941
+    },
+    {
+      "path": "doc/gui-plan.md",
+      "sha256": "3af3e01398dfdf24faddf0310ef87b9da72b033275286b950542055f73731e1c",
+      "bytes": 54617
+    },
+    {
+      "path": "doc/gui-implementation-plan.md",
+      "sha256": "9b6a757d66637e7e0d05b0f4a42a071909819c0e2dd18833ccb07edeb64d5c52",
+      "bytes": 63056
+    },
+    {
+      "path": "doc/multiwrite-architecture.md",
+      "sha256": "5c0c5cff94bdf6acf76cfc0f57eb1363553c34592959373a0c7904da6b6e324f",
+      "bytes": 15832
+    },
+    {
+      "path": "doc/evidence/godot-vr-gui-alignment-20261101/conformance-review-274.md",
+      "sha256": "61fed11b1b29cd6447957d4810cbe0548dddfbb90638a83971e9aebaa1f0dc77",
+      "bytes": 40474
+    },
+    {
+      "path": "client/godot/QuestionHub.cs",
+      "sha256": "3ba0656747b51e846c5d5dffaea6468447e396cf879bd5292286aed05a981760",
+      "bytes": 20110
+    },
+    {
+      "path": "client/godot/FormPanel.cs",
+      "sha256": "d3be800def8a13826094ffc27e3e488f5d13bf3a7e19d8e086cd33102cf305e5",
+      "bytes": 18775
+    },
+    {
+      "path": "client/godot/Main.cs",
+      "sha256": "55a25e21385b391c0eeacfffe666c32906a717513a810efb70a1780d6d11081c",
+      "bytes": 48502
+    },
+    {
+      "path": "client/godot/SpatialGui.cs",
+      "sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+      "bytes": 21295
+    },
+    {
+      "path": "doc/evidence/godot-question-attention-20261101/result.json",
+      "sha256": "d9c56f5ffa2a32d4babfabdc763f7fac4955b7b57f68d89c8e7f2a7609a78239",
+      "bytes": 80126
+    },
+    {
+      "path": "nimbalyst-local/handoffs/godot-question-attention-result-277.md",
+      "sha256": "4907f6ec46a4639887cee50179842efd79607414c5a63d0b06431dce2a067478",
+      "bytes": 7643
+    }
+  ],
+  "brief_sha256": "153edf2c498100af9614ea4eccae38fcca564c0fd299c4b4f409507d5b6d6e57",
+  "raw_private_included": false,
+  "read_only": true
+}

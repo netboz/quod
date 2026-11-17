@@ -1,0 +1,12 @@
+{
+  "container": "quod-stage2-disposable-founder",
+  "expression": "quod_foundation_operator:root_admin()",
+  "command_argv": [
+    "docker",
+    "exec",
+    "quod-stage2-disposable-founder",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin quod_foundation_operator:root_admin() end))))."
+  ]
+}

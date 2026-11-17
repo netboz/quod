@@ -1,0 +1,14 @@
+javascript exit 0
+core-clean exit 0
+godot-clean exit 0
+core exit 0
+godot-build exit 0
+package-content exit 0
+godot-icons exit 0
+scene exit 0
+workspace exit 0
+gui exit 0
+spaces exit 0
+navigation exit 0
+local-backup exit 0
+PHASE3_CLIENT_06_PASS

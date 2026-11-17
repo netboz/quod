@@ -1,0 +1,50 @@
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+
+PASS a hundred metre wireframe spans minus50 to plus50 metres
+M2_WIRE_SURFACE primitive=1 vertices=24 expected=1
+PASS actual engine wire surface contains twelve lines and no face primitives
+PASS spatial ray cannot pick a wireframe face interior
+PASS spatial ray picks a wire edge through the same exact subject owner
+M2_SCENE_VISIBLE False
+PASS actual desktop wireframe raster leaves its face interior empty
+PASS actual desktop wireframe raster draws the projected edge
+PASS desktop wireframe raster retained
+PASS unchanged scene occurrences retain actual engine resources
+PASS rotated asymmetric rational wireframe remains centred on transformed local origin
+PASS axis rotation preserves odd and submillimetre rational extents at render boundary
+PASS wire edge picking resolves exact ancestor subject and history
+PASS wireframe does not invent a picking surface away from its edges
+PASS a real-size corner box keeps the same exact rational extents at render boundary
+PASS default solid cube uses the same exact-subject picking adapter
+PASS each thing's label is fixed in the world, written twice, each copy seen from one side only
+PASS the label turns with its thing: one copy faces the thing's front, its twin the back
+PASS a corner box is twenty-four line segments whose colour fades along their length
+PASS a marker is picked through its see-through sides as its exact subject
+PASS a marker corner resolves the same subject
+PASS marks start in their display look
+PASS pointing switches every mark of that one thing to its pointed-at look
+PASS the selected look wins while the same thing is pointed at
+PASS pointing elsewhere leaves the selection shown and other things untouched
+M2_MARKER_RASTER corner=(0.7882353, 0.8235294, 0.85882354, 1) middle=(0.12941177, 0.14117648, 0.16470589, 1) pointed=(0.98039216, 0.78431374, 0.050980393, 1)
+PASS actual marker raster draws each corner and leaves the middle of its edge empty
+PASS actual marker raster shows the pointed-at thing in gold and its neighbour in gray-blue
+PASS desktop marker raster retained
+PASS an unchanged scene keeps its resources and its shown looks
+PASS looks return to display without rebuilding anything
+PASS the display model shown again in place changes and rebuilds nothing
+PASS another mode adds only its own new part to that one thing
+PASS the mode is drawn where the thing stands, not at the model's own pose
+PASS the thing keeps its selection and shows the mode's line
+PASS a thing drawn in another mode still shows its selected look
+PASS an unchanged world view keeps the thing in its mode and rebuilds nothing
+PASS a model of another thing, or of several, is not drawn in this thing's place
+PASS withdrawing the mode returns the thing to display
+PASS exterior adapter creates no collision bodies or walls
+PASS withdrawal removes geometry and picking together
+M2_SCENE_PASS
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":true,"revision":"0","digest":"local-sign-in","choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"","pie_ready_ms":null,"controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}

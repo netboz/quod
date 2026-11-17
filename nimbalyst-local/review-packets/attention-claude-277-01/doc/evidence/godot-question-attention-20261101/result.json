@@ -1,0 +1,1761 @@
+{
+  "passed": true,
+  "evidence_verified": true,
+  "selected": {
+    "attention-composition16": {
+      "checks": 26,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/attention-composition16.json",
+      "sha256": "274dbb4a4ffde37c2a27118f5fd7f7d814ca79f8cd3184ea9ad6cb510476267a",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate15-manifest.json",
+      "manifest_sha256": "791af7855997544ad9f994fc6866974a119058eb4231b36b6ffce75e66a7e670",
+      "current_input_reuse": {},
+      "all_children_and_wrapper_zero": true,
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-composition-stdout": true,
+        "client-attention-composition-stderr": true
+      },
+      "cost": {}
+    },
+    "attention-current12": {
+      "checks": 121,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/attention-current12.json",
+      "sha256": "0b8665793d652731ca8ab2fb821bb0fd45e54350e3afaaa7b81d7fc024b4c3b7",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate12-manifest.json",
+      "manifest_sha256": "7bcde86eebfe7630d062eb5c747f5948fbe161d94d022ff35d08b98dba71f9aa",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "11ad81f10a9c77700f094aa11c6223262b4bd02f5fe6533552b90660e52c62f2",
+          "current_sha256": "55a25e21385b391c0eeacfffe666c32906a717513a810efb70a1780d6d11081c",
+          "reason": "Only current-world viewport sizing through existing layout notifications differs; the exact current correction is qualified by composition16 normal/enlarged/narrow and question/object form/capture/resource checks. No question/domain/lifetime logic changes."
+        }
+      },
+      "all_children_and_wrapper_zero": true,
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "cost": {
+        "unchanged-work.json": {
+          "work": {
+            "calls": [],
+            "watched": [
+              [
+                "quod_foreign_projection",
+                "start_monitor",
+                4
+              ],
+              [
+                "quod_committed_projection",
+                "apply_entry",
+                3
+              ],
+              [
+                "quod_physics_native",
+                "install",
+                3
+              ],
+              [
+                "quod_physics_native",
+                "install_hinges",
+                2
+              ],
+              [
+                "quod_physics_native",
+                "new_world",
+                3
+              ],
+              [
+                "quod_ledger_store",
+                "fold",
+                5
+              ],
+              [
+                "quod_ledger_store",
+                "open",
+                3
+              ],
+              [
+                "file",
+                "write",
+                2
+              ],
+              [
+                "file",
+                "pwrite",
+                3
+              ],
+              [
+                "file",
+                "sync",
+                1
+              ],
+              [
+                "file",
+                "datasync",
+                1
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "attention-outcome-final08": {
+      "checks": 18,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/attention-outcome-final08.json",
+      "sha256": "cc467b08b94f31e80becff356cd9296899ec4be9099eafab2e9b9d33e912df60",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate08-manifest.json",
+      "manifest_sha256": "ed0fa343874edd43355df58e21409d1945a0253cf02a5d76a70f21ffd19ed033",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "11ad81f10a9c77700f094aa11c6223262b4bd02f5fe6533552b90660e52c62f2",
+          "current_sha256": "55a25e21385b391c0eeacfffe666c32906a717513a810efb70a1780d6d11081c",
+          "reason": "Only current-world viewport sizing through existing layout notifications differs; the exact current correction is qualified by composition16 normal/enlarged/narrow and question/object form/capture/resource checks. No question/domain/lifetime logic changes."
+        },
+        "client/godot/QuestionHub.cs": {
+          "tested_sha256": "f570a55a0d8bfed3b5b1a911cff2b32f6bfea4160f64a80a47583f8a0ed572be",
+          "current_sha256": "3ba0656747b51e846c5d5dffaea6468447e396cf879bd5292286aed05a981760",
+          "reason": "Intervening changes preserve received status on retired consumers and compare appearance to the actually installed semantic tree. Current12 qualifies retained submitted/cancelled status; stale-final11 qualifies the exact schema-change regression. This case uses the unchanged awaiting/unknown or removed-original recovery path, with no schema edit or negative application result."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "current_sha256": "742733395a91af47224d359b18e1bcfcf7504038134624f01ce23a1b57c33878",
+          "reason": "Documentation only; exact current product README is separately bound."
+        }
+      },
+      "all_children_and_wrapper_zero": true,
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-state-stdout": true,
+        "client-attention-state-stderr": true
+      },
+      "cost": {}
+    },
+    "attention-stale-final11": {
+      "checks": 20,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/attention-stale-final11.json",
+      "sha256": "5ce7668c546eb7ee99e31798aba8aa35523eeb16a62c40c3f1a720dc53afb916",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate11-manifest.json",
+      "manifest_sha256": "34ca1cdc04554f00223484eb1bee0e9562e8ce923ec7be7ff9b5849b9f6fd464",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "11ad81f10a9c77700f094aa11c6223262b4bd02f5fe6533552b90660e52c62f2",
+          "current_sha256": "55a25e21385b391c0eeacfffe666c32906a717513a810efb70a1780d6d11081c",
+          "reason": "Only current-world viewport sizing through existing layout notifications differs; the exact current correction is qualified by composition16 normal/enlarged/narrow and question/object form/capture/resource checks. No question/domain/lifetime logic changes."
+        }
+      },
+      "all_children_and_wrapper_zero": true,
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-stale-stdout": true,
+        "client-attention-stale-stderr": true
+      },
+      "cost": {}
+    },
+    "attention-unknown07": {
+      "checks": 18,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/attention-unknown07.json",
+      "sha256": "3b83f114fb633e50e21d751f10e2705004407c7b3c17115db8c33dcab2b647ad",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate07-manifest.json",
+      "manifest_sha256": "7e17aaf6667a3f280570c9997540cd649030553c12f9c94e546c59fa2619b569",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "11ad81f10a9c77700f094aa11c6223262b4bd02f5fe6533552b90660e52c62f2",
+          "current_sha256": "55a25e21385b391c0eeacfffe666c32906a717513a810efb70a1780d6d11081c",
+          "reason": "Only current-world viewport sizing through existing layout notifications differs; the exact current correction is qualified by composition16 normal/enlarged/narrow and question/object form/capture/resource checks. No question/domain/lifetime logic changes."
+        },
+        "client/godot/QuestionHub.cs": {
+          "tested_sha256": "564e7d26020207316fa21118ad7cf33d00c6ce758014f8067e4ea43e49813f40",
+          "current_sha256": "3ba0656747b51e846c5d5dffaea6468447e396cf879bd5292286aed05a981760",
+          "reason": "Intervening changes preserve received status on retired consumers and compare appearance to the actually installed semantic tree. Current12 qualifies retained submitted/cancelled status; stale-final11 qualifies the exact schema-change regression. This case uses the unchanged awaiting/unknown or removed-original recovery path, with no schema edit or negative application result."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "current_sha256": "742733395a91af47224d359b18e1bcfcf7504038134624f01ce23a1b57c33878",
+          "reason": "Documentation only; exact current product README is separately bound."
+        }
+      },
+      "all_children_and_wrapper_zero": true,
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-unknown-stdout": true,
+        "client-attention-unknown-stderr": true
+      },
+      "cost": {}
+    }
+  },
+  "cases": {
+    "attention-baseline01": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-baseline": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-baseline-stdout": true,
+        "client-attention-baseline-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 9,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "2607b55cfe0afd03633b376d361b1b631b912b4594533869a1d6a37db2c5ee22"
+    },
+    "attention-composition13": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-composition": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-composition-stdout": true,
+        "client-attention-composition-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 13,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "a0b24a3d537fd51d6ad7dba8455e949b4093e249a28272cc79a0b4e977376e78"
+    },
+    "attention-composition15": {
+      "passed": false,
+      "children": {
+        "server": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true
+      },
+      "failure": "RuntimeError: fixture ended before actual readiness",
+      "passing_prefix": 0,
+      "client_started": false,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "ee21449c78797541e8a7878cb81f442617f9cc238e592a15a487407de22ddbe1"
+    },
+    "attention-composition16": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-attention-composition": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-composition-stdout": true,
+        "client-attention-composition-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 26,
+      "client_started": true,
+      "explicit_completion": true,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "274dbb4a4ffde37c2a27118f5fd7f7d814ca79f8cd3184ea9ad6cb510476267a"
+    },
+    "attention-current02": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 36,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "a1e2b1aefc568651c84d2c3069e1f7c26e1cb3def93f2bdf14a0b9278da26686"
+    },
+    "attention-current03": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 36,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "1cd0915ab7912b2ffb15430b7bf5f01468cf347af198895dc25e544e46670c76"
+    },
+    "attention-current06": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 74,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "3e11dcaba5b765e998875ec111f708a3b2dc49eb098852c536815368b2ba10e3"
+    },
+    "attention-current07": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 100,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "d39714382302bf5602a8d67bee0e8b2bb6dcf81b3f5d6c3a53216dd494862045"
+    },
+    "attention-current08": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 104,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "90ee73969f02798112e300504f140443f8ff78052a30aa5c10087aa40d4e489d"
+    },
+    "attention-current10": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 20,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "8f4b907d34c2b0fea351cc92ebe19437284b3d4e7dc72fd57a5e18b130d0e393"
+    },
+    "attention-current11": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-full": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 103,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "a9204d62bc185ae6d5d6ba7f5eb892e07603360572fb06b7b1e93ca2af7a68ff"
+    },
+    "attention-current12": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-attention-full": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-full-stdout": true,
+        "client-attention-full-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 121,
+      "client_started": true,
+      "explicit_completion": true,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "0b8665793d652731ca8ab2fb821bb0fd45e54350e3afaaa7b81d7fc024b4c3b7"
+    },
+    "attention-outcome-baseline05": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-state": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-state-stdout": true,
+        "client-attention-state-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 12,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "d1273b0093b7f7bd5786ca6f380247acb2efc22821417ac80dda0d779623fffd"
+    },
+    "attention-outcome-final06": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-state": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-state-stdout": true,
+        "client-attention-state-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 14,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "85479cd37c863197455d4d2f09b125da5940454e8ce5faf21ed7356be6e986e0"
+    },
+    "attention-outcome-final08": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-attention-state": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-state-stdout": true,
+        "client-attention-state-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 18,
+      "client_started": true,
+      "explicit_completion": true,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "cc467b08b94f31e80becff356cd9296899ec4be9099eafab2e9b9d33e912df60"
+    },
+    "attention-refused12": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-refused": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-refused-stdout": true,
+        "client-attention-refused-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 12,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "c283fcfdf1448c1cb02f96b1580a96a059774ff23d4beb85ba2376ce157ebaa8"
+    },
+    "attention-refused14": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-refused": -15
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-refused-stdout": true,
+        "client-attention-refused-stderr": true
+      },
+      "failure": "Empty: ",
+      "passing_prefix": 11,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": true,
+      "cleanup_timeout": false,
+      "receipt_sha256": "9def43f8d315847baf94d150f39a93d40acda4228c8fdd1d7316f023799dfb42"
+    },
+    "attention-stale-baseline09": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-stale": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-stale-stdout": true,
+        "client-attention-stale-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 13,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "f898cc10fbae853769df16ea225117372216c08472a0f2b76a49f194978b00cd"
+    },
+    "attention-stale-baseline10": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-attention-stale": 1
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-stale-stdout": true,
+        "client-attention-stale-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 15,
+      "client_started": true,
+      "explicit_completion": false,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "507044589e5fc44d2f094810ff28bf2fa0375a09293280e27c26f115b83d310c"
+    },
+    "attention-stale-final11": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-attention-stale": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-stale-stdout": true,
+        "client-attention-stale-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 20,
+      "client_started": true,
+      "explicit_completion": true,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "5ce7668c546eb7ee99e31798aba8aa35523eeb16a62c40c3f1a720dc53afb916"
+    },
+    "attention-unknown07": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-attention-unknown": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-attention-unknown-stdout": true,
+        "client-attention-unknown-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 18,
+      "client_started": true,
+      "explicit_completion": true,
+      "unretired_failure": false,
+      "cleanup_timeout": false,
+      "receipt_sha256": "3b83f114fb633e50e21d751f10e2705004407c7b3c17115db8c33dcab2b647ad"
+    }
+  },
+  "builds": {
+    "client-attention-baseline01": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-baseline01-manifest.json",
+      "manifest_sha256": "2c75150c3e887712dda56a351a2b1b070a7611cc24f08e25558c817ef4728efd",
+      "live": 98,
+      "supplied": 99
+    },
+    "client-attention-candidate02": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate02-manifest.json",
+      "manifest_sha256": "add92a1b625cdf0081ee70358fe100b07b240b6f93936fcdc26ac1c3ec87b725",
+      "live": 98,
+      "supplied": 99
+    },
+    "client-attention-candidate03": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate03-manifest.json",
+      "manifest_sha256": "c217226719b92b5b985c112d5958713f97ac7cfe47517102b29c0910abe93686",
+      "live": 98,
+      "supplied": 99
+    },
+    "client-attention-candidate04": {
+      "passed": false,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate04-manifest.json",
+      "manifest_sha256": "0a345ba6966990a4ce2e2fd05560a4811c17507c9fbf8c4abbbbd39552d14bfe",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate05": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate05-manifest.json",
+      "manifest_sha256": "cf1b3fcc0a88ad13b62e5cf0a5437eeb84a7f2acc8eec54215a213935cc24adf",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate06": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate06-manifest.json",
+      "manifest_sha256": "3444063073a2679743dcba717bbdbfea5783f396320680826b28202f09927ac5",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate07": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate07-manifest.json",
+      "manifest_sha256": "7e17aaf6667a3f280570c9997540cd649030553c12f9c94e546c59fa2619b569",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate08": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate08-manifest.json",
+      "manifest_sha256": "ed0fa343874edd43355df58e21409d1945a0253cf02a5d76a70f21ffd19ed033",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate09": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate09-manifest.json",
+      "manifest_sha256": "6826dabd51be8213cc5718bcb9c0c72bef23701122d75399b39c1b017f931a03",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate10": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate10-manifest.json",
+      "manifest_sha256": "da5f2d687925bfab5c7bb978f5bde7e2c667672fe0aca515dddac5b12908a3f0",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate11": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate11-manifest.json",
+      "manifest_sha256": "34ca1cdc04554f00223484eb1bee0e9562e8ce923ec7be7ff9b5849b9f6fd464",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate12": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate12-manifest.json",
+      "manifest_sha256": "7bcde86eebfe7630d062eb5c747f5948fbe161d94d022ff35d08b98dba71f9aa",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate13": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate13-manifest.json",
+      "manifest_sha256": "deff478790d48ab3cd98df9617365a653e888e8b7138a5d059df5b072c734e76",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate14": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate14-manifest.json",
+      "manifest_sha256": "d95bc04f5f6bbd5f3d5acadf77280b40ed26bc9d5bca11884e282e5761f903fc",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-candidate15": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate15-manifest.json",
+      "manifest_sha256": "791af7855997544ad9f994fc6866974a119058eb4231b36b6ffce75e66a7e670",
+      "live": 98,
+      "supplied": 100
+    },
+    "client-attention-product01": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-product01-manifest.json",
+      "manifest_sha256": "1a6c8463e73a7ff1db2aedbc048c5a0bef73759ae353b233cf8aef104345a29d",
+      "live": 98,
+      "supplied": 98
+    }
+  },
+  "wrappers": {
+    "attention-baseline01-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-baseline01-build.json",
+      "sha256": "38a7f4b600091c407ea810bfdb4d913c964755d24889d1bbecbc822d0f90a7ff"
+    },
+    "attention-baseline01-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-baseline01-run.json",
+      "sha256": "69253a1c90948cb265c798be688083e069e6455fbd4e63d2fecb6c75678d4d72"
+    },
+    "attention-browser01": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-browser01.json",
+      "sha256": "3f8bf0ca1816ba3e329d01b10506e71e3cdf82216bc6295a0f72d72f3848f615"
+    },
+    "attention-candidate02-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate02-build.json",
+      "sha256": "40bc038a6303dda3ef4411b6708c52b5fd403f318860d01d931b028ef7953801"
+    },
+    "attention-candidate03-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate03-build.json",
+      "sha256": "8454bbea7723a126a1db1afe067f12b2cb6d3a87fb4c08598d0d8f6f929afe31"
+    },
+    "attention-candidate04-build": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate04-build.json",
+      "sha256": "5a635d6f0628f268675d13383f4ca48e52271a1bef15e93d02c42486dce1d1eb"
+    },
+    "attention-candidate05-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate05-build.json",
+      "sha256": "38d29cbe1f3463d6a6724cfbf37c4b3ebe116a54072f57520ef58e340dc0c9b7"
+    },
+    "attention-candidate06-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate06-build.json",
+      "sha256": "0d37975047ec8d6f9110976d395999c2b431d611eecde09d8a074e0577b80dbe"
+    },
+    "attention-candidate07-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate07-build.json",
+      "sha256": "e8de8797d7fe44c6486463f31147f0898c63f5e76358a35bd577e669fbcd0acc"
+    },
+    "attention-candidate08-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate08-build.json",
+      "sha256": "23159b97cedc05d414f36260de65dc054289a38d98283f8b41a9f7bfdce343f0"
+    },
+    "attention-candidate09-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate09-build.json",
+      "sha256": "7ca6a4b91fedb56e3372962b040c922921a58c02aef33370faab79dd926fe180"
+    },
+    "attention-candidate10-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate10-build.json",
+      "sha256": "88a65a6417932cdd789568d30e89f853a1dd3987523ee30119382d2b63965b1b"
+    },
+    "attention-candidate11-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate11-build.json",
+      "sha256": "3e6674637e1ac4285ee6389e794b912481c5f2465739d9b4263b650b0125334e"
+    },
+    "attention-candidate12-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate12-build.json",
+      "sha256": "7bd9cf8b8c93de8fdd3990799bb6bbccfdd3d15e6a80b6dc92eb5438982164d2"
+    },
+    "attention-candidate13-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate13-build.json",
+      "sha256": "56a7041a25f724a1120c749d6e01e707d191ce6346d401b3540728dd1939cc38"
+    },
+    "attention-candidate14-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate14-build.json",
+      "sha256": "0fb0f45af2eab4fa6e6372c1bd1b198704dad1bca57871bf64b967c3fcc6bd37"
+    },
+    "attention-candidate15-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-candidate15-build.json",
+      "sha256": "63fb6fad010ce7566c94bf64bcd7e24de42dd563c61ee831af690d9feb56c877"
+    },
+    "attention-composition13-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-composition13-run.json",
+      "sha256": "0596463dc128d36ce38f9a642e5718371941b7615bfbdd93e0defd276befa76c"
+    },
+    "attention-composition15-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-composition15-run.json",
+      "sha256": "79552de2bd2626818ff64dad28cd9a3ecaba6eef7d658fc36923d31867d05112"
+    },
+    "attention-composition16-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-composition16-run.json",
+      "sha256": "27b22038b8ec149894b18e9f010886f64ce31b03729157dcc86cafadb13805fa"
+    },
+    "attention-current02-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current02-run.json",
+      "sha256": "2571b489e76202f086feca11ca996e94d0a154e4364beacf1a8422f442ddb44a"
+    },
+    "attention-current03-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current03-run.json",
+      "sha256": "6114df7b73070826bb6225dbc0b12ff80fae6fd142ea60f3f737fb06f716ec65"
+    },
+    "attention-current06-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current06-run.json",
+      "sha256": "799e9ff477a58d360f2b57d3d326cc7d8b37b26a04efefe2b8c6ecd73e78d371"
+    },
+    "attention-current07-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current07-run.json",
+      "sha256": "90d77c39121d641c89d61c1f876b8dc77ec276f28a0c567e5604956dcfff6f8c"
+    },
+    "attention-current08-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current08-run.json",
+      "sha256": "20244e6a638ac19a02b4043aeab31f61cc42304f4773ba75f391a1c34089992d"
+    },
+    "attention-current10-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current10-run.json",
+      "sha256": "61ff0081a0bdd65bfef0fd225a3ffac038c45018328e0f8b5b3f903a9912268c"
+    },
+    "attention-current11-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current11-run.json",
+      "sha256": "012764671db4ad7c4af77795426c27b557703f33b13863e4a2812d7862d20829"
+    },
+    "attention-current12-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current12-run.json",
+      "sha256": "c86deaa7ce417b5f32722766f8d68a5830e8e8ee1bf110e48ed4a413804ee885"
+    },
+    "attention-outcome-baseline04-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-outcome-baseline04-run.json",
+      "sha256": "16f99358712520c6f7e7524a6c4e3730ba233736c791ad177f1604ef4963f1d5"
+    },
+    "attention-outcome-baseline05-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-outcome-baseline05-run.json",
+      "sha256": "bb58e5491055f8a7d85c52916390cd19791f52ed5ea432b29e1e46712b5457b4"
+    },
+    "attention-outcome-final06-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-outcome-final06-run.json",
+      "sha256": "1b7ece5f2453e1fb2bd80f853b3ab639c9ddff656c67a5ccd4c6b91153b7e231"
+    },
+    "attention-outcome-final08-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-outcome-final08-run.json",
+      "sha256": "a81c5c05872da939ce5d146536f1d6ad1cf7610d22d24ac15f052f08539a2a14"
+    },
+    "attention-product01-build": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-product01-build.json",
+      "sha256": "0079c899f1f7e40311e4f7389c78945c3b7eface9481559bf682bc8e6a911b8b"
+    },
+    "attention-qualified01-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-qualified01-run.json",
+      "sha256": "b9f62cc6e14c434df86428f21e41f61df968e5d585f35ee73a59f27cbdd2f5e5"
+    },
+    "attention-refused12-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-refused12-run.json",
+      "sha256": "aadd109a83b52f21038e3e72326602ac2624f6791c56ef79e2117b60025e18dd"
+    },
+    "attention-refused14-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-refused14-run.json",
+      "sha256": "11eb33cc5ae30758ef14636fde70ff6f07c50126e65d239aa0484cc74736de4d"
+    },
+    "attention-stale-baseline09-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-stale-baseline09-run.json",
+      "sha256": "cfe891cdd97513232dec1e3bfd38a2677a7910a55456b766b4de455b4dd76e63"
+    },
+    "attention-stale-baseline10-run": {
+      "true_exit": 1,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-stale-baseline10-run.json",
+      "sha256": "5b104a79361916b73703483276ba83aa578d112d9ed63aa0e1ebc321ca5880a2"
+    },
+    "attention-stale-final11-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-stale-final11-run.json",
+      "sha256": "8a0490a9bf459f0a481c6c7a2e4a4b3329a9c3372fdf9da8cd39cfb3a8c44f80"
+    },
+    "attention-unknown07-run": {
+      "true_exit": 0,
+      "timed_out": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-unknown07-run.json",
+      "sha256": "05ef0420ca87c0d25abb1aaef6e5b71c4469e28c61022979fe5b48ba130d3717"
+    },
+    "attention-baseline01-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-baseline01-bootstrap/result.json",
+      "sha256": "5367c50d385249059c60bb4d2b24b3fd094959cdf6700829cc1b51f3a1f35a13"
+    },
+    "attention-baseline01-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-baseline01-export/result.json",
+      "sha256": "162e6c0ee53e7761e06dc8f21dc9386abe963fa47a655f6242f0e3b6aa1922a0"
+    },
+    "attention-baseline01-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-baseline01-restore-debug/result.json",
+      "sha256": "1d9d40494cee56663bfc76bfe5343fb92b159564f9e21e79e0b8b05a17b89ab0"
+    },
+    "attention-baseline01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-baseline01-restore-exportrelease/result.json",
+      "sha256": "97cd1f1dd62c8345ba3df8a2780408e794236abee06a21a9297504b81b28978e"
+    },
+    "attention-baseline01-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-baseline01-toolchain/result.json",
+      "sha256": "389c2725f85634a7a2e6c5d7dcefb28f950cfce5b727ede2e190cb5bc431762f"
+    },
+    "attention-candidate02-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate02-bootstrap/result.json",
+      "sha256": "dadb8c890dcf3ef85d9ec3fb0d26cfd5887f96422fb407a5b8575c245c6b6630"
+    },
+    "attention-candidate02-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate02-export/result.json",
+      "sha256": "c4f9e988a9f13e0aa193b25df2424f6ac88726fd078b6c7ed074b9aeff8a5006"
+    },
+    "attention-candidate02-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate02-restore-debug/result.json",
+      "sha256": "76125470bfd5e578bc6dd1cb7b5cd39ec619089f0f3c0e1f4fd8c03d51fa7ae1"
+    },
+    "attention-candidate02-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate02-restore-exportrelease/result.json",
+      "sha256": "c91c39a5134928535f890a55bdebf73faeebaf0a7aa6f6683dc7a5a844704350"
+    },
+    "attention-candidate02-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate02-toolchain/result.json",
+      "sha256": "5ded347ac0c6f3819afe6cafd8511ee5a87d4ec9ae530b920ffcb76c893ed7f0"
+    },
+    "attention-candidate03-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate03-bootstrap/result.json",
+      "sha256": "56302cc6c9369be210667afe422d4d4d81dba1ddf651329a99e448d38638b643"
+    },
+    "attention-candidate03-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate03-export/result.json",
+      "sha256": "e83dd3eb9fb93239b38a2692c78b1cbddafd61f2bc6ba3978dd47f3601da4e28"
+    },
+    "attention-candidate03-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate03-restore-debug/result.json",
+      "sha256": "e9596a5cbddfd91ac233cac2cd97f36d27d44f620d596fbcf5f9eb5316a48f1c"
+    },
+    "attention-candidate03-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate03-restore-exportrelease/result.json",
+      "sha256": "f649b282a2d41961d16ae338e8378a7ba0639ccba889be94b3f8c4f5c38f9208"
+    },
+    "attention-candidate03-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate03-toolchain/result.json",
+      "sha256": "adcd6707bcc268c57037a5c3cde1cf0c96191c98f56c6a7ccb5599af8d967b68"
+    },
+    "attention-candidate04-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate04-bootstrap/result.json",
+      "sha256": "ffafc72ee1645564b8d52a77f2aab3fc57f1b05c21c7857baec3509fbecbbf83"
+    },
+    "attention-candidate04-export": {
+      "true_exit": 1,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate04-export/result.json",
+      "sha256": "89786118c21f8ca90be627478c235519034f2adff61a172b8b6fc77dfd9855ae"
+    },
+    "attention-candidate04-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate04-restore-debug/result.json",
+      "sha256": "fb412bb60d2fb2602d88367bdd01b5f78089f1fb707a75c2cc5bcf4aadf9a57c"
+    },
+    "attention-candidate04-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate04-restore-exportrelease/result.json",
+      "sha256": "20d9fc50dc32670b2ff2ebc77677af99fbc4e4a98e850e3029ca5b2d30511581"
+    },
+    "attention-candidate04-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate04-toolchain/result.json",
+      "sha256": "378dc722edd0078adcf8b864beadc6aefdabcb4619d56f2b0bee093a801d2d4c"
+    },
+    "attention-candidate05-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate05-bootstrap/result.json",
+      "sha256": "8db1322e716b5f50e186850e954d7baa72fb122c6246a003af6f0e08ea289a19"
+    },
+    "attention-candidate05-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate05-export/result.json",
+      "sha256": "0d4fd7ea355f427763dee2079557e12e9df445f35057f47f2fea81f74fc5cdcc"
+    },
+    "attention-candidate05-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate05-restore-debug/result.json",
+      "sha256": "1318c8ca9f954ad0d78c2508134124babfda76e7dc3df97478d7c5736f10ea51"
+    },
+    "attention-candidate05-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate05-restore-exportrelease/result.json",
+      "sha256": "43b90c85c2c27884f88ea64cbb5fe07dbf47ca54e0e7af8906444ccd385d8ac8"
+    },
+    "attention-candidate05-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate05-toolchain/result.json",
+      "sha256": "727f200257d9a2f1feb7ead10032f907857507f3c2599744a7986f1aa2df9ecb"
+    },
+    "attention-candidate06-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate06-bootstrap/result.json",
+      "sha256": "ff4931a8ae901a12d7939ae4a037dc98639554bb46c1606b19427022a57742b1"
+    },
+    "attention-candidate06-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate06-export/result.json",
+      "sha256": "3083ab83a2ba5c958652f37eee15c59245a7bcde882916d3345a8df1bd71282a"
+    },
+    "attention-candidate06-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate06-restore-debug/result.json",
+      "sha256": "3bd3af3027a0e56c677ecb06f861e12819da2a150753334e805aa1fdfc23e37e"
+    },
+    "attention-candidate06-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate06-restore-exportrelease/result.json",
+      "sha256": "52864023cc348eec8ea9e829b833372fb6d02e3343271b9c09d6538535df3f15"
+    },
+    "attention-candidate06-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate06-toolchain/result.json",
+      "sha256": "1752fa0d2dbec8281705882ce189d4b8a1f0c3ba901613da87b893095336ed20"
+    },
+    "attention-candidate07-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate07-bootstrap/result.json",
+      "sha256": "5f23be7bc61c80d26305b8065690810fb55041f9301e853008b90cb9e2d53f8d"
+    },
+    "attention-candidate07-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate07-export/result.json",
+      "sha256": "5e1ad738d0f3e486992fcad67c2f2ac5d226426b238c5af0e9f8a2ee824ce1e2"
+    },
+    "attention-candidate07-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate07-restore-debug/result.json",
+      "sha256": "f70d8ad6e6082c76ffdf657ac3ad81af0d7bb03d4102d463ac3c1977dbba59f0"
+    },
+    "attention-candidate07-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate07-restore-exportrelease/result.json",
+      "sha256": "55f30e1a333912a03fd6fda51b7f5c1bff496cb2d4ad35de5765c91021687bd9"
+    },
+    "attention-candidate07-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate07-toolchain/result.json",
+      "sha256": "9122b49aad6915855c409dc57f76347a15e11700d88f8c88e49fa2e352b2add5"
+    },
+    "attention-candidate08-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate08-bootstrap/result.json",
+      "sha256": "487f079554dc4582684cd8dbbaa32b67ce802d7c4e64cddb94a9e99c6fe0ec56"
+    },
+    "attention-candidate08-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate08-export/result.json",
+      "sha256": "8973cc25fe1a634299d937b0863135ab9c8726de6d61a18cbc2895f0932fdd7a"
+    },
+    "attention-candidate08-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate08-restore-debug/result.json",
+      "sha256": "eea69280c86ff80cd7ef63ce82b17c8f260c1e1b865e1fb7175e7c8013858519"
+    },
+    "attention-candidate08-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate08-restore-exportrelease/result.json",
+      "sha256": "fd970a06e38f28ce34a88306ccbc286fb2a8475d46db1962d947e2146e11aa69"
+    },
+    "attention-candidate08-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate08-toolchain/result.json",
+      "sha256": "1f29d5d95d71a1ba9b4cdf01a4d87ec784df35fcbebbffd3cdb463a0eccb4af7"
+    },
+    "attention-candidate09-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate09-bootstrap/result.json",
+      "sha256": "25edcf1fa2b840bdd1c3211c173a9ec0883aad8e17f69f5a3d7dc4e74772c3b5"
+    },
+    "attention-candidate09-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate09-export/result.json",
+      "sha256": "65373cc018f5bbaff44ff4316d8653d6703ec0e6d4abb5bbc060b18f1b6e1b73"
+    },
+    "attention-candidate09-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate09-restore-debug/result.json",
+      "sha256": "a89e238ff92ff90535e343d0976723961adaf212f19e78e8e3571bebe6df9487"
+    },
+    "attention-candidate09-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate09-restore-exportrelease/result.json",
+      "sha256": "20b3cab99cbcdc8fbf426fbe22cbe3ed8e33ce5c5332ffe00333e23e153e6515"
+    },
+    "attention-candidate09-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate09-toolchain/result.json",
+      "sha256": "5fa583e6a9b357a38d7b9d9b4b1e0d62ff0dff086a06ac2ba6a0492e5f708ded"
+    },
+    "attention-candidate10-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate10-bootstrap/result.json",
+      "sha256": "843c96fb45e95299f0f1993712c638ef816b0c620d8b30f7a076c8157af27d59"
+    },
+    "attention-candidate10-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate10-export/result.json",
+      "sha256": "16f509dc85f6c56c8dde90568a5b25f99ed6cb32e297d1a0025f108ff20a230f"
+    },
+    "attention-candidate10-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate10-restore-debug/result.json",
+      "sha256": "8f2a28cdb28237abdcdf31432825b3c13828cf8ab7d9500840348c8bdac60080"
+    },
+    "attention-candidate10-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate10-restore-exportrelease/result.json",
+      "sha256": "2874e53fae2dbeb48c68710ae37d5feb341c43267d9b33835a1443613cbd3b3c"
+    },
+    "attention-candidate10-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate10-toolchain/result.json",
+      "sha256": "a2ecfc828fcf85d1d63611865c1c2af871a4a26d22b0feb93d7b539e8611910f"
+    },
+    "attention-candidate11-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate11-bootstrap/result.json",
+      "sha256": "280e7b0f89008771262aef84298824a9e88eca4717d86391522bce90131df1c5"
+    },
+    "attention-candidate11-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate11-export/result.json",
+      "sha256": "2b668ff56d5235e578377a8bce809d5674f01eb312718d4b859cf709beb2e611"
+    },
+    "attention-candidate11-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate11-restore-debug/result.json",
+      "sha256": "860d687651a0aceb892b39859471d436baa274e733af20e257ab4ee419152e48"
+    },
+    "attention-candidate11-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate11-restore-exportrelease/result.json",
+      "sha256": "253a058bbb5d905c91f53103f72776435401c19ef6262807e231fcff4c32672b"
+    },
+    "attention-candidate11-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate11-toolchain/result.json",
+      "sha256": "a8fe1e498ea9def82ad2faaf6c4bd864dfbf243cc8160fba5f666e7bb1d36c53"
+    },
+    "attention-candidate12-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate12-bootstrap/result.json",
+      "sha256": "de223f96b36a0937cf264b01e5a8d77b7702abd4e7a0c90ab2bd453e2e8dc1ce"
+    },
+    "attention-candidate12-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate12-export/result.json",
+      "sha256": "494a5d0c6ff9e313082d0df0d886721735c8000c71288fae83c7722896c2ef1c"
+    },
+    "attention-candidate12-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate12-restore-debug/result.json",
+      "sha256": "d81fafbd6c1080c1c49c2ff7c6acf9fd4a41cef0874886902567dbfc29d7e810"
+    },
+    "attention-candidate12-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate12-restore-exportrelease/result.json",
+      "sha256": "d250a7879a0638a482c5a3c4944c45ef601ee6166c84c1afee0056229946b4cd"
+    },
+    "attention-candidate12-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate12-toolchain/result.json",
+      "sha256": "a9bf631ca494e9dc93bb58aba69ef43e9f04d413fd896cfcec4c24866f8fe66f"
+    },
+    "attention-candidate13-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate13-bootstrap/result.json",
+      "sha256": "460c3bfa401478794e5624f4fe791b54eb04a799176068fdcedab9134ea451fa"
+    },
+    "attention-candidate13-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate13-export/result.json",
+      "sha256": "1e1751cdc90f9724d3e183c391769025e5dddcb8079519e8f8ef934ac6320b51"
+    },
+    "attention-candidate13-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate13-restore-debug/result.json",
+      "sha256": "269f3cc8f796ecd69503f36d04fb425b14d3f018ee732ba4093ff6cb7808e175"
+    },
+    "attention-candidate13-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate13-restore-exportrelease/result.json",
+      "sha256": "4bddad508ed40e684bf3e85b64492df5898042f2fd2674ce3dd3428262f295a4"
+    },
+    "attention-candidate13-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate13-toolchain/result.json",
+      "sha256": "2f0c951ee2e66e38b810d98109f1d485edeff4ac7c6a9abc59d5036d7a949c43"
+    },
+    "attention-candidate14-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate14-bootstrap/result.json",
+      "sha256": "ff23865b6b2f98b12ee3e54e6b24785f96a432d7eccad61c4d21b0e7fc4cddc3"
+    },
+    "attention-candidate14-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate14-export/result.json",
+      "sha256": "b90519d4db5e30afecd9c2b739d2733480d3c004594084049f9564213b383145"
+    },
+    "attention-candidate14-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate14-restore-debug/result.json",
+      "sha256": "92b5c42583968ab6934b73a1bfd74bc63af9ffbd2b2fa691dc6fad244c9a13a6"
+    },
+    "attention-candidate14-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate14-restore-exportrelease/result.json",
+      "sha256": "1315bf9c485b08bdc65c89a73cf38bc3ec64614906d3447f0530f93d4992207c"
+    },
+    "attention-candidate14-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate14-toolchain/result.json",
+      "sha256": "e01508260fabeeafd5a057881db8968d94f3b62268842a45fb6757030ce6819d"
+    },
+    "attention-candidate15-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate15-bootstrap/result.json",
+      "sha256": "bcaf544576506fede85019fc38d25d97882978a8926919684003d08b4f92968c"
+    },
+    "attention-candidate15-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate15-export/result.json",
+      "sha256": "8da52f9bba8602e4a043fa4fdedc1450c8ac6c8ee3c3a5fa4ccffce3deddff6f"
+    },
+    "attention-candidate15-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate15-restore-debug/result.json",
+      "sha256": "6cef33866043b507295365b1619fabc505f546c2c7a04c5c6b592b26c7d1b897"
+    },
+    "attention-candidate15-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate15-restore-exportrelease/result.json",
+      "sha256": "65c5dbf76c2565e6d417f80ace6e87a16004114409af9ddccf902813160b3bf6"
+    },
+    "attention-candidate15-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-candidate15-toolchain/result.json",
+      "sha256": "2e8a797c09b1964358b5ebdd31713669c05a3cb9e98d63ecba33b9ed0b46fc8f"
+    },
+    "attention-product01-bootstrap": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-product01-bootstrap/result.json",
+      "sha256": "af09bd2b2d1d0500097f9eeea9d2d2b6de1d661e6d20cd02733f27f54667ab62"
+    },
+    "attention-product01-export": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-product01-export/result.json",
+      "sha256": "b4032164bb215f04224ec6acb5517c228a87f1448d41ea9ac3280151f6100e4c"
+    },
+    "attention-product01-restore-debug": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-product01-restore-debug/result.json",
+      "sha256": "00da71c866b692fe11d1f5ff8d44406e1f753613db77c0efd78b8408a9a06cda"
+    },
+    "attention-product01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-product01-restore-exportrelease/result.json",
+      "sha256": "1193e4bd047136258a0b801d3fb509b49bebe83f15ace06c03967ddaf2c6bafd"
+    },
+    "attention-product01-toolchain": {
+      "true_exit": 0,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/attention-product01-toolchain/result.json",
+      "sha256": "94dd03b017278aa84c3a5749faa97df4534d9731567fe750de24bbd8ced1af36"
+    }
+  },
+  "server_bindings": {
+    "attention-baseline01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-baseline01-server.json",
+      "sha256": "8368eca7f2d80b1e0ca377e2e402908b353e41d2a4d9eb4bae681ad94a816bf3",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-composition13": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-composition13-server.json",
+      "sha256": "3c3c9271a128823cf3730d20bfbf6e457f84f68e4e7568f5d0b0c1d47af61621",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-composition16": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-composition16-server.json",
+      "sha256": "778421317c996a4038e69642c02d384e1101957db5506fc8d6e5d4c7ffbd95eb",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current02": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current02-server.json",
+      "sha256": "2c0c4898e2d34fab666698915a58587ebf0dd7d1d160788082ea68772078a059",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current03": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current03-server.json",
+      "sha256": "57b4f2dcdd785b9697ccbbe3b5d3638d95357519bbd3962474918334d2818ad7",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current06": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current06-server.json",
+      "sha256": "ad37e5d1733ea1f8f4aecac86c83170d51bca0a5f1d9c3fd0a9b02f025e3de5f",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current07": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current07-server.json",
+      "sha256": "d563c3da80e92f2fddffb2ac6b2132bec73d9eaf9d1c0cb61b352706c2f0972a",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current08": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current08-server.json",
+      "sha256": "595ed7f5fb986cf2811792ad9db8aef8a09732c52ace9c103496d34d502f6dd4",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current10": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current10-server.json",
+      "sha256": "d5d3d362f0a2bac64ed51ae0887201b89362bd578d8c2261f6698a519abf21ec",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current11": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current11-server.json",
+      "sha256": "db061e64dd3baf9859216bbca720ba2cf626454ad4106cb1c14691aa14debbcf",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-current12": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-current12-server.json",
+      "sha256": "f76236d0735810bdd1ddbf7f9b8de419966205ca98cd86facaba19e742a94cd6",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-outcome-baseline05": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-outcome-baseline05-server.json",
+      "sha256": "e95431f195ee417b835e7403e1176a7661aaeeb4bc041027c6ae3522819b75db",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-outcome-final06": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-outcome-final06-server.json",
+      "sha256": "ded87162736854b7577854a890b6337e971b1ce485252e1e7fca6920fdd3b0d8",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-outcome-final08": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-outcome-final08-server.json",
+      "sha256": "987bf60f0ef7aa64a5b78b06601b1424e7747256afd8d7b3e483f658c75dae85",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-refused12": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-refused12-server.json",
+      "sha256": "83864778bcc6611d9439fd9c8a13ba39f9462588f33c00dda5219910b2cf436b",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-refused14": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-refused14-server.json",
+      "sha256": "1e72c66865e112936f38766a85651af85accf78360a16970c15006ebaab68771",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-stale-baseline09": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-stale-baseline09-server.json",
+      "sha256": "984d23f2dda72d35857082fa4f5b20154c01310622d40d35ba63d53285c7b497",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-stale-baseline10": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-stale-baseline10-server.json",
+      "sha256": "5f628762f43102b08916ec458f9e588700c9f94b3717e4350d5501aaabad305c",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-stale-final11": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-stale-final11-server.json",
+      "sha256": "e93b066d1f57dba3b1d9cf4e1d0ea58fff45cf19930371af329eabcd00eae64b",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    },
+    "attention-unknown07": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-attention-unknown07-server.json",
+      "sha256": "b31ac96f3a4638bfc95d6084e35162ac7775c9b1e638f96872df463d4e24d775",
+      "current_sources": 14,
+      "fixture_outputs": 4
+    }
+  },
+  "shared_question_owners": {
+    "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/shared-question-owners.json",
+    "sha256": "c628c37325b2c6e9cd553c7528cdf4ae55d27025b95573e405be84dd73f4ed34",
+    "current_resources": [
+      "priv/ontologies/gui_instance.pl",
+      "priv/ontologies/user_instance.pl"
+    ]
+  },
+  "selection": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/selection.json",
+    "sha256": "ecf4dca97929880eca35fac2bf6a2fc01df0eeda70aca87e3c5d031ee0f62296"
+  },
+  "browser": {
+    "checks": 33,
+    "receipt_sha256": "d769ad74bc2a5e1bd486476338d231c6457e692c2f873a0e415949797a66d3eb",
+    "source_only": true,
+    "browser_runtime": false
+  },
+  "source_delta": {
+    "client/godot/QuestionHub.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/before/client/godot/QuestionHub.cs",
+      "before_sha256": "029f0aaf6d5ac26b1d4c26f0a98399b2fef8ee6ac172d7f626d56910ead4c2bb",
+      "before_stat_key": [
+        66305,
+        28450750,
+        11405,
+        1793564662842236063,
+        1793571041531068612
+      ],
+      "after_sha256": "3ba0656747b51e846c5d5dffaea6468447e396cf879bd5292286aed05a981760",
+      "mode": 420,
+      "added": 161,
+      "removed": 44
+    },
+    "client/godot/Main.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/before/client/godot/Main.cs",
+      "before_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+      "before_stat_key": [
+        66305,
+        28450751,
+        47515,
+        1793568949453594437,
+        1793571041531210048
+      ],
+      "after_sha256": "55a25e21385b391c0eeacfffe666c32906a717513a810efb70a1780d6d11081c",
+      "mode": 420,
+      "added": 20,
+      "removed": 9
+    },
+    "client/godot/FormPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/before/client/godot/FormPanel.cs",
+      "before_sha256": "8d19a51d76b9d01a8aa719702431368d5cf91e8b4b6b69e7341067498ea596f5",
+      "before_stat_key": [
+        66305,
+        28450752,
+        18707,
+        1793564662842965672,
+        1793571041531413389
+      ],
+      "after_sha256": "d3be800def8a13826094ffc27e3e488f5d13bf3a7e19d8e086cd33102cf305e5",
+      "mode": 420,
+      "added": 2,
+      "removed": 1
+    },
+    "client/godot/README.md": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/before/client/godot/README.md",
+      "before_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+      "before_stat_key": [
+        66305,
+        28450755,
+        22943,
+        1793568874180501332,
+        1793571041531841072
+      ],
+      "after_sha256": "742733395a91af47224d359b18e1bcfcf7504038134624f01ce23a1b57c33878",
+      "mode": 420,
+      "added": 22,
+      "removed": 1
+    }
+  },
+  "production_line_delta": {
+    "added": 183,
+    "removed": 54
+  },
+  "documentation_line_delta": {
+    "added": 22,
+    "removed": 1
+  },
+  "product": {
+    "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/client-attention-product01-manifest.json",
+    "sha256": "1a6c8463e73a7ff1db2aedbc048c5a0bef73759ae353b233cf8aef104345a29d",
+    "inputs": 98,
+    "exports": 196,
+    "export_bytes": 193596912,
+    "trace_free": true,
+    "distributable": false
+  },
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/attention-qualified02-hashes.json",
+    "sha256": "51273af56331b609943e814aa1109659f53d6b923b046cc4b7c6e9c95de28c03"
+  },
+  "qualification_private": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-qualified02",
+  "run_labels": [
+    "attention-baseline01-build",
+    "attention-baseline01-run",
+    "attention-browser01",
+    "attention-candidate02-build",
+    "attention-candidate03-build",
+    "attention-candidate04-build",
+    "attention-candidate05-build",
+    "attention-candidate06-build",
+    "attention-candidate07-build",
+    "attention-candidate08-build",
+    "attention-candidate09-build",
+    "attention-candidate10-build",
+    "attention-candidate11-build",
+    "attention-candidate12-build",
+    "attention-candidate13-build",
+    "attention-candidate14-build",
+    "attention-candidate15-build",
+    "attention-composition13-run",
+    "attention-composition15-run",
+    "attention-composition16-run",
+    "attention-current02-run",
+    "attention-current03-run",
+    "attention-current06-run",
+    "attention-current07-run",
+    "attention-current08-run",
+    "attention-current10-run",
+    "attention-current11-run",
+    "attention-current12-run",
+    "attention-outcome-baseline04-run",
+    "attention-outcome-baseline05-run",
+    "attention-outcome-final06-run",
+    "attention-outcome-final08-run",
+    "attention-product01-build",
+    "attention-qualified01-run",
+    "attention-refused12-run",
+    "attention-refused14-run",
+    "attention-stale-baseline09-run",
+    "attention-stale-baseline10-run",
+    "attention-stale-final11-run",
+    "attention-unknown07-run"
+  ],
+  "digest_work": {
+    "hits": 5042,
+    "new_objects": 1402,
+    "new_bytes": 38740659
+  },
+  "packaged": false,
+  "historical_shutdown_fixed": false,
+  "human_HMD_accepted": false,
+  "limits": [
+    "Native certified-negative and Applied presentation are not dynamically qualified: refused12 had an unavailable application outcome; refused14 original-owner completion timed out and the whole run failed. Neither absence nor failed proof permits another answer or a false application-success claim.",
+    "Generic question drafts remain local to their open controller. Reconnect discovers exact authoritative pending refs without replay; no new durable question-draft or outcome archive.",
+    "P07 focusable validation summary/individual disabled-field explanation and P08 general fixed-grid reflow/visible_rows remain open. Current column-form layout and actual required-field inline validation are qualified.",
+    "Source/agent captions use existing signed form/actor identifiers and authored title; complete anchors remain inspectable. No arbitrary naming service or new policy/schema.",
+    "Software-only native Control/spatial composition; no host input, native XR, human/HMD acceptance, package, broad GUI/Stage2/M4/M5 completion or historical shutdown fix."
+  ]
+}

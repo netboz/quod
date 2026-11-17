@@ -1,0 +1,3 @@
+df31d919 #{default => ok, kind => ok, height => 7, isa => ok, value_none => ok, value_view => ok, value_bad => fail}
+79467393 #{default => ok, kind => ok, height => 7, isa => ok, value_none => ok, value_view => ok, value_bad => fail}
+9735812b #{default => ok, kind => ok, height => 7, isa => ok, value_none => ok, value_view => ok, value_bad => fail}

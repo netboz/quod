@@ -1,0 +1,15 @@
+{
+  "removed_editor_environment": {
+    "QT_QPA_PLATFORM": "wayland;xcb",
+    "LD_LIBRARY_PATH": "/tmp/.mount_NimbalxFQTsK/usr/lib:/tmp/.mount_Nimbal7pLyvJ/usr/lib"
+  },
+  "steam_pids": [
+    2671465
+  ],
+  "vr_pids": [
+    2743862
+  ],
+  "shutdown_exit": 0,
+  "steam_exited": true,
+  "restart_exit": 0
+}

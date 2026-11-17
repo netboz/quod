@@ -1,0 +1,29 @@
+Build started 11/12/2026 12:32:30 PM.
+     1>Project "/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj" on node 1 (Clean target(s)).
+     1>CoreClean:
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.deps.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.runtimeconfig.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.pdb".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/BouncyCastle.Cryptography.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/GodotSharp.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/GodotSharpEditor.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.csproj.AssemblyReference.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.GeneratedMSBuildEditorConfig.editorconfig".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.AssemblyInfoInputs.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.AssemblyInfo.cs".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.csproj.CoreCompileInputs.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.sourcelink.json".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.csproj.Up2Date".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/refint/Quod.dll".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.pdb".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/Quod.genruntimeconfig.cache".
+         Deleting file "/home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/obj/Debug/ref/Quod.dll".
+     1>Done Building Project "/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj" (Clean target(s)).
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.52

@@ -1,0 +1,582 @@
+{
+  "label": "vr-reliability-remediation01",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "scope": "four reviewed file updates and separately labeled offline evidence; no product changes",
+  "previous_packet_manifest_sha256": "9c738b4fdb4cb9683eff6d5cecfbdad31fc9724f54aa045b24124657df404bf8",
+  "entries": [
+    {
+      "path": "doc",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/check_live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "a5ce866b24eb8ceba54248632b4a9ae52048b77245efc3437610b55ba7a3432a",
+      "bytes": 10579
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/qualify.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "dbc011d337ab315a8fbfce944d6eb927763514348dd453bddb7d46be86b0f624",
+      "bytes": 7143
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/baseline01",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/baseline01/check_live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "a5ce866b24eb8ceba54248632b4a9ae52048b77245efc3437610b55ba7a3432a",
+      "bytes": 10579
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/baseline01/live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "33578872bc9fb6ddc68721bea157272e38898ef5ce05d2f7736185f74accd781",
+      "bytes": 13429
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/baseline01/output.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "a726204fa8554e27adcf01f1ce5c54a314171df541c881ae9997a436a988759b",
+      "bytes": 5296
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/baseline01/result.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "db31a77937a453f24e44d9723695827c270e6f77c4d9b1292bb87750f2f95ae1",
+      "bytes": 197
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/doc",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/doc/evidence",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/doc/evidence/godot-vr-reliability-20261103",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/doc/evidence/godot-vr-reliability-20261103/check_live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "4f22c48a237fef1b61500f6d27d9b1842e4dd9f527a20b5db21d728f9de2466d",
+      "bytes": 7677
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/doc/evidence/godot-vr-reliability-20261103/qualify.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "be7d5093af9402db1741840c1dd029af35f974e8794cfefa1ad3389dcb147119",
+      "bytes": 6330
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/doc/evidence/godot-vr-visual-readiness-20261102",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/doc/evidence/godot-vr-visual-readiness-20261102/live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "33578872bc9fb6ddc68721bea157272e38898ef5ce05d2f7736185f74accd781",
+      "bytes": 13429
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/nimbalyst-local",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/nimbalyst-local/handoffs",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/before/nimbalyst-local/handoffs/godot-vr-reliability-result-20261103.md",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "6e349394ddb97746be069e6eeb42ac30acd5aef25fbe615e5f4cf91fa33e1041",
+      "bytes": 6343
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/live-final01",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/live-final01/output.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "132b17e4d183d13c186312986ee88b5f9411031ffb45dd50c5ac3dd6ec63e944",
+      "bytes": 1555
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/live-final01/result.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "f16f8bc241be8c602cd01c891dafc2bc44811b609ca56a4d1c2622f2899a35a6",
+      "bytes": 197
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline-wrapper01",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline-wrapper01/output.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "810047a86babd681e66400f86315e2d2fb33cb46d80f95df01566c842c6f0610",
+      "bytes": 1670
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline-wrapper01/result.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "7d86b3cb45a2803564ff7f328e178405beef2528812cc820bc51d84f8d9576c1",
+      "bytes": 224
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/admission.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "916c23940851a3e1ca80637deee45e9a8ebbf84110acfa80a3ccc31321e31584",
+      "bytes": 3194
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-0",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-1",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-10",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-11",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-2",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-3",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-4",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-4/visual-ready.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "9c5f3a9b54781b02e03ac1c9f03eb627f1722a9c6ab993e78120515071707855",
+      "bytes": 39
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-5",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-5/visual-ready.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "9c5f3a9b54781b02e03ac1c9f03eb627f1722a9c6ab993e78120515071707855",
+      "bytes": 39
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-6",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-6/visual-ready.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "9c5f3a9b54781b02e03ac1c9f03eb627f1722a9c6ab993e78120515071707855",
+      "bytes": 39
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-7",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-7/visual-ready.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "9c5f3a9b54781b02e03ac1c9f03eb627f1722a9c6ab993e78120515071707855",
+      "bytes": 39
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-8",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/admission-case-9",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/bin",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/bin/Offline",
+      "mode": "0o755",
+      "type": "file",
+      "sha256": "a4c0b46fda05d068813a7120a72317c7c29e373a2a463f860ab592fef68d9683",
+      "bytes": 98312
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/bin/Offline.deps.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "c386280ffff0e72be835cd73a1657b82dcd0973e829465346c4480538dee6c14",
+      "bytes": 393
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/bin/Offline.dll",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "42d3b58e7fe956dde68fa2f4387ba0919abeaeafb114f3e70e28fff01d6e9cd6",
+      "bytes": 44032
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/bin/Offline.pdb",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "c01850f56a8d9c0d2807d60a7fd826167201bc8b71257a3c571ed4b51b245548",
+      "bytes": 21408
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/artifacts/bin/Offline.runtimeconfig.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "f9bc8e9f0c46247078ed47309f19a7576b4b94e4300e9de0003917d6bd2d667a",
+      "bytes": 259
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/build.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "a23f9394d9956df2d91a92fff1d62d760215b70cc4b768528b300b260fc6c046",
+      "bytes": 469
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/AdmissionBody.cs",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "1df84e8a96004069036441ca02fd56875df64f5b919a11daf8d847126a4234ea",
+      "bytes": 1577
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/AdmissionChecks.cs",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "c506c7a54e3b049220f448a2935b6bf22c5e6e8fe317abab0bf4e22381e9da48",
+      "bytes": 3951
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/FrameObservation.cs",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "141e4876c3d9561819c9e9421e91494214a220f37705719f2eabba9e60610f35",
+      "bytes": 3518
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/FrameObservationChecks.cs",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "e5a0cd212889d0dfdc0950a6e448e6ccb9fc14b25bc6bff1aa19661c3ae33993",
+      "bytes": 6750
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/NuGet.Config",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "439c6ddcbe6a40f03047c03292e4486e02b639f061f259e8ec592f96419e53f4",
+      "bytes": 211
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/Offline.csproj",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "38e201f047792df530db8c7d157c2b6b19d1ed2e4134dba5da5c59e97d3b0da2",
+      "bytes": 211
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/Program.cs",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "0db6baa1dffc4538573f909d975a71f970f0f2e4ea05dbca52c670e02c93bb7d",
+      "bytes": 6780
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/VrFrameReady.cs",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "1ad52bbc5e95e3b9828bd16518b072774763809e63216a04a973c7480565baca",
+      "bytes": 14842
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/attempt-visual02-result.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "b0e4e207f5ca2cc2c66006f32f25559b20c29a16eadd0283c2c423523ee590c7",
+      "bytes": 1871
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/check_live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "a5ce866b24eb8ceba54248632b4a9ae52048b77245efc3437610b55ba7a3432a",
+      "bytes": 10579
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/client-visibility-visual-companion04-manifest.json",
+      "mode": "0o600",
+      "type": "file",
+      "sha256": "16d2c211c6687494bcf188f249c88ba054c1bcd8b97b685e56c936b46cc0cef7",
+      "bytes": 61940
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/closure281.json",
+      "mode": "0o600",
+      "type": "file",
+      "sha256": "7f2138a4473e38205d8c33a7b5f246a7667f83b7e504e2d3db8edc327d108963",
+      "bytes": 7347
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/global.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "58cf5bad3915ebd7a3e327e9ad99ded232e9a4f03ff46917126a1df3019713a3",
+      "bytes": 55
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "f8a303159184ce3d7c9798ec21ad33f941bbef8e199557ebec5dcb61968c6dc6",
+      "bytes": 13513
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/owned_commands.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "60c693b94cc8113263f0238f47337430a18108ac544132bfff8ed3f5ef8aa6a0",
+      "bytes": 1943
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/pipe_ownership.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "9c0c91893306d33ed415170164004cacff276364748564bb481e67aa8b80fa89",
+      "bytes": 3227
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/qualify.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "dbc011d337ab315a8fbfce944d6eb927763514348dd453bddb7d46be86b0f624",
+      "bytes": 7143
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/supervision.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "a579a7cc7dfc6cd17e87345989ba16e1b0b938fcd5c548207eb6bba121977f5b",
+      "bytes": 2870
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/test_owned_commands.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "1fd3edb42e2426114d1d0eae6ccbd17d1ae7e39890ca47aaa205756f5e0563c1",
+      "bytes": 6224
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/inputs/test_supervision.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "5dada091889c47fa7d443bcc40e21d8076053497a9939cb2df5e483ef04807ce",
+      "bytes": 7643
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/live-loop.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "132b17e4d183d13c186312986ee88b5f9411031ffb45dd50c5ac3dd6ec63e944",
+      "bytes": 1555
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/owned-pipes.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "03c9fd376f0e53fbde15d7dba421c9b9bd29de6af1941aa7ca16ddc7a243df32",
+      "bytes": 2085
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/result.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "5a73ceb0adab893c7524349a9309f6d29cfad38fd849d0ae9fb67b58440cdcc0",
+      "bytes": 6273
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/offline01/supervision.log",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "422d04d1fbac0a4545984c61ed9b291c1aea28d721d57cd9b0a12e5db4057b88",
+      "bytes": 2175
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/preflight.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "a51f88975be41c700f3e70d03d66578ca9158a80cadf4ea6b7ab87f85b9e163d",
+      "bytes": 545
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/result.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "880f26fdea909c12cecc2b667b0d9aa03ee96f49862396aefd4859bab7d01887",
+      "bytes": 3401
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/review.patch",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "050be087bcad2871c625af76e3bd1b80d4bc08ab82dea510be04b874dcc9aeaf",
+      "bytes": 19161
+    },
+    {
+      "path": "doc/evidence/godot-vr-reliability-20261103/review-fixes01/tracker-result.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "f49a7ca9156e248a8f6dd423d90303f861e5c72d12bec2f940f28a825d42e080",
+      "bytes": 9401
+    },
+    {
+      "path": "doc/evidence/godot-vr-visual-readiness-20261102",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-vr-visual-readiness-20261102/live.py",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "f8a303159184ce3d7c9798ec21ad33f941bbef8e199557ebec5dcb61968c6dc6",
+      "bytes": 13513
+    },
+    {
+      "path": "nimbalyst-local",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "nimbalyst-local/handoffs",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "nimbalyst-local/handoffs/godot-vr-reliability-result-20261103.md",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "75b3bfbf9b21bda1e47a6e42b16ea2a63bbd9f615dc64c0ee2a40a97feb92f61",
+      "bytes": 10842
+    },
+    {
+      "path": "nimbalyst-local/review-packets",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/vr-reliability-claude01",
+      "mode": "0o755",
+      "type": "directory"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/vr-reliability-claude01/manifest.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "9c738b4fdb4cb9683eff6d5cecfbdad31fc9724f54aa045b24124657df404bf8",
+      "bytes": 19030
+    },
+    {
+      "path": "nimbalyst-local/review-packets/vr-reliability-claude01/review.json",
+      "mode": "0o644",
+      "type": "file",
+      "sha256": "d39afe1d2693bdd46e326613e1b1ce4ddf552df785d4041a631ce1d38e658256",
+      "bytes": 6725
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+--- stage2-product01/client/godot/SourcePanel.cs
++++ current/client/godot/SourcePanel.cs
+@@ -13,6 +13,7 @@
+     Actor target=null!,tools=null!;
+     Component? descriptor;
+     string scope="",descriptorKey="",selected="all";
++    string sourceVersion="",readVersion="";
+     Term[] catalogue=[];
+     SourceDraft? draft;
+     ProofPreview? preview;
+@@ -21,8 +22,9 @@
+     long generation;
+     bool authorized,editable,busy,loading,disposed,lens;
+     public event Action? Changed;
+-    public string Content=>Editor?.Text??"";
++    public string Content=>authorized&&form.Visible ? Editor?.Text??"" : "";
+     public string Status=>status.Text;
++    public bool IsWorking=>busy;
+     public string? RetirementError { get; private set; }
+     public int SnapshotReads { get; private set; }
+     public bool CanEdit=>authorized&&editable&&!busy&&preview==null&&!Pending().Any();
+@@ -35,7 +37,7 @@
+     public override void _Ready()
+     {
+         AddChild(status);AddChild(actions);AddChild(form);
+-        void Local(string name,string text,Action action){var b=new Button { Name=name,Text=text };actions.AddChild(b);b.Pressed+=action;}
++        void Local(string name,string text,Action action){var b=SpatialGui.ActionButton(text,name);actions.AddChild(b);b.Pressed+=action;}
+         Local("source-reload","Reload saved source",()=>Run(()=>Read(false)));
+         Local("source-discard","Discard local draft and reload",()=>Run(()=>Read(true)));
+         form.Invoked+=role=>{
+@@ -47,7 +49,7 @@
+             if(role=="create")AddPredicate();
+         };
+     }
+-    public void Install(SignedSession session,Accounts accounts,LocalStore store,Subject subject,Eidolon choice,Term representation)
++    public void Install(SignedSession session,Accounts accounts,LocalStore store,Subject subject,Eidolon choice,Term representation,Term dependencies)
+     {
+         representation.Ground();bool nextLens=representation.Name=="lens_view";
+         var a=representation.Require(nextLens ? "lens_view" : "workspace",5);
+@@ -57,15 +59,23 @@
+         var tool=Subject.Decode(a[offset+2]).Target;
+         if(tool.Namespace!=choice.Recipe.Namespace || tool.Anchor!=choice.Recipe.Anchor)throw new FormatException("Representation names another recipe owner.");
+         string nextScope=string.Join("\n",session.Network,session.Key.PublicText,accounts.Human!.Entity,subject.Target.Ontology,tool.Ontology);
+-        string nextDescriptor=representation.ToString();
+-        if(authorized&&scope==nextScope&&descriptorKey==nextDescriptor)return;
++        dependencies.Ground();var versions=dependencies.Items.Select(d=>d.Require("dependency",3)).Where(d=>d[0].TextValue==subject.Target.Namespace&&Identity.Encode(d[1].Bytes)==subject.Target.Anchor).ToArray();
++        if(versions.Length!=1||versions[0][2].Integer<0)throw new FormatException("Missing exact source dependency version.");
++        string nextVersion=versions[0][2].ToString();
+         var tree=nextLens ? null : Component.Decode(a[4]);
+         if(tree!=null)Validate(tree);
+-        Withdraw();this.session=session;this.accounts=accounts;this.store=store;target=subject.Target;tools=tool;
++        string nextDescriptor=nextLens ? representation.ToString() : Term.Call("workspace",a[0],a[1],a[2],a[3],tree!.Semantic).ToString();
++        if(!nextLens&&ReferenceEquals(this.session,session)&&scope==nextScope&&descriptorKey==nextDescriptor&&
++           (authorized&&sourceVersion==nextVersion || tree!=null&&!busy&&readVersion==nextVersion)) {
++            if(tree!=null){form.RefreshAppearance(tree);descriptor=tree;authorized=true;form.Show();Update();}return;
++        }
++        bool retainLens=nextLens&&ReferenceEquals(this.session,session)&&scope==nextScope&&descriptorKey==nextDescriptor;
++        Withdraw(retainLens);this.session=session;this.accounts=accounts;this.store=store;target=subject.Target;tools=tool;
++        sourceVersion=nextVersion;
+         if(scope!=nextScope){scope=nextScope;selected="all";draft=null;}
+         bool same=descriptorKey==nextDescriptor;descriptorKey="";lens=nextLens;
+         if(lens){authorized=true;editable=false;Run(()=>ReadLens(a[3],a[4],nextDescriptor),true);return;}
+-        if(!same)Build(tree!);
++        if(!same)Build(tree!);else {form.RefreshAppearance(tree!);descriptor=tree;}
+         editable=descriptor!.Leaves.Any(c=>c.Role=="accept") &&
+             !descriptor.Leaves.Single(c=>c.Role=="source").Flag("readonly") && Editor!.GetMeta("offered_enabled").AsBool();
+         descriptorKey=nextDescriptor;authorized=true;Run(()=>Read(false),true);
+@@ -92,7 +102,8 @@
+     async Task Read(bool discard)
+     {
+         if(!authorized||preview!=null)return;
+-        if(Pending().Any()){status.Text="An original saved edit is pending. Check its outcome before editing; do not submit it again.";Reveal("resolve");return;}
++        if(Pending().Any()){status.Text="An original saved edit is pending. Check its outcome before editing; do not submit it again.";form.Show();Reveal("resolve");return;}
++        readVersion="";
+         long expected=generation;var cancellation=work!.Token;var consumer=session;var actor=accounts.Human!;
+         var owner=tools;var subject=target;var localStore=store;string key=Key,selection=selected,sourceScope=scope;bool mayEdit=editable;
+         var reply=await consumer.Read(actor,SignedSession.ViewGoal(owner,Term.Call("prolog_predicates",subject.Ontology,Term.Variable("Predicates"))),cancellation);
+@@ -116,6 +127,7 @@
+         Catalogue.Select(selection=="all" ? 0 : Array.FindIndex(catalogue,c=>c.ToString()==selection)+1);
+         draft=mayEdit && saved!=null && saved.Text!=saved.Baseline ? saved : new(text,text);
+         loading=true;Editor!.Text=draft.Text;loading=false;
++        readVersion=sourceVersion;form.Show();
+         status.Text=mayEdit ? (draft.Baseline!=text ? "Saved source changed. Your original draft baseline is retained; reload/discard explicitly or inspect the guarded refusal." : "Local draft. Preview stages changes; Save changes explicitly accepts them.") : "Authorized read-only source. This grants no editing or spatial membership.";
+     }
+     async Task ReadLens(Term view,Term parameters,string nextDescriptor)
+@@ -123,9 +135,17 @@
+         long expected=generation;var consumer=session;var actor=accounts.Human!;var owner=tools;var cancellation=work!.Token;
+         var tree=Json.Binding(await consumer.Read(actor,SignedSession.ViewGoal(owner,Term.Call("gui_view",Term.Atom("prolog_source"),Term.Variable("Tree"))),cancellation),"Tree");
+         if(expected!=generation||!authorized||cancellation.IsCancellationRequested)return;
++        var next=Component.Decode(tree);Validate(next);
++        bool same=descriptor!=null&&descriptor.Semantic.ToString()==next.Semantic.ToString();
++        // An authored lens can compute from other ontologies or live runtime data.
++        // Target history alone cannot validate its prior result.
++        SnapshotReads++;
+         var text=await consumer.ReadSource(actor,SignedSession.ViewGoal(owner,Term.Call("view",view,parameters,Term.Variable("Rows"))),"Rows",cancellation);
+         if(expected!=generation||!authorized||cancellation.IsCancellationRequested)return;
+-        Build(Component.Decode(tree));descriptorKey=nextDescriptor;Catalogue!.Hide();loading=true;Editor!.Text=text;loading=false;
++        if(same){form.RefreshAppearance(next);descriptor=next;}else Build(next);
++        descriptorKey=nextDescriptor;Catalogue!.Hide();
++        if(Editor!.Text!=text){loading=true;Editor.Text=text;loading=false;}
++        readVersion=sourceVersion;form.Show();
+         status.Text="Authorized inspection · "+view.TextValue.Replace('_',' ')+". Exact committed data; read only.";
+     }
+     void AddPredicate()
+@@ -137,6 +157,24 @@
+             var name=Term.Parse(value[..slash]);if(name.Kind!="atom")throw new FormatException("Use an atom predicate name.");
+             selected=Term.Call("/",name,Term.Number(arity.ToString())).ToString();draft=null;Run(()=>Read(false));
+         }catch(Exception e){status.Text=e.Message;Changed?.Invoke();}
++    }
++    public void PrepareFact(Term change)
++    {
++        if(!CanEdit)return;
++        Run(async()=>{
++            long expected=generation;var cancellation=work!.Token;var consumer=session;var actor=accounts.Human!;var owner=tools;
++            var fact=change.Args[0];string predicate=Term.Call("/",Term.Atom(fact.Name),Term.Number(fact.Args.Length.ToString())).ToString();
++            if(selected!=predicate){selected=predicate;draft=null;await Read(false);}
++            if(expected!=generation||cancellation.IsCancellationRequested||draft==null||!authorized||!editable)return;
++            var original=draft;
++            string text=await consumer.ReadSource(actor,SignedSession.ViewGoal(owner,
++                Term.Call("prolog_workbench_draft",Term.Text(original.Text),change,Term.Variable("Draft"))),"Draft",cancellation);
++            if(expected!=generation||!authorized||cancellation.IsCancellationRequested||draft!=original)return;
++            if(text==original.Text)return;
++            draft=original with {Text=text};loading=true;Editor!.Text=text;loading=false;Persist();
++            status.Text="Graph edit prepared in the same local source draft. Inspect it, Preview changes, then Save changes explicitly.";
++            Reveal("run");
++        });
+     }
+     async Task Preview()
+     {
+@@ -190,7 +228,7 @@
+     }
+     void Update()
+     {
+-        if(Editor!=null)Editor.Editable=CanEdit&&!lens;
++        if(Editor!=null)SpatialGui.SetEditable(Editor,CanEdit&&!lens);
+         if(Catalogue!=null)Catalogue.Disabled=!authorized||busy||preview!=null||Pending().Any();
+         foreach(string role in new[]{"run","accept","stop","create","resolve"})if(form.Input(role) is Button button)button.Disabled=!authorized||busy||!button.GetMeta("offered_enabled").AsBool()||
+             role=="run"&&(draft==null||draft.Text==draft.Baseline)||
+@@ -200,12 +238,16 @@
+     }
+     void Reveal(string role)
+     {long expected=generation;if(form.Input(role) is Control control)SpatialGui.Reveal(control,()=>!disposed&&authorized&&generation==expected);}
+-    public void Withdraw()
++    public void Suspend()=>Withdraw(true);
++    public void Withdraw()=>Withdraw(false);
++    void Withdraw(bool retain)
+     {
+         generation++;authorized=false;work?.Cancel();
+         var old=preview;preview=null;
+         if(old!=null){var consumer=session;async Task Close(){try{await consumer.Stop(old);}catch(Exception e){RetirementError=e.GetType().Name;}}retired=Task.WhenAll(retired,Close());}
+-        if(Editor!=null){loading=true;Editor.Text="";loading=false;}if(Results!=null)Results.Text="";
++        form.Hide();
++        if(!retain){readVersion="";if(Editor!=null){loading=true;Editor.Text="";loading=false;}}
++        if(Results!=null)Results.Text="";
+         Update();
+     }
+     public void DisposeView(){if(disposed)return;Withdraw();disposed=true;}

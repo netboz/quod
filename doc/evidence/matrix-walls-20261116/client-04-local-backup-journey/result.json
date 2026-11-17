@@ -1,0 +1,21 @@
+[
+  {
+    "phase": "crypto",
+    "case": "crypto",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-matrix-walls/client-04/local-backup/identity",
+      "--node",
+      "https://localhost:14570"
+    ],
+    "child_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "passed": true
+  }
+]

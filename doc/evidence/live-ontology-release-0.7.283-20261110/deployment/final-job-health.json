@@ -1,0 +1,1 @@
+{"deployment":"successful","groups":{"quod-node":{"desired":8,"healthy":8,"unhealthy":0},"quod-cloud":{"desired":2,"healthy":2,"unhealthy":0}},"running":{"quod-node":8,"quod-cloud":2}}

@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-11-10T22:25:18.009872+01:00",
+  "source": "installed Steam shortcut, disposable profile",
+  "app_pid": 2041891,
+  "steamvr_app_key": "steam.app.3208097213",
+  "compositor_fatal_since_launch": false,
+  "active_hmd_verified": false,
+  "capture_exits": {
+    "installed-run": 0,
+    "vrserver": 0,
+    "vrcompositor": 0,
+    "gameprocess": 0,
+    "manifest": 0
+  },
+  "scene_duration_seconds": 84.72,
+  "scene_end": "deliberate SIGTERM of disposable test process",
+  "client_openxr_runtime": "SteamVR/OpenXR 2.19.2",
+  "client_xr_viewport_warning": false,
+  "steamvr_manifest_image_path": "/home/yan/Games/quod/steam/icon.png",
+  "temporary_launch_options_restored": true,
+  "steam_restarted": true,
+  "logs": {
+    "installed-run": "vr-steam-shortcut-01-installed-run.log",
+    "vrserver": "vr-steam-shortcut-01-vrserver.log",
+    "vrcompositor": "vr-steam-shortcut-01-vrcompositor.log",
+    "gameprocess": "vr-steam-shortcut-01-gameprocess.log",
+    "manifest": "vr-steam-shortcut-01-manifest.log"
+  }
+}

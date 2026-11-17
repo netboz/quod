@@ -1,0 +1,56 @@
+{
+  "kind": "documentation-and-source-audit-freeze",
+  "files": 51,
+  "archive": {
+    "sha256": "596ec74c0be816fea057ca655111c7ae3bdbab0fc39e600a1c5127b1691c0fe9",
+    "bytes": 2283520,
+    "mode": 420
+  },
+  "manifest": {
+    "sha256": "4ee0f8355d8b941c61b56ee15f7a87a931052c257891add86cd47b0f57f1689b",
+    "bytes": 9393,
+    "mode": 420
+  },
+  "checks": [
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "child_exit": 0,
+      "stdout_eof": true,
+      "stderr_eof": true
+    },
+    {
+      "command": [
+        "tar",
+        "-cf",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/stage2-d5-reconciliation01/snapshot.tar",
+        "-C",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/stage2-d5-reconciliation01",
+        "tree",
+        "manifest.json"
+      ],
+      "child_exit": 0,
+      "stdout_eof": true,
+      "stderr_eof": true
+    },
+    {
+      "command": [
+        "tar",
+        "-xpf",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/stage2-d5-reconciliation01/snapshot.tar",
+        "-C",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/stage2-d5-reconciliation01/reconstructed"
+      ],
+      "child_exit": 0,
+      "stdout_eof": true,
+      "stderr_eof": true
+    }
+  ],
+  "reconstruction_verified": true,
+  "production_delta": "+0/-0",
+  "inherited_sources_unchanged": 848,
+  "runtime_qualification": false
+}

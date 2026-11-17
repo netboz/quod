@@ -1,0 +1,101 @@
+{
+  "passed": true,
+  "software_only": true,
+  "stage": "/tmp/quod-vr-reliability-jpc_8a2z",
+  "inputs": {
+    "doc/evidence/godot-visibility-test-20261103/inputs/client-visibility-visual-companion04-manifest.json": "16d2c211c6687494bcf188f249c88ba054c1bcd8b97b685e56c936b46cc0cef7",
+    "doc/evidence/godot-visibility-test-20261103/VrFrameReady.cs": "1ad52bbc5e95e3b9828bd16518b072774763809e63216a04a973c7480565baca",
+    "doc/evidence/godot-visibility-test-20261103/FrameObservation.cs": "141e4876c3d9561819c9e9421e91494214a220f37705719f2eabba9e60610f35",
+    "doc/evidence/godot-vr-visual-readiness-20261102/live.py": "33578872bc9fb6ddc68721bea157272e38898ef5ce05d2f7736185f74accd781",
+    "doc/evidence/godot-vr-visual-readiness-20261102/supervision.py": "a579a7cc7dfc6cd17e87345989ba16e1b0b938fcd5c548207eb6bba121977f5b",
+    "doc/evidence/godot-vr-visual-readiness-20261102/owned_commands.py": "60c693b94cc8113263f0238f47337430a18108ac544132bfff8ed3f5ef8aa6a0",
+    "doc/evidence/godot-vr-visual-readiness-20261102/pipe_ownership.py": "9c0c91893306d33ed415170164004cacff276364748564bb481e67aa8b80fa89",
+    "doc/evidence/godot-vr-visual-readiness-20261102/test_supervision.py": "5dada091889c47fa7d443bcc40e21d8076053497a9939cb2df5e483ef04807ce",
+    "doc/evidence/godot-vr-visual-readiness-20261102/test_owned_commands.py": "1fd3edb42e2426114d1d0eae6ccbd17d1ae7e39890ca47aaa205756f5e0563c1",
+    "doc/evidence/godot-vr-visual-readiness-20261102/FrameObservationChecks.cs": "e5a0cd212889d0dfdc0950a6e448e6ccb9fc14b25bc6bff1aa19661c3ae33993",
+    "doc/evidence/godot-vr-frame-observation-20261102/closure281.json": "7f2138a4473e38205d8c33a7b5f246a7667f83b7e504e2d3db8edc327d108963",
+    "doc/evidence/godot-vr-reliability-20261103/check_live.py": "4f22c48a237fef1b61500f6d27d9b1842e4dd9f527a20b5db21d728f9de2466d",
+    "doc/evidence/godot-vr-reliability-20261103/AdmissionChecks.cs": "c506c7a54e3b049220f448a2935b6bf22c5e6e8fe317abab0bf4e22381e9da48",
+    "doc/evidence/godot-vr-reliability-20261103/qualify.py": "be7d5093af9402db1741840c1dd029af35f974e8794cfefa1ad3389dcb147119",
+    "doc/evidence/godot-visibility-test-20261103/attempt-visual02-result.json": "b0e4e207f5ca2cc2c66006f32f25559b20c29a16eadd0283c2c423523ee590c7"
+  },
+  "commands": [
+    {
+      "name": "build",
+      "argv": [
+        "dotnet",
+        "build",
+        "Offline.csproj",
+        "--disable-build-servers",
+        "-p:UseSharedCompilation=false",
+        "--configfile",
+        "NuGet.Config"
+      ],
+      "cwd": "/tmp/quod-vr-reliability-jpc_8a2z",
+      "timeout_seconds": 60,
+      "true_exit": 0,
+      "elapsed_seconds": 3.7238766259979457
+    },
+    {
+      "name": "admission",
+      "argv": [
+        "dotnet",
+        "/tmp/quod-vr-reliability-jpc_8a2z/bin/Debug/net10.0/Offline.dll"
+      ],
+      "cwd": "/tmp/quod-vr-reliability-jpc_8a2z",
+      "timeout_seconds": 60,
+      "true_exit": 0,
+      "elapsed_seconds": 0.11416194499906851
+    },
+    {
+      "name": "supervision",
+      "argv": [
+        "/usr/bin/python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-reliability-20261103/offline03/inputs/test_supervision.py"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "timeout_seconds": 60,
+      "true_exit": 0,
+      "elapsed_seconds": 0.031676065002102405
+    },
+    {
+      "name": "owned-pipes",
+      "argv": [
+        "/usr/bin/python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-reliability-20261103/offline03/inputs/test_owned_commands.py"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "timeout_seconds": 60,
+      "true_exit": 0,
+      "elapsed_seconds": 0.16401170699828072
+    },
+    {
+      "name": "live-loop",
+      "argv": [
+        "/usr/bin/python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-reliability-20261103/check_live.py"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "timeout_seconds": 60,
+      "true_exit": 0,
+      "elapsed_seconds": 0.11381332000019029
+    }
+  ],
+  "binding": {
+    "manifest_sha256": "16d2c211c6687494bcf188f249c88ba054c1bcd8b97b685e56c936b46cc0cef7",
+    "live_inputs": 98,
+    "supplied_inputs": 100,
+    "saved_build_phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "managed_export_files_verified": 4,
+    "full_native_export_reaudit": false
+  }
+}

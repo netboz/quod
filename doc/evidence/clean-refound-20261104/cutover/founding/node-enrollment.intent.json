@@ -1,0 +1,18 @@
+{
+  "allocation": "ccfd8752-0031-73d9-f811-131ffe6467f9",
+  "expression": "quod_foundation_operator:enrolled_node()",
+  "command_argv": [
+    "nomad",
+    "alloc",
+    "exec",
+    "-i=false",
+    "-t=false",
+    "-address=http://192.168.1.10:4646",
+    "-task",
+    "quod",
+    "ccfd8752-0031-73d9-f811-131ffe6467f9",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin quod_foundation_operator:enrolled_node() end))))."
+  ]
+}

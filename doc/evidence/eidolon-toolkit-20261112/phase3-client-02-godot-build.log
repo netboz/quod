@@ -1,0 +1,389 @@
+  Determining projects to restore...
+  Restored /home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj (in 353 ms).
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(424,39): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(424,102): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(425,18): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Main.cs(668,53): warning CS8602: Dereference of a possibly null reference. [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(45,23): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(47,41): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(48,41): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(49,40): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(49,137): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,79): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,113): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,143): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,173): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(53,66): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(71,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(100,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(104,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(108,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(110,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(112,66): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(114,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(114,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(116,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(116,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(117,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(125,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(126,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(128,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(129,87): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(131,96): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(133,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(135,67): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(137,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(137,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(142,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(142,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(171,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(171,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(175,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(175,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(176,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(176,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(179,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(180,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(181,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(181,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(185,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(195,30): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(196,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(197,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(200,19): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(202,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(203,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(205,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(205,59): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(208,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(213,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(217,66): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(218,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(219,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(219,48): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(221,38): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(221,74): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(222,118): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(222,155): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,49): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,87): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,127): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,163): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,199): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,49): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,87): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,127): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,163): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,199): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(145,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(145,55): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(147,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(147,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(148,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(148,49): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/SpaceChecks.cs(304,73): warning CS8602: Dereference of a possibly null reference. [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,79): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,113): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,143): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,173): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(148,33): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(161,33): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(161,77): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(163,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(163,43): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(165,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(165,53): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(167,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(202,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(202,97): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(202,141): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(206,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(209,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(219,37): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+  Quod -> /home/yan/src/quod_worktrees/pearl-stone/client/godot/.godot/mono/temp/bin/Debug/Quod.dll
+
+Build succeeded.
+
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(424,39): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(424,102): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(425,18): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Main.cs(668,53): warning CS8602: Dereference of a possibly null reference. [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(45,23): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(47,41): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(48,41): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(49,40): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/OpenXRInput.cs(49,137): warning CS0618: 'XRPositionalTracker.GetInput(StringName)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,79): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,113): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,143): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(40,173): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(53,66): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(71,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(100,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(104,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(108,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(110,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(112,66): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(114,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(114,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(116,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(116,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(117,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(125,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(126,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(128,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(129,87): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(131,96): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(133,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(135,67): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(137,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(137,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(142,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(142,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(171,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(171,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(175,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(175,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(176,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(176,45): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(179,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(180,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(181,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(181,46): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(185,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(195,30): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(196,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(197,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(200,19): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(202,39): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(203,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(205,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(205,59): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(208,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(213,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(217,66): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(218,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(219,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(219,48): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(221,38): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(221,74): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(222,118): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerChecks.cs(222,155): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,49): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,87): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,127): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,163): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ControllerLiveChecks.cs(22,199): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,49): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,87): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,127): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,163): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(130,199): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(145,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(145,55): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(147,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(147,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(148,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/PhysicsChecks.cs(148,49): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/SpaceChecks.cs(304,73): warning CS8602: Dereference of a possibly null reference. [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,13): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,79): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,113): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,143): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(134,173): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(148,33): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(161,33): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(161,77): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(163,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(163,43): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(165,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(165,53): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(167,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(202,47): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(202,97): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(202,141): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(206,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(209,9): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/WorkspaceChecks.cs(219,37): warning CS0618: 'XRPositionalTracker.SetInput(StringName, Variant)' is obsolete: 'Use through 'XRControllerTracker'.' [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+    106 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:03.19
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Started Project initialization (5 steps)[39m[0m
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Scanning file structure...[39m[0m
+[  16% ] [90m[1mfirst_scan_filesystem[22m | Loading global class names...[39m[0m
+[  33% ] [90m[1mfirst_scan_filesystem[22m | Verifying GDExtensions...[39m[0m
+[  50% ] [90m[1mfirst_scan_filesystem[22m | Creating autoload scripts...[39m[0m
+[  66% ] [90m[1mfirst_scan_filesystem[22m | Initializing plugins...[39m[0m
+[  83% ] [90m[1mfirst_scan_filesystem[22m | Starting file scan...[39m[0m
+[92m[ DONE ][39m [1mfirst_scan_filesystem[22m
+[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Started Loading editor (5 steps)[39m[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Loading editor layout...[39m[0m
+[  16% ] [90m[1mloading_editor_layout[22m | Loading docks...[39m[0m
+[92m[ DONE ][39m [1mloading_editor_layout[22m
+[0m
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Started Project initialization (5 steps)[39m[0m
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Scanning file structure...[39m[0m
+[  16% ] [90m[1mfirst_scan_filesystem[22m | Loading global class names...[39m[0m
+[  33% ] [90m[1mfirst_scan_filesystem[22m | Verifying GDExtensions...[39m[0m
+[  50% ] [90m[1mfirst_scan_filesystem[22m | Creating autoload scripts...[39m[0m
+[  66% ] [90m[1mfirst_scan_filesystem[22m | Initializing plugins...[39m[0m
+[  83% ] [90m[1mfirst_scan_filesystem[22m | Starting file scan...[39m[0m
+[92m[ DONE ][39m [1mfirst_scan_filesystem[22m
+[0m
+[   0% ] [90m[1mdotnet_publish_project[22m | Started Publishing .NET project... (1 steps)[39m[0m
+[   0% ] [90m[1mdotnet_publish_project[22m | Running dotnet publish[39m[0m
+[92m[ DONE ][39m [1mdotnet_publish_project[22m
+[0m
+[   0% ] [90m[1msavepack[22m | Started Packing (102 steps)[39m[0m
+[   1% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/accept.png-3450ed608d36190630dbc9ccd4f6ec01.ctex[39m[0m
+[   1% ] [90m[1msavepack[22m | Storing File: res://assets/icons/accept.png.import[39m[0m
+[   2% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/account.png-e630d3a5f1ce547b50dcd5b7b15b0ad3.ctex[39m[0m
+[   2% ] [90m[1msavepack[22m | Storing File: res://assets/icons/account.png.import[39m[0m
+[   3% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/account_controls.png-8552c0b71673dc575106aabf75783f4d.ctex[39m[0m
+[   3% ] [90m[1msavepack[22m | Storing File: res://assets/icons/account_controls.png.import[39m[0m
+[   4% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/attention.png-c220d371d9505cdb27252c774001cb04.ctex[39m[0m
+[   4% ] [90m[1msavepack[22m | Storing File: res://assets/icons/attention.png.import[39m[0m
+[   5% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/back.png-295b9660063cf00db6ac7b07a9b0e5e7.ctex[39m[0m
+[   5% ] [90m[1msavepack[22m | Storing File: res://assets/icons/back.png.import[39m[0m
+[   6% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/controllers.png-96d66917bee1515f1fcb948a165db038.ctex[39m[0m
+[   6% ] [90m[1msavepack[22m | Storing File: res://assets/icons/controllers.png.import[39m[0m
+[   7% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/create_exact.png-91973225ff096f48bf0f391a0568c3ee.ctex[39m[0m
+[   7% ] [90m[1msavepack[22m | Storing File: res://assets/icons/create_exact.png.import[39m[0m
+[   9% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/create_finite.png-c9274d5cef6f9f94ef53b6e24c1d5705.ctex[39m[0m
+[   9% ] [90m[1msavepack[22m | Storing File: res://assets/icons/create_finite.png.import[39m[0m
+[  10% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/create_here.png-640d5d11efa5a8d5aeaa46889d9adec0.ctex[39m[0m
+[  10% ] [90m[1msavepack[22m | Storing File: res://assets/icons/create_here.png.import[39m[0m
+[  11% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/create_infinite.png-d0e8d4b9ed6732c7f3bafbcebed58abc.ctex[39m[0m
+[  11% ] [90m[1msavepack[22m | Storing File: res://assets/icons/create_infinite.png.import[39m[0m
+[  12% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/create_storage.png-3457b40bea179c65577f0cfc8b59d181.ctex[39m[0m
+[  12% ] [90m[1msavepack[22m | Storing File: res://assets/icons/create_storage.png.import[39m[0m
+[  13% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/decline.png-0f281caee454f5b71e16c924ce0ab0ff.ctex[39m[0m
+[  13% ] [90m[1msavepack[22m | Storing File: res://assets/icons/decline.png.import[39m[0m
+[  14% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/device.png-7f7c371babdda83f692581055bea24aa.ctex[39m[0m
+[  14% ] [90m[1msavepack[22m | Storing File: res://assets/icons/device.png.import[39m[0m
+[  16% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/enter.png-54bc6603f8162190804f9783d6a02801.ctex[39m[0m
+[  16% ] [90m[1msavepack[22m | Storing File: res://assets/icons/enter.png.import[39m[0m
+[  17% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/farther.png-ead7d8744c7c007d63e14d250ee450c0.ctex[39m[0m
+[  17% ] [90m[1msavepack[22m | Storing File: res://assets/icons/farther.png.import[39m[0m
+[  18% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/go_to.png-cfbb5634bf14931c2280b0a2f553b83c.ctex[39m[0m
+[  18% ] [90m[1msavepack[22m | Storing File: res://assets/icons/go_to.png.import[39m[0m
+[  19% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/hide.png-909afe385056a55e238b055b4db078db.ctex[39m[0m
+[  19% ] [90m[1msavepack[22m | Storing File: res://assets/icons/hide.png.import[39m[0m
+[  20% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/inspect.png-c9d676f804204d9399e11b25c8732aab.ctex[39m[0m
+[  20% ] [90m[1msavepack[22m | Storing File: res://assets/icons/inspect.png.import[39m[0m
+[  21% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/inspection.png-2aab4653fa298796eeab3a9f9e3faff5.ctex[39m[0m
+[  21% ] [90m[1msavepack[22m | Storing File: res://assets/icons/inspection.png.import[39m[0m
+[  23% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/leave.png-a3e3afc78b21be51b630b875ba1c0817.ctex[39m[0m
+[  23% ] [90m[1msavepack[22m | Storing File: res://assets/icons/leave.png.import[39m[0m
+[  24% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/matrix.png-a51acadf71b942b390240eacd10c2ab9.ctex[39m[0m
+[  24% ] [90m[1msavepack[22m | Storing File: res://assets/icons/matrix.png.import[39m[0m
+[  25% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/me.png-186b41c0ce8a98ac6267e1982691e465.ctex[39m[0m
+[  25% ] [90m[1msavepack[22m | Storing File: res://assets/icons/me.png.import[39m[0m
+[  26% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/more.png-8abfe74354276510610ee0cf3b8cc92c.ctex[39m[0m
+[  26% ] [90m[1msavepack[22m | Storing File: res://assets/icons/more.png.import[39m[0m
+[  27% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/move_panel.png-83532f3af381058ea17af56b38e8cba6.ctex[39m[0m
+[  27% ] [90m[1msavepack[22m | Storing File: res://assets/icons/move_panel.png.import[39m[0m
+[  28% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/nearer.png-20a6d7fcd55c143576545b14da35fcd0.ctex[39m[0m
+[  28% ] [90m[1msavepack[22m | Storing File: res://assets/icons/nearer.png.import[39m[0m
+[  30% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/panels_opacity.png-7a2202deae568be2a50e8c76bd27024e.ctex[39m[0m
+[  30% ] [90m[1msavepack[22m | Storing File: res://assets/icons/panels_opacity.png.import[39m[0m
+[  31% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/question.png-022fc4943cb9aee2c4578b2630bfeff4.ctex[39m[0m
+[  31% ] [90m[1msavepack[22m | Storing File: res://assets/icons/question.png.import[39m[0m
+[  32% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/recenter.png-e61084d9bc27a1d14f20a21b509f32d5.ctex[39m[0m
+[  32% ] [90m[1msavepack[22m | Storing File: res://assets/icons/recenter.png.import[39m[0m
+[  33% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/show_as.png-3fec9b99bd915b5c5edd002ffa2c568f.ctex[39m[0m
+[  33% ] [90m[1msavepack[22m | Storing File: res://assets/icons/show_as.png.import[39m[0m
+[  33% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/show_none.png-a99f4919e5e697a79ed2f6a1ae9627ad.ctex[39m[0m
+[  33% ] [90m[1msavepack[22m | Storing File: res://assets/icons/show_none.png.import[39m[0m
+[  34% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/source.png-fb45bad43bba2b9591394eb5bf7ce43e.ctex[39m[0m
+[  34% ] [90m[1msavepack[22m | Storing File: res://assets/icons/source.png.import[39m[0m
+[  36% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/text_larger.png-ee527a5e7b5b1e1171c9aa51c6bb7421.ctex[39m[0m
+[  36% ] [90m[1msavepack[22m | Storing File: res://assets/icons/text_larger.png.import[39m[0m
+[  37% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/text_smaller.png-a32419a35d8a693ca8c417553f0132a5.ctex[39m[0m
+[  37% ] [90m[1msavepack[22m | Storing File: res://assets/icons/text_smaller.png.import[39m[0m
+[  38% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/vr.png-b77d7bee6a0cefce0091908fb043bbe2.ctex[39m[0m
+[  38% ] [90m[1msavepack[22m | Storing File: res://assets/icons/vr.png.import[39m[0m
+[  39% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/wireframe.png-10b141dec2e887b2bf346f4833b329e4.ctex[39m[0m
+[  39% ] [90m[1msavepack[22m | Storing File: res://assets/icons/wireframe.png.import[39m[0m
+[  40% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/workspace.png-4605c0065f135607af3e4bed9def3d91.ctex[39m[0m
+[  40% ] [90m[1msavepack[22m | Storing File: res://assets/icons/workspace.png.import[39m[0m
+[  41% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94_onepointfive_texture.png-837ba16650637525d81c4d6aa6befdfd.ctex[39m[0m
+[  41% ] [90m[1msavepack[22m | Storing File: res://assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94_onepointfive_texture.png.import[39m[0m
+[  43% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/quod-icon.png-a7172f6caca5c18bd100a44542e2e57b.ctex[39m[0m
+[  43% ] [90m[1msavepack[22m | Storing File: res://assets/quod-icon.png.import[39m[0m
+[  44% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/quod-logo.png-1df9a9a7769791c390cacc51fc798c78.ctex[39m[0m
+[  44% ] [90m[1msavepack[22m | Storing File: res://assets/quod-logo.png.import[39m[0m
+[  45% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/quod-splash.png-4bb2b599b5adfb29e045ad47674dc5ea.ctex[39m[0m
+[  45% ] [90m[1msavepack[22m | Storing File: res://assets/quod-splash.png.import[39m[0m
+[  46% ] [90m[1msavepack[22m | Storing File: res://Core/Accounts.cs[39m[0m
+[  47% ] [90m[1msavepack[22m | Storing File: res://Core/Controllers.cs[39m[0m
+[  48% ] [90m[1msavepack[22m | Storing File: res://Core/Eidolons.cs[39m[0m
+[  50% ] [90m[1msavepack[22m | Storing File: res://Core/Forms.cs[39m[0m
+[  51% ] [90m[1msavepack[22m | Storing File: res://Core/Identity.cs[39m[0m
+[  52% ] [90m[1msavepack[22m | Storing File: res://Core/LocalStore.cs[39m[0m
+[  53% ] [90m[1msavepack[22m | Storing File: res://Core/Menus.cs[39m[0m
+[  54% ] [90m[1msavepack[22m | Storing File: res://Core/PhysicsInput.cs[39m[0m
+[  55% ] [90m[1msavepack[22m | Storing File: res://Core/Scene.cs[39m[0m
+[  56% ] [90m[1msavepack[22m | Storing File: res://Core/SignedView.cs[39m[0m
+[  58% ] [90m[1msavepack[22m | Storing File: res://Core/StaticGlb.cs[39m[0m
+[  59% ] [90m[1msavepack[22m | Storing File: res://Core/Term.cs[39m[0m
+[  60% ] [90m[1msavepack[22m | Storing File: res://Core/Transport.cs[39m[0m
+[  61% ] [90m[1msavepack[22m | Storing File: res://Core/World.cs[39m[0m
+[  62% ] [90m[1msavepack[22m | Storing File: res://EidolonPanel.cs[39m[0m
+[  63% ] [90m[1msavepack[22m | Storing File: res://OperationsPanel.cs[39m[0m
+[  65% ] [90m[1msavepack[22m | Storing File: res://packages.Debug.linux-x64.lock.json[39m[0m
+[  66% ] [90m[1msavepack[22m | Storing File: res://packages.ExportRelease.linux-x64.lock.json[39m[0m
+[  66% ] [90m[1msavepack[22m | Storing File: res://tests/SceneChecks.cs[39m[0m
+[  67% ] [90m[1msavepack[22m | Storing File: res://tests/SpaceChecks.cs[39m[0m
+[  68% ] [90m[1msavepack[22m | Storing File: res://tests/WorkspaceChecks.cs[39m[0m
+[  69% ] [90m[1msavepack[22m | Storing File: res://FormPanel.cs[39m[0m
+[  71% ] [90m[1msavepack[22m | Storing File: res://global.json[39m[0m
+[  72% ] [90m[1msavepack[22m | Storing File: res://HudBar.cs[39m[0m
+[  73% ] [90m[1msavepack[22m | Storing File: res://Main.cs[39m[0m
+[  74% ] [90m[1msavepack[22m | Storing File: res://.godot/exported/133200997/export-3070c538c03ee49b7677ff960a3f5195-main.scn[39m[0m
+[  75% ] [90m[1msavepack[22m | Storing File: res://OpenXRInput.cs[39m[0m
+[  76% ] [90m[1msavepack[22m | Storing File: res://SourcePanel.cs[39m[0m
+[  78% ] [90m[1msavepack[22m | Storing File: res://SpatialGui.cs[39m[0m
+[  79% ] [90m[1msavepack[22m | Storing File: res://SpatialKeyboard.cs[39m[0m
+[  80% ] [90m[1msavepack[22m | Storing File: res://WorkbenchPanel.cs[39m[0m
+[  81% ] [90m[1msavepack[22m | Storing File: res://PieMenu.cs[39m[0m
+[  82% ] [90m[1msavepack[22m | Storing File: res://QuestionHub.cs[39m[0m
+[  83% ] [90m[1msavepack[22m | Storing File: res://RenderModels.cs[39m[0m
+[  85% ] [90m[1msavepack[22m | Storing File: res://ScenePanel.cs[39m[0m
+[  86% ] [90m[1msavepack[22m | Storing File: res://assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94.bin[39m[0m
+[  87% ] [90m[1msavepack[22m | Storing File: res://.godot/exported/133200997/export-2ca97b4e4956ae18135efbff74de0127-xr_actions.res[39m[0m
+[  88% ] [90m[1msavepack[22m | Storing File: res://tests/ControllerChecks.cs[39m[0m
+[  89% ] [90m[1msavepack[22m | Storing File: res://tests/ControllerLiveChecks.cs[39m[0m
+[  90% ] [90m[1msavepack[22m | Storing File: res://tests/ExportChecks.cs[39m[0m
+[  92% ] [90m[1msavepack[22m | Storing File: res://tests/ExportLifecycle.cs[39m[0m
+[  93% ] [90m[1msavepack[22m | Storing File: res://tests/IconChecks.cs[39m[0m
+[  94% ] [90m[1msavepack[22m | Storing File: res://tests/NavigationChecks.cs[39m[0m
+[  95% ] [90m[1msavepack[22m | Storing File: res://tests/OpenXRChecks.cs[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://tests/PhysicsChecks.cs[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://tests/PresentationChecks.cs[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://main.tscn.remap[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://xr_actions.tres.remap[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://.godot/global_script_class_cache.cfg[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://assets/quod-icon.png[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://assets/quod-splash.png[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://.godot/uid_cache.bin[39m[0m
+[  97% ] [90m[1msavepack[22m | Storing File: res://project.binary[39m[0m
+[92m[ DONE ][39m [1msavepack[22m
+[0m

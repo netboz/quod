@@ -1,0 +1,5 @@
+{
+  "target": "local",
+  "on": "quod-matrix-rehearsal",
+  "expression": "quod_refound_operator:signed_user_registration(binary:decode_hex(<<\"B6612300F94843D5C783A8880DBF6AB2FF4FBA122BEC5E0CEED829C68C96D1D4\">>))"
+}

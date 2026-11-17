@@ -1,0 +1,36 @@
+{
+  "startup-refactor-baseline01": {
+    "refresh": {
+      "connection": 59564,
+      "time": 178258.858448648,
+      "type": "refresh",
+      "kind": null,
+      "reason": "dependency_owner_changed"
+    },
+    "following": {
+      "connection": 59564,
+      "time": 178258.966279351,
+      "type": "projection",
+      "kind": "navigation",
+      "reason": null
+    },
+    "milliseconds": 107.83070299657993
+  },
+  "startup-refactor-client02": {
+    "refresh": {
+      "connection": 55420,
+      "time": 178343.87515225,
+      "type": "refresh",
+      "kind": null,
+      "reason": "dependency_owner_changed"
+    },
+    "following": {
+      "connection": 55420,
+      "time": 178343.905844411,
+      "type": "unavailable",
+      "kind": null,
+      "reason": "view_not_authorized_or_ready"
+    },
+    "milliseconds": 30.692161002662033
+  }
+}

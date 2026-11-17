@@ -1,0 +1,279 @@
+{
+  "passed": false,
+  "freeze_exit": 1,
+  "archive_child_exit": 0,
+  "extract_child_exit": 0,
+  "failure": "Archive extraction applied private umask to saved helper modes; content bytes match. Required full-mode reconstruction rejected.",
+  "mismatches": [
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/CloseTrace.cs",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/PackageJourneyChecks.cs",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/CloseTrace.cs",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/PackageJourneyChecks.cs",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/build.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/godot_m3b_fixture.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/godot_m3b_physics_fixture.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/instrument_close.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/isolation.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/journey.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/run.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/serve.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/shutdown_capture.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/build.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/godot_m3b_fixture.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/godot_m3b_physics_fixture.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/helper-line-delta.json",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/new-evidence-index.json",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/retained-evidence-references.json",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/retained-review-packet-check.json",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-common_predicates.pl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-godot_m3b_fixture.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-godot_m3b_physics_fixture.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-gui_forms.pl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-gui_tools.pl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-material_policy.pl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_ask.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_client_view.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_gui.pl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_material_admission.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_ontology_name.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_proof_session.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_scope_session.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_scope_wire.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_space.pl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_wire_term.erl",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-serve.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/tracker-start.json",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/instrument_close.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/isolation.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/journey.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/qualify.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/run.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/serve.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown_capture.py",
+      "expected_mode": "0o644",
+      "actual_mode": "0o600",
+      "content_equal": true
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "freeze_verified": true,
+  "source_label": "applied-consolidated02-final01",
+  "files": 7102,
+  "archive_sha256": "860662ffa704ef9e46f15f567498448ba692554d5905f987a04ea11ba6dbe6ed",
+  "manifest_sha256": "057faf7fb1105052ee6263abce739c786242ef55c036c4fc8624ad9af06895da",
+  "archive_bytes": 224266240,
+  "actual_delta": {
+    "dependency_production": {
+      "files": 2,
+      "added": 23,
+      "removed": 51,
+      "net": -28
+    },
+    "dependency_tests": {
+      "files": 1,
+      "added": 16,
+      "removed": 23,
+      "net": -7
+    },
+    "tests": {
+      "files": 60,
+      "added": 663,
+      "removed": 345,
+      "net": 318
+    },
+    "repository_production": {
+      "files": 43,
+      "added": 499,
+      "removed": 635,
+      "net": -136
+    },
+    "specs": {
+      "files": 2,
+      "added": 43,
+      "removed": 9,
+      "net": 34
+    }
+  },
+  "prior_freezes_verified": {
+    "stage2-remaining-admission-proposal01": {
+      "archive_sha256": "06d25194e9b8d03c464657c94ae33ad22c94712bca33163fae61a86b951ce850",
+      "manifest_sha256": "8d5b624ef03666489db302bc3e3baf5e0a67d0b96c0f4f7129108967c92f04da"
+    },
+    "stage2-presentation-limits01": {
+      "archive_sha256": "18881cb54ef293d7d30d0455caedcdc26c609cfa9314daecd2cdf1520cae039c",
+      "manifest_sha256": "b60390bf3102d7d3eada27af57093e5c4d9c24b88bf3ad9e7c5158a39c1b9493"
+    },
+    "stage2-presentation-limits02": {
+      "archive_sha256": "72923108b0127b5a273a186a6bd0bbce88b2a72b559e1ffab6e85bcf8e7bd9db",
+      "manifest_sha256": "2b207facfd29fdc7f850d7b2d5c99950c4f410cf4944aaf0e6b8b390d433d630"
+    },
+    "stage2-presentation-limits03": {
+      "archive_sha256": "60bfc30714d2e105e038054430d1b9c312be7702d1232d357c70515ec74c59da",
+      "manifest_sha256": "6613faac6565b681b0ffa3de1e7e0d765d4f92ecb042cfc597e535055defb61d"
+    },
+    "stage2-presentation-limits04": {
+      "archive_sha256": "f00c923d28d90f28c1c05377c0d37d7f4d333416d69c4368409bdb648ad41749",
+      "manifest_sha256": "0b6147d5c88f43eaba4b46cfadf5cf63955827fea52e0b9f09145e153a5df22c"
+    },
+    "stage2-presentation-boundaries01": {
+      "archive_sha256": "a637c55b644113f36728a604d2827174a3e4d6731890d9bcab7edf58eb5dd67b",
+      "manifest_sha256": "cb973b7610a44343be0a0fc7377fbaae80e07f289085e4ce9f54a0451d2f6fa8"
+    },
+    "stage2-presentation-boundaries-parent01": {
+      "archive_sha256": "48e382f30281e482eefbb338e922a3a8368c88bd0cf67175f8e4e0513aa1c6d3",
+      "manifest_sha256": "4ea71de3c20aef15ad73bbb68e9d67555e2230f86c8bd998f7abbe88866b8a6e"
+    }
+  },
+  "three_authorized_patches_applied": true,
+  "affected_software_validation_complete": true,
+  "all_production_compiled_without_test_exports": true,
+  "dependency_source_tested": true,
+  "dependency_published": false,
+  "dependency_pin_changed": false,
+  "dependency_delivery_blocker": "Required editor commit tool repository attachment excludes exact pearl-stone Erlog repository; parent owns authorized publication/pin",
+  "original_aggregate_30s_three_renewal_acceptance": "failed, unchanged and not rerun",
+  "large_signed_display_accepted": false,
+  "stage2_complete": false,
+  "whole_tree_acceptance": false,
+  "user_stores_accessed": false,
+  "storage_cutover_performed": false,
+  "hardware_or_human_tests": false,
+  "fixture_stores_credentials_profiles_beams_included": false,
+  "source_unchanged_after_freeze": true
+}

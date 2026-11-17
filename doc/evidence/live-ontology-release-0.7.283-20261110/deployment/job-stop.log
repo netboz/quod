@@ -1,0 +1,18 @@
+==> 2026-11-10T16:19:16+01:00: Monitoring evaluation "1a0bc519"
+    2026-11-10T16:19:16+01:00: Evaluation triggered by job "quod"
+    2026-11-10T16:19:17+01:00: Evaluation within deployment: "acf2f4a7"
+    2026-11-10T16:19:17+01:00: Evaluation status changed: "pending" -> "complete"
+==> 2026-11-10T16:19:17+01:00: Evaluation "1a0bc519" finished with status "complete"
+==> 2026-11-10T16:19:17+01:00: Monitoring deployment "acf2f4a7"
+    
+2026-11-10T16:19:17+01:00
+ID          = acf2f4a7
+Job ID      = quod
+Job Version = 259
+Status      = successful
+Description = Deployment completed successfully
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       2        0          2026-11-08T00:54:06Z
+quod-node   8        8       8        0          2026-11-08T01:56:25+01:00

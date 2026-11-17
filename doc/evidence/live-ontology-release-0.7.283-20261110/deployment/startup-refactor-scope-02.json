@@ -1,0 +1,50 @@
+[
+  {
+    "path": "client/godot/Main.cs",
+    "added": 52,
+    "removed": 23,
+    "delta": 29
+  },
+  {
+    "path": "client/godot/OpenXRInput.cs",
+    "added": 16,
+    "removed": 3,
+    "delta": 13
+  },
+  {
+    "path": "client/godot/SpatialKeyboard.cs",
+    "added": 7,
+    "removed": 4,
+    "delta": 3
+  },
+  {
+    "path": "client/godot/project.godot",
+    "added": 0,
+    "removed": 1,
+    "delta": -1
+  },
+  {
+    "path": "client/godot/README.md",
+    "added": 14,
+    "removed": 6,
+    "delta": 8
+  },
+  {
+    "path": "client/godot/tests/ControllerChecks.cs",
+    "added": 14,
+    "removed": 3,
+    "delta": 11
+  },
+  {
+    "path": "client/godot/tests/WorkspaceChecks.cs",
+    "added": 14,
+    "removed": 0,
+    "delta": 14
+  },
+  {
+    "path": "client/godot/tests/ExportLifecycle.cs",
+    "added": 3,
+    "removed": 4,
+    "delta": -1
+  }
+]

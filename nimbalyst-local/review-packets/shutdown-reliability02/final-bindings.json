@@ -1,0 +1,60 @@
+{
+  "handoff_copy_verified": true,
+  "source_archive_is_separate_from_final_handoff_and_tracker_receipt": true,
+  "files": [
+    {
+      "path": "nimbalyst-local/handoffs/godot-shutdown-reliability-result-20261103.md",
+      "sha256": "ccbfb400a858bf2afd3132b2cb86a54d843b46a8cc06823d36063f8be361f4f6",
+      "bytes": 10767,
+      "mode": "0o644"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/handoff.md",
+      "sha256": "ccbfb400a858bf2afd3132b2cb86a54d843b46a8cc06823d36063f8be361f4f6",
+      "bytes": 10767,
+      "mode": "0o644"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/tracker-final.json",
+      "sha256": "e64bd336fcb0e20f5b520adc2b98a9fdd3b47b916fe8f103e0fec044752429b7",
+      "bytes": 20034,
+      "mode": "0o644"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/freeze.py",
+      "sha256": "0a4a27578cf6e4215438ab5dbc225054a8e2a546916c54d255ed1cc8042377ca",
+      "bytes": 3008,
+      "mode": "0o644"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/before-freeze.py",
+      "sha256": "3ed7b616b6b42831a096710c7047924c64740b4317cb9348cc2175451686abc5",
+      "bytes": 2986,
+      "mode": "0o644"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/retained-failure.json",
+      "sha256": "65831d4fce4e21912489702bf7bfcdb1f9cf5bbebb1d043246a5dcc598a21b00",
+      "bytes": 465,
+      "mode": "0o644"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/result.json",
+      "sha256": "ae44571969626b6f6ba774259ebaf9a4c92ca3429dcacd377cc3aa66f1f71568",
+      "bytes": 1363,
+      "mode": "0o600"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/manifest.json",
+      "sha256": "4ed4d782b469ac5017eb050d01070f0af15e51af65019cd4aab9e175a4be09f1",
+      "bytes": 28280,
+      "mode": "0o600"
+    },
+    {
+      "path": "nimbalyst-local/review-packets/shutdown-reliability02/new-evidence.tar.gz",
+      "sha256": "8d0b3c3aa41de72a2635859e8c8175e39f9e132b17041cdd76b3bdfb8843e08f",
+      "bytes": 431073,
+      "mode": "0o600"
+    }
+  ]
+}

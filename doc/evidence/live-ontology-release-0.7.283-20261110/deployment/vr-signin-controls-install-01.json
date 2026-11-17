@@ -1,0 +1,11 @@
+{
+  "switch_exit": 0,
+  "staged_files": 203,
+  "backup": "/home/yan/Games/quod-before-vr-signin-20261111",
+  "installed": "/home/yan/Games/quod",
+  "shortcut_target": "/home/yan/Games/quod/quod.x86_64",
+  "launcher_sha256": "fc8b9c86d79c628856b09e46726086a5086727cb094d1e7c0abc2028f38390d3",
+  "managed_assembly_sha256": "2c75ef886ade9070978974f8b1e5e3df361d80ab56014ab2cda1872b3a1dc00c",
+  "pack_sha256": "f073dfb5a9778e899d88f638612dbab71bcf6b9bce6d97f4932657430f0428b7",
+  "last_run_preserved": false
+}

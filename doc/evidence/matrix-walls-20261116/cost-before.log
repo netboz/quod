@@ -1,0 +1,30 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+    ┌─ test/quod_matrix_walls_cost_tests.erl:
+    │
+ 20 │          Space = {ontology_ref,<<"quod:space">>,SpaceAnchor = quod_simplex:genesis_hash(<<"quod:space">>)},
+    │                                                 ╰── Warning: variable 'SpaceAnchor' is unused
+
+
+===> Performing EUnit tests...
+
+SOURCE bytes=83185 non_white_bytes=73140 chunks=6 complete_read_median_us=22845 carried=[{"common_predicates.pl",
+                                                                                          true},
+                                                                                         {"construction.pl",
+                                                                                          true},
+                                                                                         {"material_policy.pl",
+                                                                                          true},
+                                                                                         {"gui_forms.pl",
+                                                                                          false},
+                                                                                         {"geometry_schema.pl",
+                                                                                          false},
+                                                                                         {"quod_space.pl",
+                                                                                          true}]
+
+COST matrix_walls pie_us=417411 world_view_us=44300
+[0;32m.[0m
+Finished in 24.277 seconds
+[0;32m1 tests, 0 failures
+[0m

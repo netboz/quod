@@ -1,0 +1,756 @@
+{
+  "scope": "New public diagnostic/evidence subtree only; inherited source untouched; private profiles excluded.",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "entries": [
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/CloseTrace.cs",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 1074,
+      "sha256": "31a56a256fff95507be68bfb77ea8684244d8f08e0ecaf7fd864e4f30213f0d9"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/PackageJourneyChecks.cs",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 22445,
+      "sha256": "01ebce69d2cee48c83dea7656e578ab1ae25ba3fa9a672a47189f13e3cc613ef"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/CloseTrace.cs",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 1074,
+      "sha256": "31a56a256fff95507be68bfb77ea8684244d8f08e0ecaf7fd864e4f30213f0d9"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/PackageJourneyChecks.cs",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 22445,
+      "sha256": "01ebce69d2cee48c83dea7656e578ab1ae25ba3fa9a672a47189f13e3cc613ef"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/build.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 5263,
+      "sha256": "a285dc04de136f0a4d05f0b775e43ecdbe3677b649f8354069512063755cf57e"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/godot_m3b_fixture.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 12382,
+      "sha256": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/godot_m3b_physics_fixture.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 7879,
+      "sha256": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/instrument_close.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 2385,
+      "sha256": "08d6dad282699a93fd3f7647b93aa0ea3560702db8fa62a2e119f6be55a30f48"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/isolation.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 2086,
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/journey.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 8688,
+      "sha256": "e7cfaa3424add24eea37dc724f26ecdf5ee7aef787e8cf8b9f9dbd58692380d8"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/run.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 2975,
+      "sha256": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/serve.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 14989,
+      "sha256": "20e9c82a75895e0bd0bad08fba727c7d43aa6bbfd231983dd36e48d40e84eb44"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/before/shutdown_capture.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 5588,
+      "sha256": "e97f4516a312fdb8f8c6c1f44eab17e98ff3765285441828c27bfa7b3205977f"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/build.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 5267,
+      "sha256": "3276f671f8ed606896c549418a7eae259120bcebce3abe5bc0c6da039adb243e"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/environment.py",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 1294,
+      "sha256": "664a35735d155c979104f5f2d0075d98b5976ac3d45b91c580303a23054de043"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/godot_m3b_fixture.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 12382,
+      "sha256": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/godot_m3b_physics_fixture.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 7879,
+      "sha256": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/hashes.py",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 581,
+      "sha256": "2f4b361984a3c594c268da63c71ea6d6da0aa5417de68460ae786b5f1a4160c9"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/baseline-status.txt",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 1719246,
+      "sha256": "4e344c0fcdcca47091d53d48f53dc894f421a4f74c20b9d646a16d781085c116"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/baseline-tracked.patch",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 379986,
+      "sha256": "1d4422a9031f508982424d75abaed4ba5df2b602ba1978d33a8ac6d2d5276796"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/client-shutdown-observation01-manifest.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 27962,
+      "sha256": "2f959d143844ce476ea15302177c76a8ffb6240c0bfce995e72c5f1707cd66ee"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/client-shutdown-observation02-manifest.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 62575,
+      "sha256": "88bc9ea272dba04d9a676465efd107b0f04010dfb9f28512be4f748ab8d2000f"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/helper-line-delta.json",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 2553,
+      "sha256": "5f0ceff9b82a05960b25e99088fcb2b6c81acbba80c57beedf73176a73bafb97"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/native-status-format01.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 367,
+      "sha256": "8b5a14f090ca683c4e2bd7dfa7122051e17b8c07fc2c6c4dc4ca8d310750e095"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/native-status-format01.jsonl",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 68,
+      "sha256": "ab0879a4f852a4f2a1cb47169f9e8e48ba2687632e9c4427ba5cba763b598c62"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/new-evidence-index.json",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 23601,
+      "sha256": "676d1c4964b16ee58aa0e915bafe2694b57da52c2383e04791665a4b74cf1bbe"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/origins.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 2103,
+      "sha256": "c7945a58852e3905f348afa98a908929df87cb7619d35f84094704b36468525e"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/retained-evidence-references.json",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 990,
+      "sha256": "a041020de1acd3f2eb3318f182544d14decdbbe9828100dd5b36bc41450c6a23"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/retained-review-packet-check.json",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 124,
+      "sha256": "e7651e3c106e55e59dc29d8eccfc1f0e5e4a6a441bc2d0a68c0d4db59fabecfa"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/server-shutdown-observation02-server.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 14167,
+      "sha256": "be9836690c36169ff650b9989a2486ccdfd03112635cd3f3bed5309bbda36c34"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-common_predicates.pl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 26362,
+      "sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-godot_m3b_fixture.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 12382,
+      "sha256": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-godot_m3b_physics_fixture.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 7879,
+      "sha256": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-gui_forms.pl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 15501,
+      "sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-gui_tools.pl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 41206,
+      "sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-material_policy.pl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 1649,
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_ask.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 84316,
+      "sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_client_view.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 52939,
+      "sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_gui.pl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 17794,
+      "sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_material_admission.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 3845,
+      "sha256": "ceef0436b16a5127d6e6ae30b60897470084b12cf7ecf28255608eed0753ce2a"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_ontology_name.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 1268,
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_proof_session.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 44301,
+      "sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_scope_session.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 78227,
+      "sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_scope_wire.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 42609,
+      "sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_space.pl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 33326,
+      "sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-quod_wire_term.erl",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 32717,
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02-server-serve.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 14981,
+      "sha256": "847dea767c5c4cf1fa23857f488c003039afe056493f37ec61c03bbd5c23ac8b"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/shutdown-observation02.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 28137,
+      "sha256": "b21f55b2c0338ed9da5aab68329b1b57325c81f9432ebffe8395ee2d2a7cc734"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/inputs/tracker-start.json",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 18224,
+      "sha256": "70fa2cca34fb4354e1cd3a030fae534b7acd524ed834add27c9d377e82abca9b"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/instrument_close.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 2385,
+      "sha256": "08d6dad282699a93fd3f7647b93aa0ea3560702db8fa62a2e119f6be55a30f48"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/isolation.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 2086,
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/journey.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 9800,
+      "sha256": "8fed63ae61ae6617a10447a518fbfbfea0019ee9298ea76cce16bac4b3d1de39"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/native-status-format01-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/native-status-format01-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/qualification01-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/qualification01-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 555,
+      "sha256": "da318277456771b06dd6b64826a83bb78c7be02ae74f82d4e1b2f6e0fde7fe44"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/qualification01.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 2389,
+      "sha256": "e0f895a562bfa216ca20d56acef51cf9a484a6b8a0b05b1236235b3a7b56085f"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation01-build-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 675,
+      "sha256": "de665923f49d942e8278c84e4e6e3b45e4ce9f92adccdec23488c33a32d09a91"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation01-build-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 11114,
+      "sha256": "1e85422f5afc6f4ebeeb987fe7fe613ba34bacfef05eef92273dbcbacb49b293"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation01-build.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 2392,
+      "sha256": "1fad22823519b3fcc52dac1fa862d582006e6762569176c0e79c0e73bf3ef520"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-build-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-build-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 1164,
+      "sha256": "b3a017f7cb9849858dcd6281f3b4bb6467e8aa4bc11d999f32e1882b68a7ed4d"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-build.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 2385,
+      "sha256": "ffc641d2939ca05c8e97ae2e8e482b9846fd8fdf1a7709a3a9ef57e8721fe8bc"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-client-initial-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 4440,
+      "sha256": "d07d8b08babd54ab4c2dfb92afe38b199c681d757978a7eb9fd03dbdccc6cd1e"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-client-initial-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 17879,
+      "sha256": "43785f1a568929f5ddecb348b3c78b076a0e74077de6c5929a31ff190530d870"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-client-reopen-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 4440,
+      "sha256": "b4eba9f30cf5ee329bedb63a102e571449799d1b3064083e13db990845ea9201"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-client-reopen-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 10114,
+      "sha256": "0b36f84131ce41840367fd4cc1801dd2ed4b3dcd4b5b5bb993eeee14dd83cf20"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-server-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-server-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 36,
+      "sha256": "5121b60746516965866e463793e6259659816f1d07646b3fb130250d941619d2"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-stderr.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02-stdout.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 19292,
+      "sha256": "bf8d5799dabbdcac2c514230ff8c820764c8aff21b258d7f60d6149942e78840"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/logs/shutdown-observation02.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 2559,
+      "sha256": "3fa84a5a5dfb22e36b883bb65ced663365b6971f446937e26cf622eae19a2d41"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/qualify.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 9801,
+      "sha256": "4d5d5c4693063e35fe16462b3a7be46d31053942020632601d52b06732c5372e"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 15825,
+      "sha256": "6a3395006e1fd560b2677b47491f0cd462cb054a035c1328d40812f8a74060d7"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/run.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 3214,
+      "sha256": "28c9b6cff447023553593e4068c1371bae1f8c5068bbea82c37f9f9600328113"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/serve.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 14981,
+      "sha256": "847dea767c5c4cf1fa23857f488c003039afe056493f37ec61c03bbd5c23ac8b"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-bootstrap",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-bootstrap/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-bootstrap/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 173,
+      "sha256": "f7ec3313070878b1537d37d0863133c73b3a5a908bbfc69d93ac8caec7a9f03e"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-export",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-export/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 103219,
+      "sha256": "49d8bbe6d2065083b3791a76d341fa7e5708df132c891bde9950363847fa1a28"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-export/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 170,
+      "sha256": "c61bcdd91ae7f858a6ca4814c316e6390cbd0f00699e77533da625a3538c53fd"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-restore-debug",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-restore-debug/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 315,
+      "sha256": "3aada93eefa90d6580461f56d7c80d6a47db7fa6ebe9bfb7bb7eaeaad4bce92c"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-restore-debug/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 397,
+      "sha256": "aa5967ef93eacbd91a7a7851db784623d13b3b01f6784bef75fb979b7e678379"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-restore-exportrelease",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-restore-exportrelease/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 217,
+      "sha256": "b35da07521e9bf17ee31a39484d1be74465968633d13fb80bc99ea6d3435b081"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-restore-exportrelease/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 405,
+      "sha256": "74b7f4385b7563a2c83c0b7197d4cb4490cb657900d8c5aec9e84448cf5d91d7"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-toolchain",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-toolchain/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 1332,
+      "sha256": "0dc554f77674bb2069b9c7bff63ebd773d14b9d392290c8d27cee646a003c76d"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation01-toolchain/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 134,
+      "sha256": "d4270a5c29b7cc63e18709507f4a517f1d7bfc798e31af76ce1d8fce120bb1c1"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-bootstrap",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-bootstrap/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-bootstrap/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 173,
+      "sha256": "d60b873e29148f36c41aa1657628d1f66020219db2a5198940a46d51454c1ee2"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-export",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-export/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 99414,
+      "sha256": "ace823eff2e04b61fcf25f9068c4121a6b45af1cbfdd08b9d838f2ef3d4b117b"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-export/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 170,
+      "sha256": "10fdca56d705ba0cf554782101fac0c9d7cf9327d7d98a24c3b98c4c2972fae6"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-restore-debug",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-restore-debug/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 217,
+      "sha256": "5070cbc8a7894501312aa19f1dbd68da582f589a2ddf671595d9eda1afac4895"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-restore-debug/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 398,
+      "sha256": "6da0245a79476219397a96549c246fb44d0c76eaed866d174f6250dce3e7d12c"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-restore-exportrelease",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-restore-exportrelease/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 217,
+      "sha256": "d69c47b0c7f31482cce044e13ab50e613ddf3850ffe0d0b05c836c5824e53e4f"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-restore-exportrelease/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 406,
+      "sha256": "3dd5c3bdd0e0295e54d2fb5f704484cf35be1a724a128693164712059ee76044"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-toolchain",
+      "mode": "0o700",
+      "type": "directory"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-toolchain/output.log",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 1332,
+      "sha256": "52fac38ae4f2dcad45d313ee42db0366a0845a5c8999205d03e42be25cf80ae1"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown-observation02-toolchain/result.json",
+      "mode": "0o600",
+      "type": "file",
+      "bytes": 135,
+      "sha256": "f4686d27af190b3da8d75a063679743aca11c8759cb43384e09174045b9b2583"
+    },
+    {
+      "path": "doc/evidence/godot-shutdown-reliability-20261103/shutdown_capture.py",
+      "mode": "0o644",
+      "type": "file",
+      "bytes": 5588,
+      "sha256": "e97f4516a312fdb8f8c6c1f44eab17e98ff3765285441828c27bfa7b3205977f"
+    }
+  ],
+  "freeze_script_sha256": "3ed7b616b6b42831a096710c7047924c64740b4317cb9348cc2175451686abc5"
+}

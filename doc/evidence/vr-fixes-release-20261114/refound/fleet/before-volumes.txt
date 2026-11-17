@@ -1,0 +1,10 @@
+Dynamic Host Volumes
+ID        Name                Namespace  Plugin ID  Node ID   Node Pool  State
+22fbc46f  quod-node-local[1]  default    mkdir      75b1a578  default    ready
+3505e392  quod-node-local[5]  default    mkdir      c8f9edef  default    ready
+4ae73069  quod-node-local[7]  default    mkdir      75b1a578  default    ready
+7e90142f  quod-node-local[0]  default    mkdir      3e390ebd  default    ready
+867b5938  quod-node-local[3]  default    mkdir      3e390ebd  default    ready
+87272a46  quod-node-local[6]  default    mkdir      3e390ebd  default    ready
+9437bb94  quod-node-local[4]  default    mkdir      75b1a578  default    ready
+aae3d5f3  quod-node-local[2]  default    mkdir      c8f9edef  default    ready

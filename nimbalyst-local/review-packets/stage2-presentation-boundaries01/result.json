@@ -1,0 +1,511 @@
+{
+  "freeze_verified": true,
+  "source_label": "applied-carrier02",
+  "scope_accepted": false,
+  "large_signed_display_accepted": false,
+  "whole_tree_acceptance": false,
+  "files": 4300,
+  "archive_sha256": "a637c55b644113f36728a604d2827174a3e4d6731890d9bcab7edf58eb5dd67b",
+  "manifest_sha256": "cb973b7610a44343be0a0fc7377fbaae80e07f289085e4ce9f54a0451d2f6fa8",
+  "archive_bytes": 142120960,
+  "private_streams": {
+    "files": 120,
+    "archive_sha256": "f95d95ee23d058101f20d413b68a8ef9e94eba1461aaad923c5b42f39c4e8361",
+    "manifest_sha256": "0de0e4c7e7b0f32dfd4b16674f53e6244fc82f41677e52b3faa354b0f2d717fb",
+    "archive_bytes": 1873920
+  },
+  "production_delta": {
+    "added": 535,
+    "removed": 908,
+    "net": -373,
+    "paths": [
+      {
+        "path": "client/godot/Core/Identity.cs",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/client/godot/Core/Identity.cs",
+        "production": true,
+        "added": 2,
+        "removed": 2,
+        "before_sha256": "77490a81b8dda5c44506573586dfb0b5cb7b61856f7052778db53792214cd1db",
+        "current_sha256": "75647d0482cf1b8cfc2df83ca4a305137f6bb9ce964e7164dca07128f7ade72b",
+        "deleted": false
+      },
+      {
+        "path": "client/godot/Core/Term.cs",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/client/godot/Core/Term.cs",
+        "production": true,
+        "added": 5,
+        "removed": 7,
+        "before_sha256": "5850cff771cf6e318fcf6a60e9a601883e69eb4b079d49f18bc6c2862e53cd9f",
+        "current_sha256": "b14a35566a0e7dda2118790bc0b39e03de5deb8d5246dfe4b046c3accdb9c1c0",
+        "deleted": false
+      },
+      {
+        "path": "client/src/agent-references.js",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/client/src/agent-references.js",
+        "production": true,
+        "added": 1,
+        "removed": 2,
+        "before_sha256": "c2df0674a475fa8575a1f9453257fbcfd7ca3657aa21c38c2b09567fadabe7f7",
+        "current_sha256": "e45e576cbb8e75d8db8da58eab5a6d546f2c5bbcfa2b8d20a9629df2eb883247",
+        "deleted": false
+      },
+      {
+        "path": "client/src/operation-journal.js",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/client/src/operation-journal.js",
+        "production": true,
+        "added": 1,
+        "removed": 3,
+        "before_sha256": "01b3e7635c3ec7a1e2ece811cda17696112587df001c382bb7d101f9f7dd468a",
+        "current_sha256": "cb74856269da813fec1c1af0aae2b63fbcff087ba921698327f10dc8475ec33c",
+        "deleted": false
+      },
+      {
+        "path": "client/src/prolog-read.js",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/client/src/prolog-read.js",
+        "production": true,
+        "added": 12,
+        "removed": 15,
+        "before_sha256": "060aa24ad49f93029d47b8ef68b31cb962650bf0ace0ec9070ef6eb0f313fae8",
+        "current_sha256": "dad7b18086e202c871a066435e952c47f0b50bffab827b5338d2d17fa15177e5",
+        "deleted": false
+      },
+      {
+        "path": "client/src/protocol-limits.js",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/client/src/protocol-limits.js",
+        "production": true,
+        "added": 3,
+        "removed": 20,
+        "before_sha256": "f4c4c18ab84df48f27c7e4a2f95716e0dae8cef3d7fc39909e546240f0ae55c5",
+        "current_sha256": "d90f56e78362b132283e5e3a1d5056bbf4c30ee5e6c7dbd429e76453b99bd80b",
+        "deleted": false
+      },
+      {
+        "path": "client/src/signed-client.js",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/client/src/signed-client.js",
+        "production": true,
+        "added": 3,
+        "removed": 4,
+        "before_sha256": "99ae6a09009e00afa2440171814c3cb5d3cee92a98cbcb4f08350581286ea3dd",
+        "current_sha256": "40a80e895d4d4e429773c9e5dd0680d20ef05125149a9af99275fb01111651cf",
+        "deleted": false
+      },
+      {
+        "path": "client/src/simulation.js",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/client/src/simulation.js",
+        "production": true,
+        "added": 6,
+        "removed": 9,
+        "before_sha256": "acf145eb7e5541cb780ef54bbcb3282621c1383f017cac2919a36249c68a5bb0",
+        "current_sha256": "81ac3c65f35e69e04619ff752123ff1aa1887da3776cf94e52919d4cd570ce7e",
+        "deleted": false
+      },
+      {
+        "path": "include/quod_client_goal_limits.hrl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/include/quod_client_goal_limits.hrl",
+        "production": true,
+        "added": 0,
+        "removed": 24,
+        "before_sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+        "current_sha256": "0fa6aac12385626349f98e40cad6189fa16478fea8a46503fe38dbbe63ee2aec",
+        "deleted": false
+      },
+      {
+        "path": "include/quod_ingress_limits.hrl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/include/quod_ingress_limits.hrl",
+        "production": true,
+        "added": 3,
+        "removed": 6,
+        "before_sha256": "62389470e8b035526e2c79723996de3ddae97c39a7a433b9473dcf98742ea33a",
+        "current_sha256": "23f7f7ed40410f7b68c108fb64af98d42583d7356ca97492ac869ede0cecec98",
+        "deleted": false
+      },
+      {
+        "path": "include/quod_proof_limits.hrl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/include/quod_proof_limits.hrl",
+        "production": true,
+        "added": 1,
+        "removed": 28,
+        "before_sha256": "e3d2641261eccfaf5491d5e48351d17f718c996a2612352ea7a9248d24f83cfd",
+        "current_sha256": "922e8e39a4a83eca34b175f2ef05e521cf92439da98b3160fed52174742dfdca",
+        "deleted": false
+      },
+      {
+        "path": "include/quod_term_limits.hrl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/include/quod_term_limits.hrl",
+        "production": true,
+        "added": 0,
+        "removed": 8,
+        "before_sha256": "affe244d7aa341161b29b1c9eb68c3c830bc12e449058e94c21e7cebfbd3e785",
+        "current_sha256": null,
+        "deleted": true
+      },
+      {
+        "path": "include/quod_transport_limits.hrl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/include/quod_transport_limits.hrl",
+        "production": true,
+        "added": 5,
+        "removed": 4,
+        "before_sha256": "0221f1df8a41184e7114a53ec61bb6c45528cc93bac3bd0cab637365366c09a3",
+        "current_sha256": "39d3d6788bae9c1443a68ef16d1debaa1ef6613877fed9654e2fa2ff96e2a969",
+        "deleted": false
+      },
+      {
+        "path": "priv/ontologies/common_predicates.pl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/priv/ontologies/common_predicates.pl",
+        "production": true,
+        "added": 30,
+        "removed": 9,
+        "before_sha256": "27a23b8d3d34e2f9e04316e9d2b101d92befbd039c623d293b4488a7da46a049",
+        "current_sha256": "b7da4728aa1df6a7fd5466315d1151065c94cbbba4eb2706225ca9e49a1b1435",
+        "deleted": false
+      },
+      {
+        "path": "src/predicates/quod_ask.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/predicates/quod_ask.erl",
+        "production": true,
+        "added": 1,
+        "removed": 1,
+        "before_sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+        "current_sha256": "a6f5704ae8003d4e66bf7ed23d50a9fe677702425cdf1e1eff89ab997c790581",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_agent_identity.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_agent_identity.erl",
+        "production": true,
+        "added": 3,
+        "removed": 8,
+        "before_sha256": "6596a9aa0f5cf595839a4c914ced923493d2480ca237a54788cc8d8ea3f37af5",
+        "current_sha256": "d3b192cae4c88bfa48edc385e5a6fc4b1e0963aac13b0b52ae3365a055e6364b",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_agent_ref.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_agent_ref.erl",
+        "production": true,
+        "added": 4,
+        "removed": 8,
+        "before_sha256": "ca5065c341b9f2ac5303bc0ec01bc4dd4cb1a4ae3b0c6c4150bd33cfb4acd81c",
+        "current_sha256": "f88ffae3976ae9e1c46be7776356d0bc7806a3e66677250bf70c801c56bf35e1",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_agent_vault.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_agent_vault.erl",
+        "production": true,
+        "added": 2,
+        "removed": 6,
+        "before_sha256": "12a3e8f27d76ea1acad49c00c9a23a70d795be003eb4161a4530e99265c483b9",
+        "current_sha256": "5f29e85665cf14e4f3e405bd0710eb3d1de15c4dbab4c16a8d929ea04a5987b1",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_atomic.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_atomic.erl",
+        "production": true,
+        "added": 13,
+        "removed": 24,
+        "before_sha256": "49ea52069bf69e513ac783244a3f05e8aa67ad4c34bdcd3678db9ed54817d408",
+        "current_sha256": "3e26b7888a5e88ed1d87205b3eccf74c9ce2afee312bb8831614641a3168cb0f",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_catchup.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_catchup.erl",
+        "production": true,
+        "added": 6,
+        "removed": 6,
+        "before_sha256": "d3a26d35f84e41ae179596ede8f822b5929104074f3299426e9fbc1c5cc90737",
+        "current_sha256": "dd6510f42caeb1ac8ef3796003a391f1e467a7957d2a5a237aae370542fa98f0",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_client_goal.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_client_goal.erl",
+        "production": true,
+        "added": 8,
+        "removed": 13,
+        "before_sha256": "8ee0cdeb9bc7f5835c1a248df863b44206527944eca8d04f5bbfde48ed1e3086",
+        "current_sha256": "4f66337f40644c479c9474e7a8cb604d3ac346a593fe3545169cdcae665c6c25",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_client_goal_endpoint.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_client_goal_endpoint.erl",
+        "production": true,
+        "added": 7,
+        "removed": 15,
+        "before_sha256": "4e8ceb6ff917d265ec27643da7963c92ee64abb1b0ea2ce61f5b1f9bf4360e2a",
+        "current_sha256": "28af6b91ac7b8bd6b2fd39318c981e7ba89fa273631e0fc393fc92dca5d91b14",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_client_goal_parser.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_client_goal_parser.erl",
+        "production": true,
+        "added": 24,
+        "removed": 71,
+        "before_sha256": "4f6319487ee89dc00919c76015745fd6cd10429af5dab063d09d9b45f1d5a4d5",
+        "current_sha256": "03c6c1864e1ea1201cbfcf261a038d1d222ad3005503b8fc89de289fb970af55",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_client_goal_router.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_client_goal_router.erl",
+        "production": true,
+        "added": 23,
+        "removed": 18,
+        "before_sha256": "96362eb7980b1a79e308d5ed9baea29613239a70af2d120f11e667630235def4",
+        "current_sha256": "5c7cf90e295b91bd008c4bbbfd3163e7506b1abbb035e01d70cb0dd79aee926d",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_client_http.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_client_http.erl",
+        "production": true,
+        "added": 41,
+        "removed": 37,
+        "before_sha256": "d5f72f410e746245eec29d37d218e8f81766667540e48ba91ce07efdbef174d8",
+        "current_sha256": "2390dcae30913c714171485546636216eedce8dc832bd75124e3ff9eec7a583f",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_client_result.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_client_result.erl",
+        "production": true,
+        "added": 50,
+        "removed": 63,
+        "before_sha256": "7196780a64d1d28efaee6e249094b38ed3628f75f3f1fc796d8c93b9bd94d74e",
+        "current_sha256": "0fd9d6eb82212df1bdb5f2d6457d378e82f9f9822b6c1d8c8206890c8943fd2e",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_client_view.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_client_view.erl",
+        "production": true,
+        "added": 10,
+        "removed": 20,
+        "before_sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+        "current_sha256": "bb1b84c10337d33b24f6193dd34a2206125cf3dd0eae2b020dfda6b42e0bfcbe",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_dtx.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_dtx.erl",
+        "production": true,
+        "added": 24,
+        "removed": 62,
+        "before_sha256": "eec22a3b55674ee83c8a6367ac52101e3a559747c405516ed548bf8aa46da436",
+        "current_sha256": "60f6052f4779752f8ac64fbc4a72a600a647232fcd27f720894d041f1a421d4a",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_dtx_endpoint.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_dtx_endpoint.erl",
+        "production": true,
+        "added": 2,
+        "removed": 3,
+        "before_sha256": "41c1346edff37994b7f7653bbb451fcd9867f84e3399b487aef9188d0249e86d",
+        "current_sha256": "a475ebec7798d6733143f8088b1bdcee8815b26bf2c2ca32a5c57f5d6babdc82",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_dtx_phase_index.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_dtx_phase_index.erl",
+        "production": true,
+        "added": 5,
+        "removed": 19,
+        "before_sha256": "15ab5594245f081348512cb5ca60d1851397bb835a9b1f30d8740bc3bdb6a8a2",
+        "current_sha256": "759c2bf48d5cd3298164a4849a1207aaf076eecbb43dc9821a18d319cfd76cfb",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_durable_term.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_durable_term.erl",
+        "production": true,
+        "added": 8,
+        "removed": 41,
+        "before_sha256": "96984214589ec2116d2f0053091aa0c632c2a8e78b97f856c2d8361e134ac7e0",
+        "current_sha256": "0547a7058f64df374bf7943cfeec5a9f10c30dcbe2bb2be6e104e8eaf2bc424d",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_feed.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_feed.erl",
+        "production": true,
+        "added": 5,
+        "removed": 5,
+        "before_sha256": "3582302dfa36598eaf2ceb8937253fe5dde5bf94e8489cd7b5c6898bcef3f8cd",
+        "current_sha256": "a357a223bade45ae246daaec3dc5c60e473bc45ec18164481409cea06127674b",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_ledger.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_ledger.erl",
+        "production": true,
+        "added": 14,
+        "removed": 15,
+        "before_sha256": "1c40d1989d53f1c8f02129cf06395b128ea2996bcb946aca240bedd3594ee30b",
+        "current_sha256": "e6818fd0f636a3db3ebe06090a5cd9dc6c0d2aa4046c86214178826b8bd1fe8e",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_link.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_link.erl",
+        "production": true,
+        "added": 29,
+        "removed": 19,
+        "before_sha256": "cd78778a0558b2b4a664f8f189e6e37521bbf53a38cd030917a22b53ff2ff03b",
+        "current_sha256": "fed5d33d8d0a91187c3301f97ba596a27f83e16e7a963315f36bb6a71a0e23a0",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_physics.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_physics.erl",
+        "production": true,
+        "added": 6,
+        "removed": 16,
+        "before_sha256": "39792fb4a50c149e20550ce6070d18df4e8568b5b1e5c9e379b8190e3aa8659b",
+        "current_sha256": "be812d304da32461b175c3190246239bed22068e92aecc7b3d4c3561aa4844aa",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_proof_session.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_proof_session.erl",
+        "production": true,
+        "added": 3,
+        "removed": 4,
+        "before_sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+        "current_sha256": "47481ede0cab64605d40d99c8a1df843ea954a41eea32c37687d05e047a418a0",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_read_certificate.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_read_certificate.erl",
+        "production": true,
+        "added": 4,
+        "removed": 7,
+        "before_sha256": "7dfc682dd411ced6e1e1cf730c685f9e3e8fb8d8c0beb04b268bd182a44b81c8",
+        "current_sha256": "d5fe2ebe03a96089b0bf97778c769907d2a89436821e86fc7777d81af01f6291",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_relay.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_relay.erl",
+        "production": true,
+        "added": 1,
+        "removed": 2,
+        "before_sha256": "40e66e56a909f3ec044b9b71c6d8d4907528492822808a7bfcbd6fb97966f030",
+        "current_sha256": "6f75a07480b6a6c4064ac7ddc39afb8b4ae533415b9d768ce6d40e2b8d13609f",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_safe_term.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_safe_term.erl",
+        "production": true,
+        "added": 51,
+        "removed": 51,
+        "before_sha256": "6c453e00133f7b171fa7396d3e893a774b1f7b2d34591a89746fd3cf531a735a",
+        "current_sha256": "84e785e858090b35d50fc9f0f922a7fd681c05f27306a7584ff62628161fe6c9",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_scope_session.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_scope_session.erl",
+        "production": true,
+        "added": 3,
+        "removed": 4,
+        "before_sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+        "current_sha256": "62b706bba9f9c8ea9a73bf3721f16739a417115fe2cdc100f0cddec878a0279c",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_scope_wire.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_scope_wire.erl",
+        "production": true,
+        "added": 13,
+        "removed": 23,
+        "before_sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+        "current_sha256": "657989940184d5164b8532cdf599df14f74be78673b0488d1db9a0f709b7b6ec",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_signing_journal.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_signing_journal.erl",
+        "production": true,
+        "added": 13,
+        "removed": 27,
+        "before_sha256": "d5c6c53f0160e46e15bae1d43a832b2c8733e123c597107937c8e4ac0d861c83",
+        "current_sha256": "aefc3b1c01f088810d54c894f178be4c31e656fdc481f800920d379ff49a27fa",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_simplex.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_simplex.erl",
+        "production": true,
+        "added": 2,
+        "removed": 2,
+        "before_sha256": "9bde0ab683a6aefe44039a286cf21389fbe0a3a914bdec9e76a6ab93a31ada74",
+        "current_sha256": "afae9aceeadbfdae3322c68f3c4172089d5e834f78c4304051b53e44d0549a4b",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_terrain_wire.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_terrain_wire.erl",
+        "production": true,
+        "added": 2,
+        "removed": 39,
+        "before_sha256": "43f6d82f6565d888552e0a1bacac1c72a4ec31e16f39bdd0c8b7a0fbcb8c83d9",
+        "current_sha256": "d831af9ae3114b6635df33a9d178d274c9d6fcd73a41d60b196419bd360a9934",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_transaction.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before-admission/src/quod_transaction.erl",
+        "production": true,
+        "added": 25,
+        "removed": 55,
+        "before_sha256": "f0877b583ce7cc90500bffe0f3e2977b89c9e791a9557b6f0423467b95a3023b",
+        "current_sha256": "95040fc1ddadfdc2b7a1593ef831272a91e4f8cf1b25cfeb79ebd16c7e02ca8b",
+        "deleted": false
+      },
+      {
+        "path": "src/quod_wire_term.erl",
+        "baseline": "doc/evidence/stage2-presentation-boundaries-20261103/before/src/quod_wire_term.erl",
+        "production": true,
+        "added": 61,
+        "removed": 83,
+        "before_sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+        "current_sha256": "00352f26e3e61420b02f9609df7926b0655d4685fc70e59d81aca50fe5990da2",
+        "deleted": false
+      }
+    ]
+  },
+  "deleted_source": [
+    "include/quod_term_limits.hrl"
+  ],
+  "prior_presentation_freezes_verified": {
+    "01": {
+      "archive_sha256": "18881cb54ef293d7d30d0455caedcdc26c609cfa9314daecd2cdf1520cae039c",
+      "manifest_sha256": "b60390bf3102d7d3eada27af57093e5c4d9c24b88bf3ad9e7c5158a39c1b9493"
+    },
+    "02": {
+      "archive_sha256": "72923108b0127b5a273a186a6bd0bbce88b2a72b559e1ffab6e85bcf8e7bd9db",
+      "manifest_sha256": "2b207facfd29fdc7f850d7b2d5c99950c4f410cf4944aaf0e6b8b390d433d630"
+    },
+    "03": {
+      "archive_sha256": "60bfc30714d2e105e038054430d1b9c312be7702d1232d357c70515ec74c59da",
+      "manifest_sha256": "6613faac6565b681b0ffa3de1e7e0d765d4f92ecb042cfc597e535055defb61d"
+    },
+    "04": {
+      "archive_sha256": "f00c923d28d90f28c1c05377c0d37d7f4d333416d69c4368409bdb648ad41749",
+      "manifest_sha256": "0b6147d5c88f43eaba4b46cfadf5cf63955827fea52e0b9f09145e153a5df22c"
+    }
+  },
+  "fixture_stores_profiles_and_private_keys_included": false,
+  "private_streams_restricted": true,
+  "optional_heap_policy_applied": false,
+  "interpreter_candidate_installed": false,
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "package_release_or_deploy": false
+}

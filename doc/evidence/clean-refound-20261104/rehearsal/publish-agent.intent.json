@@ -1,0 +1,12 @@
+{
+  "container": "quod-stage2-disposable-founder",
+  "expression": "quod_foundation_operator:publish(<<\"quod:agent\">>,binary:decode_hex(<<\"3037E508A5120B2D0EA58C687469CDB36B94150C74DE906B375268C158F8F03D\">>),false)",
+  "command_argv": [
+    "docker",
+    "exec",
+    "quod-stage2-disposable-founder",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin quod_foundation_operator:publish(<<\"quod:agent\">>,binary:decode_hex(<<\"3037E508A5120B2D0EA58C687469CDB36B94150C74DE906B375268C158F8F03D\">>),false) end))))."
+  ]
+}

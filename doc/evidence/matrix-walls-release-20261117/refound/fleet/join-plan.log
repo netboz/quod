@@ -1,0 +1,61 @@
++/- Job: "quod"
++/- Task Group: "quod-cloud"
+      Task: "prepare-agent-vault"
+  +/- Task: "quod" (forces create/destroy update)
+    +/- Template {
+          ChangeMode:    "noop"
+          ChangeSignal:  ""
+          DestPath:      "${NOMAD_TASK_DIR}/quod.conf"
+      +/- EmbeddedTmpl:  "node {\n  ip        = \"{{ env \"attr.unique.network.ip-address\" }}\"\n  port      = {{ env \"NOMAD_HOST_PORT_p2p\" }}\n  bind_port = 14567\n  consensus_owner_tracing = false\n}\nmetrics { port = 14568 }\nagent_vault {\n  enabled = true\n  directory = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}/agent-keys\"\n  unlock_file = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}/agent-vault.unlock\"\n}\n# Explorer stays tunnel-only: the published port lives on tailscale0 and the VM's public\n# interface is firewalled, so 0.0.0.0 here never faces the internet.\nexplorer {\n  enabled = true\n  ip      = \"0.0.0.0\"\n  port    = 14569\n}\n# HTTPS, with the node's own self-signed certificate: a browser withholds Web\n# Crypto outside a secure context, so over plaintext the client could not hold a\n# key at all. Visitors accept the certificate once per node.\nclient {\n  enabled  = true\n  ip       = \"0.0.0.0\"\n  port     = 14570\n  certfile = \"\"\n  keyfile  = \"\"\n}\n# `content` is a LIST — extra ontologies join here too (see the quod-node group's note).\ncontent = [\n  {\n    namespace = \"quod:root\"\n    data_dir  = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}\"\n    max_proof_workers = 64\n    max_scope_workers = 64\n    proof_timeout_ms = 300000\n    transaction_ttl_ms = 30000\n    batch_window_ms = 25\n    scope_timeout_ms = 300000\n    scope_step_timeout_ms = 30000\n    detailed_consensus_metrics = false\n    mode         = join\n    genesis_hash = \"\"\n    seeds        = [\n{{- range service \"quod\" }}\n      \"{{ .Address }}:{{ .Port }}\",\n{{- end }}\n    ]\n  }\n]\n" => "node {\n  ip        = \"{{ env \"attr.unique.network.ip-address\" }}\"\n  port      = {{ env \"NOMAD_HOST_PORT_p2p\" }}\n  bind_port = 14567\n  consensus_owner_tracing = false\n}\nmetrics { port = 14568 }\nagent_vault {\n  enabled = true\n  directory = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}/agent-keys\"\n  unlock_file = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}/agent-vault.unlock\"\n}\n# Explorer stays tunnel-only: the published port lives on tailscale0 and the VM's public\n# interface is firewalled, so 0.0.0.0 here never faces the internet.\nexplorer {\n  enabled = true\n  ip      = \"0.0.0.0\"\n  port    = 14569\n}\n# HTTPS, with the node's own self-signed certificate: a browser withholds Web\n# Crypto outside a secure context, so over plaintext the client could not hold a\n# key at all. Visitors accept the certificate once per node.\nclient {\n  enabled  = true\n  ip       = \"0.0.0.0\"\n  port     = 14570\n  certfile = \"\"\n  keyfile  = \"\"\n}\n# `content` is a LIST — extra ontologies join here too (see the quod-node group's note).\ncontent = [\n  {\n    namespace = \"quod:root\"\n    data_dir  = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}\"\n    max_proof_workers = 64\n    max_scope_workers = 64\n    proof_timeout_ms = 300000\n    transaction_ttl_ms = 30000\n    batch_window_ms = 25\n    scope_timeout_ms = 300000\n    scope_step_timeout_ms = 30000\n    detailed_consensus_metrics = false\n    mode         = join\n    genesis_hash = \"375B3F5E8E3421038898C14A0D2E63FE9011C3E5EAC245F9F068B8064FD479AC\"\n    seeds        = [\n{{- range service \"quod\" }}\n      \"{{ .Address }}:{{ .Port }}\",\n{{- end }}\n    ]\n  }\n]\n"
+          Envvars:       "false"
+          ErrMissingKey: "false"
+          LeftDelim:     "{{"
+          Once:          "false"
+          Perms:         "0644"
+          RightDelim:    "}}"
+          SourcePath:    ""
+          Splay:         "5000000000"
+          VaultGrace:    "0"
+        }
+      Task: "wait-for-peer"
+
++/- Task Group: "quod-node" (7 create, 1 ignore)
+  +/- Count: "1" => "8" (forces create)
+      Task: "prepare-agent-vault"
+  +/- Task: "quod" (forces create/destroy update)
+    +/- Template {
+          ChangeMode:    "noop"
+          ChangeSignal:  ""
+          DestPath:      "${NOMAD_TASK_DIR}/quod.conf"
+      +/- EmbeddedTmpl:  "node {\n  ip        = \"{{ env \"attr.unique.network.ip-address\" }}\"\n  port      = {{ env \"NOMAD_HOST_PORT_p2p\" }}\n  bind_port = 14567\n  consensus_owner_tracing = false\n}\nmetrics { port = 14568 }\nagent_vault {\n  enabled = true\n  directory = \"/quod/data/agent-keys\"\n  unlock_file = \"/quod/data/agent-vault.unlock\"\n}\n# The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet\n# opts in explicitly and binds all interfaces so Nomad's explorer /health check can reach it. This\n# is a private cluster; do not copy `ip = \"0.0.0.0\"` to an internet-exposed deployment.\nexplorer {\n  enabled = true\n  ip      = \"0.0.0.0\"\n  port    = 14569\n}\n# HTTPS, with the node's own self-signed certificate: a browser withholds Web\n# Crypto outside a secure context, so over plaintext the client could not hold a\n# key at all. Visitors accept the certificate once per node.\nclient {\n  enabled  = true\n  ip       = \"0.0.0.0\"\n  port     = 14570\n  certfile = \"\"\n  keyfile  = \"\"\n}\n# `content` is a LIST: further ontologies are added as extra entries, each with its own\n# mode/anchor (founded once by a single create deploy, then joined fleet-wide with the\n# logged anchor — same two-phase dance as quod:root; they share /quod/data, the ledger\n# keeps one subdirectory per namespace).\ncontent = [\n  {\n    namespace = \"quod:root\"\n    # data_dir is the fast local host volume mounted at /quod/data — identity, vote\n    # journal, and ledger all live here now, so ledger_dir (the 0.7.36 Ceph workaround)\n    # is no longer needed.\n    data_dir  = \"/quod/data\"\n    max_proof_workers = 64\n    max_scope_workers = 64\n    proof_timeout_ms = 300000\n    transaction_ttl_ms = 30000\n    batch_window_ms = 25\n    scope_timeout_ms = 300000\n    scope_step_timeout_ms = 30000\n    detailed_consensus_metrics = false\n\n    mode         = create\n    genesis_file = \"ontologies/quod_root.pl\"\n    seeds        = []\n\n  }\n]\n" => "node {\n  ip        = \"{{ env \"attr.unique.network.ip-address\" }}\"\n  port      = {{ env \"NOMAD_HOST_PORT_p2p\" }}\n  bind_port = 14567\n  consensus_owner_tracing = false\n}\nmetrics { port = 14568 }\nagent_vault {\n  enabled = true\n  directory = \"/quod/data/agent-keys\"\n  unlock_file = \"/quod/data/agent-vault.unlock\"\n}\n# The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet\n# opts in explicitly and binds all interfaces so Nomad's explorer /health check can reach it. This\n# is a private cluster; do not copy `ip = \"0.0.0.0\"` to an internet-exposed deployment.\nexplorer {\n  enabled = true\n  ip      = \"0.0.0.0\"\n  port    = 14569\n}\n# HTTPS, with the node's own self-signed certificate: a browser withholds Web\n# Crypto outside a secure context, so over plaintext the client could not hold a\n# key at all. Visitors accept the certificate once per node.\nclient {\n  enabled  = true\n  ip       = \"0.0.0.0\"\n  port     = 14570\n  certfile = \"\"\n  keyfile  = \"\"\n}\n# `content` is a LIST: further ontologies are added as extra entries, each with its own\n# mode/anchor (founded once by a single create deploy, then joined fleet-wide with the\n# logged anchor — same two-phase dance as quod:root; they share /quod/data, the ledger\n# keeps one subdirectory per namespace).\ncontent = [\n  {\n    namespace = \"quod:root\"\n    # data_dir is the fast local host volume mounted at /quod/data — identity, vote\n    # journal, and ledger all live here now, so ledger_dir (the 0.7.36 Ceph workaround)\n    # is no longer needed.\n    data_dir  = \"/quod/data\"\n    max_proof_workers = 64\n    max_scope_workers = 64\n    proof_timeout_ms = 300000\n    transaction_ttl_ms = 30000\n    batch_window_ms = 25\n    scope_timeout_ms = 300000\n    scope_step_timeout_ms = 30000\n    detailed_consensus_metrics = false\n\n    mode         = join\n    genesis_hash = \"375B3F5E8E3421038898C14A0D2E63FE9011C3E5EAC245F9F068B8064FD479AC\"\n    seeds        = [\n{{- range service \"quod\" }}\n      \"{{ .Address }}:{{ .Port }}\",\n{{- end }}\n    ]\n\n  }\n]\n"
+          Envvars:       "false"
+          ErrMissingKey: "false"
+          LeftDelim:     "{{"
+          Once:          "false"
+          Perms:         "0644"
+          RightDelim:    "}}"
+          SourcePath:    ""
+          Splay:         "5000000000"
+          VaultGrace:    "0"
+        }
+  +/- Task: "wait-for-peer" (forces create/destroy update)
+    +/- Config {
+      +/- args[0]:       "if [ -z '' ] || [ \"$NOMAD_ALLOC_INDEX\" = 0 ]; then echo 'anchor allocation, no peer required'; exit 0; fi; while :; do while IFS=: read -r H P; do if [ -n \"$H\" ] && [ -n \"$P\" ] && curl -s -o /dev/null --max-time 2 \"http://$H:$P/metrics\"; then echo \"peer reachable at $H:$P\"; exit 0; fi; done < \"$NOMAD_TASK_DIR/peers\"; echo 'no peer reachable yet, sleeping 2s'; sleep 2; done" => "if [ -z '375B3F5E8E3421038898C14A0D2E63FE9011C3E5EAC245F9F068B8064FD479AC' ] || [ \"$NOMAD_ALLOC_INDEX\" = 0 ]; then echo 'anchor allocation, no peer required'; exit 0; fi; while :; do while IFS=: read -r H P; do if [ -n \"$H\" ] && [ -n \"$P\" ] && curl -s -o /dev/null --max-time 2 \"http://$H:$P/metrics\"; then echo \"peer reachable at $H:$P\"; exit 0; fi; done < \"$NOMAD_TASK_DIR/peers\"; echo 'no peer reachable yet, sleeping 2s'; sleep 2; done"
+          entrypoint[0]: "/bin/sh"
+          entrypoint[1]: "-c"
+          force_pull:    "true"
+          image:         "192.168.1.11:5000/quod:0.7.294"
+        }
+
+Scheduler dry-run:
+- All tasks successfully allocated.
+
+Job Modify Index: 949092
+To submit the job with version verification run:
+
+nomad job run -check-index 949092 -var="image_tag=0.7.294" -var="genesis_hash=375B3F5E8E3421038898C14A0D2E63FE9011C3E5EAC245F9F068B8064FD479AC" -var="node_count=8" -var="cloud_node_count=0" deploy/quod.nomad
+
+When running the job with the check-index flag, the job will only be run if the
+job modify index given matches the server-side version. If the index has
+changed, another user has modified the job and the plan's results are
+potentially invalid.

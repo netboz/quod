@@ -1,0 +1,12 @@
+{
+  "container": "quod-stage2-disposable-founder",
+  "expression": "quod_foundation_operator:found(<<\"quod:gui\">>,[\"quod_gui.pl\",\"gui_measure.pl\",\"gui_scene.pl\",\"gui_tools.pl\"],[],[quod_agent_predicates,quod_gui_predicates])",
+  "command_argv": [
+    "docker",
+    "exec",
+    "quod-stage2-disposable-founder",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin quod_foundation_operator:found(<<\"quod:gui\">>,[\"quod_gui.pl\",\"gui_measure.pl\",\"gui_scene.pl\",\"gui_tools.pl\"],[],[quod_agent_predicates,quod_gui_predicates]) end))))."
+  ]
+}

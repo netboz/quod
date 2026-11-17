@@ -92,6 +92,35 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
 - Keep comments about current invariants and intent. Put run logs, historical
   status diaries and review narration in handoffs, not implementation docs.
 
+### Keeping the repository tidy
+
+Yan's rules of 2026-11-17, after a cleanup of about 150 GB of leftovers.
+
+- Quod lives in one directory, `~/src/quod`, on `master`. Do not create a git
+  worktree, a second clone or a scratch directory beside it. Work that must be
+  kept apart uses a branch.
+- Before starting a task, check that no other session is working on it. If one
+  is, stop and change nothing.
+- The specs in `doc/` are the reference. A plan is temporary:
+  `nimbalyst-local/plans/` holds only unfinished work. When a plan is built,
+  write its rulings into the spec page, file in the tracker what was designed
+  but not built, then delete the plan file. Delete a review note once each of
+  its findings is applied or filed.
+- Commit what a piece of work produces in the same increment: plans, evidence,
+  assets, tools. Nothing that matters stays untracked.
+- `doc/evidence` keeps a folder only while a spec links to it, or a test or
+  the next release reads a file from it. Remove a folder when a newer one
+  replaces it. Git history keeps what was committed.
+- Release tools (gate scripts, the refound recipe, the client install script)
+  belong in `scripts/`, not in an evidence folder.
+- `_build` holds builds only. Delete a gate run's frozen tree and outputs once
+  its results are recorded. Keep no notes, scripts or archives there.
+- Keep one rollback copy of the installed client at most
+  (`~/Games/quod-before-*`).
+- `/tmp` is wiped at reboot: put nothing there that must survive.
+- The GitHub repository is public. Check for keys, tokens and passwords before
+  pushing new evidence or archives.
+
 ### Diagnosis and verification
 
 - Understand the causal chain before optimizing. Use traces and deterministic
@@ -112,8 +141,9 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
 - At required release/review boundaries, use the standing clean sequential
   gates, full logs and true child exits. Retain and triage failures before
   trusting a run; no silent reruns or weakened assertions. Freeze each scope's
-  exact tree and evidence, keep label bumps separate, and report partial work
-  honestly. Do not turn routine edits into unnecessary review rounds.
+  exact tree and evidence for its review and release; afterwards its evidence
+  folder follows the rule in "Keeping the repository tidy". Keep label bumps
+  separate, and report partial work honestly. Do not turn routine edits into unnecessary review rounds.
 
 ## Continuity
 

@@ -14,6 +14,13 @@ implementation and names each state owner. Follow only the subject you need:
 | Client and simulated-world direction | [World](world.md) |
 | Application startup, registration and local identity recovery | [Startup lifecycle](world.md#application-startup) |
 | Imported static mesh Eidolons | [Mesh support](eidolon-mesh-support.md) |
+| Spaces: classes, creation, placement, travel, Eidolons of a space | [Governed spaces](spaces.md) |
+| The Godot client's screen: pointing, pies, the strip, placement in the headset | [Main screen](main-screen.md) |
+| Eidolons, rain, forms and questions | [GUI](gui-plan.md) |
+| Godot client and the seven founding ontologies | [Foundation contract](godot-foundation-contract.md) |
+| Server physics | [Physics profile](physics-native.md) |
+| Voxel terrain | [Voxel terrain arithmetic](voxel-world.md) |
+| Node identity enrollment | [Node enrollment](node-enrollment.md) |
 
 The previous 83 Markdown documents, the Simplex PDF and figures are in the
 [archive](outdated/README.md). They are preserved as design, review and measurement

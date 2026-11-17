@@ -44,7 +44,7 @@ membership changes neither the entity reference, code, ACL nor history.
 space S0 for human U; S0 is the initial personal lobby, has no containing space,
 and initially contains A.]{decided by="yan.guiborat" email=yan.guiborat@gmail.com on=2026-10-27 over="a dedicated lobby subclass for this delivery"} [Y](https://console.nimbalyst.com/app/cite/ed9cd520-b2a4-4607-a8f5-ff99d08f3e46/prompt/80fe5d70d8db7a67f1cc071ad91cced3 "by=yan.guiborat email=yan.guiborat@gmail.com at=2026-10-27T14:04:14.517Z quote='some points before starting :%0A- I would like to clarify new users onbording. These should only prolog if possible:%0A%2A When a normal user is created atm we will create for it a simple empty space. It will be later the user lobby %28 we will create a dedicated subclass for it %29 but for now we will use a simple space class. So I guess when registering a new user, we should create a space and an agent…'")
 
-The setup form uses `quod:space:space` and its defaults, including the 100-metre
+The setup form uses `quod:space:space` and its defaults, including the 10-metre
 box extent, after signup has allocated the user's ontology. S0 is an ordinary
 space instance; a dedicated user-lobby subclass is later work.
 
@@ -133,8 +133,8 @@ reply is recovered from the original operation, including after restart or
 later instance deletion. Recovery does not create the instance again.
 
 `dimensions` defaults to `box(q(10, <<"m">>), q(10, <<"m">>),
-q(100, <<"m">>))`: X, Y and Z lengths centred on the local origin, extending
-50 metres in each direction. It also accepts `infinite` or three strictly
+q(10, <<"m">>))`: X, Y and Z lengths centred on the local origin, extending
+5 metres in each direction (Yan, 2026-11-12). It also accepts `infinite` or three strictly
 positive exact length quantities. Existing measurement conversion validates
 compatible units and rational values without floats or rounding. Malformed,
 unitless, non-length, zero and negative dimensions fail creation. Supplied
@@ -359,7 +359,7 @@ Far away the letters melt into soft green streaks; they never flicker. Floor
 and ceiling are black. A wall with no light on it is black, never grey. The
 walls are the first user of [rain](gui-plan.md#rain).
 
-The space's pie offers **Show as** in slot 2. Inside the space it lists the
+The [space's pie](main-screen.md#the-pie-of-a-space) offers **Show as** in slot 2. Inside the space it lists the
 `interior` Eidolons, from outside the `playing` ones, without the one the
 viewer already sees, and **Default** once the viewer has chosen one. It
 changes only what the viewer sees (see [Eidolons](gui-plan.md#eidolons)).

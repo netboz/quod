@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"lobby_space(room, [playing]) :- true.\\xA\\\">>"
-  ],
-  "at": "2026-10-12T14:01:07.082803+00:00"
-}

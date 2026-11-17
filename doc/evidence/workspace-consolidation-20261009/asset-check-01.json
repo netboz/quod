@@ -1,6 +1,0 @@
-{
-  "exit": 1,
-  "assertion": "priv/explorer/world.html references /explorer/favicon.png",
-  "cause": "The diagnostic incorrectly mapped this HTTP URL to priv/explorer/explorer/favicon.png. src/quod_client.erl:95 explicitly serves it from priv/explorer/favicon.png. No product or asset change required.",
-  "next_check": "asset-check-02 uses the actual production route mapping"
-}

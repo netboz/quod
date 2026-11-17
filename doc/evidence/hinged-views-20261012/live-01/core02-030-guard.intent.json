@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_references,4),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_references,4)))),','(assertz(':-'(physics_hinged_references(V2,V3,hinge(V3,V4),[joint(V3,V4),body(V3,V5),body(V6,V7)]),','(physics_joint(V2,hinge(body(V3,V5),V4,body(V6,V7),V8,V9,V10,V11)),','(physics_body_definition(V2,V3,V5,dynamic,V12,V13),physics_body_definition(V2,V6,V7,fixed,V14,V15))))),';'('->'('$quod_predicate_source'('/'(physics_hinged_references,4),<<\"physics_hinged_references(V0, V1, hinge(V1, V2), [joint(V1, V2), body(V1, V3), body(V4, V5)]) :- physics_joint(V0, hinge(body(V1, V3), V2, body(V4, V5), V6, V7, V8, V9)) , physics_body_definition(V0, V1, V3, dynamic, V10, V11) , physics_body_definition(V0, V4, V5, fixed, V12, V13).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_references,4)))))))))",
-    "personal_lobby"
-  ],
-  "at": "2026-10-12T13:42:39.354885+00:00"
-}

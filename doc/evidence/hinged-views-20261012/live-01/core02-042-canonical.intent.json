@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_remove_hinged_request(V0, V1) :- physics_hinged_custody(V0, V1, V2) , (V2 = none -> true ; retract(physics_hinged_request(V0, V1, V2))).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:43:39.634292+00:00"
-}

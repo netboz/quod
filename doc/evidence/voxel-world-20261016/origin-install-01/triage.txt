@@ -1,1 +1,0 @@
-Compilation failed because the new internal installation error union lacked its From<geometry::Error> conversion. Add that conversion through the existing geometry-to-atom mapping; leave its existing malformed-geometry behavior unchanged. No tests executed in this run.

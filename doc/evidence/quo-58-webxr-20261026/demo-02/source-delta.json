@@ -1,8 +1,0 @@
-{
-  "prior_run": "demo-01/release-gates-02",
-  "changed_build_inputs": [
-    "priv/ontologies/quod_lobby.pl",
-    "test/quod_controller_tests.erl"
-  ],
-  "commit": "1daac001bfccb508cb5916cbb1e33e98296f3d90"
-}

@@ -1,7 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "client/src/controlled-navigation.js": "83ea37127e2af4946ab6d394578b2dfeafae1fbea63c693e0ea867d1ca70f2b5",
-  "client/test/controlled-navigation.test.js": "6dfa631f42487ec91063cb08d0fc2363fdc21d499fc9b478bec5619a4517b38b",
-  "client/src/simulation.js": "ba95231b28500f7ee68a85509700d4ffa4c20cc3b446a3c08d6a780295f7f4b0",
-  "client/test/simulation.test.js": "9b9fad6c51f32227a19f1a4b2d21bf3e51e67109ffd0440b181eedf03716877f"
-}

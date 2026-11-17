@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"hinged_example_label(idle, <<\\\"Ready to close\\\">>) :- true.\\xA\\hinged_example_label(closing(V0), <<\\\"Closing\\\">>) :- true.\\xA\\hinged_example_label(cancelled(V0), <<\\\"Cancelled\\\">>) :- true.\\xA\\hinged_example_label(finished(V0, closed), <<\\\"Closed\\\">>) :- true.\\xA\\hinged_example_label(finished(V0, blocked(V1)), <<\\\"Blocked\\\">>) :- true.\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:54:40.372576+00:00"
-}

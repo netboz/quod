@@ -1,8 +1,0 @@
-{
-  "count": 287,
-  "marks": 574,
-  "label": "predicate_with_a_complet",
-  "fullLabel": false,
-  "fullScene": false,
-  "sceneResult": "Quod.Client.ApiError: proof_unavailable"
-}

@@ -1,7 +1,0 @@
-{
-  "input_files": 24,
-  "changed_inputs": [],
-  "native_tests": 47,
-  "targeted_erlang_tests": 60,
-  "overall_feature_complete": false
-}

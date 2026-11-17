@@ -1,7 +1,0 @@
-{
-  "at": "2026-10-17T09:05:26.449895+00:00",
-  "reason": "Superseded frozen scope after independently confirmed Fable findings; terminate current eunit, retain true child exit and all prior failures.",
-  "pid": 4108013,
-  "cwd": "/home/yan/src/quod/_build/terrain-presentation-20261017/clean-presentation-04/tree",
-  "signal": "SIGTERM"
-}

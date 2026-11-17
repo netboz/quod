@@ -1,8 +1,0 @@
-{
-  "sessionId": "e73c8c85-3736-47bd-b3c7-3f1bb1c55add",
-  "provider": "claude-code",
-  "model": "claude-code:fable",
-  "toolScope": "read",
-  "tree": "_build/voxel-world-20261016/clean-fixes-01/tree",
-  "brief": "doc/evidence/voxel-world-20261016/review-fixes-01/review-brief.md"
-}

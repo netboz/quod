@@ -1,6 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "src/quod_client_goal.erl": "7798c176f893cef86cbeb024ff82b4a5eeba6871187045648053f457a7733879",
-  "src/predicates/quod_runtime_predicates.erl": "3f2a53ddeb5c91f6c6554475582a90dd8fa4a4556bb06769c698f1b60ab93947",
-  "test/quod_client_goal_tests.erl": "3ee923373ffcf8ca83e68ad0b5325241ef53f57ef15047365d1e03a46667255e"
-}

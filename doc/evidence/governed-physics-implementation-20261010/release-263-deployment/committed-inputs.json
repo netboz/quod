@@ -1,9 +1,0 @@
-{
-  "commit": "f949d1c4632d42dd91d1a10176869237948a60e0",
-  "all_inputs_match": true,
-  "version": "0.7.263",
-  "gate": "gates-05",
-  "inputs": 1036,
-  "verified": "2026-10-12T01:39:50.212920+00:00",
-  "explorer_matches": true
-}

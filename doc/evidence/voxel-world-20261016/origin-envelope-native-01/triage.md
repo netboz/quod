@@ -1,1 +1,0 @@
-Compile failure: Vec3 resolved to Rapier’s DVec3, which is not a Rustler tuple encoder. Use the existing geometry::V3 tuple type. Native-02 passes all 56 tests, including new fast-step refusal and same-resource rebase continuation.

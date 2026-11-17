@@ -1,8 +1,0 @@
-{
-  "client/src/workspace-panel.js": "69ace93b6c1858ed6ef8ab14bec8905c1bffa0db375c083fc279e0f32d01cbb4",
-  "client/src/world-scene.js": "4ed893e030bd7e0e7f9c1794df93899259d09b589da269c1a6ab5441e86523e6",
-  "client/test/workspace-panel.fixture.js": "3ca2d1649af13b1f604c66628f4775717803b7700bab27d1576c34f1e3ec52b4",
-  "ui/src/GuiForm.tsx": "c0001ddd1742b354ae400b59afdd0885d8c614c060e408f7abe10530ac6bbf77",
-  "ui/src/gui-form.css": "f15f09d9c1080240315376a34ceaa0d31c17ede7c3781c4ac0b7a5d6859fc835",
-  "ui/test/gui-form.fixture.tsx": "7424a7c5bd20f88701990cb8587161aef7c5c36079fb45cb0cb751562bc50719"
-}

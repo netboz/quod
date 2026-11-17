@@ -1,7 +1,0 @@
-Two supplements arrived. Before replying I'm checking whether the captured current docs change any contract I reviewed against.
-
-Both supplements are checked. The review stands unchanged.
-
-**Message 1, current docs.** The captured `doc/voxel-world.md` is byte-identical to the live copy I reviewed against, so no finding was based on a stale contract. The current `doc/physics-native.md` additions only restate what I checked: exact integer origin and origin sequence in frames, one shared delivery credit for frames and terrain, and the sentence "Missing physical coverage pauses relevant work until installation, rather than treating unknown terrain as empty." That sentence reinforces confirmed defect 1 rather than weakening it. The contract pauses on missing coverage only, while `terrain_step_coverage` also pauses on an embedded or ambiguous body with an empty demand that nothing can fulfil. Nothing in the current docs bounds the terrain interest centre, so confirmed defect 2 also stands. The new `doc/gui-examples.md` section describes composition only and touches no reviewed seam.
-
-**Message 2, GUI responder profile.** That evidence concerns which predicate modules the responder needs and the lobby entry plan. It is outside the smooth terrain core I reviewed, and my report makes no claim about `quod_agent_work_predicates`. It does not change any finding. The two confirmed defects remain the items to close before worlds are composed into the user-owned lobby, since lobby entry is exactly the admission path that defect 1 exposes.

@@ -1,4 +1,0 @@
-Command: python3 /tmp/pearl-review-evidence.py
-Exit: 1
-UnicodeDecodeError: 'utf-8' codec can't decode byte 0x89 in position 0: invalid start byte
-The unused read_text calls ran before git diff's binary-safe measurement. No measurement output was written.

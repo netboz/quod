@@ -1,9 +1,0 @@
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "{\"answers\":{\"hdmi_reconnect\":{\"type\":\"singleSelect\",\"selectedId\":\"done\"}},\"respondedBy\":\"desktop\",\"respondedAt\":1793291741331}"
-    }
-  ],
-  "isError": false
-}

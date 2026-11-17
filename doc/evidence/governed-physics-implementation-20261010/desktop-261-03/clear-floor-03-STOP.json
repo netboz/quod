@@ -1,6 +1,0 @@
-{
-  "reason": "Page.bringToFront timed out before any movement key; same failure with clean library environment",
-  "timeout_seconds": 40,
-  "input_sent": false,
-  "server_unchanged": true
-}

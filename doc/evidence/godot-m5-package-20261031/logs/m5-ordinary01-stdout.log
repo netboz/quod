@@ -1,1 +1,0 @@
-{"passed": false, "ordinary_launch": true, "qualification_flag": false, "build_tools_available": false, "developer_paths_mounted": false, "no_network_namespace": true, "native_xr": false, "reader_errors": [], "wrapper_pid": 2256332, "failure": "AssertionError: ordinary window readiness expired", "packaged_coreclr_loaded": false, "ordinary_launch_errors": true}

@@ -1,5 +1,0 @@
-{
-  "exit": 1,
-  "cause": "Missing parent for private diagnostic directory; failed before trust/browser or network startup",
-  "next": "Separate desktop-diagnosis-02 with parent directory prepared"
-}

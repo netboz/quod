@@ -1,7 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "src/quod_runtime.erl": "ad58bc3d04cec2ffe8a8bcd83bbc85c334e47835a54d8fc4cea8235fda45f3e7",
-  "test/quod_runtime_tests.erl": "0cc16fc3215938d426663daab24a73c758069106f0bb04b6405d9b48e3f47026",
-  "src/quod_foreign_log.erl": "cc34ff174b5a44ab413fb85daf98c7e635f8de98b1c34e1d0955835c47ea7ee6",
-  "src/quod_foreign_projection.erl": "985fe4b4ab1d81b69a0672f0cf1e90f715bb861e4fa4a9caf1292cb37086f5b7"
-}

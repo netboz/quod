@@ -1,8 +1,0 @@
-usage: human.py [-h] --label LABEL --package PACKAGE
-                --server-label SERVER_LABEL
-
-options:
-  -h, --help            show this help message and exit
-  --label LABEL
-  --package PACKAGE
-  --server-label SERVER_LABEL

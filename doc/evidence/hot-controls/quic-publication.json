@@ -1,9 +1,0 @@
-{
-  "repository": "https://github.com/netboz/erlang_quic.git",
-  "branch": "idle-timer-rfc9000-10.1",
-  "verified_branch_sha": "9832288e2fca0c848bc6453cfb4ee7cbfd59ddd5",
-  "credit_commit": "fac1f28520d53ebb2aa59fc42d61f2b45384fd94",
-  "verified_at": "2026-10-08T19:45:34.517814+00:00",
-  "upstream_notifications": false,
-  "upstream_writes": false
-}

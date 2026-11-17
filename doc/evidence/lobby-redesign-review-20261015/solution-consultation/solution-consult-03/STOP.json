@@ -1,4 +1,0 @@
-{
-  "status": "interrupted",
-  "reason": "User interruption during wait; unified process id 66554 no longer exists; host process check found no matching recent runner or Claude process. No output or completion receipt; no verdict."
-}

@@ -1,8 +1,0 @@
-{
-  "first_join_plan_failed_before_submission": true,
-  "failed_evidence": "join/STOP.json",
-  "correction": "existing cold stop of installed founder, then place all eight with exact pinned joined config",
-  "new_root_and_installed_history_retained": true,
-  "manual_allocation_stop_api_not_used": true,
-  "nomad_reference": "https://developer.hashicorp.com/nomad/api-docs/allocations"
-}

@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_unconstrained_body(V0, V1) :- \\\\+ physics_joint(V0, hinge(body(V1, V2), V3, V4, V5, V6, V7, V8)) , \\\\+ physics_joint(V0, hinge(V9, V10, body(V1, V11), V12, V13, V14, V15)) -> true ; fail_with_reason(body_constraint_group(V1)).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:58:47.930818+00:00"
-}

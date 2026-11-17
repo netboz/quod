@@ -1,4 +1,0 @@
-{
-  "reason": "Sustained browser walk confirmed seconds-long pose starvation during terrain delivery. Extend the existing shared credit scheduler before release; preserve completed current gate and stop this separately labelled scope.",
-  "at": "2026-10-17T08:36:36.643201+00:00"
-}

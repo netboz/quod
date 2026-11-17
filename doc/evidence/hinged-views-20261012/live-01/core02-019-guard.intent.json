@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_door_replaceable,2),<<\"physics_door_replaceable(none, V0) :- true.\\xA\\physics_door_replaceable(request(V0, V1, V2, V3), V4) :- V0 = door_sample(V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18) , V4 = door_sample(V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32) , (V24 > V10 ; V24 = V10 , V29 > V15) , physics_request_rejected(V2, V3).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_door_replaceable,2)))),','('$quod_retract_exact'(':-'(physics_door_replaceable(none,V2),true)),','('$quod_retract_exact'(':-'(physics_door_replaceable(request(V3,V4,V5,V6),V7),','('='(V3,door_sample(V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21)),','('='(V7,door_sample(V22,V23,V24,V25,V26,V27,V28,V29,V30,V31,V32,V33,V34,V35)),','(';'('>'(V27,V13),','('='(V27,V13),'>'(V32,V18))),physics_request_rejected(V5,V6)))))),';'('->'('$quod_predicate_source'('/'(physics_door_replaceable,2),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_door_replaceable,2))))))))))",
-    "personal_lobby"
-  ],
-  "at": "2026-10-12T13:41:46.897663+00:00"
-}

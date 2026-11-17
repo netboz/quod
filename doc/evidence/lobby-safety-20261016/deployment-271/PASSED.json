@@ -1,8 +1,0 @@
-{
-  "passed": true,
-  "release": "0.7.271",
-  "scope": "candidate network only",
-  "desktop": true,
-  "physicalVR": false,
-  "obsolete_candidate_volumes_deleted": 8
-}

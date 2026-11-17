@@ -1,8 +1,0 @@
-native-simulated-final01 {"create_swapchains": 1, "destroy_swapchains": 1, "stereo_submissions": 272}
-native-pre-head01 {"create_swapchains": 0, "destroy_swapchains": 0, "stereo_submissions": 0}
-render-lifecycle-observation01 {"create_swapchains": 0, "destroy_swapchains": 0, "stereo_submissions": 0}
-render-lifecycle-observation02 {"create_swapchains": 0, "destroy_swapchains": 0, "stereo_submissions": 0}
-native-vive-final02 {"create_swapchains": 0, "destroy_swapchains": 0, "stereo_submissions": 0}
-native-simulated-final03 {"create_swapchains": 1, "destroy_swapchains": 1, "stereo_submissions": 272}
-native-fault-close-final03 {"create_swapchains": 1, "destroy_swapchains": 1, "stereo_submissions": 89}
-native-vive-final03 {"create_swapchains": 0, "destroy_swapchains": 0, "stereo_submissions": 0}

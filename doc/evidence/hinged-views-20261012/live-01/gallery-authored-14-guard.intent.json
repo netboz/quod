@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(hinged_example_appearance,5),<<\"\">>),true),fail_with_reason(edit_conflict('/'(hinged_example_appearance,5)))),','(assertz(':-'(hinged_example_appearance(room,3,<<\"hinged-lid\">>,container_lid,[part(<<\"hinged-lid/panel\">>,<<\"box\">>,[f(<<\"width\">>,2000),f(<<\"height\">>,200),f(<<\"depth\">>,2000)],transform(0,0,0,0,0,0),surface(<<\"#C48A45\">>,0,900,0,[])),part(<<\"hinged-lid/handle\">>,<<\"sphere\">>,[f(<<\"diameter\">>,300)],transform(0,150,V2,0,0,0),surface(<<\"#D7CB9F\">>,600,450,0,[]))]),is(V2,-700))),';'('->'('$quod_predicate_source'('/'(hinged_example_appearance,5),<<\"hinged_example_appearance(room, 3, <<\\\"hinged-lid\\\">>, container_lid, [part(<<\\\"hinged-lid/panel\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 2000), f(<<\\\"height\\\">>, 200), f(<<\\\"depth\\\">>, 2000)], transform(0, 0, 0, 0, 0, 0), surface(<<\\\"#C48A45\\\">>, 0, 900, 0, [])), part(<<\\\"hinged-lid/handle\\\">>, <<\\\"sphere\\\">>, [f(<<\\\"diameter\\\">>, 300)], transform(0, 150, V0, 0, 0, 0), surface(<<\\\"#D7CB9F\\\">>, 600, 450, 0, []))]) :- V0 is (-700).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(hinged_example_appearance,5)))))))))",
-    "room"
-  ],
-  "at": "2026-10-12T14:02:04.747086+00:00"
-}

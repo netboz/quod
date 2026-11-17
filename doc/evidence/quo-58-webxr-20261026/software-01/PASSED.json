@@ -1,9 +1,0 @@
-{
-  "passed": true,
-  "test_files": 30,
-  "tests": 289,
-  "public_assets_preserved": true,
-  "release_qualified": false,
-  "production_https_accepted": false,
-  "physical_accepted": false
-}

@@ -1,9 +1,0 @@
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "{\n  \"data\": {\n    \"result\": {\n      \"renderer\": \"WebGL2 - Parallel shader compilation\",\n      \"errors\": [],\n      \"commands\": 1,\n      \"immersiveVR\": false,\n      \"checks\": [\n        \"authored camera mount\",\n        \"accepted pose correction\",\n        \"disabled direct translation\",\n        \"unavailable world freezes travel\",\n        \"observer restoration\",\n        \"scene disposal\"\n      ]\n    }\n  }\n}"
-    }
-  ],
-  "isError": false
-}

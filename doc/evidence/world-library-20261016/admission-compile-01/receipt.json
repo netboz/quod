@@ -1,9 +1,0 @@
-{
-  "command": [
-    "rebar3",
-    "compile"
-  ],
-  "started": "2026-10-16T22:28:01.800455+00:00",
-  "exit": 0,
-  "seconds": 6.22
-}

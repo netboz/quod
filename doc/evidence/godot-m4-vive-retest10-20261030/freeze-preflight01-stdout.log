@@ -1,2 +1,0 @@
-{"free_bytes": 806895603712, "new_destinations_absent": true, "parent_source_entries": 25596, "passed": true, "root_custody_reply": "meta-1793360704062-rx89hzg: no concurrent root links; prior65 and case10-83 caches unchanged.", "scope": "Metadata/cache coverage and prepared-source syntax/adaptation only; no source qualification or live process/socket/display inspection.", "source_or_readonly_object_links_created": false}
-{"uncached_prior_source": {"live": {"entries": 0, "bytes": 0}, "previous-materialization": {"entries": 0, "bytes": 0}}}

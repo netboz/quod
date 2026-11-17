@@ -1,1 +1,0 @@
-"world_view(room, playing, V0) :- hinged_example_view(room, V1) , hinged_fixture_view(room, V2) , append(V1, V2, V0).\n"

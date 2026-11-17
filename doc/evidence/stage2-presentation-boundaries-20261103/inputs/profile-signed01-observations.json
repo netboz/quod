@@ -1,5 +1,0 @@
-[
-  "CONTENTS_RENEWAL_RECEIPT 0",
-  "RENEWAL_MS 14646",
-  "RENEWAL_WORK {\"profile\":[{\"function\":\"quod_erlog_db_local_prove(get_procedure,2)\",\"calls\":390399,\"time_us\":2068393},{\"function\":\"quod_erlog_db_local_prove(follower_clauses,3)\",\"calls\":307787,\"time_us\":112746},{\"function\":\"quod_erlog_db_mvcc(get_interpreted_functors,1)\",\"calls\":857,\"time_us\":396287},{\"function\":\"erlog_int(well_form_body,3)\",\"calls\":307787,\"time_us\":53661}],\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"wall_us\":14689169,\"cpu_ms\":14786}"
-]

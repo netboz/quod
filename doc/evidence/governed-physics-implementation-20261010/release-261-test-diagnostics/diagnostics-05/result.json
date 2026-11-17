@@ -1,5 +1,0 @@
-{
-  "exit": 0,
-  "seconds": 11.079,
-  "expected": "original module passes while namespaces survive; then explicitly stopped"
-}

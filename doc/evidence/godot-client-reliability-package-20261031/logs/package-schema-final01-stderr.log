@@ -1,6 +1,0 @@
-Traceback (most recent call last):
-  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-reliability-package-20261031/schema_check.py", line 11, in <module>
-    r=owner.package(m,raw(m),e,work/'current.tar.gz')
-  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tools/package.py", line 34, in package
-    raise ValueError('Export path set differs from manifest')
-ValueError: Export path set differs from manifest

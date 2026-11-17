@@ -1,7 +1,0 @@
-{
-  "at": "2026-10-11T18:18:41.723891+00:00",
-  "image": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
-  "http_status": 200,
-  "digest_matches": true,
-  "read_only": true
-}

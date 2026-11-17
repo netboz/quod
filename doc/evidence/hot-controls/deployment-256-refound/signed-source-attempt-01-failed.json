@@ -1,9 +1,0 @@
-{
-  "passed": false,
-  "stage": "authenticateKey",
-  "classification": "outcome_unknown",
-  "cause_code": "DEPTH_ZERO_SELF_SIGNED_CERT",
-  "cause": "Node rejected the candidate lobby's self-signed LAN certificate before accepting the HTTPS response",
-  "action": "The process and its ephemeral key provider ended; its request was not resubmitted. A separately labelled attempt uses a fresh ephemeral identity with the documented LAN-only TLS verification bypass.",
-  "exit": 1
-}

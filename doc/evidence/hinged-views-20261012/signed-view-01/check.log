@@ -1,3 +1,0 @@
-===> Verifying dependencies...
-===> Uncaught error in rebar_core. Run with DIAGNOSTIC=1 to see stacktrace or consult rebar3.crashdump
-===> When submitting a bug report, please include the output of `rebar3 report "your command"`

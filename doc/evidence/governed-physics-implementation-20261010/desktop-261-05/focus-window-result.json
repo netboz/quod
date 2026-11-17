@@ -1,7 +1,0 @@
-{
-  "exit": 7,
-  "stdout": "error: [string \"return hl.dispatch(focuswindow address:0x55ea...\"]:1: ')' expected near 'address'\n\n \u2192 Note: dispatch in lua is a shorthand for hl.dispatch(...), your syntax might need to be updated.\n",
-  "stderr": "",
-  "active_pid": 1669361,
-  "active_class": "Project Zomboid"
-}

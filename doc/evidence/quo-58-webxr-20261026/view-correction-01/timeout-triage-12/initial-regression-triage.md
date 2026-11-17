@@ -1,1 +1,0 @@
-The initial regression used `committed` where the existing operation-vote helper expects `applied`. Both initial runs failed at that new assertion before checking cleanup. Their logs remain. The corrected regression uses the existing vote vocabulary; neither original assertions nor deadlines change.

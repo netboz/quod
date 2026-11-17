@@ -1,4 +1,0 @@
-==> 2026-11-16T20:35:24+01:00: Monitoring evaluation "d23fb92c"
-    2026-11-16T20:35:24+01:00: Evaluation triggered by job "quod-cloud-ledger-cleanup-20261116"
-    2026-11-16T20:35:25+01:00: Evaluation status changed: "pending" -> "complete"
-==> 2026-11-16T20:35:25+01:00: Evaluation "d23fb92c" finished with status "complete"

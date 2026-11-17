@@ -1,5 +1,0 @@
-{
-  "split": ["activewin", "dowv2>>ab", "c\nactivewindowv2>>abc\nactivewindowv2>>de", "f\nactivewindowv2>>abc\n"],
-  "unrelated": "activewindow>>EXAMPLE_CLASS,DO_NOT_RETAIN_WINDOW_TITLE\nwindowtitle>>EXAMPLE_IDENTIFIER,EXAMPLE_TITLE\nactivewindowv2>>deadbeef\n",
-  "forbidden": ["EXAMPLE_CLASS", "DO_NOT_RETAIN_WINDOW_TITLE", "EXAMPLE_IDENTIFIER", "EXAMPLE_TITLE", "deadbeef", "0xabc"]
-}

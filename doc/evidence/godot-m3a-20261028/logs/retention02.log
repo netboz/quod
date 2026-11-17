@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3a-20261028/retain-target.py", line 44, in <module>
-    assert member.isfile() and member.size==row['bytes']
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError

@@ -1,1 +1,0 @@
-189 tests passed with true child exit zero and unchanged input hashes. This run includes physics, physics control and foreign lifecycle, covering the corrected cleanup fixtures, different-session retirement and the real timed-out native attachment/socket-death cleanup. The prior stopped clean gate remains separate. See ../renewal-implementation-resolution.md for scope and limits.

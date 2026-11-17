@@ -1,5 +1,0 @@
-Error! Failed to eval: true=code:add_pathsa(filelib:wildcard("/work/_build/test/lib/*/ebin")),{ok,quod_lobby_tests}=compile:file("/probe/quod_lobby_tests.erl",[export_all,{d,'TEST'},{i,"/work/include"},{outdir,"/probe"}]),true=code:add_patha("/probe"),case eunit:test([quod_lobby_tests:authored_space_composition_preserves_world_test_(),quod_lobby_tests:inactive_physics_source_authoring_preserves_world_test_()],[verbose]) of ok->halt(0);_->halt(1) end.
-
-Runtime terminating during boot ({{badmatch,ok},[{erl_eval,expr,6,[{file,"erl_eval.erl"},{line,672}]},{erl_eval,exprs,6,[{file,"erl_eval.erl"},{line,276}]},{init,start_it,1,[]},{init,start_em,1,[]},{init,do_boot,3,[]}]})
-
-Crash dump is being written to: erl_crash.dump...

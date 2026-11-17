@@ -1,1 +1,0 @@
-{"command": ["dotnet", "run", "--project", "/data/quod-m4-vr-ca84d4f8-20261029/builds/cue-gates02/CueGateChecks.csproj", "-c", "Release"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 2.034403872999974}

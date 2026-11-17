@@ -1,6 +1,0 @@
-{
-  "same_source_manifest": true,
-  "previous": "gates-01",
-  "reason": "vault test loopback listen denied by sandbox, eperm",
-  "changed_code_or_assertions": false
-}

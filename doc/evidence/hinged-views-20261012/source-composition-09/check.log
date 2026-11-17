@@ -1,7 +1,0 @@
-escript: exception error: no match of right hand side value {error,invalid_term}
-  in function  run_escript__escript__1791__806404__727981__1123:main/1 (_build/quod36/compact-source-09/run.escript:28)
-  in call from escript:run/2 (escript.erl:906)
-  in call from escript:start/1 (escript.erl:420)
-  in call from init:start_it/1 
-  in call from init:start_em/1 
-  in call from init:do_boot/3 

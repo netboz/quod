@@ -1,1 +1,0 @@
-Read-only cache inspection failed before child execution: linux-sandbox/src/linux_run_main.rs:998:25 failed to register synthetic bubblewrap mount target /tmp/.git: Quota exceeded (os error122). No cleanup or system mutation. Scoped read retried with authorized escalation; not an approval-review rejection or product failure.

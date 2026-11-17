@@ -1,5 +1,0 @@
-{
-  "exit": 1,
-  "cause_hypothesis": "Wayland Unix socket path is 111 bytes, exceeding Linux sockaddr_un.sun_path capacity. Chrome exited before session creation. No surviving profile process.",
-  "next": "Separately labelled diagnostic with short private state path and verbose driver log. Trust removal succeeded."
-}

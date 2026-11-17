@@ -1,9 +1,0 @@
-   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
-error[E0614]: type `DVec3` cannot be dereferenced
-   --> src/terrain.rs:200:20
-    |
-200 |         assert_eq!(*w.bodies[handle].linvel(),Vector::ZERO);
-    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^ can't be dereferenced
-
-For more information about this error, try `rustc --explain E0614`.
-error: could not compile `quod_physics` (lib test) due to 1 previous error

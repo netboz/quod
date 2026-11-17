@@ -1,9 +1,0 @@
-===> Verifying dependencies...
-    Finished `release` profile [optimized] target(s) in 0.02s
-===> Analyzing applications...
-===> Compiling quod
-===> Performing EUnit tests...
-======================== EUnit ========================
-quod_outcome_endpoint_tests: exact_claim_reuses_live_consensus_custody_test...[0.193 s] ok
-=======================================================
-  Test passed.

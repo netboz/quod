@@ -1,7 +1,0 @@
-{
-  "diagnosticExportArchiveIndexMatchesExecutedManifest": 196,
-  "actualDiagnosticExportHashesMatched": 196,
-  "actualHistoricalFinal04ExportHashesMatched": 196,
-  "method": "Every recorded SHA256 and byte count matched immutable archive index; every real diagnostic and historical final04 export file SHA256 reread",
-  "productTestsRerun": false
-}

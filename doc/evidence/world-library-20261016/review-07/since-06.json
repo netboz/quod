@@ -1,8 +1,0 @@
-{
-  "changed": [
-    "test/quod_names_SUITE.erl"
-  ],
-  "production_byte_identical": true,
-  "reviewed_tree": "/home/yan/src/quod/_build/world-library-20261016/clean-integration-06/tree",
-  "final_tree": "/home/yan/src/quod/_build/world-library-20261016/clean-integration-07/tree"
-}

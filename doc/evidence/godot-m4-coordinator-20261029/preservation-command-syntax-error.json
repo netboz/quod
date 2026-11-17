@@ -1,3 +1,0 @@
-{
-  "failure": "First preservation command had a Python parenthesis syntax error before executing any statement. Artifact/source state was not changed. The still-present attempt02 receipt and exact verifier version were then preserved before the corrected audit completed."
-}

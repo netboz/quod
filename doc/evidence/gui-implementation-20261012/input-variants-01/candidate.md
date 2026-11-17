@@ -1,7 +1,0 @@
-# Common input variants
-
-Use ordinary subclasses: text_area of text_box, number_input/slider/rotary_knob of numeric_input, checkbox/toggle of boolean_input, radio_group/selectable_list of selection. Each concrete kind has the same inherited constraint and binding semantics as its family. Boolean values are Prolog true/false; required booleans require true. Choice options retain ground stable IDs. Selectable lists may declare multiple(true); their value is a duplicate-free list of option IDs, default empty, required implies nonempty. Other choice controls remain single selection.
-
-The vocabulary returns exact input IDs during its existing tree projection. Application binding validation uses this list, removing its duplicated concrete-kind lists. No additional foreign ask or domain owner. Existing signed validation, revisions, transactions, retained intent and lifecycle are untouched.
-
-Both adapters must implement every new kind before this slice is accepted. Multiline is ordinary text input, not the dedicated ontology source editor. Number input reuses the exact integer grid/direct-entry and increment controls, with no slider. Choice, boolean and text variants use local drafts until the existing form submission. Production-seam tests must cover defaults, typed accepted bindings, rejection/rollback, authority and unchanged read I/O; browser fixtures must cover editable and locked controls and multi selection.

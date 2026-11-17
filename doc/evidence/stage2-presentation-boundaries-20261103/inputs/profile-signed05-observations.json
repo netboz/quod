@@ -1,5 +1,0 @@
-[
-  "CONTENTS_RENEWAL_RECEIPT 0",
-  "RENEWAL_MS 15046",
-  "RENEWAL_WORK {\"profile\":[{\"function\":\"quod_proof_scope(run_step,3)\",\"calls\":4865,\"time_us\":182721},{\"function\":\"quod_erlog_db_local_prove(get_procedure,2)\",\"calls\":390399,\"time_us\":2459839},{\"function\":\"erlog_int(prove_goal_clause,4)\",\"calls\":489872,\"time_us\":2388646},{\"function\":\"erlog_int(unify_prove_body,4)\",\"calls\":482241,\"time_us\":4260104},{\"function\":\"erlog_int(unify,3)\",\"calls\":1160051,\"time_us\":378020},{\"function\":\"erlog_int(fail,1)\",\"calls\":706069,\"time_us\":3546803},{\"function\":\"erlog_int(prove_findall,5)\",\"calls\":3443,\"time_us\":695126}],\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"wall_us\":15089033,\"cpu_ms\":15516}"
-]

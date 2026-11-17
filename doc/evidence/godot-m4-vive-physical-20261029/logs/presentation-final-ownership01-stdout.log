@@ -1,1 +1,0 @@
-{"desktop_unchanged_since_case07": true, "config_unchanged_since_case07": true, "config_files_checked": 76, "HDMI-A-1_disabled": true, "known_closed_owned_client_pids_remaining": [], "scope": "Read-only monitors/config check; no runtime/display/config mutation and no whole-host identity claim. All actual qualification child exits/EOF are checked separately."}

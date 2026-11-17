@@ -1,8 +1,0 @@
-{
-  "anchor": "037E31ED139E5F968D506468F955E222CFE5C629E7D13AE8A25E66624659BA21",
-  "namespace": "quod:user",
-  "root_administrator": true,
-  "sources": {
-    "quod_user.pl": "5481461CFF241B53F85F2292D4E11405D7359F42292EF44801F8A4F57BEEF0CE"
-  }
-}

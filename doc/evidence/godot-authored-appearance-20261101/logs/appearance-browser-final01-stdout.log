@@ -1,6 +1,0 @@
-PASS existing browser form consumes the shared explicit inherit declaration
-PASS ordinary browser question still admits the same revision and native fields
-PASS unsupported authored appearance fails explicitly in the browser adapter
-PASS repeated appearance property is refused
-PASS actual browser operation caller retains exact target submit and values
-BROWSER_APPEARANCE_PASS

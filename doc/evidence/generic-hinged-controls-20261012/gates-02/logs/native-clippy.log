@@ -1,7 +1,0 @@
-    Checking glam v0.33.12
-    Checking nalgebra v0.35.0
-    Checking glamx v0.3.1
-    Checking parry3d-f64 v0.31.1 (/home/yan/src/quod/_build/quod-generic-hinged/gates-02/tree/native/quod_physics/vendor/parry3d-f64)
-    Checking rapier3d-f64 v0.36.0
-    Checking quod_physics v0.1.0 (/home/yan/src/quod/_build/quod-generic-hinged/gates-02/tree/native/quod_physics)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.94s

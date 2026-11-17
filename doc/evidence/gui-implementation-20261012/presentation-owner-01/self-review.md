@@ -1,7 +1,0 @@
-# Shared presentation ownership
-
-Codex self-review. The existing question controller now exposes subscriptions and can defer opening its signed view for native preparation. The fixed constructor callback was replaced, with every live caller migrated; no compatibility dispatcher remains. It still owns the only draft, locks and saved-operation correlation. Closing an owner notifies mounted consumers of a locked state before releasing subscriptions.
-
-World retains actual controller handles per question and authenticated identity. GuiQuestion borrows them, so switching to the HUD/editor or unmounting a panel does not discard a draft. Signed HUD removal retires a handle; temporary invalidation does not. Identity change/unmount closes all handles. This map contains only local presentations that have been opened; it is not an authoritative pending list or a work queue. Native preparation/activation has not yet been wired to it.
-
-Client-gate01 10/0 exit0; client-gate02 all17 test files pass exit0; build-gate03 TypeScript/Vite exit0. MCP mounted React/IndexedDB browser-result01 verifies preserved draft after actual component unmount/remount, shared spatial/desktop draft, default and stale handling, all uncertain-operation locks, exactly1execute+1outcome read of identical original bytes, no retained row,errors[]. The HTTP/socket and scene fixtures are doubles, not native acceptance or hardware. Browser closed; Vite session18252 deliberately stopped exit130. No active gates/builds/servers.

@@ -1,1 +1,0 @@
-Confirmed regression: reinstalling the same chunk after an edit away from the body re-admitted unchanged solver contacts and blocked at tick 17. Corrected by exact oriented-face comparison, retaining the last integrated baseline; no solver tolerance changed. Native 13 and owner 09 carry the final relevant passing evidence.

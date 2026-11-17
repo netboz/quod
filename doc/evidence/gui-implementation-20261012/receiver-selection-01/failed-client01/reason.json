@@ -1,4 +1,0 @@
-{
-  "exit": 130,
-  "reason": "Interrupted hung fixture awaiting selection: receiver goal passed period-terminated instance source into binding-term parser; error callback ran but fixture awaited only journal deletion."
-}

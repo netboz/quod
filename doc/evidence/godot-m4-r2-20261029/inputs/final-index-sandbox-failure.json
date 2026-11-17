@@ -1,8 +1,0 @@
-{
-  "command": ["python3", "doc/evidence/godot-m4-r2-20261029/run.py", "--timeout", "300", "final-evidence-index", "--", "python3", "doc/evidence/godot-m4-r2-20261029/finalize-evidence.py"],
-  "wrapper_exit": 1,
-  "child_started": false,
-  "failure": "OSError: [Errno 30] Read-only file system: '/home/yan/.cache/quod-m4-r2-artifacts/private/logs/final-evidence-index.log'",
-  "scope": "Sandbox external-cache write failure before command start; not a product qualification result or automatic approval rejection",
-  "disposition": "Retain exact failure; use authorized scoped require_escalated external-cache access with a separately labelled command"
-}

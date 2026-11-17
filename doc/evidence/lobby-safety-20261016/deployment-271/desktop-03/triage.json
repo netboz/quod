@@ -1,4 +1,0 @@
-{
-  "failure": "Time-sensitive second Space while in air did not yield no_support observation before landing. Firstjump was definitely applied(sequence11,tick129,Y.5446 from.4973), and definitely landed bytick165,Y.4958. No pageerrors, no setupwrite or uncertain durable operation.",
-  "resolution": "Keep midair refusal covered by deterministic real-owner tests already passing. Desktop continuation verifies actual jump height and landing, rim, speed and reload, avoiding a second key gesture that the existing one-in-flight control rule can drop. Preservefailedrun; same account and emptyjournal."
-}

@@ -1,5 +1,0 @@
-warning: the /proc/sys/kernel/yama/ptrace_scope setting of 1 might prevent attaching, see 'man 2 ptrace'
-ptrace: No such process.
-Unknown thread 1.
-No stack.
-The program is not being run.

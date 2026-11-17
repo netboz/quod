@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_hinged_consequences([]) :- true.\\xA\\physics_hinged_consequences([V0 | V1]) :- call(V0) , physics_hinged_consequences(V1).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:56:49.064394+00:00"
-}

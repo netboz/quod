@@ -1,8 +1,0 @@
-{
-  "args": [
-    "node",
-    "client/test/voxel-profile.test.js"
-  ],
-  "exit": 0,
-  "finished": "2026-10-16T12:41:07.014304+00:00"
-}

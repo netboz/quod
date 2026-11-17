@@ -1,8 +1,0 @@
-{
-  "recorded_at": "2026-10-16T10:41:57.220112+00:00",
-  "status": "interrupted_without_result",
-  "child_exit": null,
-  "review_valid": false,
-  "evidence": "Original exec session unavailable after chat model switch; no matching review runner/child process found; stdout and stderr empty; no completion receipt. Cause of termination not established.",
-  "continuation": "Requested review continued in separately labeled plan-review-02; original inputs and outputs preserved."
-}

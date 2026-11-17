@@ -1,5 +1,0 @@
-{
-  "at": "2026-10-11T19:22:47.798424+00:00",
-  "matching_browser_pids": [],
-  "method": "Exact argv executable and profile argument; previous substring check matched its own shell and was discarded"
-}

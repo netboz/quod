@@ -1,1 +1,0 @@
-"lobby_workspace(console, prove_console, form(<<\"Prolog console\">>, [editor(goal, <<\"Prolog goal\">>), bindings(results, <<\"Bindings\">>), button(run, <<\"Run\">>), button(next, <<\"Next solution\">>), button(accept, <<\"Accept solution\">>), button(stop, <<\"Stop\">>), button(resolve, <<\"Check saved outcome\">>)])) :- true.\n"

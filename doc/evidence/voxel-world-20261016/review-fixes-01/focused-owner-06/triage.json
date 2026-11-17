@@ -1,5 +1,0 @@
-{
-  "cause": "Test assumed terrain body id 0. The actual production allocator selected id 4. All preceding create, settling, signed dig, same-incarnation and resumed-step assertions passed; digest lookup then failed with badkey.",
-  "correction": "Resolve terrain identity from installed resources, as existing owner fixtures do. No production change, deadline extension or weakened assertion.",
-  "next_run": "focused-owner-07"
-}

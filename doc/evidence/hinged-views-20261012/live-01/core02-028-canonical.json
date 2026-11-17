@@ -1,1 +1,0 @@
-"physics_hinged_definition(local(V0, V1), V2) :- physics_hinged_class(V0, V1, V2).\nphysics_hinged_definition(class_ref(V0, V1, V2, V3), V4) :- V0 :: (current_ontology_identity(V0, V1) , physics_hinged_class(V2, V3, V4)).\n"

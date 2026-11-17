@@ -1,7 +1,0 @@
-{
-  "action": "read",
-  "args": [
-    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>::world_view(personal_lobby,playing,Marks)."
-  ],
-  "at": "2026-10-12T13:46:56.375340+00:00"
-}

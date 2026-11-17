@@ -1,9 +1,0 @@
-===> Verifying dependencies...
-    Finished `release` profile [optimized] target(s) in 0.02s
-===> Analyzing applications...
-===> Compiling quod
-===> Performing EUnit tests...
-======================== EUnit ========================
-quod_lobby_tests: -inactive_physics_source_authoring_preserves_world_test_/0-fun-19-...[34.024 s] ok
-=======================================================
-  Test passed.

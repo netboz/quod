@@ -1,8 +1,0 @@
-{
-  "command": [
-    "node",
-    "client/test/controlled-navigation.test.js"
-  ],
-  "exit": 0,
-  "seconds": 0.16785749100381508
-}

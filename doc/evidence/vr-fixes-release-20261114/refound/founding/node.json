@@ -1,9 +1,0 @@
-{
-  "anchor": "92000DBF4E765E70E5BEF0704F03D9526BBAA33BFD01F9CEBB033E6430C190BB",
-  "enrollment": "awaiting_identity",
-  "namespace": "quod:node",
-  "node": "{agent_instance_ref,<<\"node:6cfbad777f949b709743bf1d51e4ca1c12a94a7ab738a65825b07d87670beb07\">>,<<19,253,113,107,28,187,229,180,126,202,95,221,38,215,218,246,230,115,151,129,178,15,233,9,244,16,139,197,139,43,100,235>>,me}",
-  "sources": {
-    "quod_node.pl": "624156C433E886E712EC91EAB89E1768B6E4D5EE6109B8177FC881CB369820A0"
-  }
-}

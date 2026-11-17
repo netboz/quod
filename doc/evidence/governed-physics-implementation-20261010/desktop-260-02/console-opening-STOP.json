@@ -1,5 +1,0 @@
-{
-  "stage": "release pointer before console interaction",
-  "result": "WebDriver execute/sync document.exitPointerLock() timed out at 40s; no console click or proof was submitted",
-  "console_acceptance": "not performed"
-}

@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_consequences,1),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_consequences,1)))),','(assertz(':-'(physics_hinged_consequences([]),true)),','(assertz(':-'(physics_hinged_consequences([V2|V3]),','(call(V2),physics_hinged_consequences(V3)))),';'('->'('$quod_predicate_source'('/'(physics_hinged_consequences,1),<<\"physics_hinged_consequences([]) :- true.\\xA\\physics_hinged_consequences([V0 | V1]) :- call(V0) , physics_hinged_consequences(V1).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_consequences,1))))))))))",
-    "personal_lobby"
-  ],
-  "at": "2026-10-12T13:42:20.931060+00:00"
-}

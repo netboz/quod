@@ -1,9 +1,0 @@
-{
-  "kind": "assistant metadata error",
-  "tool": "nimbalyst-host/send_prompt",
-  "isError": true,
-  "error": "Mcp error: -32603: prompt is required",
-  "empty_prompt": true,
-  "coordinator_report_delivered": false,
-  "product_or_test_failure": false
-}

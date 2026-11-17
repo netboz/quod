@@ -1,9 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "src/quod_client_view.erl": "a4fb8834405310552990196bc7b6467ebac929b1fe4224d251b0a0b4eef79635",
-  "client/src/signed-view.js": "5276c564ceb4cda2e9b2916d12a882038af5801d6cf1cb9cd18a2f659d0e27c1",
-  "client/src/simulation.js": "ba95231b28500f7ee68a85509700d4ffa4c20cc3b446a3c08d6a780295f7f4b0",
-  "test/quod_physics_tests.erl": "eb8c5fc870f90ddc9b9352c0d2d67ef684439993eed95abafedfba12f6f87385",
-  "test/quod_gui_question_tests.erl": "fd89c7c1e9b84a865c89f2a880b0299c487c769b0041f528722488e8a4fdbdb4",
-  "doc/multiwrite-architecture.md": "9a10791ac69f6d2ac222c80317473e597d96401285efb3b0dbd08969eb3ec5f2"
-}

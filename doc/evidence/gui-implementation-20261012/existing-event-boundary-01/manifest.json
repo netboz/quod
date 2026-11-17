@@ -1,9 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "src/quod_diff.erl": "2030c41065b439ef705b0cc74e3c231bc3d165b290fd155cc2f3af7d7ce4073d",
-  "src/predicates/quod_transaction_predicates.erl": "3ba74ecfad111b1a59346489cfd037002ed73e99db0dde027b59bfdbb434b04f",
-  "src/quod_runtime.erl": "ad58bc3d04cec2ffe8a8bcd83bbc85c334e47835a54d8fc4cea8235fda45f3e7",
-  "src/predicates/quod_runtime_predicates.erl": "8d39cdc089731e1d19a8dc96909dfd3fffc46ff81598cd9ef619bd4f784fe6d9",
-  "test/quod_agent_reaction_tests.erl": "ca3608101135adcc987b2edc000a3e623e02dcf45a7db486be1805acdfb9da35",
-  "test/quod_agent_hosting_tests.erl": "081f3a7c2cee761f14fbf592fba7b334534d6f981ed63e11cf47134c7a4a5d1e"
-}

@@ -1,2 +1,0 @@
-found-controllers {"anchor": "F0987FD51841101741C8FC5FAB4C0BC0DBE3B14EC8E7FC054209A042C30FAA35", "namespace": "quod:controllers", "sources": {"quod_controllers.pl": "78DF5F091B5995D17A7465EBB416E9472BA1CA39914E66EA2DF849EA357000B2"}}
-publish-controllers {"anchor": "F0987FD51841101741C8FC5FAB4C0BC0DBE3B14EC8E7FC054209A042C30FAA35", "namespace": "quod:controllers", "published": true}

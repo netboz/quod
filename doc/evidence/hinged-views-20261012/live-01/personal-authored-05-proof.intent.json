@@ -1,7 +1,0 @@
-{
-  "action": "cursor",
-  "args": [
-    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">> :: (current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xc1\\P&\\x9e\\[\\x82\\uL\\x06\\\\xcb\\y(\\xf6\\\\xe5\\_\\xfb\\\\xce\\\\xda\\\\xbd\\%\\xe6\\B\\xc2\\\\xcc\\\\xf8\\t\\xa3\\\\xa6\\\\xf7\\\\x7f\\\">>), transaction((physics_space(personal_lobby, disabled, physics_authority), ('$quod_predicate_source'(physics_hinged_class / 3, <<\"\">>) -> true ; fail_with_reason(edit_conflict(physics_hinged_class / 3))), assertz((physics_hinged_class(vertical_door, 1, hinged(box(50, 1000, 50), box(1000, 1000, 100), 1, vector(0, 1, 0), anchors(vector(0, 0, 0), vector(V2, 0, 0)), limits(V3, 1500), 1500, position(0, motor(100, 10, 1000), stop(20, target_or_contact)))) :- V2 is (-1000), V3 is (-1500))), ('$quod_predicate_source'(physics_hinged_class / 3, <<\"physics_hinged_class(vertical_door, 1, hinged(box(50, 1000, 50), box(1000, 1000, 100), 1, vector(0, 1, 0), anchors(vector(0, 0, 0), vector(V0, 0, 0)), limits(V1, 1500), 1500, position(0, motor(100, 10, 1000), stop(20, target_or_contact)))) :- V0 is (-1000) , V1 is (-1500).\\n\">>) -> true ; fail_with_reason(edit_not_representable(physics_hinged_class / 3))))))."
-  ],
-  "at": "2026-10-12T13:45:18.010580+00:00"
-}

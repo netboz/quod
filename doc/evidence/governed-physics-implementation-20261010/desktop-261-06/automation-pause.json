@@ -1,9 +1,0 @@
-{
-  "at": "2026-10-11T20:24:19.019192+00:00",
-  "reason": "Body moved between scripted steps; collected low-roof-hold06 buffer includes120 controls across272frames, not just the300ms script. Need establish who is driving before safe route continues.",
-  "last_script_completed": true,
-  "last_script_key_up_completed": true,
-  "roof_contact_observed_in_step05": true,
-  "roof_hold06_not_accepted_as_scoped_test": true,
-  "no_assumed_cause": "Could be concurrent user input; inspect actual event timing before attribution."
-}

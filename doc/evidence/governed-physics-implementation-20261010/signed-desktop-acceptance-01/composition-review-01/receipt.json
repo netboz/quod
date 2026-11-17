@@ -1,9 +1,0 @@
-{
-  "started": "2026-10-11T00:24:43.622799+00:00",
-  "finished": "2026-10-11T00:27:34.937054+00:00",
-  "child_exit": 1,
-  "is_error": true,
-  "models": [],
-  "frozen_count": 14,
-  "changed_frozen_inputs": []
-}

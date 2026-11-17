@@ -1,7 +1,0 @@
-{
-  "unit": "quod27-release-258-deploy-01.service",
-  "invocation": "bf09e9272b7f46a78782ca7b5b7d1d9a",
-  "source_commit": "96ab9bf45ae9f3ccebe31a5adc1613d216c3d09d",
-  "scope": "quod-finality-candidate-v6-20260926 only; v4 to v5; separately authorized refound",
-  "recorded_at": "2026-10-11T12:13:06.631679+00:00"
-}

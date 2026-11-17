@@ -1,7 +1,0 @@
-{
-  "disposition": "intentionally stopped, superseded source; not a full passing campaign",
-  "cause": "Parent reproduced a readiness-state defect after freeze, focused-owner-10; fixed in focused-owner-11.",
-  "eunit": "SIGTERM caused exit 0 without completion summary. NOT a passing result. Receipt retained unchanged.",
-  "ct": "Runner advanced after EUnit exit0. Exact CT child terminated with SIGKILL; actual exit -9 and runner exit247. STOP.json retained.",
-  "final_campaign": "clean-fixes-04 uses corrected source and verifies positive completion summaries as well as actual child exits, and honours an explicit stop-request record at each gate boundary."
-}

@@ -1,7 +1,0 @@
-{
-  "status": "failed",
-  "gate": "ct",
-  "failed_case": "quod_quic_SUITE:priority_mixed_traffic",
-  "root_cause": "Pinned quic_connection do_send_data_fitting case_clause -64",
-  "subsequent_gates": "xref/dialyzer/release not run; commit/deploy blocked"
-}

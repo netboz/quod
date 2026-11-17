@@ -1,9 +1,0 @@
-{
-  "original_manifest": "preflight57-source.json",
-  "additional_staged_authored_inputs": {
-    "test/quod_m3a_acl_diagnostic_tests.erl": "2ffb31985f65694fbe3d71e2bd994a8b56460662b79aa3ec58d8dfa7917de59a"
-  },
-  "retained_source": "acl-diagnostic-56.erl",
-  "complete_authored_input_count": 1431,
-  "reason": "The incremental stage retained this earlier diagnostic module. Rebar may compile it, but the exact four-module test selection did not execute it. Production inputs and the selected tests are unchanged. Clean gates04 starts fresh and excludes it."
-}

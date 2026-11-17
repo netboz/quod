@@ -1,1 +1,0 @@
-genesis anchor \u2014 pin as content.genesis_hash on joiners: 297382CBBBEF18D3D5B480C392F68BB0818754FBD3D07E2D5F123207220DAA01

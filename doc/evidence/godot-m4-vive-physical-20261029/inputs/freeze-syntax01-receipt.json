@@ -1,9 +1,0 @@
-{
-  "original_exec_child_exit": 1,
-  "source": "doc/evidence/godot-m4-vive-physical-20261029/inputs/freeze-syntax01-source.py",
-  "failure": "unterminated string literal at freeze.py124 before any module execution",
-  "boundary_created": false,
-  "outer_freeze_directory_created": false,
-  "syntax_error": "SyntaxError: unterminated string literal (detected at line 124) (freeze.py, line 124)\n",
-  "exact_original_source_retained": true
-}

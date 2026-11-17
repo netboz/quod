@@ -1,5 +1,0 @@
-{
-  "target": "local",
-  "on": "quod-refound-rehearsal",
-  "expression": "quod_refound_operator:gui()"
-}

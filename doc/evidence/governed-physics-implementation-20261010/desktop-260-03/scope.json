@@ -1,9 +1,0 @@
-{
-  "at": "2026-10-11T17:33:09.880833+00:00",
-  "purpose": "ordinary signed view authorization and console acceptance; current260 solver defect remains open",
-  "profile": "_build/quod27-desktop-259-03/profile",
-  "same_profile_in_place": true,
-  "platform": "native X11 Chrome Testing157",
-  "prior_browser_verified_exited": true,
-  "no_server_mutation_for_browser_restart": true
-}

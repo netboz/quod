@@ -1,6 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "src/quod_client_view.erl": "f72429d0fed347eeb6e5ce88b24741dcc35dab43f0097ed691f5feb6a87ca8ca",
-  "test/quod_physics_tests.erl": "5fde7876557d1ff6cd203c86f3b616fa0501b021f7480e9d7340a007d6ac6d45",
-  "test/quod_gui_question_tests.erl": "fd89c7c1e9b84a865c89f2a880b0299c487c769b0041f528722488e8a4fdbdb4"
-}

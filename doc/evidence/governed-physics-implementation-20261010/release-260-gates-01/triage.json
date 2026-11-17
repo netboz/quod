@@ -1,7 +1,0 @@
-{
-  "date": "2026-10-11T16:01:24.769923+00:00",
-  "status": "failed; retained unchanged",
-  "queue_failure": "deterministically reproduced as valid cache-custody wait after exact predecessor published its result but before actual writer death; fix verifies both stages, including forced handoff; 180 tests passed",
-  "source_io_failure": "unattributed file:pwrite/3 and file:datasync/1 from VM-wide assertion; isolated caller-attributed checks passed both two-repeat and twenty-repeat windows at two identities before/after recovery; these passes do not explain original observation",
-  "next_campaign": "gates-02; queue fixture corrected, source trace gains PID/caller/gproc attribution, zero-work assertion unchanged. Diagnose any remaining source write before release approval."
-}

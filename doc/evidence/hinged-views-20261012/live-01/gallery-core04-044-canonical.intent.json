@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_rest_replaceable(V0, V1, V2) :- physics_rest_state(V1, V2, V3, V4) , physics_free_body(V1, V2, V5) , (V4 = finished(V6) -> V6 = physics_sample(V7, activity(V8, V9, V10), V11, V12, V13, V14) , V15 = finished(V9) ; V15 = V4) , physics_observation_replaceable(V0, V15, [body(V2, V5)]).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:58:22.240569+00:00"
-}

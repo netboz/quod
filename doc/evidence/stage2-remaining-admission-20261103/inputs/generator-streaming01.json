@@ -1,7 +1,0 @@
-{
-  "exit_code": 1,
-  "source": "revisions/rejected-aggregate01/streaming-generator-attempt01.py",
-  "failure": "AssertionError replacing next_transfer_part range completion clause; earlier broad text replacement changed both record and clause. Artifact generation only; no production mutation.",
-  "tool_chunk_id": "6cf20b",
-  "not_a_runtime_test": true
-}

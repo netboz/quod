@@ -1,4 +1,0 @@
-{
-  "phase": "snapshot-setup",
-  "reason": "The previous manifest included review-request.md relative to its own packet, not repository root. No Claude process was launched."
-}

@@ -1,9 +1,0 @@
-{
-  "profile_used_in_place": "/home/yan/src/quod/_build/quod27-desktop-259-03/profile",
-  "origin": "https://192.168.1.10:30519",
-  "view_url": "https://192.168.1.10:30519/",
-  "browser_change": "same Chrome157, native X11 backend instead of Wayland",
-  "prior_browser_pid_exited": 1256966,
-  "private_keys_copied": false,
-  "prior_failed_campaign_preserved": "quod27-desktop-260-01"
-}

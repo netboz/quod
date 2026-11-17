@@ -1,1 +1,0 @@
-done 2026-11-13: pie-client-02 all steps exit 0 on pie-02-tree.diff

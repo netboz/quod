@@ -1,9 +1,0 @@
-{
-  "sessionId": "8d55a3f3-e558-46e2-afbb-2e028558f371",
-  "provider": "openai-codex",
-  "model": "openai-codex:gpt-6.1-sol",
-  "observed_from": "get_session_status during gates04",
-  "requested_effort": "xhigh",
-  "effective_effort": "Not exposed by the installed session status API",
-  "model_changed_by_prompt": false
-}

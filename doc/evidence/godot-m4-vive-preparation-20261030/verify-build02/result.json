@@ -1,9 +1,0 @@
-{
-  "command": [
-    "python3",
-    "doc/evidence/godot-m4-vive-preparation-20261030/verify_build02.py"
-  ],
-  "exit": 0,
-  "diagnostic_failure": false,
-  "elapsed_seconds": 1.3405215639941161
-}

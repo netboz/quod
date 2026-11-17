@@ -1,9 +1,0 @@
-{
-  "action": "remove",
-  "exit": 0,
-  "certificate_sha256": "6d294c3211997edbb16ca0fa3c94d9ef498ad7da440770128b55747b2eaab659",
-  "nickname": "quod-xr-view-correction01-live01",
-  "trust": "exact TLS server leaf",
-  "other_trust_rows_unchanged": true,
-  "hostname_checks_disabled": false
-}

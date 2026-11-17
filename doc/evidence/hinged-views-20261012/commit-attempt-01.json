@@ -1,5 +1,0 @@
-{
-  "result": "failed before commit",
-  "reason": "The editor commit tool refused the ignored rebar3.crashdump evidence filename. Preserve the exact bytes as rebar3-crash.log and retry the same complete session-owned scope.",
-  "user_files_included": false
-}

@@ -1,4 +1,0 @@
-gate=eunit6 exit=0 log=/tmp/quod-stage2-release-gates-20261104/final-eunit6.log
-gate=ct6 exit=0 log=/tmp/quod-stage2-release-gates-20261104/final-ct6.log
-gate=xref6 exit=0 log=/tmp/quod-stage2-release-gates-20261104/final-xref6.log
-gate=dialyzer6 exit=1 log=/tmp/quod-stage2-release-gates-20261104/final-dialyzer6.log

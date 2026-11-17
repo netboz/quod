@@ -1,1 +1,0 @@
-Launcher failure only. Use Python resource.getrusage(RUSAGE_CHILDREN) for process CPU/RSS and retain the real escript exit in a separately labeled run.

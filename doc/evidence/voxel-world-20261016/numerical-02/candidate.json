@@ -1,7 +1,0 @@
-{
-  "basis": "../numerical-01/upstream-manifest.json",
-  "compiler": "../numerical-01/compile.json",
-  "change": "Test normalized odd signed-byte sample quantization: clamp(2*floor(D*64/spacing)+1,-127,127). This changes the canonical sampled field explicitly; it is not triangle repair.",
-  "spacing_mm": 500,
-  "unresolved": "upstream floating-point topology decisions; cross-build agreement; whole-cell ambiguity/topology regression coverage"
-}

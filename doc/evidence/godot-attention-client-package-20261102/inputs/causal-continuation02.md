@@ -1,5 +1,0 @@
-# Coordinator continuation meta-1793612089308-r6q4ds2
-
-Material follow-up within SAME QUO66 package scope: journey01's client1 is a demonstrated removable companion callback-detach lifetime error after81 functional PASS checks, with normal EOF; it is not an original postcompletion noEOF/phase failure. Preserve whole failed01. Correct ONLY that diagnostic helper against legitimate Later retirement, without weakening exactly-once/callback assertions or changing production/archive/limits, then run one separately labelled journey02 under the SAME original bounds to complete the already-authorized same-profile reopen. This is a causal fixture correction, not an identical green retry. If journey02 hits a genuine original guard or product failure, retain whole failure and stop further journey attempts; finish unaffected package evidence honestly. No new task, hardware, XR, human input or package rebuild.
-
-Actual full body read from pending inbox row at material qualification boundary; list-only is not consumption.

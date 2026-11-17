@@ -1,8 +1,0 @@
-escript: exception error: undefined function otel_ctx:get_current/0
-  in function  quod_ledger_store:traced_file_open/4 (/home/yan/src/quod/src/quod_ledger_store.erl:998)
-  in call from quod_ledger_store:open_ro/3 (/home/yan/src/quod/src/quod_ledger_store.erl:201)
-  in call from 'inspect-naming-history_escript__escript__1792__190068__958066__564':main/1 (doc/evidence/world-library-20261016/inspect-naming-history.escript:6)
-  in call from escript:run/2 (escript.erl:906)
-  in call from escript:start/1 (escript.erl:420)
-  in call from init:start_it/1 
-  in call from init:start_em/1 

@@ -1,8 +1,0 @@
-6	1	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/client => client}/src/gui-view.d.ts
-61	10	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/client => client}/src/gui-view.js
-6	4	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/client => client}/src/signed-view.js
-79	2	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/client => client}/test/gui-view.test.js
-183	10	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/src => src}/quod_client_view.erl
-104	0	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/test => test}/quod_gui_question_tests.erl
-33	9	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/ui => ui}/src/World.tsx
-55	8	{doc/evidence/gui-implementation-20261012/native-receiver-01/before/ui => ui}/test/gui-question.fixture.tsx

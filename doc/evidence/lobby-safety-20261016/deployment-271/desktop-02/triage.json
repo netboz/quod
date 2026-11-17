@@ -1,4 +1,0 @@
-{
-  "failure": "Cross-run anchor comparison mismatched liveUint8Array against JSON-persisted object despite identical32bytes and same namespace.",
-  "resolution": "Normalize the live identity through JSON before comparing with persisted evidence. Same account/profile, empty unresolved journal and zero setup writes. Register jump outcome observer before keypress to observe discrete feedback even if a following drive advances latest."
-}

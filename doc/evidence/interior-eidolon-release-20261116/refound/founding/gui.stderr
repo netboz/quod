@@ -1,3 +1,0 @@
-erl_call: evaluating input failed: binary_to_list(base64:encode(iolist_to_binary(json:encode(begin quod_refound_operator:gui() end)))).
-
-failed to exec into task: unexpected EOF

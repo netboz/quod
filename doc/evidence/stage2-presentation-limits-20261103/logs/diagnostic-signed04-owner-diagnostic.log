@@ -1,6 +1,0 @@
-LIMITS_INVOCATION_REFUSED #{selection => true,goal_bytes => 159879,
-                            chain_nonempty => true}
-COMPOSITION_OWNER_ERROR {protocol_error,request_binding}
-STAGE2_CURSOR_NORMALIZE {{error,proof_unavailable},
-                         {error,{protocol_error,request_binding}}}
-LIMITS_CATALOGUE_CALLS {call_count,858}

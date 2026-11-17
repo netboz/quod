@@ -1,9 +1,0 @@
-PASS enabled action create-key
-PASS enabled action connect
-PASS enabled action register
-PASS enabled action prepare
-PASS enabled action setup
-PASS current native target is enabled and enclosed: location-operations
-PASS one native press release activates exactly one callback
-PASS actual current-subject raster retained
-{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-contextual": 1}, "native_inputs": 0}

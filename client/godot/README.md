@@ -456,7 +456,7 @@ Runtime discovery, injected engine tests and physical hardware observations are
 separate qualification levels. A compatible runtime ABI and access to the
 headset display are prerequisites independent of controller mapping. The pinned
 engine's retained teardown diagnostics and native/physical acceptance limits
-are recorded in the [M4-R2 evidence](../../doc/evidence/godot-m4-r2-20261029/README.md).
+are recorded in the M4-R2 evidence (`doc/evidence/godot-m4-r2-20261029`, removed from the tree on 2026-11-17; in git at `b2733b31`).
 Process exit alone does not prove native resource retirement. Quest and Android
 headset qualification are outside M4.
 The legacy native viewer
@@ -464,6 +464,6 @@ retains its uncovered asset/XR obligations until their replacement qualifies;
 it is not a dependency of this client. The shared [QUO-62](nimbalyst://QUO-62)
 and [M1b evidence](../../doc/evidence/godot-m1b-20261028/README.md) retain the M1
 qualification. [QUO-63](nimbalyst://QUO-63) and the
-[M2 evidence](../../doc/evidence/godot-m2-20261028/README.md) track additional-space
+M2 evidence (`doc/evidence/godot-m2-20261028`, in git at `b2733b31`) track additional-space
 qualification. The explicit `--qualification` application flag is used only by the
 retained exported-application test driver; it supplies no domain permissions.

@@ -1,9 +1,0 @@
-{
-  "production_inputs_identical": 95,
-  "primary_stage2_and_complete_reconnect_method_identical": true,
-  "prefix_sha256": "42dc593cd209d900486b25f41bbe0f9a9f75a7c5074d1b428157919c6c225d67",
-  "from_manifest": "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-final01-manifest.json",
-  "to_manifest": "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-final03-manifest.json",
-  "changed_test_scope": "Stage2Contents independent-currentness and Stage2Layout clipping/hit/focus only",
-  "original_metadata_disposition": "final-software-reuse-binding.json proved the Stage2 method prefix but stopped before the reconnect method; its broader field wording is not used as reconnect-body proof. Original retained."
-}

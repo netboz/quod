@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"hinged_fixture_appearance(personal_lobby, 6, <<\\\"hinged-door/frame\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 100), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 100)], surface(<<\\\"#737373\\\">>, 0, 900, 0, []), door_frame) :- true.\\xA\\hinged_fixture_appearance(personal_lobby, 7, <<\\\"hinged-door/obstacle\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 400), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 400)], surface(<<\\\"#AB4646\\\">>, 0, 900, 0, []), door_obstacle) :- true.\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:45:20.031237+00:00"
-}

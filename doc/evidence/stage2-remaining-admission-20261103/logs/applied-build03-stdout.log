@@ -1,3 +1,0 @@
-[{"src/quod_client_auth.erl",{ok,quod_client_auth}},
- {"test/quod_client_auth_tests.erl",{ok,quod_client_auth_tests}},
- {"test/quod_scope_wire_tests.erl",{ok,quod_scope_wire_tests}}]

@@ -1,9 +1,0 @@
-{
-  "script": "const done=arguments[arguments.length-1]; import(performance.getEntriesByType('resource').find(r=>r.name.includes('engineStore')).name).then(({EngineStore})=>{const scene=EngineStore.LastCreatedScene;const trace=window.guiPlacementTrace={frames:0,events:[],recent:[],maxStep:0,maxYawStep:0,minHorizontal:1};let previous=null;window.guiPlacementObserver=scene.onAfterRenderObservable.add(()=>{const c=scene.activeCamera,m=scene.getMeshByName('workspace'),d=c.getForwardRay().direction,p=c.globalPosition;const row={t:performance.now(),camera:c.name,tracking:c.trackingState,p:p.asArray(),q:c.rotationQuaternion?.asArray(),direction:d.asArray(),panel:m.position.asArray(),yaw:m.rotation.y,visible:m.isVisible,horizontal:Math.hypot(d.x,d.z)};trace.frames++;trace.minHorizontal=Math.min(trace.minHorizontal,row.horizontal);if(previous){row.step=Math.hypot(...row.p.map((v,i)=>v-previous.p[i]));row.yawStep=Math.abs(Math.atan2(Math.sin(row.yaw-previous.yaw),Math.cos(row.yaw-previous.yaw)));trace.maxStep=Math.max(trace.maxStep,row.step);trace.maxYawStep=Math.max(trace.maxYawStep,row.yawStep);if(row.step>.1||row.yawStep>.15||row.tracking!==previous.tracking||row.visible!==previous.visible){trace.events.push({before:previous,after:row});if(trace.events.length>100)trace.events.shift();}}trace.recent.push(row);if(trace.recent.length>900)trace.recent.shift();previous=row;});done({tracing:true,tracking:scene.activeCamera.trackingState});}).catch(e=>done({error:String(e)}));",
-  "result": {
-    "value": {
-      "tracing": true,
-      "tracking": 0
-    }
-  }
-}

@@ -1,1 +1,0 @@
-Real owner test: automatic envelope rebase passed. Repeating an unchanged selection after a coordinate refusal incorrectly restored phase=active without rerunning numerical admission. Preserve unchanged coordinate waits and require the native pre-step gate when a changed selection resumes a retained installation. Also test an unrelated request-budget change. Failure retained.

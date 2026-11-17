@@ -1,9 +1,0 @@
-# Final deployed acceptance harness correction
-
-Read AGENTS.md. Production, frozen clean08 and image 0.7.275 are unchanged. The rolling deployment succeeded at job v98/index871075, with all eight nodes and retained-history checks passed. Exact new scope is walk-acceptance-03.mjs; use harness-03-manifest.json and harness-03.patch. No new production review requested.
-
-First deployed walk failed honestly at the texture count assertion. Its full result and true exit are retained. Motion, bounded/partial content, sky and error assertions preceding it passed: 40s travel, 16.87m excursion, 11 interests, 13 content messages, max pose gap973ms, 286 rendered frames, zero hidden roots, no console/page/delivery errors, one sky. failure.png visibly shows grass texture and sky. The harness counted only scene.materials, but terrainContainer at client/src/render-resources.js:284-311 detaches AssetContainer templates; scene.js:178-190 instantiates with shared attached materials. Parent reproduced this with Babylon NullEngine: scene.materials excludes the surface, enabled rendered instance has that exact surface through MultiMaterial; true exit0.
-
-The correction collects leaf materials attached to enabled visible verified-terrain mesh occurrences and requires both occurrence presence and ready textured terrain surfaces. No runtime path, budget, policy, image or gate change. All original movement, max pose gap, frame size, partial-batch, enabled sky, error and deployed-bundle assertions remain. The old failed campaign is retained; separate new campaigns use03. This is a narrow correction to the acceptance evidence you previously reviewed.
-
-Read-only; no commands/tests/builds/edits/memory/delegation/deployment. Return COMPLETE concise report: confirmed issues versus limitations, exact references. Parent independently checks and runs the harness.

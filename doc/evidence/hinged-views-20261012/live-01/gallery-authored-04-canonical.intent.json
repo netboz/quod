@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"lobby_owner(V0) :- hinged_example_owner(room, V0).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T14:01:00.176311+00:00"
-}

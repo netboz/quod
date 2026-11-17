@@ -1,6 +1,0 @@
-{
-  "passed": false,
-  "error": "all-client-build-outputs.tar.gz path set",
-  "traceback": "Traceback (most recent call last):\n  File \"/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-coordinator-verification-20261029/verify_boundary.py\", line 150, in <module>\n    result = main()\n  File \"/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-coordinator-verification-20261029/verify_boundary.py\", line 134, in main\n    outputs = {name:archive_payload(name) for name in [\n                    ~~~~~~~~~~~~~~~^^^^^^\n  File \"/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-coordinator-verification-20261029/verify_boundary.py\", line 85, in archive_payload\n    assert set(found) == set(expected), name+' path set'\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: all-client-build-outputs.tar.gz path set\n",
-  "elapsed_seconds": 52.226216077804565
-}

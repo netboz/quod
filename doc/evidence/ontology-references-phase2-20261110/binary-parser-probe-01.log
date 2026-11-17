@@ -1,2 +1,0 @@
-current {error,{1,erlog_parse,...}}
-hex {ok,[{gui_asset,test,<<34,92,137>>}]}

@@ -1,7 +1,0 @@
-{
-  "action": "cursor",
-  "args": [
-    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">> :: (current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xc1\\P&\\x9e\\[\\x82\\uL\\x06\\\\xcb\\y(\\xf6\\\\xe5\\_\\xfb\\\\xce\\\\xda\\\\xbd\\%\\xe6\\B\\xc2\\\\xcc\\\\xf8\\t\\xa3\\\\xa6\\\\xf7\\\\x7f\\\">>), transaction((physics_space(personal_lobby, disabled, physics_authority), ('$quod_predicate_source'(hinged_example_appearance / 5, <<\"\">>) -> true ; fail_with_reason(edit_conflict(hinged_example_appearance / 5))), assertz((hinged_example_appearance(personal_lobby, 5, <<\"hinged-door\">>, vertical_door, [part(<<\"hinged-door/panel\">>, <<\"box\">>, [f(<<\"width\">>, 2000), f(<<\"height\">>, 2000), f(<<\"depth\">>, 200)], transform(0, 0, 0, 0, 0, 0), surface(<<\"#4678AB\">>, 0, 900, 0, []))]) :- true)), ('$quod_predicate_source'(hinged_example_appearance / 5, <<\"hinged_example_appearance(personal_lobby, 5, <<\\\"hinged-door\\\">>, vertical_door, [part(<<\\\"hinged-door/panel\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 2000), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 200)], transform(0, 0, 0, 0, 0, 0), surface(<<\\\"#4678AB\\\">>, 0, 900, 0, []))]) :- true.\\n\">>) -> true ; fail_with_reason(edit_not_representable(hinged_example_appearance / 5))))))."
-  ],
-  "at": "2026-10-12T13:45:19.367890+00:00"
-}

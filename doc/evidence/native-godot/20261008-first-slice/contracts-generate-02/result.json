@@ -1,9 +1,0 @@
-{
-  "command": [
-    "node",
-    "client/native/tools/contracts.mjs",
-    "--write"
-  ],
-  "exit": 1,
-  "elapsed_seconds": 0.6680762150208466
-}

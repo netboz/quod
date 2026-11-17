@@ -1,1 +1,0 @@
-Initial delta preparation stopped on a binary fixture while decoding UTF-8. No patches or delta records were produced. Recompute using byte comparison and explicit binary fixture records; source freeze is unchanged.

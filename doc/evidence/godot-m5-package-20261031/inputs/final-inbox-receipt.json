@@ -1,9 +1,0 @@
-{
-  "private_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/m5-inbox-final01/whole-bodies.json",
-  "sha256": "e6904d822ffb64b261a33ea82540fad278aeda66b8ec278c4f3d66e18bd8d6ed",
-  "bytes": 9005,
-  "worker_rows_fully_read": 4,
-  "coordinator_rows_fully_read": 0,
-  "list_only_not_consumption": true,
-  "disposition": "168 task/input notice and171/172 independent package/GLIBC facts incorporated. Root171 cache authenticated and added before final freeze. No new scope, review, hardware run or write retry inferred."
-}

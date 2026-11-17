@@ -1,6 +1,0 @@
-PASS current startup raster retained
-PASS fresh offline profile permits key creation/import only
-PASS first-run presentation excludes unavailable account workspace actions
-PASS fresh first action is recognizable as the primary action
-ONBOARDING_PASS
-{"passed": true, "children": {"client": 0}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 4}

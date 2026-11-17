@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-retest10-20261030/verify_result.py", line 53, in <module>
-    assert all([s['metrics']['resources'][n] for n in ['Acquisitions','Decodes','InstancesCreated','NodesBuilt','TexturesDecoded']]==[2,1,2,114,1] for s in observed)
-           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError

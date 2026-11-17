@@ -1,9 +1,0 @@
-PASS delivery failure is not certified nonexecution
-PASS one execution send retains original durable work
-PASS original signed work survives store reopen
-PASS existing outcome lookup returns terminal recovery
-PASS terminal recovery retires original durable work
-PASS recovery never replays execution
-PASS HTTP recovery preserves exact request and signature
-PASS HTTP recovery preserves exact request and signature
-RECOVERY_ERROR_PASS

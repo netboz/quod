@@ -1,5 +1,0 @@
-{
-  "failures": 1,
-  "cause": "A stale creation request unified its required absent specification before checking the revision, causing ordinary failure without the conflict reason.",
-  "correction": "Read the actual specification into a fresh variable, check the revision, then check absence. Existing refusal assertions are retained."
-}

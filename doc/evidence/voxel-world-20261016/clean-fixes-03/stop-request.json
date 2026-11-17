@@ -1,6 +1,0 @@
-{
-  "reason": "Superseded by reproduced pending-restoration readiness defect, focused-owner-10, fixed and verified in focused-owner-11. Intentionally terminate this exact EUnit child; the runner records its actual exit and STOP. No assertion failure in this campaign is being hidden.",
-  "pid": 3383320,
-  "signal": "SIGTERM",
-  "at": "2026-10-16T20:55:19.925651+00:00"
-}

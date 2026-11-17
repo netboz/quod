@@ -1,9 +1,0 @@
-{
-  "current_get_session_summary_header": "Session: \"Godot M4 controllers and OpenXR\" (ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f)\nProvider: openai-codex | Model: openai-codex:gpt-6.1-sol\nCreated: Oct 29, 4:12 AM | Last active: Oct 29, 6:07 PM\nWorkstream: \"M4 desktop shutdown causal review\"\nPhase: validating\nTags: #feature, #godot, #controllers, #openxr, #uncommitted, #bug-fix, #shutdown, #runtime\n\n",
-  "actual_api_model": "openai-codex:gpt-6.1-sol",
-  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
-  "launcher_requested_effort": "max",
-  "retained_launcher_receipt": "doc/evidence/godot-m4-20261029/inputs/launcher-metadata.json",
-  "effective_backend_effort": "unexposed",
-  "model_switch": false
-}

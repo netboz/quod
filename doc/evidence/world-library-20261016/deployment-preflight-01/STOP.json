@@ -1,4 +1,0 @@
-{
-  "exit": 1,
-  "reason": "Read-only Nomad query blocked by sandbox network permission before any response or mutation"
-}

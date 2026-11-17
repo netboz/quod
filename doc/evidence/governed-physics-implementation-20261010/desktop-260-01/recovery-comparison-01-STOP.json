@@ -1,4 +1,0 @@
-{
-  "reason": "whole view differs across recovery; inspect revision-bearing fields before identity assertions",
-  "field": "view"
-}

@@ -1,4 +1,0 @@
-{
-  "reason": "Opus implementation review rejected bound-convergence hunk and requested exit/refinement tracing, normal-error and caller audit. Full run may finish, but cannot authorize release.",
-  "review": "_build/quod27-floor-gjk-implementation-review-01/opus-review.md"
-}

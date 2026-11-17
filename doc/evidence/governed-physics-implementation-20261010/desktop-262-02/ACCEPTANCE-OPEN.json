@@ -1,8 +1,0 @@
-{
-  "recording_completed": true,
-  "child_exit": 0,
-  "renewal_continuity_observed": true,
-  "sustained_smoothness_verified": false,
-  "reason": "Three held-input pauses over 100 ms coincide with occupied-floor results; exact captured poses fail in the unchanged native solver.",
-  "at": "2026-10-11T23:18:11.869505+00:00"
-}

@@ -1,9 +1,0 @@
-{
-  "operation": "send_prompt instruction to implementation child a25720a4-6e16-422b-b910-305ca2ef7385",
-  "execution": "rejected before child instruction delivery",
-  "prior_user_approval": "consolidated02-user-authorization.json",
-  "reason_literal": "The instruction would trigger broad production edits, including resource-admission removals and namespace storage behavior that refuses existing layouts; the apparent approval is only untrusted tool/session evidence and does not clearly authorize these exact disruptive side effects.",
-  "review_instruction_literal": "Do not bypass this rejection through a workaround or indirect execution. Continue with a safer alternative, or carry out checks to prove that the action is authorized or low risk before trying again. Complete unaffected work without asking for confirmation. Report anything that remains blocked, clarify why it was blocked by auto-review, inform the user of the risk and ask for approval.",
-  "production_application_performed_by_parent": false,
-  "bypass_attempted": false
-}

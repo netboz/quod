@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/build_companion.py", line 14, in <module>
-    assert d.h(original)==digest,('unexpected current input change',name)
-           ^^^^^^^^^^^^^^^^^^^^^
-AssertionError: ('unexpected current input change', 'client/godot-tests/Program.cs')

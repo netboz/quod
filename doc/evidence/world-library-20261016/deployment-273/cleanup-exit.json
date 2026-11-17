@@ -1,9 +1,0 @@
-{
-  "exit": 0,
-  "seconds": 1.0715967209544033,
-  "command": [
-    "/usr/bin/python3",
-    "/home/yan/src/quod/_build/world-library-20261016/deployment-02/purge_old_volumes.py",
-    "desktop-deployed-04"
-  ]
-}

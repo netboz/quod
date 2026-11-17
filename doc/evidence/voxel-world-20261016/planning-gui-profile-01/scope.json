@@ -1,6 +1,0 @@
-{
-  "purpose": "Check whether the existing signed GUI completion needs the extra work-continuation predicate module before proposing a separate application ontology.",
-  "changes": "Copy existing GUI production-seam fixture; rename test module and remove only quod_agent_work_predicates from the responder founding modules. No production edits.",
-  "fixture_sha256": "7063c7b2858d7d8d261babc7a6fda48dcd7b145f9ea275ffd6f361f5097eb2ad",
-  "basis": "clean-gates-04 compiled production and test helpers"
-}

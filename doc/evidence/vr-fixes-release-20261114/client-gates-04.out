@@ -1,6 +1,0 @@
-javascript exit 0
-core-clean exit 0
-godot-clean exit 0
-core exit 1
-STOPPED on core
-client gates exit=1

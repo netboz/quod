@@ -1,6 +1,0 @@
-{
-  "command": ["python3", "doc/evidence/godot-m3b-20261029/audit-public-artifacts.py"],
-  "child_exit": 1,
-  "error": "PermissionError: [Errno 13] Permission denied: '/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-physics-candidate01-server/viewer.json'",
-  "disposition": "Keep the root-owned original private. Record unreadable paths; scan the existing owned client/viewer copies without changing permissions."
-}

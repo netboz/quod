@@ -1,4 +1,0 @@
-{
-  "exit": 1,
-  "stderr": "Traceback (most recent call last):\n  File \"/home/yan/src/quod/doc/evidence/governed-physics-implementation-20261010/desktop-261-05/analyze-traces.py\", line 53, in <module>\n    result = analyze(path)\n  File \"/home/yan/src/quod/doc/evidence/governed-physics-implementation-20261010/desktop-261-05/analyze-traces.py\", line 28, in analyze\n    following[\"timestamp\"] - event[\"timestamp\"]), 3) if following else None,\n    ~~~~~~~~~^^^^^^^^^^^^^\nKeyError: 'timestamp'\n"
-}

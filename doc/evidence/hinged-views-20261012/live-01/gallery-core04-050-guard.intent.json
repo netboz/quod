@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_valid_hinge,5),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_valid_hinge,5)))),','(assertz(':-'(physics_valid_hinge(vector(V2,V3,V4),anchors(V5,V6),limits(V7,V8),V9,V10),','(physics_milli_integer(V2),','(physics_milli_integer(V3),','(physics_milli_integer(V4),','(';'('=\\\\='(V2,0),';'('=\\\\='(V3,0),'=\\\\='(V4,0))),','(physics_body_vector(V5,V10),','(physics_body_vector(V6,V10),','(integer(V7),','(integer(V8),','('>='(V7,-3141),','('=<'(V8,3141),','('=<'(V7,V8),','('=<'('-'(V8,V7),3141),','(integer(V9),','('>='(V9,V7),'=<'(V9,V8))))))))))))))))),';'('->'('$quod_predicate_source'('/'(physics_valid_hinge,5),<<\"physics_valid_hinge(vector(V0, V1, V2), anchors(V3, V4), limits(V5, V6), V7, V8) :- physics_milli_integer(V0) , physics_milli_integer(V1) , physics_milli_integer(V2) , (V0 =\\\\= 0 ; V1 =\\\\= 0 ; V2 =\\\\= 0) , physics_body_vector(V3, V8) , physics_body_vector(V4, V8) , integer(V5) , integer(V6) , V5 >= (-3141) , V6 =< 3141 , V5 =< V6 , V6 - V5 =< 3141 , integer(V7) , V7 >= V5 , V7 =< V6.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_valid_hinge,5)))))))))",
-    "room"
-  ],
-  "at": "2026-10-12T13:58:49.577222+00:00"
-}

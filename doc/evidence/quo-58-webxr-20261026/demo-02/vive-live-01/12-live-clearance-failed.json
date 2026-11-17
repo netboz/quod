@@ -1,5 +1,0 @@
-{
-  "exit": 1,
-  "result": "HTTP 500 at Runtime.evaluate(WebSocket.prototype); listener installation was not reached. Runtime.releaseObjectGroup also returned HTTP 500. No clearance value acquired; no operation submitted.",
-  "physical_acceptance": "not established"
-}

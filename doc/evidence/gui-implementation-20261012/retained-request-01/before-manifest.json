@@ -1,9 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "src/quod_agent.erl": "a88aabb4b4acefb934856cf44ea0659a8d4079386fd6af62f15e85b545e3d32d",
-  "src/predicates/quod_runtime_predicates.erl": "230be992c07ab9b597e3797120cbfda76177f993d8c1e87afaad204210f98c03",
-  "test/quod_agent_hosting_tests.erl": "081f3a7c2cee761f14fbf592fba7b334534d6f981ed63e11cf47134c7a4a5d1e",
-  "test/quod_reaction_metadata_tests.erl": "c416b0ef7dc21d84e68fba471e37742ebda04d106459b66c52487704132b8fd2",
-  "doc/runtime-and-agents.md": "2658c0386e4b4defeba266d41ccd1036eb1f219e6e11b74651cfa466a713cacb",
-  "test/quod_agent_vault_tests.erl": "ca0e1f8b0991b6f62d26f196db734fc5d36a3dfa608365c015801fb0c82e9112"
-}

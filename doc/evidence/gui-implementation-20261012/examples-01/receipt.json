@@ -1,8 +1,0 @@
-{
-  "gate": "gate01.log",
-  "exit": 0,
-  "tests": 5,
-  "failures": 0,
-  "seconds": 53.018,
-  "review": "self"
-}

@@ -1,3 +1,0 @@
-System.Exception: Did not refuse: malformed functional term
-   at Tests.Reject(Action action, String name) in /home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Program.cs:line 12
-   at Tests.Main(String[] args) in /home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Program.cs:line 43

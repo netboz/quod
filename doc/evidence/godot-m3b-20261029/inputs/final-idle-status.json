@@ -1,9 +1,0 @@
-{
-  "source_frozen": true,
-  "active_owned_export_or_campaign_pids": [],
-  "active_m3b_containers": [],
-  "all_final_children_completed": true,
-  "peer_status_receipt": "inputs/final-peer-status.json",
-  "pending_batch_read": "inputs/final-pending-findings.json",
-  "no_successor_launched": true
-}

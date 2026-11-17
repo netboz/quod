@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_valid_joint_command,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_valid_joint_command,2)))),','(assertz(':-'(physics_valid_joint_command(hold,V2),true)),','(assertz(':-'(physics_valid_joint_command(position(V3,motor(V4,V5,V6),stop(V7,target_or_contact)),limits(V8,V9)),','(integer(V3),','('>='(V3,V8),','('=<'(V3,V9),','(physics_positive_scalar(V4),','(physics_positive_scalar(V5),','(physics_positive_scalar(V6),physics_positive_scalar(V7))))))))),';'('->'('$quod_predicate_source'('/'(physics_valid_joint_command,2),<<\"physics_valid_joint_command(hold, V0) :- true.\\xA\\physics_valid_joint_command(position(V0, motor(V1, V2, V3), stop(V4, target_or_contact)), limits(V5, V6)) :- integer(V0) , V0 >= V5 , V0 =< V6 , physics_positive_scalar(V1) , physics_positive_scalar(V2) , physics_positive_scalar(V3) , physics_positive_scalar(V4).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_valid_joint_command,2))))))))))",
-    "personal_lobby"
-  ],
-  "at": "2026-10-12T13:44:23.832597+00:00"
-}

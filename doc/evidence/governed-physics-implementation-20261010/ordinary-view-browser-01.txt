@@ -1,3 +1,0 @@
-First MCP fixture attempt did not run: the Vite server exited 1 with ENOSPC while watching client/_build/webxr-linux/chromium.
-A terminal-attached restart was initiated before reading that exit; it also exited 1 with ENOSPC before processing the stop request.
-No system watcher limit changed. The separate next attempt disables development file watching for this frozen fixture.

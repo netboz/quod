@@ -1,1 +1,0 @@
-Last-consumer reclamation passed. The new large-origin barrier incorrectly hardcoded terrain body 0; this fixture starts its monotonic body allocator at 4. Derive the selected terrain body identity from the real runtime selection and retain the exact destination-chunk requirement.

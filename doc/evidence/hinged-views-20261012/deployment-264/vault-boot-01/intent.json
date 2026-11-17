@@ -1,6 +1,0 @@
-{
-  "image": "192.168.1.11:5000/quod:0.7.264",
-  "scope": "network-disabled disposable local container",
-  "rendered_config": "quod.conf",
-  "probe": "quod_vault_boot_probe.erl"
-}

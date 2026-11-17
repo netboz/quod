@@ -1,9 +1,0 @@
-# Failures and limits
-
-No build, package, application or signed-journey gate failed in this checkpoint. Nine finite negative package fixtures deliberately refuse invalid inputs; their output artifacts remain in the private fixture tree. Early read commands included one nonexistent historical evidence directory and one nonexistent guessed source filename; these were read-only lookup errors, not product or test failures.
-
-All earlier labels remain literal: package246 journeys01/02 are whole failures and its reopen was unrun; observation250 passed without obtaining the original trigger. Historical workbench05/09, GUI signed14, startup07/source09, keyboard and other noEOF failures remain unresolved. Current normal exits establish neither their cause nor a correction. No stack capture, timeout change, engine change, GC workaround, force-success or shutdown campaign was attempted.
-
-The old desktop human rejection remains open. These are software native-Control signals/pointer events, not host input, user understanding, physical reach, headset bootstrap or comfort. The source-context recall rasters do not show the editor fully enclosed; actual preceding native scrolling/focus checks establish its software reachability. Reopen displays the existing truthful changed-baseline warning while retaining the unsent original draft; this run does not Preview/Save it or waive OCC.
-
-The ordinary uninstrumented launch only qualifies mapped startup, packaged runtime loading and normal close. The signed journey is a separately labelled nondistributed companion with exact same production inputs. Private package requires GLIBC2.44/current-host desktop libraries, a real matching world-name/GUI server and its trusted CA. No server/account/credentials/runtime is bundled. Browser authored non-inherit appearance remains explicitly unsupported. Full M4/M5, human/HMD qualification, retirement, deployment, cutover and committed integrated release remain open.

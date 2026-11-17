@@ -1,9 +1,0 @@
-PASS physically ready plus semantic WAITING never becomes READY
-PASS working instruction stays honest while a control is held
-PASS STOP dominates physically ready gates
-PASS offline reconnect is never a green ready instruction
-PASS eligible actionable instruction retains READY
-PASS missing physical prerequisites withdraw READY
-PASS held-control cue invites only release
-PASS semantic WAITING cannot emit a ready marker
-CUE_COMPOSITION_PASS 8

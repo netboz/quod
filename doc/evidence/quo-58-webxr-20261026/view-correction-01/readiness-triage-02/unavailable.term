@@ -1,8 +1,0 @@
-#{alive => true,pending => 0,mode => live,stopping => false,
-  items => [{snapshot,3}],
-  runner =>
-      {events,<0.1668.0>,#Ref<0.1222000216.940834818.222999>,
-              #Ref<0.1222000216.940834818.222998>,
-              #Ref<0.1222000216.940834818.223000>},
-  height => 7,ns => <<"host-test-agent">>,queue_len => 0,frontier => 7,
-  pending_bytes => 0}.

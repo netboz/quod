@@ -1,8 +1,0 @@
-{
-  "production_inputs_identical": 95,
-  "primary_stage2_and_reconnect_prefix_identical": true,
-  "prefix_sha256": "8d711fe493aee4744c29301b903bc40c1239c0faa5ef801e693afd20e1c7be5d",
-  "from_manifest": "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-final01-manifest.json",
-  "to_manifest": "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-final03-manifest.json",
-  "changed_test_scope": "only Stage2Contents independent-currentness and Stage2Layout clipping/hit/focus qualification; full171 not replayed for recount"
-}

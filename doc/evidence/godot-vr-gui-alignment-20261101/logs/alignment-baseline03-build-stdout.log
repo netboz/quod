@@ -1,6 +1,0 @@
-{"command": ["dotnet", "--info"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 0.14797910500783473}
-{"command": ["python3", "client/godot-tools/run.py", "--bootstrap"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 5.609329840022838}
-{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=Debug", "-p:SelfContained=true", "--source", "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-alignment-baseline03/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 2.7685306769853923}
-{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=ExportRelease", "-p:SelfContained=true", "--source", "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-alignment-baseline03/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 1.667858339002123}
-{"command": ["python3", "client/godot-tools/run.py", "--export"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 15.14838283197605}
-{"passed": true, "inputs": 99, "exports": 196}

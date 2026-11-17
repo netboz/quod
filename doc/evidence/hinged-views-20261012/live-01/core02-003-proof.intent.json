@@ -1,7 +1,0 @@
-{
-  "action": "cursor",
-  "args": [
-    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">> :: (current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xc1\\P&\\x9e\\[\\x82\\uL\\x06\\\\xcb\\y(\\xf6\\\\xe5\\_\\xfb\\\\xce\\\\xda\\\\xbd\\%\\xe6\\B\\xc2\\\\xcc\\\\xf8\\t\\xa3\\\\xa6\\\\xf7\\\\x7f\\\">>), transaction((physics_space(personal_lobby, disabled, physics_authority), ('$quod_predicate_source'(can_close_physics_door / 3, <<\"can_close_physics_door(V0, V1, V2) :- fail.\\n\">>) -> true ; fail_with_reason(edit_conflict(can_close_physics_door / 3))), '$quod_retract_exact'((can_close_physics_door(V2, V3, V4) :- fail)), ('$quod_predicate_source'(can_close_physics_door / 3, <<\"\">>) -> true ; fail_with_reason(edit_not_representable(can_close_physics_door / 3))))))."
-  ],
-  "at": "2026-10-12T13:40:33.561173+00:00"
-}

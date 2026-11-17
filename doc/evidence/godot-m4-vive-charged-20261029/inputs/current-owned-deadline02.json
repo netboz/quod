@@ -1,8 +1,0 @@
-{
-  "recorded_at_utc": "2026-10-29T22:30:02Z",
-  "owned_driver_pid": 1865734,
-  "driver_age_seconds": 1515.7799999999988,
-  "conservative_manual_remaining_lower_bound_seconds": 284.22000000000116,
-  "deadline_unchanged": true,
-  "no_sample_or_new_case_sent": true
-}

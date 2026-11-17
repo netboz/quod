@@ -1,5 +1,0 @@
-{
-  "expression": "Ns= <<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,H=quod_prolog:applied(Ns),D=quod_time:mono_ms()+15000,ok=quod_runtime:reconcile_resource(Ns,H,agent_hosts,all,D),ok=quod_runtime:reconcile_resource(Ns,H,physics_worlds,all,D),{Owner,[]}=quod_runtime:agents(Ns),0=map_size(gen_server:call(Owner,physics_worlds)),Fmt=fun(T)->iolist_to_binary(io_lib:format(\"~0p\",[T])) end,{ok,[#{'Bs':=Bs}],_}=quod_prolog:prove_ro(Ns,{findall,{physics_body_definition,{'_W'},{'_B'},{'_R'},{'_K'},{'_P'},{'_D'}},{physics_body_definition,{'_W'},{'_B'},{'_R'},{'_K'},{'_P'},{'_D'}},{'Bs'}}),#{height=>H,anchor=>binary:encode_hex(quod_simplex:genesis_hash(Ns)),bodies=>Fmt(Bs),inactive=>true,stats=>quod_runtime:stats(Ns)}",
-  "read_only": true,
-  "started": "2026-10-12T13:43:31.136299+00:00"
-}

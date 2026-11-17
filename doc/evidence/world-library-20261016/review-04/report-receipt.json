@@ -1,9 +1,0 @@
-{
-  "sessionId": "0d4c4ef5-911b-45f6-9e89-7587a7a80742",
-  "model": "claude-code:fable",
-  "messageId": 115187,
-  "createdAt": "2026-10-17T00:10:06.450Z",
-  "source": "Nimbalyst read-only assistant text record; original full report before cancellation supplement",
-  "scope": "clean-integration-04/tree",
-  "ranTests": false
-}

@@ -1,9 +1,0 @@
-{
-  "desktop_checks": 36,
-  "hardware_fixture_loaded_without_xr": true,
-  "passed": true,
-  "unchanged": true,
-  "boolean_checks": 67,
-  "chromedriver08_exit": -15,
-  "fixture-server08_exit": 143
-}

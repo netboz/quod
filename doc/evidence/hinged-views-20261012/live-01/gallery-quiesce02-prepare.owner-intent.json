@@ -1,5 +1,0 @@
-{
-  "expression": "Ns= <<\"acceptance:physics:259:04:gallery\">>,A=binary:decode_hex(<<\"41EF1E056943B629AC1DCA71B13BA0028ABDE7FB7B0F91756604334A2F07B69B\">>),Me={agent_instance_ref,<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,binary:decode_hex(<<\"758F8AA13D54CF626BA493A6BFBEC24548AC96B49DD0FEDA3BC0843E0838CBF2\">>),me},\n{ok,P}=quod_node_actor:reference(),{ok,[_],_}=quod_prolog:prove_ro(Ns,{acceptance_actor,P}),\nGoals=[{physics_run,room,{'G'},{'_'}},{physics_custody,room,{'C'}},{physics_previous_complete,{'C'},{'G'}},{list_to_atom([92,43]),{acceptance_actor,Me}},{assertz,{acceptance_actor,Me}},{retract,{physics_space,room,enabled,physics_authority}},{assertz,{physics_space,room,disabled,physics_authority}}],\n[First|Rest]=lists:reverse(Goals),Body=lists:foldl(fun(X,Acc)->{',',X,Acc} end,First,Rest),\nGoal={'::',Ns,{',',{current_ontology_identity,Ns,A},{transaction,Body}}},\n{ok,B,S}=quod_node_actor:signed_goal(execute,Goal,crypto:strong_rand_bytes(32),quod_time:now_ms()+30000),\n#{bytes=>base64:encode(B),signature=>base64:encode(S),existing_owner_authorized=>true}",
-  "read_only": true,
-  "started": "2026-10-12T13:44:19.937449+00:00"
-}

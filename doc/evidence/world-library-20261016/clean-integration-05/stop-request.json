@@ -1,5 +1,0 @@
-{
-  "reason": "The corresponding committed-source cancellation also reproduces a permanent coverage wait. The final correction must recheck actual coverage on changed installed inputs/controls/navigation guard, through the same owner helper used by viewer removal. Finish and retain the current gate; use a separate final freeze.",
-  "evidence": "terrain-source-cancel-diagnostic-01",
-  "source_unchanged": true
-}

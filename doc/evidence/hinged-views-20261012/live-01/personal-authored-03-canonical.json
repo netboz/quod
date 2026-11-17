@@ -1,1 +1,0 @@
-"can_edit_physics(V0, V1) :- fail.\ncan_edit_physics(V0, V1) :- hinged_example_owner(V0, V1).\n"

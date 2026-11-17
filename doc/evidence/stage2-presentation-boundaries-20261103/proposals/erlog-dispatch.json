@@ -1,9 +1,0 @@
-{
-  "applied": false,
-  "executed": false,
-  "dependency_pin": "535395c60b2133703308bbe529a63309672cb7a0",
-  "before_sha256": "40793ec49ceb9baf29d5889a93ce9f2b494228168ed83d9da5c4d65b67ad35f6",
-  "proposed_sha256": "49e2e8816bdb633657427e69f29bfeb63863ccfe9ea414051353a912b2de7711",
-  "added": 11,
-  "removed": 10
-}

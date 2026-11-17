@@ -1,2 +1,0 @@
-[{"src/quod_ledger_store.erl",{ok,quod_ledger_store}},
- {"test/quod_namespace_layout_tests.erl",{ok,quod_namespace_layout_tests}}]

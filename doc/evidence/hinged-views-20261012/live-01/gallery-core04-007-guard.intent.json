@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(hinged_example_parts,3),<<\"\">>),true),fail_with_reason(edit_conflict('/'(hinged_example_parts,3)))),','(assertz(':-'(hinged_example_parts([],V2,[]),true)),','(assertz(':-'(hinged_example_parts([part(V3,V4,V5,V6,V7)|V8],V9,[mark(V3,V4,V5,relative(V9,V6),V7,unlabelled,depicts_nothing)|V10]),hinged_example_parts(V8,V9,V10))),';'('->'('$quod_predicate_source'('/'(hinged_example_parts,3),<<\"hinged_example_parts([], V0, []) :- true.\\xA\\hinged_example_parts([part(V0, V1, V2, V3, V4) | V5], V6, [mark(V0, V1, V2, relative(V6, V3), V4, unlabelled, depicts_nothing) | V7]) :- hinged_example_parts(V5, V6, V7).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(hinged_example_parts,3))))))))))",
-    "room"
-  ],
-  "at": "2026-10-12T13:54:48.388462+00:00"
-}

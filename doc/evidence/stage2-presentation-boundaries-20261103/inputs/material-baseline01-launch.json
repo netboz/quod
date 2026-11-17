@@ -1,8 +1,0 @@
-{
-  "true_exit": 1,
-  "source": "inputs/material-baseline01-driver.py",
-  "failure": "Python SyntaxError: invalid syntax at unescaped TEST token in Erlang expression; no Docker process or test ran.",
-  "tool_chunk": "47b7e1",
-  "stdout_eof": true,
-  "stderr_eof": true
-}

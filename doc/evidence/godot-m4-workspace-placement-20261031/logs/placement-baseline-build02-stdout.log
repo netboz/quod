@@ -1,6 +1,0 @@
-{"command": ["dotnet", "--info"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 0.2368061070010299}
-{"command": ["python3", "client/godot-tools/run.py", "--bootstrap"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 6.27243720300612}
-{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=Debug", "-p:SelfContained=true", "--source", "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-placement-baseline02/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 2.641967745999864}
-{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=ExportRelease", "-p:SelfContained=true", "--source", "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-placement-baseline02/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 1.4693816840008367}
-{"command": ["python3", "client/godot-tools/run.py", "--export"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 13.732929054000124}
-{"passed": true, "inputs": 93, "outputs": 196, "stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-placement-baseline02"}

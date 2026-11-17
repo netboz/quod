@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_hinged_custody(V0, V1, V2) :- findall(V3, physics_hinged_request(V0, V1, V3), V4) , (V4 = [] -> V2 = none ; V4 = [V2]).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:42:29.206692+00:00"
-}

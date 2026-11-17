@@ -1,3 +1,0 @@
-An issue was encountered verifying workloads. For more information, run "dotnet workload update".
-  Determining projects to restore...
-  Restored /home/yan/src/quod_worktrees/pearl-stone/_build/godot-shutdown-reliability-20261103/artifacts/client-shutdown-observation01/source/client/godot/Quod.csproj (in 755 ms).

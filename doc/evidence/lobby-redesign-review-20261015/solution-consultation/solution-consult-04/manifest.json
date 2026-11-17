@@ -1,7 +1,0 @@
-{
-  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
-  "src/quod_agent_vault.erl": "56178e570601ce672b5e750ffed60a4c18f6fb4dca037799793c7dd2126ab2b1",
-  "src/quod_agent.erl": "2921833174868f1185edea638949aacd9d1992349964b7ae905e2bb199b07e69",
-  "src/quod_physics.erl": "1dbefaf067e2fee540c6d21091fc0a9e727350a8c50d63378603f6ecd8b72cf2",
-  "priv/ontologies/quod_physics.pl": "b8e04020bb31b277c9997a67c7915d16c3b892ae23ba572cced1598db866a192"
-}

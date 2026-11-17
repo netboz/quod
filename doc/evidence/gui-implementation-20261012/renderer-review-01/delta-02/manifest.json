@@ -1,7 +1,0 @@
-{
-  "priv/ontologies/gui_instance.pl": "939c22e5ada1a11a4bd69493dce244eab4a3447e2718f7c4f27e816715e41a1d",
-  "test/quod_gui_components_tests.erl": "ebc90e316726c3fdf2c99b7abe785e328b7b92e5b0a5eb9ec91d6016827a6a6a",
-  "client/src/numeric-control.js": "b96cedaa1ddfce28cdcab721773c1ff6a96dc515b4e3c747eed05fce1a2679d0",
-  "client/test/workspace-panel.fixture.js": "01a6a7df5a4e48902a39ff036040d965ebe873b408bd79c6a8315a8bfa6a3055",
-  "doc/gui-implementation-plan.md": "148048927f8eb7799762d57d51f26064bbbb5ba310d20b9565afc3f59dc08114"
-}

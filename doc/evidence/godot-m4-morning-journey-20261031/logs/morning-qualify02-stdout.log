@@ -1,1 +1,0 @@
-{"passed": true, "builds": 25, "passes": {"morning-final12-controller01": 75, "morning-final12-rehearsal01": 267, "morning-final12-render01": 270, "morning-final15-render01": 288}, "failed_labels_retained": 19, "pure": 8, "bindings": 119, "launch": 15, "api_bytes_read": 0}

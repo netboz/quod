@@ -1,1 +1,0 @@
-You've hit your session limit · resets 12am (Europe/Paris)

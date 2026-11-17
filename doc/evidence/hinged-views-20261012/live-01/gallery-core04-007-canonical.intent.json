@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"hinged_example_parts([], V0, []) :- true.\\xA\\hinged_example_parts([part(V0, V1, V2, V3, V4) | V5], V6, [mark(V0, V1, V2, relative(V6, V3), V4, unlabelled, depicts_nothing) | V7]) :- hinged_example_parts(V5, V6, V7).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:54:52.039484+00:00"
-}

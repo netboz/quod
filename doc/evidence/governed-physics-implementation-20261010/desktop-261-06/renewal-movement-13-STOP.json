@@ -1,8 +1,0 @@
-{
-  "at": "2026-10-11T20:34:38.101279+00:00",
-  "reason": "Normal view reported authentication_failed; no native frames or control requests during the attempted input. Observer also stopped on capture loss at3945.5ms; all scripted keys were released.",
-  "diagnostic_gap": "Preflight checked geometry/focus but omitted current ready status. This run is not movement acceptance.",
-  "next": "Ordinary page reload to authenticate with the same saved profile, exact pose readback, ready-state assertion, then separately labelled input test.",
-  "server_changes": false,
-  "domain_edits": false
-}

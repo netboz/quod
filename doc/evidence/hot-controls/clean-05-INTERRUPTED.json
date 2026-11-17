@@ -1,7 +1,0 @@
-{
-  "reason": "User turn interruption terminated the driver and CT child before a recorded exit; no surviving process.",
-  "completed_gates": 6,
-  "unfinished": "ct",
-  "ct_exit": null,
-  "sources_unchanged": true
-}

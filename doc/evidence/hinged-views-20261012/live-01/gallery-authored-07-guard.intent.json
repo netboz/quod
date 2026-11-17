@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(can_edit_physics,2),<<\"can_edit_physics(V0, V1) :- fail.\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(can_edit_physics,2)))),','(assertz(':-'(can_edit_physics(V2,V3),hinged_example_owner(V2,V3))),';'('->'('$quod_predicate_source'('/'(can_edit_physics,2),<<\"can_edit_physics(V0, V1) :- fail.\\xA\\can_edit_physics(V0, V1) :- hinged_example_owner(V0, V1).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(can_edit_physics,2)))))))))",
-    "room"
-  ],
-  "at": "2026-10-12T14:01:15.856335+00:00"
-}

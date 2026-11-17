@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_store_rest_request(V0, V1, V2) :- term_variables([V0, V1, V2], []) , transaction((physics_rest_measurement(V0) , V0 = physics_sample(physics_frame(world_ref(V3, V4, V5), V6, V7, V8, V9, V10), activity(rest(V11, V12), V13, rest), V14, V15, V16, V17) , physics_actor(V5) , physics_rest_custody(V5, V11, V18) , physics_observation_replaceable(V18, waiting(V13), [body(V11, V12)]) , physics_newer_sample(V18, V0) , signed_physics_request(physics_finish_rest(V0), V1, V2) , physics_remove_rest_request(V5, V11) , assertz(physics_rest_request(V5, V11, request(V0, rest, V1, V2))))).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:44:02.995299+00:00"
-}

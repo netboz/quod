@@ -1,8 +1,0 @@
-{
-  "head": "0e5b887716bd2cce0b94d45b2dc25fec2fdfd739",
-  "files": 912,
-  "erlang_cache": "pinned source only; no BEAMs",
-  "cargo_cache": "release build cache; test targets build normally",
-  "derived_outputs": "priv/explorer regenerated from frozen UI/client inputs",
-  "scope": "current source, preserving already deployed ontology inspection plus required uncommitted control foundations"
-}

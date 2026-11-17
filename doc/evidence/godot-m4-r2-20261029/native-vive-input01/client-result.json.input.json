@@ -1,1 +1,0 @@
-{"observations":[{"name":"left_hand","profile":"/interaction_profiles/htc/vive_controller","hand":"left","tracked":false,"released":[]},{"name":"right_hand","profile":"/interaction_profiles/htc/vive_controller","hand":"right","tracked":false,"released":[]}],"coverage":"actual runtime button/pose delivery; no signed mapping installed; no mapped gesture or headset-pixel claim"}

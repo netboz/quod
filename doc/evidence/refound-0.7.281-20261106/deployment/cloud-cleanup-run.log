@@ -1,9 +1,0 @@
-
-
-==> View this job in the Web UI: http://192.168.1.10:4646/ui/jobs/quod-cloud-ledger-cleanup-20261106b@default
-
-==> 2026-11-06T22:59:28+01:00: Monitoring evaluation "8baa0ca0"
-    2026-11-06T22:59:28+01:00: Evaluation triggered by job "quod-cloud-ledger-cleanup-20261106b"
-    2026-11-06T22:59:29+01:00: Allocation "c42a0384" created: node "e37f93bb", group "cleanup"
-    2026-11-06T22:59:29+01:00: Evaluation status changed: "pending" -> "complete"
-==> 2026-11-06T22:59:29+01:00: Evaluation "8baa0ca0" finished with status "complete"

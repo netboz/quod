@@ -1,6 +1,0 @@
-{
-  "label": "final01",
-  "built": true,
-  "qualified": false,
-  "reason": "Restart test conflates required new receiver selection with creation replay; corrected measurement is in the separately labeled next candidate."
-}

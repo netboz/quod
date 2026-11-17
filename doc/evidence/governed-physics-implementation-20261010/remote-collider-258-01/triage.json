@@ -1,9 +1,0 @@
-{
-  "outcome": "failed before first founding",
-  "child_exit": 1,
-  "original_error": "{error,{erlog,instantiation_error}}",
-  "cause": "The driver supplied variable-containing clauses through terms/1; the existing lifecycle validates the complete request as ground before preparation.",
-  "state_evidence": "Both candidate nodes report both measurement namespaces not_hosted; root applied remains 62, unchanged from deployment. No signed collider request was constructed or submitted.",
-  "additional_finding": "The second node is not an admitted root validator and lacks ordinary creation permission. Corrected measurement must obtain an exact root-governed grant for its source namespace and complete options; do not bypass creation policy.",
-  "continuation": "Preserve this campaign and STOP. A separately labeled corrected campaign can start only after local validation of source options and explicit governed creation permission. No unknown operation will be resubmitted."
-}

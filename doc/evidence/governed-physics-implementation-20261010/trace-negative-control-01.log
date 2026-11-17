@@ -1,5 +1,0 @@
-#{call => {file,datasync,1},
-  caller =>
-      {'quod-geometry-trace-check_erl__escript__1791__653943__91129__1128',
-          main,1},
-  calls => 1}

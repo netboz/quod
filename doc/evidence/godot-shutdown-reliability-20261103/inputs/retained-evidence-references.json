@@ -1,9 +1,0 @@
-{
-  "doc/evidence/godot-client-retirement-20261101/result.json": "43a13cbf282813558bfbc42df83227479068b1cfcd989088f05697a509cdaaa4",
-  "doc/evidence/godot-client-retirement-20261101/retained-failures.md": "8485c7da6de129b781e904d81b255059dd45bc93c30af63e78a9f5a00bab7aea",
-  "doc/evidence/godot-appearance-package-20261101/retained-failures.md": "c479901cae5e7e2f3391529152ae026a30e730d75c01560493bf88c1c0a65586",
-  "doc/evidence/godot-attention-client-package-20261102/retained-failures.md": "6259fc3e3d9ddc7f996034362a6b466138a63de62fa9c3b6aa61673013e9f8cf",
-  "doc/evidence/godot-visibility-client-package-20261102/result.json": "08a5e9526cc77a6f5639803b6c6f21cc7fdbae35c9b74c4f12da5696bb48bd9c",
-  "doc/evidence/godot-visibility-test-20261103/attempt-visual02-result.json": "b0e4e207f5ca2cc2c66006f32f25559b20c29a16eadd0283c2c423523ee590c7",
-  "doc/evidence/godot-vr-reliability-20261103/review-fixes01/result.json": "880f26fdea909c12cecc2b667b0d9aa03ee96f49862396aefd4859bab7d01887"
-}

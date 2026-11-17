@@ -1,5 +1,0 @@
-{
-  "LD_LIBRARY_PATH": "/home/yan/.cache/quod-m4-r2-artifacts/runtime/abseil-cpp-20260526.0-2/usr/lib:/home/yan/.cache/quod-m4-r2-artifacts/runtime/libjxl-0.11.2-2/usr/lib:/home/yan/.cache/quod-m4-r2-artifacts/runtime/opencv-4.13.0-12/usr/lib:/home/yan/.cache/quod-m4-r2-artifacts/runtime/openexr-3.4.15-2/usr/lib:/home/yan/.cache/quod-m4-r2-artifacts/runtime/protobuf-35.1-2/usr/lib",
-  "LD_PRELOAD": null,
-  "global_environment_changed": false
-}

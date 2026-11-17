@@ -1,9 +1,0 @@
-{
-  "name": "dialyzer",
-  "command": [
-    "rebar3",
-    "dialyzer"
-  ],
-  "exit": 1,
-  "seconds": 167.73
-}

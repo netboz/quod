@@ -1,9 +1,0 @@
-{
-  "source": "https://www.vive.com/us/support/vive/category_howto/what-do-the-headset-status-lights-mean.html",
-  "checked_utc": "2026-10-29",
-  "product": "original HTC Vive",
-  "finding": "Red denotes an error, with cable/display issues given as examples; the LED alone does not identify a cause.",
-  "physical_observation": "Yan reported a red headset LED after lifting the HMD; native high-confidence head pose then observed.",
-  "headset_display_acceptance": false,
-  "display_configuration_changed": false
-}

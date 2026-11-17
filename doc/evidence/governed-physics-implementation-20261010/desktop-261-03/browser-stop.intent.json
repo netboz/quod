@@ -1,6 +1,0 @@
-{
-  "pid": 1657891,
-  "verified_profile": true,
-  "at": "2026-10-11T19:44:20.896732+00:00",
-  "action": "SIGTERM then SIGKILL only if this owned browser fails to exit in5s"
-}

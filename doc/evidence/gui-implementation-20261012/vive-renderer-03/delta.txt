@@ -1,4 +1,0 @@
-1	1	doc/evidence/gui-implementation-20261012/vive-renderer-03/{before => tree}/client/src/workspace-panel.js
-1	0	doc/evidence/gui-implementation-20261012/vive-renderer-03/{before => tree}/client/src/world-scene.js
-14	0	doc/evidence/gui-implementation-20261012/vive-renderer-03/{before => tree}/client/test/workspace-panel.fixture.js
-2	0	doc/evidence/gui-implementation-20261012/vive-renderer-03/{before => tree}/ui/test/gui-hardware.fixture.js

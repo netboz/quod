@@ -1,2 +1,0 @@
-Dynamic Host Volumes
-No dynamic host volumes

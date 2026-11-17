@@ -1,9 +1,0 @@
-{
-  "status": "failed_before_gates",
-  "failure": "OSError: [Errno 28] No space left on device during git archive extraction",
-  "exit": 1,
-  "no_tests_started": true,
-  "source_freeze_completed": false,
-  "cache_cleanup": "../cache-cleanup-01.json",
-  "next_campaign": "clean-presentation-08"
-}

@@ -1,3 +1,0 @@
-found-node {"anchor": "94B7AC9326D063846230301F98B19D3ADDD8A0CBBF72255E5AA493CF39FD57BB", "namespace": "quod:node", "sources": {"quod_node.pl": "F7531DE9C3081EC26F77D43F34A937D2C7CFC2941EF4D27F6858764AE0D900A2"}}
-publish-node {"anchor": "94B7AC9326D063846230301F98B19D3ADDD8A0CBBF72255E5AA493CF39FD57BB", "namespace": "quod:node", "published": true}
-node-enrollment {"manager": "#{desired_hosts => #{private => 0,discoverable => 2},hosting_revision => 2,node_enrollment => complete,private_contacts => 0,route_waits => 0}", "reference": "{agent_instance_ref,<<\"node:703157b1da7a635dd291fe845b85e87b24aa43aee54f873edc2c0ce16768af3a\">>,<<225,12,220,180,252,154,117,136,145,60,204,106,206,76,246,27,214,171,209,30,214,76,182,161,177,76,62,55,218,170,193,156>>,me}"}

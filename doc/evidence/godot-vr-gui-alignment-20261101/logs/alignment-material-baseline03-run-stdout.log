@@ -1,2 +1,0 @@
-PASS retained actual solid-oblique raster
-{"passed": false, "failure": "Empty: ", "children": {"server": 0, "client-alignment-material": -15}, "native_inputs": 0}

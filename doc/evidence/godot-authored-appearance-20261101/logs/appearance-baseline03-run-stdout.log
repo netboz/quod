@@ -1,9 +1,0 @@
-PASS enabled action create-key
-PASS enabled action connect
-PASS enabled action register
-PASS enabled action prepare
-PASS enabled action setup
-PASS ordinary authorized source transaction authors an independent non-space instrument form and appearance
-PASS exact anchored subject reaches its authored operation through existing signed discovery and form owners
-PASS actual native signed instrument raster retained
-{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-appearance": 1}, "native_inputs": 0}

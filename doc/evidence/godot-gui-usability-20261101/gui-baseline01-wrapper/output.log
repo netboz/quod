@@ -1,4 +1,0 @@
-PASS actual ordinary-offline raster retained
-PASS actual desktop-form raster retained
-PASS actual spatial-form raster retained
-{"passed": false, "children": {"client": 1}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 3}

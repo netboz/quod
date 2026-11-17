@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\\xA\\physics_hinged_consequence(room, 3, V0, closed, assertz(hinged_result(container_closed, V0))) :- true.\\xA\\\">>"
-  ],
-  "at": "2026-10-12T14:02:22.507102+00:00"
-}

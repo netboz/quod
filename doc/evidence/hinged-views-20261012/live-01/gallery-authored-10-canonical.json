@@ -1,1 +1,0 @@
-"physics_hinged_class(container_lid, 1, hinged(box(1000, 200, 100), parts([part(vector(0, 0, 0), box(1000, 100, 1000)), part(vector(0, 150, V0), ball(150))]), 1, vector(1, 0, 0), anchors(vector(0, 0, 0), vector(0, 0, V1)), limits(V2, 1200), V3, position(400, motor(1000, 100, 1000), stop(20, target_or_contact)))) :- V0 is (-700) , V1 is (-1000) , V2 is (-1300) , V3 is (-1200).\n"

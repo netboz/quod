@@ -1,9 +1,0 @@
-{
-  "command": [
-    "python3",
-    "doc/evidence/stage2-d5-reconciliation-20261103/audit.py"
-  ],
-  "child_exit": 1,
-  "stdout_eof": true,
-  "stderr_eof": true
-}

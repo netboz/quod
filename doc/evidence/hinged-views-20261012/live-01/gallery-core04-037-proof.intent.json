@@ -1,7 +1,0 @@
-{
-  "action": "cursor",
-  "args": [
-    "<<\"acceptance:physics:259:04:gallery\">> :: (current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>), transaction((physics_space(room, disabled, physics_authority), ('$quod_predicate_source'(physics_observation_replaceable / 3, <<\"\">>) -> true ; fail_with_reason(edit_conflict(physics_observation_replaceable / 3))), assertz((physics_observation_replaceable(none, V2, V3) :- true)), assertz((physics_observation_replaceable(request(V4, V5, V6, V7), V8, V9) :- V4 = physics_sample(V10, activity(V11, V12, V13), revisions(V14), V15, V16, V17), ((V8 = finished(V12) ; V8 = cancelled(V12), V14 \\= V9) -> true ; physics_request_rejected(V6, V7)))), ('$quod_predicate_source'(physics_observation_replaceable / 3, <<\"physics_observation_replaceable(none, V0, V1) :- true.\\nphysics_observation_replaceable(request(V0, V1, V2, V3), V4, V5) :- V0 = physics_sample(V6, activity(V7, V8, V9), revisions(V10), V11, V12, V13) , ((V4 = finished(V8) ; V4 = cancelled(V8) , V10 \\\\= V5) -> true ; physics_request_rejected(V2, V3)).\\n\">>) -> true ; fail_with_reason(edit_not_representable(physics_observation_replaceable / 3))))))."
-  ],
-  "at": "2026-10-12T13:57:42.187871+00:00"
-}

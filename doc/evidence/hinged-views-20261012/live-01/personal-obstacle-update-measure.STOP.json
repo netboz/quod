@@ -1,5 +1,0 @@
-{
-  "type": "AssertionError",
-  "reason": "trace preparation deadline",
-  "rule": "Resolve original console operation; never rerun"
-}

@@ -1,7 +1,0 @@
-{
-  "failed_checks": [
-    "no_clear_floor_stall_100ms",
-    "no_occupied_refusal",
-    "same_body_revision"
-  ]
-}

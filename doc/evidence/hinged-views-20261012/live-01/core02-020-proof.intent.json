@@ -1,7 +1,0 @@
-{
-  "action": "cursor",
-  "args": [
-    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">> :: (current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xc1\\P&\\x9e\\[\\x82\\uL\\x06\\\\xcb\\y(\\xf6\\\\xe5\\_\\xfb\\\\xce\\\\xda\\\\xbd\\%\\xe6\\B\\xc2\\\\xcc\\\\xf8\\t\\xa3\\\\xa6\\\\xf7\\\\x7f\\\">>), transaction((physics_space(personal_lobby, disabled, physics_authority), ('$quod_predicate_source'(physics_door_result / 7, <<\"physics_door_result(V0, V1, V2, V3, V4, contact(V5, V6), blocked(V5)) :- V5 \\\\= V1 , V5 \\\\= V2 , physics_body_definition(V0, V5, V6, V7, V8, V9).\\nphysics_door_result(V0, V1, V2, V3, V4, clear, closed) :- V3 >= - V4 , V3 =< V4.\\n\">>) -> true ; fail_with_reason(edit_conflict(physics_door_result / 7))), '$quod_retract_exact'((physics_door_result(V2, V3, V4, V5, V6, contact(V7, V8), blocked(V7)) :- V7 \\= V3, V7 \\= V4, physics_body_definition(V2, V7, V8, V9, V10, V11))), '$quod_retract_exact'((physics_door_result(V12, V13, V14, V15, V16, clear, closed) :- V15 >= - V16, V15 =< V16)), ('$quod_predicate_source'(physics_door_result / 7, <<\"\">>) -> true ; fail_with_reason(edit_not_representable(physics_door_result / 7))))))."
-  ],
-  "at": "2026-10-12T13:41:52.661774+00:00"
-}

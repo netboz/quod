@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_valid_joint_command(hold, V0) :- true.\\xA\\physics_valid_joint_command(position(V0, motor(V1, V2, V3), stop(V4, target_or_contact)), limits(V5, V6)) :- integer(V0) , V0 >= V5 , V0 =< V6 , physics_positive_scalar(V1) , physics_positive_scalar(V2) , physics_positive_scalar(V3) , physics_positive_scalar(V4).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:44:26.872466+00:00"
-}

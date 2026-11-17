@@ -1,4 +1,0 @@
-{
-  "reason": "diagnostics-04 raw ETS comprehension used wrong internal tuple shape, so its empty inventory is invalid; use documented gproc select representation",
-  "scope": "same unmodified create-root module; original 04 retained"
-}

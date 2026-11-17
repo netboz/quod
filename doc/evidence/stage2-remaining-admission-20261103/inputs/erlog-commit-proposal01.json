@@ -1,9 +1,0 @@
-{
-  "tool": "mcp__nimbalyst__developer_git_commit_proposal",
-  "outcome": "repository scope error before proposal or commit",
-  "error_literal": "Selected files are outside the session's git repositories: /home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlog/src/erlog_int.erl, /home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlog/src/erlog_int.hrl, /home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlog/test/erlog_failure_reasons_tests.erl",
-  "commit_created": false,
-  "publication_performed": false,
-  "pin_changed": false,
-  "note": "This is the editor tool's repository-scope limitation, not automatic approval rejection. No CLI commit fallback is permitted by the developer instruction. Available workspace tools open/create projects but none attaches a repository to the current session."
-}

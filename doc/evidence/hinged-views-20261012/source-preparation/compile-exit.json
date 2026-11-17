@@ -1,1 +1,0 @@
-{"command": ["escript", "_build/quod36/source-preparation/compile-replacement.escript", "/home/yan/src/quod", "/home/yan/src/quod/_build/quod36/source-preparation"], "child_exit": 127, "observed_by": "unified exec session 85005", "reason": "Expanded source edit refused by existing formatter; no signed request or live mutation"}

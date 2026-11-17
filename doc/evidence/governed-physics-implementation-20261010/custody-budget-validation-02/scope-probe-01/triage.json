@@ -1,4 +1,0 @@
-{
-  "result": "fixture failed before assertion",
-  "reason": "suspend_process was called by runtime; only that suspender can resume the worker. Use existing resume_worker helper through sys:replace_state while the runtime remains suspended. No production fix or bug reproduction claimed by this run."
-}

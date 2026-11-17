@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_hinged_definition(local(V0, V1), V2) :- physics_hinged_class(V0, V1, V2).\\xA\\physics_hinged_definition(class_ref(V0, V1, V2, V3), V4) :- V0 :: (current_ontology_identity(V0, V1) , physics_hinged_class(V2, V3, V4)).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:42:33.641581+00:00"
-}

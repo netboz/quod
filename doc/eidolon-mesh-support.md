@@ -9,9 +9,9 @@ and [multiwrite-architecture.md](multiwrite-architecture.md).
 ## Description and placement
 
 `part/6` in [quod_lobby.pl](../priv/ontologies/quod_lobby.pl) feeds
-`model/2` in [quod_modelling.pl](../priv/ontologies/quod_modelling.pl), which
+`model/2` in [gui_scene.pl](../priv/ontologies/gui_scene.pl), which
 produces the shared `mark/7` vocabulary validated by
-[quod_rendering.pl](../priv/ontologies/quod_rendering.pl):
+[gui_scene.pl](../priv/ontologies/gui_scene.pl):
 
 ```prolog
 mark(Id, <<"mesh">>,

@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(rendering_vocabulary,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(rendering_vocabulary,2)))),','(assertz(':-'(rendering_vocabulary(<<\"quod:rendering\">>,<<\"Y\\xD5\\\\xDF\\\\x7\\\\xA7\\\\xE6\\YD4\\xA7\\mTa\\xA6\\\\x8F\\M\\xC3\\\\xB5\\\\xA4\\\\x8E\\\\xDB\\\\xC1\\\\xB8\\\\xA6\\\\x2\\\\xC9\\\\x9A\\Hy3\\xA1\\=\">>),true)),';'('->'('$quod_predicate_source'('/'(rendering_vocabulary,2),<<\"rendering_vocabulary(<<\\\"quod:rendering\\\">>, <<\\\"Y\\\\xD5\\\\\\\\xDF\\\\\\\\x7\\\\\\\\xA7\\\\\\\\xE6\\\\YD4\\\\xA7\\\\mTa\\\\xA6\\\\\\\\x8F\\\\M\\\\xC3\\\\\\\\xB5\\\\\\\\xA4\\\\\\\\x8E\\\\\\\\xDB\\\\\\\\xC1\\\\\\\\xB8\\\\\\\\xA6\\\\\\\\x2\\\\\\\\xC9\\\\\\\\x9A\\\\Hy3\\\\xA1\\\\=\\\">>) :- true.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(rendering_vocabulary,2)))))))))",
-    "room"
-  ],
-  "at": "2026-10-12T14:01:43.562525+00:00"
-}

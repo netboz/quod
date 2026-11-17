@@ -1,1 +1,0 @@
-{"reports":[{"pixels":[1850,496],"target":"(755, 373), (340, 48)","clip":"(0, 0), (1850, 496)","accessible":true},{"pixels":[600,900],"target":"(130, 573), (340, 48)","clip":"(0, 0), (600, 900)","accessible":true}],"checks":["the actual primary login action remains fully inside the shared workspace at (1850, 496)"]}

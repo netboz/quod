@@ -1,9 +1,0 @@
-{
-  "session_id": "8b352c53-1f93-4e4c-8d1f-c5f41e8efbb8",
-  "provider": "openai-codex",
-  "actual_api_model": "openai-codex:gpt-6.1-sol",
-  "api_model_source": "get_session_summary({})",
-  "requested_effort": "max",
-  "effective_effort": "Not exposed by installed API",
-  "coordinator": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46"
-}

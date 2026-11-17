@@ -1,6 +1,0 @@
-{
-  "at": "2026-10-11T18:20:37.844415+00:00",
-  "refresh_command": "returned successfully",
-  "capture": "subsequent scene capture hit existing 10-second script deadline; possible missing-scene exception is under investigation, not classified as browser hang",
-  "ledger_write": false
-}

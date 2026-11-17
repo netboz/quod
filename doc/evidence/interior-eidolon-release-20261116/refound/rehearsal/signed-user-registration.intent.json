@@ -1,5 +1,0 @@
-{
-  "target": "local",
-  "on": "quod-refound-rehearsal",
-  "expression": "quod_refound_operator:signed_user_registration(binary:decode_hex(<<\"5550FA8B39E73B44E8D3897D8FFE79B9EBD7A5D634CDB2AB4A7A2B8945FAB3FB\">>))"
-}

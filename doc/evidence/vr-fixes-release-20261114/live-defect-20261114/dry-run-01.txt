@@ -1,4 +1,0 @@
-network=0n8I-EvDO6tP2jWAlqv5HNLzi9TWohLN4k8KSFNm2iY human=human:65-UXSmsVRF0pjNPJ7mZGfwD8aRlsgoBaf47ODsr22o
-stored: name=<<"Underford">> exterior=solid pose=transform(1498,0,-1733,0,-20,0) interiors=[none]
-goal: <<"quod:space">>::space_represent(entity_ref(<<"human:65-UXSmsVRF0pjNPJ7mZGfwD8aRlsgoBaf47ODsr22o">>,<<"\xfc\\x84\\x97\\xe6\\xfc\y\xb0\\xa2\\xe1\^D;;m\xae\\xb0\*\x16\\x08\|\x1f\\xf5\\xde\k\x8a\3\xd7\\xdb\\xe4\\x94\\x81\\x94\">>,<<"01M7DYSG86T013SRC9330BQVV3">>),solid,transform(1498,0,-1733,0,-20,0),none,solid,transform(1498,0,-1733,0,340,0),none).
-dry run: nothing sent

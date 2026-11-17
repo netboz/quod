@@ -1,8 +1,0 @@
-{
-  "exact_live_incarnation": true,
-  "checked_monotonic": 29487.568312051,
-  "deadline_monotonic": 31200.260644344,
-  "remaining_seconds": 1712.6923319880007,
-  "actual_owner_binding_private": true,
-  "owner_binding_sha256": "e2f450c87effcfb151166109c6cd3686d9232e5cc12894db3af4e9c21be8cead"
-}

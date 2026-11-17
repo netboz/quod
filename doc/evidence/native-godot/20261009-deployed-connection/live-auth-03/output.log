@@ -1,8 +1,0 @@
-Initialize godot-rust (API v4.5.stable.official, runtime v4.7.2.stable.official, safeguards balanced)
-Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
-
-LIVE_STATUS Disconnected. Connect uses the saved identity.
-LIVE_STATUS Preparing your identity…
-LIVE_STATUS Connecting to https://192.168.1.10:31609…
-LIVE_STATUS Your key is saved. Create an account on this network to enter your lobby.
-LIVE_CONNECTION_PASS {"authenticated":true,"domain_writes":0,"endpoint":"https://192.168.1.10:31609","network_id":"0BAK5xEGu_vzgXlLaMbRQREeKUFbtjb9EIl9UlQcu84","signup_available":true}

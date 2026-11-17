@@ -1,1 +1,0 @@
-The rebar3 invocation named a generator using --test, which requires module:test. No tests ran; child exit 1 and rebar3 stack trace are retained. The corrected invocation uses --generator. No production assertion changed.

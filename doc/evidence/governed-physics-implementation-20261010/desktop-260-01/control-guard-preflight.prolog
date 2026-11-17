@@ -1,7 +1,0 @@
-<<"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby">>::(
-current_ontology_identity(<<"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby">>,<<"\x70\\x82\\xC1\\x50\\x26\\x9E\\x5B\\x82\\x75\\x4C\\x06\\xCB\\x79\\x28\\xF6\\xE5\\x5F\\xFB\\xCE\\xDA\\xBD\\x25\\xE6\\x42\\xC2\\xCC\\xF8\\x74\\xA3\\xA6\\xF7\\x7F\">>),
-current_principal(agent_instance_ref(<<"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE">>,<<"\x75\\x8F\\x8A\\xA1\\x3D\\x54\\xCF\\x62\\x6B\\xA4\\x93\\xA6\\xBF\\xBE\\xC2\\x45\\x48\\xAC\\x96\\xB4\\x9D\\xD0\\xFE\\xDA\\x3B\\xC0\\x84\\x3E\\x08\\x38\\xCB\\xF2\">>,me)),
-physics_control_state(personal_lobby,agent_instance_ref(<<"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE">>,<<"\x75\\x8F\\x8A\\xA1\\x3D\\x54\\xCF\\x62\\x6B\\xA4\\x93\\xA6\\xBF\\xBE\\xC2\\x45\\x48\\xAC\\x96\\xB4\\x9D\\xD0\\xFE\\xDA\\x3B\\xC0\\x84\\x3E\\x08\\x38\\xCB\\xF2\">>,me),1,controlled(pilot,eye)),
-physics_space(personal_lobby,enabled,physics_authority),
-findall(P,can_control_physics_agent(personal_lobby,P,pilot),[agent_instance_ref(<<"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE">>,<<"\x75\\x8F\\x8A\\xA1\\x3D\\x54\\xCF\\x62\\x6B\\xA4\\x93\\xA6\\xBF\\xBE\\xC2\\x45\\x48\\xAC\\x96\\xB4\\x9D\\xD0\\xFE\\xDA\\x3B\\xC0\\x84\\x3E\\x08\\x38\\xCB\\xF2\">>,me)])
-).

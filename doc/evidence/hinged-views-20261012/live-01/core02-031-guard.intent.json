@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_result,8),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_result,8)))),','(assertz(':-'(physics_hinged_result(V2,V3,V4,V5,V6,V7,contact(V8,V9),blocked(V8)),','('\\\\='(V8,V3),','('\\\\='(V8,V4),physics_body_definition(V2,V8,V9,V10,V11,V12))))),','(assertz(':-'(physics_hinged_result(V13,V14,V15,V16,V17,V18,clear,closed),','('>='(V16,'-'(V17,V18)),'=<'(V16,'+'(V17,V18))))),';'('->'('$quod_predicate_source'('/'(physics_hinged_result,8),<<\"physics_hinged_result(V0, V1, V2, V3, V4, V5, contact(V6, V7), blocked(V6)) :- V6 \\\\= V1 , V6 \\\\= V2 , physics_body_definition(V0, V6, V7, V8, V9, V10).\\xA\\physics_hinged_result(V0, V1, V2, V3, V4, V5, clear, closed) :- V3 >= V4 - V5 , V3 =< V4 + V5.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_result,8))))))))))",
-    "personal_lobby"
-  ],
-  "at": "2026-10-12T13:42:43.918843+00:00"
-}

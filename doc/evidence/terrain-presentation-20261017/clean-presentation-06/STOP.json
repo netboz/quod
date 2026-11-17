@@ -1,8 +1,0 @@
-{
-  "status": "interrupted",
-  "reason": "Parent turn and tool session interrupted; EUnit log stops at 12:04, no EUnit completion or true child exit receipt, and no clean06 runner remains. Earlier seven completed gates are retained. This campaign is not a release pass.",
-  "recorded_at": "2026-10-17T11:31:54.443798+00:00",
-  "unknown_child_exit": true,
-  "last_completed_gate": "ui-lint",
-  "next_campaign": "clean-presentation-07, identical source manifest"
-}

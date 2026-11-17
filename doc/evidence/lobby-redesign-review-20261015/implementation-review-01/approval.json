@@ -1,6 +1,0 @@
-{
-  "permission": "Approve Claude review",
-  "respondedBy": "desktop",
-  "respondedAt": 1792094242312,
-  "scope": "Relevant repository source, architecture, tests and diffs; excludes secrets, keys and live user data."
-}

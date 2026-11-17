@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_hinged_result(V0, V1, V2, V3, V4, V5, contact(V6, V7), blocked(V6)) :- V6 \\\\= V1 , V6 \\\\= V2 , physics_body_definition(V0, V6, V7, V8, V9, V10).\\xA\\physics_hinged_result(V0, V1, V2, V3, V4, V5, clear, closed) :- V3 >= V4 - V5 , V3 =< V4 + V5.\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:57:13.633788+00:00"
-}

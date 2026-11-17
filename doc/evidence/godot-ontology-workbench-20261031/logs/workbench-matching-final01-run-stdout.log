@@ -1,7 +1,0 @@
-======================== EUnit ========================
-workbench_checks: remove_authored_fact_test...[0.048 s] ok
-workbench_checks: replace_authored_text_attribute_test...[0.015 s] ok
-workbench_checks: duplicate_and_missing_targets_refuse_test...[0.018 s] ok
-workbench_checks: unchanged_replacement_preserves_clause_order_test...[0.025 s] ok
-=======================================================
-  All 4 tests passed.

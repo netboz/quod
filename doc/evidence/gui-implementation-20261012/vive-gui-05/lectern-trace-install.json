@@ -1,8 +1,0 @@
-{
-  "script": "const done=arguments[arguments.length-1];import(performance.getEntriesByType('resource').find(r=>r.name.includes('engineStore')).name).then(({EngineStore})=>{const scene=EngineStore.LastCreatedScene,m=scene.getMeshByName('workspace');if(!m){done({error:'no panel'});return;}m.scaling.setAll(1.5);const height=.2881758093833923;const trace=window.guiPlacementTrace={frames:0,states:{},events:[],recent:[]};let previous=null;window.guiTestFollow=scene.onBeforeRenderObservable.add(()=>{const c=scene.activeCamera;c.getViewMatrix(true);const p=c.globalPosition,q=c.rotationQuaternion;if(c.trackingState!==2||!q||Math.hypot(q.y,q.w)<.001)return;const yaw=2*Math.atan2(q.y,q.w);m.position.set(p.x-Math.sin(yaw)*1.9,height,p.z-Math.cos(yaw)*1.9);m.rotationQuaternion=null;m.rotation.set(-40*Math.PI/180,yaw,0);});window.guiPlacementObserver=scene.onAfterRenderObservable.add(()=>{const c=scene.activeCamera;const row={t:performance.now(),tracking:c.trackingState,p:c.globalPosition.asArray(),q:c.rotationQuaternion?.asArray(),panel:m.position.asArray(),yaw:m.rotation.y,visible:m.isVisible};trace.frames++;trace.states[row.tracking]=(trace.states[row.tracking]??0)+1;if(previous&&row.tracking!==previous.tracking){trace.events.push({before:previous,after:row});if(trace.events.length>100)trace.events.shift();}trace.recent.push(row);if(trace.recent.length>900)trace.recent.shift();previous=row;});done({height,slopeDegrees:50,distance:1.9,scale:1.5,tracking:c=scene.activeCamera.trackingState,report:window.guiHardwareReport()});}).catch(e=>done({error:String(e)}));",
-  "result": {
-    "value": {
-      "error": "no panel"
-    }
-  }
-}

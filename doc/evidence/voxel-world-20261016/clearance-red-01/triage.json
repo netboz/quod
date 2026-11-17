@@ -1,4 +1,0 @@
-{
-  "expected_failure": true,
-  "cause": "Pre-step coverage checked a part interior point but omitted its triangle penetration check; a centre in air allowed a partly embedded body to become ready."
-}

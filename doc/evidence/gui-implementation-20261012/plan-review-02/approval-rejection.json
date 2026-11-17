@@ -1,7 +1,0 @@
-{
-  "status": "blocked-before-execution",
-  "reason": "Automatic approval review rejected external transfer of the frozen private repository source. User authorized Claude review, but review requires explicit approval of this source payload to that destination.",
-  "attempt_01": "DNS ENOTFOUND; retained unchanged",
-  "payload": "60 frozen source/specification/mockup files listed in source-manifest.json; no credentials or deployment artifacts",
-  "next_step": "Finish unaffected local checks; request explicit authorization of source transfer before retrying."
-}

@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_cancel_door,3),<<\"physics_cancel_door(V0, V1, V2) :- term_variables([V0, V1, V2], []) , transaction((current_principal(V3) , can_cancel_physics_door(V0, V1, V3) , retract(physics_door(V0, V1, V4, closing(V2))) , assertz(physics_door(V0, V1, V4, cancelled(V2))))).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_cancel_door,3)))),','('$quod_retract_exact'(':-'(physics_cancel_door(V2,V3,V4),','(term_variables([V2,V3,V4],[]),transaction(','(current_principal(V5),','(can_cancel_physics_door(V2,V3,V5),','(retract(physics_door(V2,V3,V6,closing(V4))),assertz(physics_door(V2,V3,V6,cancelled(V4)))))))))),';'('->'('$quod_predicate_source'('/'(physics_cancel_door,3),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_cancel_door,3)))))))))",
-    "room"
-  ],
-  "at": "2026-10-12T13:55:26.735854+00:00"
-}

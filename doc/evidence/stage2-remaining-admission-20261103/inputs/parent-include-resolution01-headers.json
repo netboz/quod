@@ -1,8 +1,0 @@
-{
-  "receipt": "parent-include-resolution01.json",
-  "resolved_header_sha256": {
-    "_build/default/lib/erlog/src/erlog_int.hrl": "fc2290033440d71447bb0b19eac04e81de1998438cfc225082e9200ac9595f20",
-    "_build/stage2-remaining-admission/proposal-compile07/source/_build/default/lib/erlog/src/erlog_int.hrl": "833233fb56b7d28f19251484354e870b1aca9458c4ee7a9ac45ed53ba4fee707"
-  },
-  "note": "Header hashes recorded immediately after preprocessing; proposed snapshot is immutable and installed production source was not edited."
-}

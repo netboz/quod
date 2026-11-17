@@ -1,8 +1,0 @@
-{
-  "passed": true,
-  "links_verified": 107,
-  "archives_verified": 2,
-  "archive_members_verified": 361,
-  "user_owned_doc_sha256": "7756a489d740fea8bb4bc953284f00cfa062eed29e85e34a3acf443b22d6d18f",
-  "initial_publication_check": "Stopped on an incorrect flattened-basename comparison of a nested historical files.json with the new archive manifest. This check compares exact paths. No artifact was changed to make it pass."
-}

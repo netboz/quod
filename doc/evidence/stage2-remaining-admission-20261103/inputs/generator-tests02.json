@@ -1,9 +1,0 @@
-{
-  "action": "python3 proposal-namespace.py",
-  "true_exit": 1,
-  "scope": "artifact generator only; no production writes",
-  "error": "AssertionError: ('test/quod_runtime_tests.erl', '        ?assert(maps:get(follow_pages, FollowStats) > 0),\\n')",
-  "cause": "Assertion attempted retirement already performed by proposal-history.py",
-  "stdout_eof": true,
-  "stderr_eof": true
-}

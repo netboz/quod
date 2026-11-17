@@ -1,6 +1,0 @@
-{
-  "status": "stopped_not_accepted",
-  "exit": 130,
-  "time": "2026-10-16T13:58:59.214050+00:00",
-  "reason": "Shared Prolog body-retirement rules changed while this broad suite was still running; source tree no longer matched initial inputs. Cancelled with SIGINT. Preserve log; new sequential run required."
-}

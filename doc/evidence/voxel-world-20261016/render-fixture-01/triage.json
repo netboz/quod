@@ -1,6 +1,0 @@
-{
-  "exit": 1,
-  "command_profile": "_build/default",
-  "cause": "Default Erlang beam predates geometry_cost/2 but shared release NIF exports it; load_error={error,{bad_lib,\"Function not found quod_physics_native:geometry_cost/2\"}}.",
-  "correction": "Generate with current tested _build/test Erlang modules and native library."
-}

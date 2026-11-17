@@ -1,6 +1,0 @@
-233	29	priv/ontologies/quod_physics.pl
-16	2	src/predicates/quod_common_primitives.erl
-14	9	src/quod_foreign_log.erl
-39	17	src/quod_physics.erl
-3	0	src/quod_resource_basis.erl
-251	41	src/quod_runtime.erl

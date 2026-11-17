@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"can_close_physics_hinged(V0, V1, V2) :- fail.\\xA\\can_close_physics_hinged(V0, V1, V2) :- hinged_example_permission(V0, V1, V2).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T14:01:55.794127+00:00"
-}

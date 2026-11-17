@@ -1,8 +1,0 @@
-{
-  "observed_summary_header": "Session: \"M2 Godot space creation\" (8db34a85-ead5-4f20-b761-28a4a96a20c6)\nProvider: openai-codex | Model: openai-codex:gpt-6.1-sol\nCreated: Oct 28, 6:27 AM | Last active: Oct 28, 10:39 AM\nPhase: validating\nTags: #feature, #godot, #spaces, #uncommitted",
-  "actual_worker_session": "8db34a85-ead5-4f20-b761-28a4a96a20c6",
-  "requested_model": "openai-codex:gpt-6.1-sol",
-  "requested_effort": "xhigh",
-  "effective_effort": "Not exposed by the installed get_session_summary API. Prompt text does not change the running model.",
-  "serial_launch_owner": "922c7c06-1acb-4c2b-9141-fccf4ab4c947"
-}

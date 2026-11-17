@@ -1,1 +1,0 @@
-The fixture attempted to declare a test-only predicate module unavailable in this standalone VM. Use the existing lobby fixture namespace constructor and its production predicate manifest; this diagnostic requires no test predicates. The failed boot and true child exit remain retained.

@@ -1,9 +1,0 @@
-{
-  "plan.md": "43aa879cbfacd7b8f67c47cc852383d389774e522a23df8b06d79a74357d6e85",
-  "install-helper-retain-terminal.js": "fec25c90914a4af4b441ad5723551004fd99fb0ec9c92f04209c7737aeea9ac8",
-  "browser.py": "bc2862c8a68501ba4ac74967ce75ebf7c89d035cd879e78a34db3a7b0676e199",
-  "signed.py": "8a62c76fd64f8b62f182e08cd4167953a2fe60c6a4a2eeeae254df599994d716",
-  "capture.py": "5ec0d4d25e4742a087ca4df11b9b9f113f92084ead84f65ae4778fc03a4d560c",
-  "existing-browser-session.json": "77a01169f4125fe58bb98b131626574ea57789a5c24e111fc0032964c7bb389d",
-  "desktop-step.py": "4d61d2d49874a0c80aa7dae3b73f8a9188897ddf78dc7428a1139c5a845a06ca"
-}

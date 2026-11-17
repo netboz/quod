@@ -1,7 +1,0 @@
-Clients:
-	id: 2	act: 0	disp: 0	foc: 0	poses: 1	hands: 1	inputs: 1	outputs: 1	ovly: 0	z: 0	pid: 874849	monado-ctl
-
-Devices:
-	id: 0	name: 1	"HTC Vive. MV"
-	id: 1	name: 4	"HTC Vive. Controller MV"
-	id: 2	name: 4	"HTC Vive. Controller MV"

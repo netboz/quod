@@ -1,6 +1,0 @@
-{
-  "source": "User attachment 2026-10-29T10:09:24",
-  "sha256": "1427c788835a5bf1baf3adcd5b6cedb6070bbdbe66a800a243ec3453af020d94",
-  "observation": "Godot blocking startup dialog: OpenXR requested but failed; HMD not detected or required feature unsupported. Correlates with owned native-vive01 xrGetSystem XRT_ERROR_VULKAN after vkAcquireXlibDisplayEXT failure.",
-  "shutdown_failure_attribution": false
-}

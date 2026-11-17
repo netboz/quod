@@ -1,9 +1,0 @@
-{
-  "exit": 0,
-  "seconds": 2.4124683069530874,
-  "command": [
-    "/usr/bin/python3",
-    "/home/yan/src/quod/_build/world-library-20261016/deployment-02/fleet_probe.py",
-    "fleet-probe-after-desktop"
-  ]
-}

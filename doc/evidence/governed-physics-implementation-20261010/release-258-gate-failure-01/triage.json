@@ -1,9 +1,0 @@
-{
-  "failure": "Common Test exited 1: all five quod_agent_failover_SUITE cases auto-skipped from one init_per_testcase undef",
-  "cause": "RPC-style call(Old, quod_agent_vault, generate, [Blob]) was missed when retiring generate/1",
-  "correction": "Fixture first custody uses call(Old, quod_agent_vault, prepare, [Blob, 0])",
-  "production_change": false,
-  "test_obligations": "All original five failover tests and assertions retained. No compatibility export restored.",
-  "prior_passes": "Native, Clippy, browser tests/build/lint and 3,870 EUnit cases passed; CT had 141 passes and 5 skips and is not a passed gate.",
-  "next": "New separately labeled frozen release campaign; original STOP and full logs retained."
-}

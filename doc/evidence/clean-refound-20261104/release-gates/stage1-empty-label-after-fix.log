@@ -1,9 +1,0 @@
-===> Verifying dependencies...
-    Finished `release` profile [optimized] target(s) in 0.02s
-===> Analyzing applications...
-===> Compiling quod
-===> Performing EUnit tests...
-======================== EUnit ========================
-quod_gui_stage1_tests: -selected_exterior_uses_exact_shared_scene_test_/0-fun-6-...[8.199 s] ok
-=======================================================
-  Test passed.

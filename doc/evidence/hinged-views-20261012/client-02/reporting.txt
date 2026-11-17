@@ -1,1 +1,0 @@
-Node 26 reports file-level aggregates for this invocation (15 files). No internal case count is claimed from that output. client-03 runs the same test modules in separate real Node processes and retains every detailed assertion log, case count and true child exit. No assertion or fixture changed.

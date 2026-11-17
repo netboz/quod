@@ -1,9 +1,0 @@
-{
-  "command": [
-    "escript",
-    "doc/evidence/world-library-20261016/measure-composition.escript"
-  ],
-  "started": "2026-10-16T21:43:43.106690+00:00",
-  "exit": 0,
-  "seconds": 0.44
-}

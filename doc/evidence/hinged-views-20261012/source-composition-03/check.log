@@ -1,8 +1,0 @@
-escript: exception error: no match of right hand side value {error,
-                                                    {too_large,transcript}}
-  in function  run_escript__escript__1791__805684__195905__1122:main/1 (_build/quod36/compact-source-03/run.escript:13)
-  in call from escript:run/2 (escript.erl:906)
-  in call from escript:start/1 (escript.erl:420)
-  in call from init:start_it/1 
-  in call from init:start_em/1 
-  in call from init:do_boot/3 

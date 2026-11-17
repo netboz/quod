@@ -1,6 +1,0 @@
-===> Verifying dependencies...
-===> Upgrading erlog (from {git,"https://github.com/netboz/erlog.git",
-                 {ref,"535395c60b2133703308bbe529a63309672cb7a0"}})
-===> Failed to fetch and copy dep: {git,"https://github.com/netboz/erlog.git",
-                                  {ref,
-                                      "535395c60b2133703308bbe529a63309672cb7a0"}}

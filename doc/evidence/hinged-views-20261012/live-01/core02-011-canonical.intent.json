@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_add_hinged(V0, V1, V2, V3, V4, V5) :- term_variables([V0, V1, V2, V3, V4, V5], []) , transaction((current_principal(V6) , can_edit_physics(V0, V6) , physics_structure(V0, V5) , V1 \\\\= V2 , physics_reserve_body_ids(V0, [V1, V2]) , \\\\+ physics_body_definition(V0, V1, V7, V8, V9, V10) , \\\\+ physics_body_definition(V0, V2, V11, V12, V13, V14) , physics_hinged_definition(V3, hinged(V15, V16, V17, V18, V19, V20, V21, V22)) , physics_required_allowances(V0, limits(V23, V24, V25, V26, V27), V28, V29, V30) , physics_checked_body(V1, dynamic, V4, V16, V17, V26) , physics_checked_body(V2, fixed, V4, V15, V17, V26) , (physics_valid_hinge(V18, V19, V20, V21, V26) -> true ; fail_with_reason(invalid_hinge_definition)) , (V22 = position(V31, V32, V33) , physics_valid_joint_command(V22, V20) -> true ; fail_with_reason(invalid_hinge_command)) , physics_body_capacity(V0, 2) , physics_advance_structure(V0, V34) , assertz(physics_body_definition(V0, V2, V34, fixed, V4, owned(V15, V17))) , assertz(physics_body_definition(V0, V1, V34, dynamic, V4, owned(V16, V17))) , assertz(physics_joint(V0, hinge(body(V1, V34), V34, body(V2, V34), V18, V19, V20, V21))) , assertz(physics_hinged_source(V0, V1, V3)) , assertz(physics_hinged_control(V0, V1, V22)) , assertz(physics_hinged(V0, V1, 0, idle)))).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:41:13.880576+00:00"
-}

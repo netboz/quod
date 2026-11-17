@@ -1,6 +1,0 @@
-{
-  "at": "2026-10-11T19:48:19.803581+00:00",
-  "reason": "Display/focus diagnosis: browser inherited Nimbalyst desktop identity and was outside visible monitor bounds.",
-  "browser_exit": 0,
-  "next": "Separately labeled05 with correct standalone browser identity; same private profile, nativeWayland and hardware rendering"
-}

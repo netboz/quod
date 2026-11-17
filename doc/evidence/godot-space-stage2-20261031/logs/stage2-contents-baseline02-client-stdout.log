@@ -1,1 +1,0 @@
-{"passed": false, "children": {"server": 1}, "eof": {"server-stdout": true, "server-stderr": true}, "failure": "RuntimeError: fixture EOF before its readiness notification", "checks": 0}

@@ -1,5 +1,0 @@
-{
-  "reason": "found-world evaluator failed; inspect original result",
-  "kind": "AssertionError",
-  "rule": "Inspect recorded original operations. Do not rerun this campaign."
-}

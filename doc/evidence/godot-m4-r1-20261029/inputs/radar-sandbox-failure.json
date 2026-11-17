@@ -1,6 +1,0 @@
-{
-  "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD node /home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs /home/yan/src/quod ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f work_radar '{\"issueKey\":\"QUO-65\"}'",
-  "exit": 1,
-  "stderr": "node:internal/process/per_thread:277\n      throw new ErrnoException(err, 'kill');\n            ^\n\nError: kill ESRCH\n    at process.kill (node:internal/process/per_thread:277:13)\n    at file:///home/yan/src/quod/nimbalyst-local/tools/tracker-call.mjs:17:9 {\n  errno: -3,\n  code: 'ESRCH',\n  syscall: 'kill'\n}\n\nNode.js v26.10.0\n",
-  "disposition": "Sandbox cannot see the current app process; retry authorized read through explicit-project caller with escalation."
-}

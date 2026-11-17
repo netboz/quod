@@ -1,4 +1,0 @@
-{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=Debug", "-p:SelfContained=true", "--source", "/home/yan/.cache/quod-m4-observation1-artifacts/client-quit-marker01/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 3.2847322820016416}
-{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=ExportRelease", "-p:SelfContained=true", "--source", "/home/yan/.cache/quod-m4-observation1-artifacts/client-quit-marker01/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 2.3045308850123547}
-{"command": ["python3", "client/godot-tools/run.py", "--export"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 19.777274480002234}
-{"diagnostic_only": true, "supplied_inputs": 91, "export_outputs": 196, "passed": true}

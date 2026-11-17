@@ -1,7 +1,0 @@
-{
-  "scope": "Bounded source lookup only; no product/test failure or rerun.",
-  "command": "rg -n 'world_accepted|operation_available|controller_status|expired' client/godot/Main.cs client/godot/Space.cs client/godot/OpenXRInput.cs",
-  "true_exit": 2,
-  "reason": "The guessed client/godot/Space.cs path does not exist. Existing Main/OpenXRInput matches were returned; this absent path was not used as a product premise.",
-  "application_or_runtime_launched_by_inspection": false
-}

@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"can_edit_physics(V0, V1) :- fail.\\xA\\can_edit_physics(V0, V1) :- hinged_example_owner(V0, V1).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:45:17.105230+00:00"
-}

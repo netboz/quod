@@ -1,4 +1,0 @@
-{
-  "exit": 1,
-  "reason": "Owned hung Chrome was stopped, so final log retrieval reported invalid session id. Original failed campaign retained."
-}

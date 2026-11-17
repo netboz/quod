@@ -1,5 +1,0 @@
-======================== EUnit ========================
-quod_safe_term_tests: wrapped_decode_loaded_and_unloaded_vms_compare_identically...[0.238 s] ok
-quod_client_goal_router_tests: remote_large_result_preserves_exact_correlation_test...[0.043 s] ok
-=======================================================
-  2 tests passed.

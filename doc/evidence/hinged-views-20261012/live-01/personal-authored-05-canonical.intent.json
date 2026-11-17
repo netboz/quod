@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_hinged_class(vertical_door, 1, hinged(box(50, 1000, 50), box(1000, 1000, 100), 1, vector(0, 1, 0), anchors(vector(0, 0, 0), vector(V0, 0, 0)), limits(V1, 1500), 1500, position(0, motor(100, 10, 1000), stop(20, target_or_contact)))) :- V0 is (-1000) , V1 is (-1500).\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:45:18.166897+00:00"
-}

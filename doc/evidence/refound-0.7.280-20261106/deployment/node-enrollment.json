@@ -1,4 +1,0 @@
-{
-  "reference": "{agent_instance_ref,<<\"node:4003ce3b15ef3523820c1fdcf64ed564ed06fde6e05de2f3d27a9ac584f07348\">>,<<191,210,39,45,95,119,135,44,90,15,90,24,40,250,69,88,99,219,161,230,77,244,202,24,145,113,153,255,85,102,216,61>>,me}",
-  "manager": "#{desired_hosts => #{private => 0,discoverable => 2},hosting_revision => 2,node_enrollment => complete,private_contacts => 0,route_waits => 0}"
-}

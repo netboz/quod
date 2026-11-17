@@ -1,1 +1,0 @@
-Gate08 true exit1, 4 tests/3 failures. Fixture cleanup calls nonexistent quod_reg:unreg/1; the undef masks any preceding fixture result and leaves owners active, contaminating subsequent tests with already_started. Correct to existing gproc:unreg(quod_reg:name(Key)) and rerun under a new label. Do not claim cancellation passed from this run. No production source changes.

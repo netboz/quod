@@ -1,7 +1,0 @@
-{
-  "action": "cursor",
-  "args": [
-    "<<\"acceptance:physics:259:04:gallery\">> :: (current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>), transaction((physics_space(room, disabled, physics_authority), ('$quod_predicate_source'(hinged_example_label / 2, <<\"\">>) -> true ; fail_with_reason(edit_conflict(hinged_example_label / 2))), (assertz((hinged_example_label(idle, <<\"Ready to close\">>) :- true)), assertz((hinged_example_label(closing(V2), <<\"Closing\">>) :- true)), assertz((hinged_example_label(cancelled(V3), <<\"Cancelled\">>) :- true))), assertz((hinged_example_label(finished(V4, closed), <<\"Closed\">>) :- true)), assertz((hinged_example_label(finished(V5, blocked(V6)), <<\"Blocked\">>) :- true)), ('$quod_predicate_source'(hinged_example_label / 2, <<\"hinged_example_label(idle, <<\\\"Ready to close\\\">>) :- true.\\nhinged_example_label(closing(V0), <<\\\"Closing\\\">>) :- true.\\nhinged_example_label(cancelled(V0), <<\\\"Cancelled\\\">>) :- true.\\nhinged_example_label(finished(V0, closed), <<\\\"Closed\\\">>) :- true.\\nhinged_example_label(finished(V0, blocked(V1)), <<\\\"Blocked\\\">>) :- true.\\n\">>) -> true ; fail_with_reason(edit_not_representable(hinged_example_label / 2))))))."
-  ],
-  "at": "2026-10-12T13:54:36.395754+00:00"
-}

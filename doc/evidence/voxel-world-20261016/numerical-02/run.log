@@ -1,8 +1,0 @@
-{
-  "experiment": "signed odd 8-bit density, saturation +/-127; nearest integer mm; no welding",
-  "seam_equal": true,
-  "unchanged_repeat_equal": true,
-  "chunks_with_quantized_degeneracy": 0,
-  "total_triangles": 365508,
-  "quantized_degenerate": 0
-}

@@ -1,7 +1,0 @@
-{
-  "tree": "/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-03",
-  "source_change": "diagnostic-only phase/process measurements in one test; assertions and five-second deadline unchanged",
-  "original_test_sha256": "415100a8e2cb1b8b0391be192c4c80815c826d9d35a7fb984d8d1cbc4337d179",
-  "instrumented_test_sha256": "a8caee6b211624636e0c5f01be3a4d3db7b47a153551419067019127b4c7647e",
-  "qualification": false
-}

@@ -1,2 +1,0 @@
- M ebin/erlog.app
-?? src/erlog_scan.erl

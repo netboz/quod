@@ -1,7 +1,0 @@
-{
-  "checked": 443,
-  "covered": 443,
-  "gaps": [],
-  "scope": "prospective selected files plus HEAD compared with tested runtime backend source inputs; no commit or staging",
-  "selected_file_count": 177
-}

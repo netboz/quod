@@ -1,7 +1,0 @@
-{
-  "chunk_id": "35ff52",
-  "wall_time_seconds": 3.1195e-05,
-  "exit_code": 0,
-  "original_token_count": 152,
-  "output": "{\"process_inventory_exit\": 0, \"relevant_processes\": []}\n{\"display_query_exit\": 0, \"monitors\": [{\"name\": \"HDMI-A-1\", \"id\": 0, \"width\": 0, \"height\": 0, \"disabled\": true, \"dpmsStatus\": true, \"scale\": 1, \"transform\": 0}, {\"name\": \"DP-1\", \"id\": 1, \"width\": 1920, \"height\": 1080, \"disabled\": false, \"dpmsStatus\": true, \"scale\": 1, \"transform\": 0}, {\"name\": \"DP-3\", \"id\": 3, \"width\": 1920, \"height\": 1080, \"disabled\": false, \"dpmsStatus\": true, \"scale\": 1, \"transform\": 0}, {\"name\": \"DP-2\", \"id\": 2, \"width\": 1920, \"height\": 1080, \"disabled\": false, \"dpmsStatus\": true, \"scale\": 1, \"transform\": 0}], \"error\": \"\"}\n"
-}

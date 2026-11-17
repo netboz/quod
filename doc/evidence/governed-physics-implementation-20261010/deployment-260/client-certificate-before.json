@@ -1,7 +1,0 @@
-{
-  "origin": "https://192.168.1.10:30519",
-  "sha256": "b06f4c167933cf35b135e9b8d8c26b47084bad77a08bd6f42e85f7a0803cf1c4",
-  "captured": "2026-10-11T15:55:11.278547+00:00",
-  "der_bytes": 375,
-  "source_owner": "quod_client:self_signed/0 -> quod_client_tls:ensure/1; persisted beside node.key in identity_dir"
-}

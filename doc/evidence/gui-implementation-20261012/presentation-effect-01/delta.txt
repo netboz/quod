@@ -1,8 +1,0 @@
-12	0	{doc/evidence/gui-implementation-20261012/presentation-effect-01/before/priv => priv}/ontologies/gui_hud.pl
-17	0	{doc/evidence/gui-implementation-20261012/presentation-effect-01/before/priv => priv}/ontologies/quod_gui.pl
-77	0	/dev/null => src/predicates/quod_gui_predicates.erl
-53	17	{doc/evidence/gui-implementation-20261012/presentation-effect-01/before/src => src}/quod_effect.erl
-11	8	{doc/evidence/gui-implementation-20261012/presentation-effect-01/before/src => src}/quod_effect_journal.erl
-75	0	/dev/null => src/quod_gui_presentation.erl
-70	0	{doc/evidence/gui-implementation-20261012/presentation-effect-01/before/test => test}/quod_gui_question_tests.erl
-5	1	{doc/evidence/gui-implementation-20261012/presentation-effect-01/before/test => test}/quod_lobby_tests.erl

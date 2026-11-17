@@ -1,8 +1,0 @@
-{
-  "name": "dialyzer",
-  "command": [
-    "rebar3",
-    "dialyzer"
-  ],
-  "started_at": "2026-10-26T18:07:47.102595+00:00"
-}

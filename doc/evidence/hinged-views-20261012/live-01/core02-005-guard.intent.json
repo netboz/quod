@@ -1,8 +1,0 @@
-{
-  "action": "guard",
-  "args": [
-    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(hinged_example_label,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(hinged_example_label,2)))),','(','(assertz(':-'(hinged_example_label(idle,<<\"Ready to close\">>),true)),','(assertz(':-'(hinged_example_label(closing(V2),<<\"Closing\">>),true)),assertz(':-'(hinged_example_label(cancelled(V3),<<\"Cancelled\">>),true)))),','(assertz(':-'(hinged_example_label(finished(V4,closed),<<\"Closed\">>),true)),','(assertz(':-'(hinged_example_label(finished(V5,blocked(V6)),<<\"Blocked\">>),true)),';'('->'('$quod_predicate_source'('/'(hinged_example_label,2),<<\"hinged_example_label(idle, <<\\\"Ready to close\\\">>) :- true.\\xA\\hinged_example_label(closing(V0), <<\\\"Closing\\\">>) :- true.\\xA\\hinged_example_label(cancelled(V0), <<\\\"Cancelled\\\">>) :- true.\\xA\\hinged_example_label(finished(V0, closed), <<\\\"Closed\\\">>) :- true.\\xA\\hinged_example_label(finished(V0, blocked(V1)), <<\\\"Blocked\\\">>) :- true.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(hinged_example_label,2)))))))))))",
-    "personal_lobby"
-  ],
-  "at": "2026-10-12T13:40:41.647255+00:00"
-}

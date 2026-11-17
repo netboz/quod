@@ -1,7 +1,0 @@
-{
-  "kind": "retained tool inspection failure; no product execution",
-  "command": "rg -n 'effortLevel|launcher|max|requested' doc/evidence/godot-m4-20261029/qualification.json doc/evidence/godot-m4-20261029/inputs/model-session.json doc/evidence/godot-m4-vive-focus12-20261030/qualification.json _build/godot-m4-r2-coordinator-20261029/focus12-final-verification-92.json",
-  "true_exit": 2,
-  "combined_output": "rg: doc/evidence/godot-m4-20261029/inputs/model-session.json: No such file or directory (os error 2)\ndoc/evidence/godot-m4-vive-focus12-20261030/qualification.json:5:  \"launcher_requested_and_returned_effort\": \"max\",\ndoc/evidence/godot-m4-20261029/qualification.json:5:  \"launcher_requested_effort\": \"max\",\ndoc/evidence/godot-m4-20261029/qualification.json:6:  \"launcher_returned_effort\": \"max\",\n",
-  "disposition": "The guessed path was absent. Existing inputs/launcher-metadata.json was found with rg --files and read fully; actual own UUID/model confirmed through get_session_summary({}). No launch setting was changed. Effective backend effort remains unexposed."
-}

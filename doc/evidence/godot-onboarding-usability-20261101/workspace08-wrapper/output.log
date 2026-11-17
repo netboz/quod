@@ -1,5 +1,0 @@
-PASS the actual Current space operations control remains fully inside the shared workspace at (1850, 496)
-PASS the actual Current space operations control remains fully inside the shared workspace at (600, 900)
-PASS fixture delivers the native editor change into the existing form owner before measuring retention
-PASS XR uses the actual shared controls with a readable-density layout profile
-{"passed": false, "children": {"client": 1}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 1}

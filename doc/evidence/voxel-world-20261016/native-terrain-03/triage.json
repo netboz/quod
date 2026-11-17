@@ -1,4 +1,0 @@
-{
-  "cause": "The new test dereferenced linvel(), which returns a value in Rapier 0.36.",
-  "correction": "Compare the returned vector directly."
-}

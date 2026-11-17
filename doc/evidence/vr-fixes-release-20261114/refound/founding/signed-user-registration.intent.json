@@ -1,5 +1,0 @@
-{
-  "target": "fleet",
-  "on": "0eff6076-6985-5c93-7fe6-f9267282d978",
-  "expression": "quod_refound_operator:signed_user_registration(binary:decode_hex(<<\"5043F3582642773EF2297F0A180E07A412DFECD44331546EAF6DC6DBED5D9FA8\">>))"
-}

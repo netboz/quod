@@ -1,4 +1,0 @@
-{
-  "cause": "view_clearance clause did not bind its state argument, needed to emit a scoped coverage demand. Compile failure; native 49 tests passed.",
-  "fix": "Bind existing state argument, preserving function and ownership."
-}

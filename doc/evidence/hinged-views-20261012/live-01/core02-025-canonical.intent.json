@@ -1,7 +1,0 @@
-{
-  "action": "source",
-  "args": [
-    "<<\"physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\\xA\\\">>"
-  ],
-  "at": "2026-10-12T13:42:19.590272+00:00"
-}

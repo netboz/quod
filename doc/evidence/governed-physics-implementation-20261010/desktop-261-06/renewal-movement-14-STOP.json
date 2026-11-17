@@ -1,9 +1,0 @@
-{
-  "at": "2026-10-11T20:37:38.618712+00:00",
-  "reason": "Mouse capture lost3517.8ms into the reauthenticated ready-view run. The input observer stopped, no further cycles were submitted, and ordinary key release completed.",
-  "valid_observations": "174 public network events and102 accepted control responses collected before cleanup; real movement occurred.",
-  "not_accepted": "36-second sustained movement or renewal-under-held-input evidence",
-  "cause": "Unresolved pending control-ownership clarification; no blame assigned to the user or browser.",
-  "production_changes": false,
-  "geometry_changes": false
-}

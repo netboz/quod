@@ -1,9 +1,0 @@
-{
-  "checked": "2026-11-09T23:39:36.751931+00:00",
-  "server_input_changes": [],
-  "all_input_changes": [
-    "client/godot/export_presets.cfg",
-    "doc/evidence/ontology-references-phase1-20261109/client-gates-final-02.py",
-    "doc/evidence/ontology-references-phase1-20261109/verify-export.gd"
-  ]
-}

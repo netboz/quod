@@ -1,8 +1,0 @@
-{
-  "doc/lifecycle-and-routing.md": "33352a2467a2dd998f1c65b757c2bb24d6e9f50c0c15925478ad1570cf84ec53",
-  "src/quod_catchup.erl": "1c8494a014611ca43e792a31e3d98bf31fdfb0bdf30f39a5f085954d7875591c",
-  "src/quod_directory_control.erl": "21a9a9969601ab4660785c066b8d3404396c1f5324bca02a94abb7b4132d32d2",
-  "src/quod_foreign_log.erl": "2d67a0aa6818a4c5a41d8f50006405d2cf9d5e27d6361c0952d36887b8c05b47",
-  "test/quod_ask_SUITE.erl": "b6a1a832dc7ccc8f42edbf21093a8a2fc2f2f10c992c875021014ce9a9feedba",
-  "test/quod_directory_control_tests.erl": "6557f28f2a99961c8d548e9fcc44b439f233f76ffd5d7bca68b68fd966a1e1f1"
-}

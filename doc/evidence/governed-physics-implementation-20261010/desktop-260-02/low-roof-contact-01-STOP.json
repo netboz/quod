@@ -1,6 +1,0 @@
-{
-  "at": "2026-10-11T17:08:36.839184+00:00",
-  "acceptance": "NOT PASSED: roof was not reached",
-  "finding": "Accepted drive(+X) stalled on authored flat floor, repeating the same near-up normal contact eight times per result; body2 at (2.68794584274292,.7519908547401428,.36940792202949524), floor body1 only. No roof contact. Preserve reproduction and inspect shared slide/cast path.",
-  "live_state": "same anchored body is safely on the ring floor; original motion capabilities restored; no pending durable operation"
-}

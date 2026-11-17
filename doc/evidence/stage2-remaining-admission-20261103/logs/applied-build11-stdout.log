@@ -1,4 +1,0 @@
-[{"test/quod_transaction_tests.erl",{ok,quod_transaction_tests}},
- {"test/quod_client_result_tests.erl",{ok,quod_client_result_tests}},
- {"test/quod_foreign_projection_tests.erl",
-  {ok,quod_foreign_projection_tests}}]

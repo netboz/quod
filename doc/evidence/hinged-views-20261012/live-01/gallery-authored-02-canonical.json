@@ -1,1 +1,0 @@
-"lobby_menu(console, [menu_entry(prove_goal, <<\"Prove a goal\">>, open_view(proof_console))]) :- true.\n"

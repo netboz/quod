@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/display_rule_check.py", line 11, in <module>
-    if left<=0 or not selector.select(left):raise TimeoutError('No connector notification within bounded observation')
-                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TimeoutError: No connector notification within bounded observation

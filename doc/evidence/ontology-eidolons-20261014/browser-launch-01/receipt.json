@@ -1,9 +1,0 @@
-{
-  "command": [
-    "node",
-    "doc/evidence/ontology-eidolons-20261014/run-browser.mjs"
-  ],
-  "started": "2026-10-14T11:04:14.294324+00:00",
-  "finished": "2026-10-14T11:04:16.597808+00:00",
-  "exit": 0
-}

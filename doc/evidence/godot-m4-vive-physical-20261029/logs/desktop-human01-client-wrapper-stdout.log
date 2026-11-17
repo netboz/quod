@@ -1,5 +1,0 @@
-{"ordinary_window_mapped": true, "private_invocation": "/data/quod-m4-vr-ca84d4f8-20261029/private/desktop-human01/invocation.json", "remaining_seconds": 1797.400032088015, "first_action": "Create my key, then Connect", "auth_state": "not observed; no automated sign-in"}
-{"owned_alive": true, "remaining_seconds": 1223.2466029080097, "auth_state": "unobserved"}
-{"owned_alive": true, "remaining_seconds": 862.2759648600186, "auth_state": "unobserved"}
-{"owned_alive": true, "remaining_seconds": 417.4542429569992, "auth_state": "unobserved"}
-{"closed": true, "client_exit": 0, "eof": {"stdout": true, "stderr": true}, "failure": null, "retirement_failure": null}

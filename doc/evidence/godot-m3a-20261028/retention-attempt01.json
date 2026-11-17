@@ -1,1 +1,0 @@
-{"child_exit":1,"step":"native target manifest before archive creation","reason":"PermissionError reading root-owned Cargo incremental lock; source and output artifacts remain untouched; no archive created"}

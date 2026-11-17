@@ -1,4 +1,0 @@
-{
-  "cause": "Compile errors: collider removal requires the existing soft-body set; returning the immutable prepared shape directly did not meet Rustler encode unwind constraints.",
-  "correction": "Pass the soft-body set and encode the resource reference as a term. Shared immutable numerical data uses an Arc, with an ordinary Rustler wrapper at the NIF boundary."
-}

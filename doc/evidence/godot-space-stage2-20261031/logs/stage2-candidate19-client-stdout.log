@@ -1,8 +1,0 @@
-PASS enabled action create-key
-PASS enabled action connect
-PASS Stage2 fresh signed fixture network
-PASS enabled action register
-PASS enabled action prepare
-PASS enabled action setup
-PASS actual same selected space authors contents and operation recipes
-{"passed": false, "children": {"server": 0, "client": 1}, "eof": {"server-stdout": true, "server-stderr": true, "client-stdout": true, "client-stderr": true}, "failure": null, "checks": 0}

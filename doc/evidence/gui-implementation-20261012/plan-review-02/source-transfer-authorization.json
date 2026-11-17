@@ -1,8 +1,0 @@
-{
-  "source": "Nimbalyst PromptForUserInput",
-  "field": "approve_claude_source_transfer",
-  "value": true,
-  "respondedAt": 1791833375083,
-  "scope": "Exact frozen 60-file source packet listed in source-manifest.json; external Anthropic Claude Fable read-only plan review",
-  "implementation_approval": false
-}

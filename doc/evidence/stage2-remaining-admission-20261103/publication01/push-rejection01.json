@@ -1,9 +1,0 @@
-{
-  "execution": "rejected before process creation",
-  "reason_literal": "This pushes private Erlog source and tests to an external GitHub fork; the transcript lacks trusted user authorization specifying that payload and destination, so sensitive code egress must be denied.",
-  "commit": "5cad93c71579f138e053b3bb971c050bf2dacb7c",
-  "destination": "https://github.com/netboz/erlog.git",
-  "new_branch": "codex/stage2-policy-diagnostics",
-  "push_executed": false,
-  "pin_applied": false
-}
